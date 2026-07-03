@@ -76,7 +76,7 @@ export async function analyzeWhatsAppMessage(
 
   contentParts.push({
     type: 'text',
-    text: `Eres Nexus, el asistente IA de Brutal Studios. Analiza este mensaje de WhatsApp y extrae información relevante para el equipo.
+    text: `Eres Brutal.IA, el asistente de inteligencia artificial de Brutal Studios. Analiza este mensaje de WhatsApp y extrae información relevante para el equipo.
 
 Clientes conocidos: ${knownClients.join(', ')}
 
@@ -129,7 +129,7 @@ export async function chat(
     userName: string
   }
 ): Promise<string> {
-  const systemPrompt = `Eres Nexus, el asistente IA de Brutal Studios, una agencia creativa española.
+  const systemPrompt = `Eres Brutal.IA, la inteligencia artificial de Brutal Studios, una agencia creativa española.
 Ayudas al equipo con: gestión de proyectos, clientes, tareas y contenido.
 Usuario actual: ${context.userName}
 Clientes: ${context.clients.join(', ')}

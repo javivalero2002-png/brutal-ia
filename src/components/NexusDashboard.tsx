@@ -362,18 +362,6 @@ function modalFields(type: string, team: Profile[]) {
   return maps[type] || []
 }
 
-// ── Nexus Logo SVG ──────────────────────────────────────────
-function NexusLogo({ size = 36 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg" style={{flexShrink:0}}>
-      <path d="M22 22 L3 3 L9 1 L22 17z" fill="#1B5FFA" opacity="0.95"/>
-      <path d="M22 22 L3 41 L9 43 L22 27z" fill="#0A2FA0" opacity="0.95"/>
-      <path d="M22 22 L41 3 L35 1 L22 17z" fill="#8AADF0" opacity="0.88"/>
-      <path d="M22 22 L41 41 L35 43 L22 27z" fill="#8AADF0" opacity="0.7"/>
-      <circle cx="22" cy="22" r="2" fill="white"/>
-    </svg>
-  )
-}
 
 // ── Lucide Icon stub (replaced by actual lucide-react in prod) ──
 function LucideIcon({ name, size=16, color='currentColor' }: {name:string;size?:number;color?:string}) {
@@ -813,7 +801,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
         )}
         {data.chatMessages.map((m: any)=>(
           <div key={m.id} className={`flex ${m.role==='user'?'justify-end':''}`}>
-            {m.role==='ai'&&<div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center mr-2 mt-1" style={{background:'rgba(27,95,250,0.12)',border:'1px solid rgba(27,95,250,0.2)'}}><NexusLogo size={16}/></div>}
+            {m.role==='ai'&&<div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center mr-2 mt-1 overflow-hidden p-1" style={{background:'rgba(27,95,250,0.12)',border:'1px solid rgba(27,95,250,0.2)'}}><img src="https://brutal.thehook-produccion.es/wp-content/themes/brutal-studios/assets/img/brutal-logo-white.svg" className="w-full opacity-80" alt="Brutal.IA"/></div>}
             <div className="max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed" style={{background:m.role==='user'?BLU:'#0C0C15',color:m.role==='user'?'white':'rgba(240,240,248,0.8)',border:m.role==='ai'?'1px solid rgba(255,255,255,0.07)':'none'}}>
               {m.content}
             </div>

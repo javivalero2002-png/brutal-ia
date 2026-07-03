@@ -79,9 +79,9 @@ export async function POST(request: NextRequest) {
   let reply = ''
 
   if (analysis.shouldCreateTask) {
-    reply = `✅ *Nexus IA* entendió:\n\n${analysis.extractedInfo}\n\n${analysis.confirmationQuestion}\n\nResponde *sí* para crear la tarea o *no* para cancelar.`
+    reply = `✅ *Brutal.IA* entendió:\n\n${analysis.extractedInfo}\n\n${analysis.confirmationQuestion}\n\nResponde *sí* para crear la tarea o *no* para cancelar.`
   } else {
-    reply = `✅ *Nexus IA* registró:\n\n${analysis.extractedInfo}\n\nInformación guardada en tu tablón.`
+    reply = `✅ *Brutal.IA* registró:\n\n${analysis.extractedInfo}\n\nInformación guardada en tu tablón.`
   }
 
   // Check if this is a confirmation response
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
         source: 'whatsapp',
       })
     }
-    reply = `✅ Tarea creada en Nexus:\n\n"${prev.taskText}"\n\nPuedes verla en tu tablón.`
+    reply = `✅ Tarea creada en Brutal.IA:\n\n"${prev.taskText}"\n\nPuedes verla en tu tablón.`
     await supabase.from('whatsapp_sessions').update({ context: { awaitingConfirmation: false } }).eq('phone', from)
   }
 
