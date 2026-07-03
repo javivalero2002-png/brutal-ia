@@ -24,6 +24,9 @@ yarn-error.log*
 *.pem
 .vercel
 
+# deploy helper (contains secrets — local only)
+deploy.sh
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
