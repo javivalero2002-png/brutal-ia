@@ -49,7 +49,7 @@ export default function LoginPage() {
             <path d="M22 22 L41 41 L35 43 L22 27z" fill="#8AADF0" opacity="0.7"/>
             <circle cx="22" cy="22" r="2" fill="white"/>
           </svg>
-          <div style={{ fontFamily: 'Syne,sans-serif', fontSize: '22px', fontWeight: 900, color: 'white', letterSpacing: '-0.5px' }}>NEXUS OS</div>
+          <div style={{ fontFamily: 'Syne,sans-serif', fontSize: '22px', fontWeight: 900, color: 'white', letterSpacing: '-0.5px' }}>BRUTAL<span style={{color:'#1B5FFA'}}>.IA</span></div>
           <div style={{ fontFamily: 'Syne,sans-serif', fontSize: '9px', letterSpacing: '4px', color: 'rgba(255,255,255,0.2)', marginTop: '4px' }}>BRUTAL STUDIOS</div>
         </div>
 

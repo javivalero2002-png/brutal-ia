@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Nexus OS · Brutal Studios',
-  description: 'Centro de operaciones IA para el equipo de Brutal Studios',
+  title: 'BRUTAL.IA',
+  description: 'Centro de inteligencia artificial para el equipo de Brutal Studios',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

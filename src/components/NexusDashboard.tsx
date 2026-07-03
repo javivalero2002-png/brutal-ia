@@ -162,7 +162,7 @@ export default function NexusDashboard({ profile }: Props) {
           <div className="flex items-center gap-2">
             <NexusLogo size={36} />
             <div>
-              <div className="font-syne text-xs font-black tracking-widest text-white">NEXUS</div>
+              <div className="font-syne text-xs font-black tracking-widest text-white">BRUTAL<span style={{color:'#1B5FFA'}}>.IA</span></div>
               <div className="text-[8px] tracking-widest text-white/20">BRUTAL STUDIOS</div>
             </div>
             <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-500 animate-glowPulse" />
@@ -188,8 +188,8 @@ export default function NexusDashboard({ profile }: Props) {
             {navItem('automatizaciones','Automatizaciones','zap',data.reglas.filter(r=>r.active).length)}
           </div>
           <div>
-            <div className="font-syne text-[8px] font-black tracking-widest text-white/15 px-2 mb-2">NEXUS</div>
-            {navItem('chat','Nexus Chat','message-square')}
+            <div className="font-syne text-[8px] font-black tracking-widest text-white/15 px-2 mb-2">IA</div>
+            {navItem('chat','Brutal.IA Chat','message-square')}
             {navItem('ajustes','Ajustes','settings')}
           </div>
         </nav>
@@ -236,7 +236,7 @@ export default function NexusDashboard({ profile }: Props) {
           <div className="flex whitespace-nowrap animate-ticker">
             {[0,1].map(i=>(
               <span key={i} className="font-syne text-[9px] font-bold tracking-[0.2em] text-white/90 pr-12">
-                BRUTAL STUDIOS · NEXUS · {urgentCount} URGENTES HOY · {data.projects.length} PROYECTOS · {unreadCount} MENSAJES
+                BRUTAL STUDIOS · BRUTAL.IA · {urgentCount} URGENTES HOY · {data.projects.length} PROYECTOS · {unreadCount} MENSAJES
               </span>
             ))}
           </div>
@@ -342,7 +342,7 @@ const modalMeta: Record<string,{eyebrow:string;title:string;saveLabel:string}> =
   cliente: { eyebrow:'GESTIÓN · CLIENTES', title:'Nuevo Cliente', saveLabel:'CREAR CLIENTE' },
   proyecto: { eyebrow:'GESTIÓN · PROYECTOS', title:'Nuevo Proyecto', saveLabel:'CREAR PROYECTO' },
   tarea: { eyebrow:'GESTIÓN · TAREAS', title:'Nueva Tarea', saveLabel:'CREAR TAREA' },
-  memoria: { eyebrow:'NEXUS · MEMORIA', title:'Nueva Entrada', saveLabel:'GUARDAR' },
+  memoria: { eyebrow:'BRUTAL.IA · MEMORIA', title:'Nueva Entrada', saveLabel:'GUARDAR' },
   regla: { eyebrow:'AUTOMATIZACIONES', title:'Nueva Regla', saveLabel:'CREAR REGLA' },
   contenido: { eyebrow:'CONTENIDO', title:'Nueva Pieza', saveLabel:'AÑADIR PIEZA' },
 }
@@ -801,7 +801,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
   return (
     <div className="flex flex-col h-full">
       <div className="px-6 py-4 border-b border-white/5 flex-shrink-0">
-        <h1 className="font-syne text-xl font-black text-white">Nexus Chat</h1>
+        <h1 className="font-syne text-xl font-black text-white">BRUTAL<span style={{color:'#1B5FFA'}}>.IA</span></h1>
         <p className="text-xs text-white/30 mt-0.5">IA con contexto de clientes, proyectos y tareas</p>
       </div>
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
@@ -828,7 +828,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
       </div>
       <div className="px-6 py-4 border-t border-white/5 flex-shrink-0">
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{background:'#0C0C15',border:'1px solid rgba(27,95,250,0.15)'}}>
-          <input value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&(e.preventDefault(),send())} placeholder="Pregunta a Nexus…" className="flex-1 bg-transparent text-sm text-white placeholder-white/25 outline-none" style={{caretColor:BLU}}/>
+          <input value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&(e.preventDefault(),send())} placeholder="Pregunta a Brutal.IA…" className="flex-1 bg-transparent text-sm text-white placeholder-white/25 outline-none" style={{caretColor:BLU}}/>
           <button onClick={send} disabled={!chatInput.trim()||chatLoading} className="w-8 h-8 rounded-lg flex items-center justify-center disabled:opacity-30 transition-opacity" style={{background:BLU}}>
             <LucideIcon name="send" size={13} color="white"/>
           </button>
