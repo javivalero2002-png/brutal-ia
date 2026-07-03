@@ -15,6 +15,24 @@ export default function NexusDashboard({ profile }: Props) {
   const data = useNexusData(profile)
   const [section, setSection] = useState<Section>('hoy')
   const [sidebarOpen, setSidebarOpen] = useState(true)
+
+  // Auto-sync Gmail and show toast when redirected back after OAuth
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const gmailStatus = params.get('gmail')
+    if (gmailStatus === 'connected') {
+      window.history.replaceState({}, '', '/dashboard')
+      setTimeout(() => {
+        setToast('Gmail conectado correctamente')
+        if (profile.gmail_connected) data.syncGmail()
+      }, 800)
+      setSection('inbox')
+    } else if (gmailStatus === 'error' || gmailStatus === 'no_refresh_token') {
+      window.history.replaceState({}, '', '/dashboard')
+      setToast('Error al conectar Gmail. Inténtalo de nuevo.')
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchIdx, setSearchIdx] = useState(-1)
@@ -629,45 +647,119 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
 // ── INBOX SECTION ────────────────────────────────────────────
 function InboxSection({data,showToast}: any) {
   const [filter, setFilter] = useState('Todos')
+  const [selected, setSelected] = useState<any>(null)
   const msgs = data.inbox.filter((m: any) => filter==='Todos'?true:filter==='No leídos'?!m.is_read:m.source===filter.toLowerCase())
 
+  const handleSelect = (m: any) => {
+    setSelected(m)
+    if (!m.is_read) data.markRead(m.id)
+  }
+
+  const createTaskFromEmail = async (m: any) => {
+    if (!m.ai_action) return
+    await data.createTask({ text: m.ai_action, level: m.ai_urgency === 'urgent' ? 'urgent' : 'high', source: 'gmail' })
+    showToast('Tarea creada desde email')
+  }
+
   return (
-    <div className="p-6 max-w-[900px] mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="font-syne text-2xl font-black text-white">Inbox IA</h1>
-        <button onClick={()=>data.syncGmail()} disabled={data.syncing} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-white/50 disabled:opacity-40" style={{border:'1px solid rgba(255,255,255,0.1)'}}>
-          <LucideIcon name="refresh-cw" size={13}/> {data.syncing?'Sincronizando…':'Actualizar'}
-        </button>
-      </div>
-      <div className="flex gap-2 mb-5">
-        {['Todos','No leídos','Gmail','WhatsApp'].map(f=>(
-          <button key={f} onClick={()=>setFilter(f)} className="px-3 py-1.5 rounded-lg text-xs font-syne font-bold tracking-wide transition-colors" style={{background:filter===f?'rgba(27,95,250,0.12)':'transparent',color:filter===f?'#F0F0F8':'rgba(240,240,248,0.4)'}}>
-            {f}
+    <div className="flex h-full">
+      {/* List */}
+      <div className="flex flex-col overflow-hidden" style={{width: selected ? '360px' : '100%', flexShrink: 0, borderRight: selected ? '1px solid rgba(255,255,255,0.06)' : 'none'}}>
+        <div className="flex items-center justify-between px-6 py-5 border-b border-white/5 flex-shrink-0">
+          <h1 className="font-syne text-xl font-black text-white">Inbox IA</h1>
+          <button onClick={()=>data.syncGmail()} disabled={data.syncing} className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-white/40 disabled:opacity-40 hover:text-white/70 transition-colors" style={{border:'1px solid rgba(255,255,255,0.08)'}}>
+            <LucideIcon name="refresh-cw" size={12}/>{data.syncing?'Sync…':'Sync'}
           </button>
-        ))}
-      </div>
-      <div className="space-y-2">
-        {msgs.map((m: any)=>(
-          <div key={m.id} onClick={()=>data.markRead(m.id)} className="p-4 rounded-xl cursor-pointer transition-colors" style={{background:m.is_read?'rgba(12,12,21,0.5)':'#0C0C15',border:`1px solid ${m.is_read?'rgba(255,255,255,0.05)':'rgba(27,95,250,0.15)'}`,opacity:m.is_read?0.6:1}}>
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-syne text-[10px] font-black" style={{background:m.source==='gmail'?'rgba(27,95,250,0.1)':'rgba(37,211,102,0.1)',color:m.source==='gmail'?BLU:'#25D366'}}>
-                {m.from_name?.slice(0,2).toUpperCase()}
+        </div>
+        <div className="flex gap-1 px-4 pt-3 pb-2 flex-shrink-0">
+          {['Todos','No leídos','Gmail','WhatsApp'].map(f=>(
+            <button key={f} onClick={()=>setFilter(f)} className="px-3 py-1.5 rounded-lg text-[10px] font-syne font-bold tracking-wide transition-colors" style={{background:filter===f?'rgba(27,95,250,0.12)':'transparent',color:filter===f?'#F0F0F8':'rgba(240,240,248,0.35)'}}>
+              {f}
+            </button>
+          ))}
+        </div>
+        <div className="flex-1 overflow-y-auto px-3 pb-4">
+          {msgs.map((m: any)=>(
+            <div key={m.id} onClick={()=>handleSelect(m)} className="flex items-start gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all mb-1" style={{background:selected?.id===m.id?'rgba(27,95,250,0.1)':m.is_read?'transparent':'rgba(12,12,21,0.8)',border:`1px solid ${selected?.id===m.id?'rgba(27,95,250,0.3)':m.is_read?'transparent':'rgba(27,95,250,0.08)'}` }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-syne text-[10px] font-black mt-0.5" style={{background:m.source==='gmail'?'rgba(27,95,250,0.12)':'rgba(37,211,102,0.12)',color:m.source==='gmail'?BLU:'#25D366'}}>
+                {m.from_name?.slice(0,2).toUpperCase()||'??'}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-semibold text-sm text-white/85">{m.from_name}</span>
-                  <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded" style={{background:m.ai_urgency==='urgent'?'rgba(229,29,42,0.1)':'rgba(255,255,255,0.04)',color:m.ai_urgency==='urgent'?RED:'rgba(240,240,248,0.25)'}}>{m.ai_urgency?.toUpperCase()}</span>
-                  {!m.is_read && <div className="w-1.5 h-1.5 rounded-full ml-auto" style={{background:BLU}}/>}
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-sm font-semibold truncate" style={{color:m.is_read?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.9)'}}>{m.from_name}</span>
+                  {!m.is_read && <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:BLU}}/>}
+                  {m.ai_urgency==='urgent' && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded flex-shrink-0" style={{background:'rgba(229,29,42,0.12)',color:RED}}>URG</span>}
                 </div>
-                <div className="text-[13px] text-white/60 mb-1">{m.subject || m.from_phone}</div>
-                {m.ai_summary && <div className="text-xs text-white/40 bg-blue-500/5 rounded-lg px-3 py-2 mt-2 border-l-2 border-blue-500/30">🤖 {m.ai_summary}</div>}
-                {m.ai_action && m.ai_action !== 'Ninguna acción requerida' && <div className="text-xs text-white/50 mt-1">→ {m.ai_action}</div>}
+                <div className="text-xs truncate" style={{color:m.is_read?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.55)'}}>{m.subject||m.from_phone||'Sin asunto'}</div>
+                {m.ai_summary && <div className="text-[10px] mt-1 truncate" style={{color:'rgba(27,95,250,0.6)'}}>{m.ai_summary}</div>}
               </div>
             </div>
-          </div>
-        ))}
-        {msgs.length === 0 && <div className="py-16 text-center text-white/20 text-sm">{data.inbox.length===0?'Conecta Gmail para ver tus mensajes':'Sin mensajes en esta categoría'}</div>}
+          ))}
+          {msgs.length === 0 && (
+            <div className="py-16 text-center text-white/20 text-sm">
+              {data.inbox.length===0 ? 'Conecta Gmail para ver tus mensajes' : 'Sin mensajes en esta categoría'}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Detail panel */}
+      {selected && (
+        <div className="flex-1 overflow-y-auto p-6 min-w-0">
+          <div className="flex items-center justify-between mb-6">
+            <button onClick={()=>setSelected(null)} className="flex items-center gap-2 text-sm text-white/40 hover:text-white/70 transition-colors">
+              <LucideIcon name="arrow-left" size={14}/> Volver
+            </button>
+            <div className="flex gap-2">
+              <button onClick={()=>createTaskFromEmail(selected)} className="flex items-center gap-2 px-4 py-2 rounded-xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:BLU}}>
+                <LucideIcon name="plus" size={12} color="white"/> CREAR TAREA
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <h2 className="font-syne text-xl font-black text-white mb-2">{selected.subject || 'Sin asunto'}</h2>
+            <div className="flex items-center gap-3 text-sm text-white/40">
+              <span className="font-medium text-white/60">{selected.from_name}</span>
+              {selected.from_email && <span>{selected.from_email}</span>}
+              {selected.received_at && <span>{new Date(selected.received_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>}
+              <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded ml-auto" style={{background:selected.source==='gmail'?'rgba(27,95,250,0.1)':'rgba(37,211,102,0.1)',color:selected.source==='gmail'?BLU:'#25D366'}}>{selected.source?.toUpperCase()}</span>
+            </div>
+          </div>
+
+          {/* AI Analysis */}
+          <div className="rounded-xl p-4 mb-5" style={{background:'rgba(27,95,250,0.05)',border:'1px solid rgba(27,95,250,0.12)'}}>
+            <div className="font-syne text-[8px] font-black tracking-widest text-blue-400/60 mb-3">BRUTAL.IA · ANÁLISIS</div>
+            {selected.ai_urgency && (
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs text-white/40">Urgencia:</span>
+                <span className="font-syne text-[9px] font-black px-2 py-0.5 rounded" style={{background:selected.ai_urgency==='urgent'?'rgba(229,29,42,0.12)':'rgba(255,255,255,0.06)',color:selected.ai_urgency==='urgent'?RED:'rgba(255,255,255,0.4)'}}>{selected.ai_urgency.toUpperCase()}</span>
+              </div>
+            )}
+            {selected.ai_client && selected.ai_client !== 'Desconocido' && (
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs text-white/40">Cliente:</span>
+                <span className="text-xs text-white/70">{selected.ai_client}</span>
+              </div>
+            )}
+            {selected.ai_summary && <p className="text-sm text-white/70 leading-relaxed mb-2">{selected.ai_summary}</p>}
+            {selected.ai_action && selected.ai_action !== 'Ninguna acción requerida' && (
+              <div className="flex items-start gap-2 mt-3 pt-3 border-t border-white/6">
+                <LucideIcon name="zap" size={12} color={BLU}/>
+                <span className="text-xs text-white/60">{selected.ai_action}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Email body */}
+          {selected.body_preview && (
+            <div className="rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+              <div className="font-syne text-[8px] font-black tracking-widest text-white/20 mb-3">CONTENIDO</div>
+              <p className="text-sm text-white/50 leading-relaxed whitespace-pre-wrap">{selected.body_preview}</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
