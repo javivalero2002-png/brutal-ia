@@ -302,7 +302,7 @@ export default function NexusDashboard({ profile }: Props) {
                   {f.type === 'select' ? (
                     <select value={mf[f.key]||''} onChange={e=>setMf(m=>({...m,[f.key]:e.target.value}))} className="w-full px-4 py-3 rounded-xl text-sm text-white bg-blue-500/4 outline-none" style={{ border:'1px solid rgba(27,95,250,0.15)' }}>
                       <option value="">Selecciona…</option>
-                      {f.options?.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+                      {f.options?.map((o:{value:string;label:string})=><option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   ) : (
                     <input value={mf[f.key]||''} onChange={e=>setMf(m=>({...m,[f.key]:e.target.value}))} placeholder={f.placeholder} className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-white/20 outline-none" style={{ background:'rgba(27,95,250,0.04)', border:'1px solid rgba(27,95,250,0.15)', caretColor:BLU }} />
