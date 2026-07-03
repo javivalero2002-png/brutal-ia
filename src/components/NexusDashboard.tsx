@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 // ── Icons (inline to avoid import issues) ──────────────────
 const BLU = '#1B5FFA', RED = '#E51D2A'
 
-type Section = 'hoy'|'inbox'|'clientes'|'proyectos'|'contenido'|'memoria'|'automatizaciones'|'chat'|'ajustes'
+type Section = 'hoy'|'inbox'|'tareas'|'clientes'|'proyectos'|'contenido'|'memoria'|'automatizaciones'|'chat'|'equipo'|'ajustes'
 
 interface Props { profile: Profile }
 
@@ -173,9 +173,11 @@ export default function NexusDashboard({ profile }: Props) {
             <div className="font-syne text-[8px] font-black tracking-widest text-white/15 px-2 mb-2">WORKSPACE</div>
             {navItem('hoy','Hoy','sun',urgentCount)}
             {navItem('inbox','Inbox IA','inbox',unreadCount)}
+            {profile.role==='owner' && navItem('equipo','Equipo','users-2')}
           </div>
           <div>
             <div className="font-syne text-[8px] font-black tracking-widest text-white/15 px-2 mb-2">GESTIÓN</div>
+            {navItem('tareas','Tareas','check-square',data.tasks.filter((t:Task)=>!t.done&&t.level==='urgent').length||undefined)}
             {navItem('clientes','Clientes','users')}
             {navItem('proyectos','Proyectos','folder-open')}
             {navItem('contenido','Contenido','calendar')}
@@ -244,6 +246,8 @@ export default function NexusDashboard({ profile }: Props) {
         <div className="flex-1 overflow-y-auto">
           {section === 'hoy' && <HoySection profile={profile} data={data} urgentCount={urgentCount} unreadCount={unreadCount} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'inbox' && <InboxSection data={data} showToast={showToast} />}
+          {section === 'tareas' && <TareasSection data={data} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
+          {section === 'equipo' && <EquipoSection data={data} showToast={showToast} />}
           {section === 'clientes' && <ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'proyectos' && <ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'contenido' && <ContenidoSection data={data} onOpenModal={setModal} showToast={showToast} />}
@@ -406,6 +410,137 @@ function LucideIcon({ name, size=16, color='currentColor' }: {name:string;size?:
 }
 
 // ── HOY SECTION ─────────────────────────────────────────────
+// ── TAREAS SECTION ───────────────────────────────────────────
+function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
+  const [filter, setFilter] = useState<'todas'|'urgente'|'high'|'normal'|'hecho'>('todas')
+  const [assigneeFilter, setAssigneeFilter] = useState('Todos')
+
+  const filtered = data.tasks.filter((t: Task) => {
+    const byStatus = filter === 'todas' ? !t.done : filter === 'hecho' ? t.done : (!t.done && t.level === filter)
+    const byAssignee = assigneeFilter === 'Todos' || t.assignee?.name === assigneeFilter
+    return byStatus && byAssignee
+  })
+
+  const tabs: {id: 'todas'|'urgente'|'high'|'normal'|'hecho', label: string, color?: string}[] = [
+    {id:'todas', label:'Todas'},
+    {id:'urgente', label:'Urgente', color:RED},
+    {id:'high', label:'Alta', color:'rgba(255,176,32,0.8)'},
+    {id:'normal', label:'Normal', color:BLU},
+    {id:'hecho', label:'Hechas'},
+  ]
+
+  const assignees = ['Todos', ...Array.from(new Set(data.tasks.map((t: Task) => t.assignee?.name).filter(Boolean)))] as string[]
+
+  return (
+    <div className="p-6 max-w-[900px] mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="font-syne text-2xl font-black text-white">Tareas</h1>
+        {isOwner && <button onClick={()=>onOpenModal('tarea')} className="flex items-center gap-2 px-4 py-2 rounded-xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:BLU}}>+ NUEVA TAREA</button>}
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center gap-3 mb-5 flex-wrap">
+        <div className="flex gap-1 p-1 rounded-xl" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.06)'}}>
+          {tabs.map(t=>(
+            <button key={t.id} onClick={()=>setFilter(t.id)} className="px-3 py-1.5 rounded-lg font-syne text-[9px] font-black tracking-wide transition-all" style={{background:filter===t.id?t.color||'rgba(255,255,255,0.08)':'transparent', color:filter===t.id?'white':t.color||'rgba(255,255,255,0.3)'}}>
+              {t.label.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        {isOwner && assignees.length > 1 && (
+          <select value={assigneeFilter} onChange={e=>setAssigneeFilter(e.target.value)} className="px-3 py-2 rounded-xl text-xs text-white/60 outline-none" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.06)'}}>
+            {assignees.map(a=><option key={a} value={a}>{a}</option>)}
+          </select>
+        )}
+        <span className="text-xs text-white/25 ml-auto">{filtered.length} tarea{filtered.length!==1?'s':''}</span>
+      </div>
+
+      {/* Task list */}
+      <div className="rounded-xl overflow-hidden" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+        {filtered.length === 0 && (
+          <div className="px-5 py-12 text-center text-white/20 text-sm">Sin tareas en este filtro</div>
+        )}
+        {filtered.map((t: Task, i: number) => (
+          <div key={t.id} className="flex items-center gap-4 px-5 py-3.5 border-b border-white/4 hover:bg-white/2 transition-colors group" style={{borderBottom:i===filtered.length-1?'none':undefined}}>
+            <button onClick={()=>data.toggleTask(t.id)} className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0 transition-all" style={{background:t.done?BLU:'transparent',border:`1.5px solid ${t.done?BLU:'rgba(255,255,255,0.15)'}`}}>
+              {t.done && <LucideIcon name="check" size={10} color="white"/>}
+            </button>
+            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.8)':BLU}}/>
+            <span className="flex-1 text-sm transition-colors" style={{color:t.done?'rgba(255,255,255,0.2)':'rgba(255,255,255,0.8)',textDecoration:t.done?'line-through':'none'}}>{t.text}</span>
+            {t.assignee && (
+              <div className="w-6 h-6 rounded-full flex items-center justify-center font-syne text-[8px] font-black flex-shrink-0" style={{background:t.assignee.avatar_color+'22',color:t.assignee.avatar_color,border:`1px solid ${t.assignee.avatar_color}44`}}>
+                {t.assignee.initials}
+              </div>
+            )}
+            {t.source && t.source !== 'manual' && (
+              <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded" style={{background:t.source==='gmail'?'rgba(27,95,250,0.1)':'rgba(37,211,102,0.1)',color:t.source==='gmail'?BLU:'#25D366'}}>{t.source.toUpperCase()}</span>
+            )}
+            {isOwner && <button onClick={()=>data.deleteTask(t.id)} className="opacity-0 group-hover:opacity-30 hover:!opacity-60 transition-opacity"><LucideIcon name="trash-2" size={12} color="rgba(229,29,42,0.8)"/></button>}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── EQUIPO SECTION ────────────────────────────────────────────
+function EquipoSection({data}: any) {
+  return (
+    <div className="p-6 max-w-[1000px] mx-auto">
+      <h1 className="font-syne text-2xl font-black text-white mb-6">Equipo</h1>
+
+      <div className="grid grid-cols-2 gap-4">
+        {data.team.map((member: Profile) => {
+          const memberTasks = data.tasks.filter((t: Task) => t.assignee?.name === member.name)
+          const pending = memberTasks.filter((t: Task) => !t.done)
+          const done = memberTasks.filter((t: Task) => t.done)
+          const urgent = pending.filter((t: Task) => t.level === 'urgent')
+
+          return (
+            <div key={member.id} className="rounded-xl overflow-hidden" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+              {/* Header */}
+              <div className="flex items-center gap-3 p-5 border-b border-white/5">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center font-syne text-sm font-black flex-shrink-0" style={{background:member.avatar_color+'22',border:`2px solid ${member.avatar_color}33`,color:member.avatar_color}}>{member.initials}</div>
+                <div className="flex-1">
+                  <div className="font-semibold text-white text-sm">{member.name}</div>
+                  <div className="text-[10px] text-white/30">{member.role === 'owner' ? 'Director' : 'Equipo'} · {member.email}</div>
+                </div>
+                {urgent.length > 0 && <span className="font-syne text-[8px] font-black px-2 py-1 rounded-full" style={{background:'rgba(229,29,42,0.1)',color:RED}}>{urgent.length} URGENTE{urgent.length>1?'S':''}</span>}
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-3 divide-x divide-white/5">
+                {[{v:pending.length,l:'Pendientes'},{v:done.length,l:'Hechas'},{v:urgent.length,l:'Urgentes'}].map((s,i)=>(
+                  <div key={i} className="p-3 text-center">
+                    <div className="font-syne text-xl font-black" style={{color:i===2&&s.v>0?RED:'rgba(255,255,255,0.8)'}}>{s.v}</div>
+                    <div className="text-[9px] text-white/25">{s.l}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tasks */}
+              <div className="px-4 pb-4">
+                {pending.slice(0,4).map((t: Task) => (
+                  <div key={t.id} className="flex items-center gap-2 py-2 border-b border-white/4">
+                    <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.7)':BLU}}/>
+                    <span className="text-xs text-white/60 flex-1 truncate">{t.text}</span>
+                  </div>
+                ))}
+                {pending.length === 0 && <div className="text-center text-white/15 text-xs py-4">Sin tareas asignadas</div>}
+                {pending.length > 4 && <div className="text-center text-white/25 text-xs pt-2">+{pending.length-4} más</div>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {data.team.length === 0 && (
+        <div className="text-center text-white/20 py-16 text-sm">Sin datos de equipo. Accede como Owner para verlos.</div>
+      )}
+    </div>
+  )
+}
+
 function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,isOwner}: any) {
   const now = new Date()
   const dateStr = now.toLocaleDateString('es-ES', { weekday:'long', day:'numeric', month:'long' })
