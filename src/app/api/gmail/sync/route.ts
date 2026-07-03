@@ -1,6 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getEmailsWithRefreshToken } from '@/lib/gmail'
-import { analyzeEmail } from '@/lib/ai'
+import { analyzeEmail, EmailAnalysis } from '@/lib/ai'
 import { NextResponse } from 'next/server'
 
 export async function POST() {
@@ -45,15 +45,14 @@ export async function POST() {
 
     if (existing) continue
 
-    let analysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' as const, suggestedTask: undefined as string | undefined }
+    let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
     try {
-      const aiResult = await analyzeEmail(
+      analysis = await analyzeEmail(
         email.subject || '',
         (email.body_preview || '').slice(0, 800),
         email.from_name,
         knownClients
       )
-      analysis = { ...analysis, ...aiResult }
     } catch {
       // AI analysis failed — save email with basic info anyway
     }
