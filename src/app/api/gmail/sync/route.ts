@@ -23,7 +23,16 @@ export async function POST() {
   const { data: clientsData } = await admin.from('clients').select('name')
   const knownClients = (clientsData || []).map(c => c.name)
 
-  const emails = await getEmailsWithRefreshToken(profile.gmail_refresh_token, 20)
+  let emails: Awaited<ReturnType<typeof getEmailsWithRefreshToken>>
+  try {
+    emails = await getEmailsWithRefreshToken(profile.gmail_refresh_token, 20)
+  } catch (err: unknown) {
+    const error = err as Error & { code?: number; response?: { data?: unknown } }
+    return NextResponse.json(
+      { error: 'Gmail API error', message: error.message, code: error.code, details: error.response?.data },
+      { status: 500 }
+    )
+  }
 
   let newCount = 0
 
