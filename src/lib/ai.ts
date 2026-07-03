@@ -2,6 +2,11 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
+// Remove null bytes and control chars that break the Anthropic API
+function sanitize(s: string) {
+  return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ').trim()
+}
+
 export interface EmailAnalysis {
   summary: string
   action: string
@@ -36,9 +41,9 @@ export async function analyzeEmail(
 
 Clientes conocidos: ${knownClients.join(', ')}
 
-Email de: ${fromName}
-Asunto: ${subject}
-Cuerpo: ${body.slice(0, 1200)}
+Email de: ${sanitize(fromName)}
+Asunto: ${sanitize(subject)}
+Cuerpo: ${sanitize(body.slice(0, 800))}
 
 Responde SOLO con JSON válido (sin markdown):
 {
@@ -80,7 +85,7 @@ export async function analyzeWhatsAppMessage(
 
 Clientes conocidos: ${knownClients.join(', ')}
 
-Mensaje: "${message}"
+Mensaje: "${sanitize(message)}"
 
 Responde SOLO con JSON válido:
 {
@@ -142,7 +147,7 @@ Responde siempre en español, de forma concisa y profesional. Máx 3 frases a no
       role: (h.role === 'ai' ? 'assistant' : 'user') as 'user' | 'assistant',
       content: h.content
     })),
-    { role: 'user', content: userMessage }
+    { role: 'user', content: sanitize(userMessage) }
   ]
 
   const msg = await anthropic.messages.create({

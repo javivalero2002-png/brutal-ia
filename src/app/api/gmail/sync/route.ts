@@ -45,14 +45,20 @@ export async function POST() {
 
     if (existing) continue
 
-    const analysis = await analyzeEmail(
-      email.subject || '',
-      email.body_preview || '',
-      email.from_name,
-      knownClients
-    )
+    let analysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' as const, suggestedTask: undefined as string | undefined }
+    try {
+      const aiResult = await analyzeEmail(
+        email.subject || '',
+        (email.body_preview || '').slice(0, 800),
+        email.from_name,
+        knownClients
+      )
+      analysis = { ...analysis, ...aiResult }
+    } catch {
+      // AI analysis failed — save email with basic info anyway
+    }
 
-    await admin.from('inbox_messages').insert({
+    const { error: insertErr } = await admin.from('inbox_messages').insert({
       user_id: user.id,
       source: 'gmail',
       gmail_id: email.gmail_id,
@@ -68,6 +74,8 @@ export async function POST() {
       is_unread: email.is_unread,
       received_at: email.received_at,
     })
+
+    if (insertErr) continue
 
     if (analysis.suggestedTask) {
       await admin.from('tasks').insert({
