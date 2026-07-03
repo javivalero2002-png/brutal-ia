@@ -64,6 +64,8 @@ export interface InboxMessage {
   ai_client?: string
   ai_urgency: 'urgent' | 'high' | 'normal'
   is_read: boolean
+  is_unread?: boolean
+  shared?: boolean
   received_at: string
 }
 

@@ -819,7 +819,12 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
 function InboxSection({data,showToast}: any) {
   const [filter, setFilter] = useState('Todos')
   const [selected, setSelected] = useState<any>(null)
-  const msgs = data.inbox.filter((m: any) => filter==='Todos'?true:filter==='No leídos'?!m.is_read:m.source===filter.toLowerCase())
+  const msgs = data.inbox.filter((m: any) => {
+    if (filter==='Todos') return true
+    if (filter==='No leídos') return !m.is_read
+    if (filter==='General') return m.shared
+    return m.source===filter.toLowerCase()
+  })
 
   const handleSelect = (m: any) => {
     setSelected(m)
@@ -843,7 +848,7 @@ function InboxSection({data,showToast}: any) {
           </button>
         </div>
         <div className="flex gap-1 px-4 pt-3 pb-2 flex-shrink-0">
-          {['Todos','No leídos','Gmail','WhatsApp'].map(f=>(
+          {['Todos','No leídos','General','Gmail','WhatsApp'].map(f=>(
             <button key={f} onClick={()=>setFilter(f)} className="px-3 py-1.5 rounded-lg text-[10px] font-syne font-bold tracking-wide transition-colors" style={{background:filter===f?'rgba(27,95,250,0.12)':'transparent',color:filter===f?'#F0F0F8':'rgba(240,240,248,0.35)'}}>
               {f}
             </button>
@@ -859,6 +864,7 @@ function InboxSection({data,showToast}: any) {
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className="text-sm font-semibold truncate" style={{color:m.is_read?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.9)'}}>{m.from_name}</span>
                   {!m.is_read && <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:BLU}}/>}
+                  {m.shared && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded flex-shrink-0" style={{background:'rgba(27,95,250,0.1)',color:'rgba(27,95,250,0.7)'}}>GENERAL</span>}
                   {m.ai_urgency==='urgent' && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded flex-shrink-0" style={{background:'rgba(229,29,42,0.12)',color:RED}}>URG</span>}
                 </div>
                 <div className="text-xs truncate" style={{color:m.is_read?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.55)'}}>{m.subject||m.from_phone||'Sin asunto'}</div>

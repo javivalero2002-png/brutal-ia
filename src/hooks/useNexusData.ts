@@ -37,10 +37,8 @@ export function useNexusData(profile: Profile | null) {
       ])
       setClients(c); setProjects(p); setTasks(t); setInbox(i)
       setMemoria(m); setAgenda(a); setReglas(r); setChatMessages(ch)
-      if (profile.role === 'owner') {
-        const teamData = await apiFetch('/api/team')
-        setTeam(teamData)
-      }
+      const teamData = await apiFetch('/api/team')
+      setTeam(teamData)
     } finally {
       setLoading(false)
     }

@@ -21,6 +21,14 @@ export function getAuthUrl(userId: string) {
   })
 }
 
+export async function getGmailAccountEmail(refreshToken: string): Promise<string> {
+  const oauth2Client = getOAuthClient()
+  oauth2Client.setCredentials({ refresh_token: refreshToken })
+  const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client })
+  const { data } = await oauth2.userinfo.get()
+  return data.email || ''
+}
+
 export async function getEmailsWithRefreshToken(refreshToken: string, maxResults = 15) {
   const oauth2Client = getOAuthClient()
   oauth2Client.setCredentials({ refresh_token: refreshToken })

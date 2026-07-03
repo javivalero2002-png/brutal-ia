@@ -1,7 +1,9 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { getEmailsWithRefreshToken } from '@/lib/gmail'
+import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
 import { analyzeEmail, EmailAnalysis } from '@/lib/ai'
 import { NextResponse } from 'next/server'
+
+const COMPANY_EMAIL = 'colaboraciones@brutalstudios.es'
 
 export async function POST() {
   const supabase = await createClient()
@@ -24,8 +26,10 @@ export async function POST() {
   const knownClients = (clientsData || []).map(c => c.name)
 
   let emails: Awaited<ReturnType<typeof getEmailsWithRefreshToken>>
+  let gmailAccount = ''
   try {
     emails = await getEmailsWithRefreshToken(profile.gmail_refresh_token, 20)
+    gmailAccount = await getGmailAccountEmail(profile.gmail_refresh_token)
   } catch (err: unknown) {
     const error = err as Error & { code?: number; response?: { data?: unknown } }
     return NextResponse.json(
@@ -33,6 +37,9 @@ export async function POST() {
       { status: 500 }
     )
   }
+
+  // Messages from the company email are visible to the whole team
+  const isCompanyAccount = gmailAccount === COMPANY_EMAIL
 
   let newCount = 0
 
@@ -72,6 +79,7 @@ export async function POST() {
       is_read: !email.is_unread,
       is_unread: email.is_unread,
       received_at: email.received_at,
+      shared: isCompanyAccount,
     })
 
     if (insertErr) continue
@@ -88,5 +96,5 @@ export async function POST() {
     newCount++
   }
 
-  return NextResponse.json({ synced: newCount, total: emails.length })
+  return NextResponse.json({ synced: newCount, total: emails.length, account: gmailAccount, shared: isCompanyAccount })
 }

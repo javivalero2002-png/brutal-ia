@@ -7,12 +7,14 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = await createAdminClient()
+
+  // Return own messages + shared company messages (colaboraciones@)
   const { data, error } = await admin
     .from('inbox_messages')
     .select('*')
-    .eq('user_id', user.id)
+    .or(`user_id.eq.${user.id},shared.eq.true`)
     .order('received_at', { ascending: false })
-    .limit(50)
+    .limit(100)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
@@ -29,7 +31,6 @@ export async function PATCH(request: NextRequest) {
     .from('inbox_messages')
     .update({ is_read, is_unread: !is_read })
     .eq('id', id)
-    .eq('user_id', user.id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
