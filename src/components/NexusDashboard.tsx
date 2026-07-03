@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 // ── Icons (inline to avoid import issues) ──────────────────
 const BLU = '#1B5FFA', RED = '#E51D2A'
 
-type Section = 'hoy'|'inbox'|'tareas'|'clientes'|'proyectos'|'contenido'|'memoria'|'automatizaciones'|'chat'|'equipo'|'ajustes'
+type Section = 'hoy'|'inbox'|'tareas'|'clientes'|'proyectos'|'contenido'|'memoria'|'automatizaciones'|'chat'|'equipo'|'reportes'|'ajustes'
 
 interface Props { profile: Profile }
 
@@ -204,6 +204,7 @@ export default function NexusDashboard({ profile }: Props) {
             <div className="font-syne text-[8px] font-black tracking-widest text-white/15 px-2 mb-2">CEREBRO</div>
             {navItem('memoria','Memoria','database')}
             {navItem('automatizaciones','Automatizaciones','zap',data.reglas.filter(r=>r.active).length)}
+            {profile.role==='owner' && navItem('reportes','Reportes','bar-chart-2')}
           </div>
           <div>
             <div className="font-syne text-[8px] font-black tracking-widest text-white/15 px-2 mb-2">IA</div>
@@ -266,6 +267,7 @@ export default function NexusDashboard({ profile }: Props) {
           {section === 'inbox' && <InboxSection data={data} showToast={showToast} />}
           {section === 'tareas' && <TareasSection data={data} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'equipo' && <EquipoSection data={data} showToast={showToast} />}
+          {section === 'reportes' && <ReportesSection data={data} />}
           {section === 'clientes' && <ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'proyectos' && <ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'contenido' && <ContenidoSection data={data} onOpenModal={setModal} showToast={showToast} />}
@@ -555,6 +557,167 @@ function EquipoSection({data}: any) {
       {data.team.length === 0 && (
         <div className="text-center text-white/20 py-16 text-sm">Sin datos de equipo. Accede como Owner para verlos.</div>
       )}
+    </div>
+  )
+}
+
+// ── REPORTES SECTION ─────────────────────────────────────────
+function ReportesSection({data}: any) {
+  const tasks: Task[] = data.tasks
+  const projects: Project[] = data.projects
+  const clients: Client[] = data.clients
+  const inbox: any[] = data.inbox
+
+  const totalTasks = tasks.length
+  const doneTasks = tasks.filter(t=>t.done).length
+  const pendingTasks = tasks.filter(t=>!t.done).length
+  const urgentTasks = tasks.filter(t=>!t.done&&t.level==='urgent').length
+  const completionRate = totalTasks > 0 ? Math.round((doneTasks/totalTasks)*100) : 0
+
+  const projectsByStatus = [
+    {label:'En progreso', count:projects.filter(p=>p.status==='activo').length, color:BLU},
+    {label:'Urgente', count:projects.filter(p=>p.status==='urgente').length, color:RED},
+    {label:'Revisión', count:projects.filter(p=>p.status==='revisión').length, color:'rgba(255,176,32,0.8)'},
+    {label:'Planificación', count:projects.filter(p=>p.status==='plan.').length, color:'rgba(255,255,255,0.3)'},
+  ]
+
+  const tasksByMember = data.team.map((m: Profile) => ({
+    name: m.name,
+    initials: m.initials,
+    color: m.avatar_color,
+    pending: tasks.filter(t=>!t.done&&t.assignee?.name===m.name).length,
+    done: tasks.filter(t=>t.done&&t.assignee?.name===m.name).length,
+  }))
+
+  const urgencyBreakdown = [
+    {label:'Urgente', count:inbox.filter(m=>m.ai_urgency==='urgent').length, color:RED},
+    {label:'Alta', count:inbox.filter(m=>m.ai_urgency==='high').length, color:'rgba(255,176,32,0.8)'},
+    {label:'Normal', count:inbox.filter(m=>m.ai_urgency==='normal').length, color:BLU},
+  ]
+
+  const maxBar = Math.max(...tasksByMember.map((m: any)=>m.pending+m.done), 1)
+
+  return (
+    <div className="p-6 max-w-[1100px] mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="font-syne text-2xl font-black text-white">Reportes</h1>
+        <button onClick={()=>window.print()} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm text-white/40 hover:text-white/70 transition-colors" style={{border:'1px solid rgba(255,255,255,0.1)'}}>
+          <LucideIcon name="printer" size={13}/>Exportar PDF
+        </button>
+      </div>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-4 gap-3 mb-6">
+        {[
+          {v:`${completionRate}%`, l:'Tareas completadas', accent:completionRate>60?'#22c55e':BLU},
+          {v:urgentTasks+'', l:'Urgentes pendientes', accent:urgentTasks>0?RED:BLU},
+          {v:projects.length+'', l:'Proyectos totales', accent:null},
+          {v:clients.length+'', l:'Clientes activos', accent:null},
+        ].map((k,i)=>(
+          <div key={i} className="rounded-xl p-4" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)',borderTop:`2px solid ${k.accent||'rgba(255,255,255,0.1)'}`}}>
+            <div className="font-syne text-4xl font-black mb-1" style={{color:k.accent||'#F0F0F8'}}>{k.v}</div>
+            <div className="text-xs text-white/35">{k.l}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-[1fr_1fr] gap-4 mb-4">
+        {/* Task completion bar */}
+        <div className="rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+          <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Estado de tareas</div>
+          <div className="space-y-3">
+            {[
+              {l:'Completadas', v:doneTasks, total:totalTasks, color:'#22c55e'},
+              {l:'Pendientes', v:pendingTasks, total:totalTasks, color:BLU},
+              {l:'Urgentes', v:urgentTasks, total:totalTasks, color:RED},
+            ].map((b,i)=>(
+              <div key={i}>
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className="text-white/50">{b.l}</span>
+                  <span className="text-white/70 font-medium">{b.v} / {b.total}</span>
+                </div>
+                <div className="h-2 rounded-full" style={{background:'rgba(255,255,255,0.05)'}}>
+                  <div className="h-full rounded-full transition-all" style={{width:`${b.total>0?(b.v/b.total)*100:0}%`,background:b.color}}/>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Projects by status */}
+        <div className="rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+          <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Proyectos por estado</div>
+          <div className="space-y-3">
+            {projectsByStatus.map((s,i)=>(
+              <div key={i}>
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className="text-white/50">{s.label}</span>
+                  <span className="font-syne font-black" style={{color:s.color}}>{s.count}</span>
+                </div>
+                <div className="h-2 rounded-full" style={{background:'rgba(255,255,255,0.05)'}}>
+                  <div className="h-full rounded-full" style={{width:`${projects.length>0?(s.count/projects.length)*100:0}%`,background:s.color}}/>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[1fr_320px] gap-4">
+        {/* Team workload */}
+        <div className="rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+          <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-5">Carga de trabajo por persona</div>
+          <div className="space-y-4">
+            {tasksByMember.map((m: any,i: number)=>(
+              <div key={i}>
+                <div className="flex items-center gap-3 mb-1.5">
+                  <div className="w-6 h-6 rounded-full flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0" style={{background:m.color+'22',color:m.color}}>{m.initials}</div>
+                  <span className="text-sm text-white/60 flex-1">{m.name}</span>
+                  <span className="text-xs text-white/40">{m.pending} pend. · {m.done} hechas</span>
+                </div>
+                <div className="h-2 rounded-full ml-9" style={{background:'rgba(255,255,255,0.04)'}}>
+                  <div className="h-full rounded-full flex overflow-hidden">
+                    <div style={{width:`${((m.done)/(maxBar))*100}%`,background:'rgba(34,197,94,0.6)',transition:'width 0.5s'}}/>
+                    <div style={{width:`${((m.pending)/(maxBar))*100}%`,background:m.color+'80',transition:'width 0.5s'}}/>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {tasksByMember.length===0&&<div className="text-center text-white/20 text-sm py-4">Sin datos de equipo</div>}
+          </div>
+        </div>
+
+        {/* Inbox urgency */}
+        <div className="rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+          <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Inbox por urgencia</div>
+          <div className="space-y-3 mb-5">
+            {urgencyBreakdown.map((u,i)=>(
+              <div key={i}>
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className="text-white/50">{u.label}</span>
+                  <span className="font-syne font-black" style={{color:u.color}}>{u.count}</span>
+                </div>
+                <div className="h-2 rounded-full" style={{background:'rgba(255,255,255,0.05)'}}>
+                  <div className="h-full rounded-full" style={{width:`${inbox.length>0?(u.count/inbox.length)*100:0}%`,background:u.color}}/>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="pt-4 border-t border-white/6">
+            <div className="text-xs text-white/25 mb-2">Clientes con más proyectos</div>
+            {clients.slice(0,3).map((c: Client,i: number)=>{
+              const n = projects.filter((p: Project)=>p.client_id===c.id).length
+              return (
+                <div key={i} className="flex items-center gap-2 py-1.5">
+                  <div className="w-5 h-5 rounded flex items-center justify-center font-syne text-[8px] font-black flex-shrink-0" style={{background:c.color+'22',color:c.color}}>{c.initials}</div>
+                  <span className="text-xs text-white/50 flex-1 truncate">{c.name}</span>
+                  <span className="font-syne text-[9px] font-black text-white/30">{n} proy.</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
