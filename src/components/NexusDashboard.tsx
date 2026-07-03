@@ -158,14 +158,12 @@ export default function NexusDashboard({ profile }: Props) {
       <aside className="flex-shrink-0 flex flex-col overflow-hidden transition-all duration-200" style={{ width:sidebarOpen?'224px':'0', background:'linear-gradient(180deg,#0C0C1C 0%,#07070F 60%,#050510 100%)', borderRight:'1px solid rgba(27,95,250,0.1)' }}>
         {/* Header */}
         <div className="px-4 py-5 border-b border-white/5 relative flex-shrink-0">
-          <img src="https://brutal.thehook-produccion.es/wp-content/themes/brutal-studios/assets/img/brutal-logo-white.svg" alt="Brutal" className="h-3 opacity-55 mb-4" />
-          <div className="flex items-center gap-2">
-            <NexusLogo size={36} />
-            <div>
-              <div className="font-syne text-xs font-black tracking-widest text-white">BRUTAL<span style={{color:'#1B5FFA'}}>.IA</span></div>
-              <div className="text-[8px] tracking-widest text-white/20">BRUTAL STUDIOS</div>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <img src="https://brutal.thehook-produccion.es/wp-content/themes/brutal-studios/assets/img/brutal-logo-white.svg" alt="Brutal Studios" className="h-4 mb-1" />
+              <div className="font-syne text-[10px] font-black tracking-widest text-white">BRUTAL<span style={{color:'#1B5FFA'}}>.IA</span></div>
             </div>
-            <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-500 animate-glowPulse" />
+            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-glowPulse flex-shrink-0" />
           </div>
         </div>
 

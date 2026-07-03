@@ -42,15 +42,9 @@ export default function LoginPage() {
     <div style={s.page}>
       <div>
         <div style={{ textAlign: 'center', marginBottom: '36px' }}>
-          <svg width="36" height="36" viewBox="0 0 44 44" style={{ margin: '0 auto 12px' }}>
-            <path d="M22 22 L3 3 L9 1 L22 17z" fill="#1B5FFA" opacity="0.95"/>
-            <path d="M22 22 L3 41 L9 43 L22 27z" fill="#0A2FA0" opacity="0.95"/>
-            <path d="M22 22 L41 3 L35 1 L22 17z" fill="#8AADF0" opacity="0.88"/>
-            <path d="M22 22 L41 41 L35 43 L22 27z" fill="#8AADF0" opacity="0.7"/>
-            <circle cx="22" cy="22" r="2" fill="white"/>
-          </svg>
-          <div style={{ fontFamily: 'Syne,sans-serif', fontSize: '22px', fontWeight: 900, color: 'white', letterSpacing: '-0.5px' }}>BRUTAL<span style={{color:'#1B5FFA'}}>.IA</span></div>
-          <div style={{ fontFamily: 'Syne,sans-serif', fontSize: '9px', letterSpacing: '4px', color: 'rgba(255,255,255,0.2)', marginTop: '4px' }}>BRUTAL STUDIOS</div>
+          <img src="https://brutal.thehook-produccion.es/wp-content/themes/brutal-studios/assets/img/brutal-logo-white.svg" alt="Brutal Studios" style={{ height: '28px', margin: '0 auto 10px', display: 'block' }} />
+          <div style={{ fontFamily: 'Syne,sans-serif', fontSize: '13px', fontWeight: 900, color: 'white', letterSpacing: '4px' }}>BRUTAL<span style={{color:'#1B5FFA'}}>.IA</span></div>
+          <div style={{ fontFamily: 'Syne,sans-serif', fontSize: '9px', letterSpacing: '4px', color: 'rgba(255,255,255,0.2)', marginTop: '4px' }}>INTELIGENCIA ARTIFICIAL</div>
         </div>
 
         <div style={s.card}>
