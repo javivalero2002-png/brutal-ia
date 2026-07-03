@@ -69,7 +69,15 @@ export default function NexusDashboard({ profile }: Props) {
   // Auto-sync Gmail on load
   useEffect(() => {
     if (profile.gmail_connected) data.syncGmail()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile.gmail_connected])
+
+  // Show sync result as toast
+  useEffect(() => {
+    if (data.syncResult) {
+      showToast(data.syncResult.message)
+    }
+  }, [data.syncResult, showToast])
 
   const handleSearchKey = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setSearchIdx(i => Math.min(i+1, sr.current.length-1)) }
@@ -830,7 +838,7 @@ function InboxSection({data,showToast}: any) {
       <div className="flex flex-col overflow-hidden" style={{width: selected ? '360px' : '100%', flexShrink: 0, borderRight: selected ? '1px solid rgba(255,255,255,0.06)' : 'none'}}>
         <div className="flex items-center justify-between px-6 py-5 border-b border-white/5 flex-shrink-0">
           <h1 className="font-syne text-xl font-black text-white">Inbox IA</h1>
-          <button onClick={()=>data.syncGmail()} disabled={data.syncing} className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-white/40 disabled:opacity-40 hover:text-white/70 transition-colors" style={{border:'1px solid rgba(255,255,255,0.08)'}}>
+          <button onClick={()=>data.syncGmail()} disabled={data.syncing} title={data.syncResult?.message || ''} className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs disabled:opacity-40 hover:text-white/70 transition-colors" style={{border:'1px solid rgba(255,255,255,0.08)', color: data.syncResult ? (data.syncResult.ok ? '#4ade80' : '#ef4444') : 'rgba(240,240,248,0.4)'}}>
             <LucideIcon name="refresh-cw" size={12}/>{data.syncing?'Sync…':'Sync'}
           </button>
         </div>

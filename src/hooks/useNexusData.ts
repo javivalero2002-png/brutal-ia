@@ -20,6 +20,7 @@ export function useNexusData(profile: Profile | null) {
   const [team, setTeam] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<{ ok: boolean; message: string } | null>(null)
 
   const load = useCallback(async () => {
     if (!profile) return
@@ -50,10 +51,15 @@ export function useNexusData(profile: Profile | null) {
   const syncGmail = useCallback(async () => {
     if (!profile?.gmail_connected) return
     setSyncing(true)
+    setSyncResult(null)
     try {
-      await apiFetch('/api/gmail/sync', { method: 'POST' })
+      const result = await apiFetch('/api/gmail/sync', { method: 'POST' })
       const newInbox = await apiFetch('/api/inbox')
       setInbox(newInbox)
+      setSyncResult({ ok: true, message: `✓ ${result.synced ?? 0} emails nuevos (${result.total ?? 0} revisados)` })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido'
+      setSyncResult({ ok: false, message: `Error: ${msg.slice(0, 200)}` })
     } finally {
       setSyncing(false)
     }
@@ -155,7 +161,7 @@ export function useNexusData(profile: Profile | null) {
   }, [])
 
   return {
-    loading, syncing, syncGmail,
+    loading, syncing, syncGmail, syncResult,
     clients, createClient, deleteClient,
     projects, createProject, updateProject, deleteProject,
     tasks, createTask, updateTask, deleteTask, toggleTask,

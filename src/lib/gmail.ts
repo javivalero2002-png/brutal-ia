@@ -30,7 +30,7 @@ export async function getEmailsWithRefreshToken(refreshToken: string, maxResults
   const listRes = await gmail.users.messages.list({
     userId: 'me',
     maxResults,
-    q: 'in:inbox -category:promotions -category:social',
+    q: 'in:inbox',
   })
 
   const messages = listRes.data.messages || []
