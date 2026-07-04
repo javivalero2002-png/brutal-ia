@@ -1301,7 +1301,7 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                 <div key={t.id} onClick={()=>data.toggleTask(t.id)} className="flex items-center gap-4 px-6 py-4 cursor-pointer transition-all" style={{borderBottom:`1px solid ${BORDER}`}}>
                   {t.assignee && <div className="w-7 h-7 rounded-full flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0" style={{background:t.assignee.avatar_color+'18',border:`1.5px solid ${t.assignee.avatar_color}30`,color:t.assignee.avatar_color}}>{t.assignee.initials}</div>}
                   <span className="flex-1 text-[13px]" style={{color:'rgba(240,240,248,0.65)'}}>{t.text}</span>
-                  <span className="font-syne text-[8px] font-black px-2 py-1 rounded-lg flex-shrink-0" style={{background:t.level==='urgent'?'rgba(229,29,42,0.12)':SURF2,color:t.level==='urgent'?RED:'rgba(255,255,255,0.22)'}}>{t.level}</span>
+                  <span className="font-syne text-[8px] font-black px-2 py-1 rounded-lg flex-shrink-0" style={{background:t.level==='urgent'?'rgba(229,29,42,0.12)':t.level==='high'?'rgba(255,176,32,0.1)':SURF2,color:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.22)'}}>{t.level==='urgent'?'URGENTE':t.level==='high'?'ALTA':'NORMAL'}</span>
                 </div>
               ))}
             </div>
@@ -1383,7 +1383,7 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                   <ProgressRing pct={p.progress} size={40} stroke={3} color={p.color||BLU}/>
                   <div className="flex-1 min-w-0">
                     <div className="text-[13px] font-medium truncate" style={{color:'rgba(240,240,248,0.8)'}}>{p.name}</div>
-                    <div className="text-[10px] mt-0.5" style={{color:'rgba(255,255,255,0.25)'}}>{p.progress}% · {p.deadline}</div>
+                    <div className="text-[10px] mt-0.5" style={{color:'rgba(255,255,255,0.25)'}}>{p.progress}% · {p.deadline ? new Date(p.deadline+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'}) : 'Sin fecha'}</div>
                   </div>
                 </div>
               ))}
@@ -1824,7 +1824,7 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
                 <div className="w-5 h-5 rounded-lg flex items-center justify-center" style={{background:'rgba(139,92,246,0.2)'}}><LucideIcon name="zap" size={11} color="#A78BFA"/></div>
                 <span className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(167,139,250,0.8)'}}>BRUTAL.IA — PLAN ESTRATÉGICO 30 DÍAS</span>
               </div>
-              <button onClick={()=>setAiAdvice(null)} className="text-[10px]" style={{color:'rgba(255,255,255,0.2)'}}>✕</button>
+              <button onClick={()=>setAiAdvice(null)} className="flex items-center justify-center w-6 h-6 rounded-lg transition-colors hover:bg-white/5" style={{color:'rgba(255,255,255,0.2)'}}><LucideIcon name="x" size={12} color="rgba(255,255,255,0.3)"/></button>
             </div>
             <div className="grid grid-cols-3 gap-4">
               {aiAdvice.map((rec: any, i: number)=>{
@@ -1910,7 +1910,7 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
             <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
               <div className="px-5 py-4 font-syne text-[9px] font-black tracking-widest" style={{borderBottom:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.25)'}}>TAREAS ACTIVAS</div>
               {activeTasks.length===0 ? (
-                <div className="px-5 py-6 text-center text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Al día ✓</div>
+                <div className="px-5 py-6 flex items-center justify-center gap-2 text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}><LucideIcon name="check-circle" size={13} color="rgba(34,197,94,0.4)"/>Al día</div>
               ) : activeTasks.slice(0,5).map((t: Task,i: number)=>(
                 <div key={t.id} className="flex items-center gap-3 px-5 py-3" style={{borderBottom:i<Math.min(activeTasks.length,5)-1?`1px solid ${BORDER}`:'none',borderLeft:`2px solid ${t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.6)':BLU}40`}}>
                   <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.7)':BLU}}/>
@@ -2501,7 +2501,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
     try {
       const events = await fetch('/api/calendar/events').then(r=>r.json())
       setCalEvents(events)
-      showToast(`✓ ${events.length} eventos de Google Calendar`)
+      showToast(`${events.length} eventos de Google Calendar sincronizados`)
     } catch { showToast('Error sincronizando calendario') }
     finally { setSyncingCal(false) }
   }
@@ -3158,7 +3158,7 @@ function AjustesSection({profile,data,showToast}: any) {
                       <input value={editMemberName} onChange={e=>setEditMemberName(e.target.value)} placeholder="Nombre" className="flex-1 px-3 py-2 rounded-xl text-[12px] text-white outline-none" style={{background:SURF2,border:`1.5px solid rgba(27,95,250,0.3)`,caretColor:BLU}}/>
                       <input value={editMemberInitials} onChange={e=>setEditMemberInitials(e.target.value.toUpperCase().slice(0,2))} maxLength={2} placeholder="XX" className="w-14 px-2 py-2 rounded-xl text-[12px] text-white outline-none text-center" style={{background:SURF2,border:`1.5px solid rgba(27,95,250,0.3)`,caretColor:BLU}}/>
                       <button onClick={saveMemberName} className="px-3 py-2 rounded-xl font-syne text-[8.5px] font-black text-white" style={{background:BLU}}>OK</button>
-                      <button onClick={()=>setEditingMember(null)} className="px-3 py-2 rounded-xl font-syne text-[8.5px] font-black" style={{color:'rgba(255,255,255,0.3)'}}>✕</button>
+                      <button onClick={()=>setEditingMember(null)} className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={13} color="rgba(255,255,255,0.3)"/></button>
                     </div>
                   ) : (
                     <div className="flex items-center gap-3 py-3 group" style={{borderBottom:`1px solid ${BORDER}`}}>
