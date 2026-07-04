@@ -2089,6 +2089,46 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
 }
 
 // ── CONTENIDO SECTION ────────────────────────────────────────
+function PlatformLogo({ platform, size = 18 }: { platform: string; size?: number }) {
+  const s = size
+  if (platform === 'TikTok') return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="#ff0050">
+      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V9a8.16 8.16 0 0 0 4.77 1.52V7.07a4.85 4.85 0 0 1-1-.38z"/>
+    </svg>
+  )
+  if (platform === 'Instagram') return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="#C13584" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+    </svg>
+  )
+  if (platform === 'LinkedIn') return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="#0A66C2">
+      <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/>
+      <rect x="2" y="9" width="4" height="12"/>
+      <circle cx="4" cy="4" r="2"/>
+    </svg>
+  )
+  if (platform === 'YouTube') return (
+    <svg width={s} height={s} viewBox="0 0 24 24">
+      <path fill="#FF0000" d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.6C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.95A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/>
+      <polygon fill="white" points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/>
+    </svg>
+  )
+  if (platform === 'Twitter') return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="#1DA1F2">
+      <path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/>
+    </svg>
+  )
+  if (platform === 'Pinterest') return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="#E60023">
+      <path d="M12 0C5.373 0 0 5.373 0 12c0 5.084 3.163 9.426 7.627 11.174-.105-.949-.2-2.405.042-3.441.218-.937 1.407-5.965 1.407-5.965s-.359-.719-.359-1.782c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.632-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146C9.57 23.812 10.763 24 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>
+    </svg>
+  )
+  return <div style={{ width: s, height: s, borderRadius: 3, background: 'rgba(255,255,255,0.15)' }} />
+}
+
 function ContenidoSection({data,onOpenModal,showToast}: any) {
   const [activeItem, setActiveItem] = useState<any>(null)
   const [editNotes, setEditNotes] = useState('')
@@ -2099,13 +2139,12 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
   const [savingNotes, setSavingNotes] = useState(false)
 
   const platColor: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
-  const platIcon: Record<string,string> = {TikTok:'▶',Instagram:'◆',LinkedIn:'in',YouTube:'▶',Twitter:'✕',Pinterest:'P'}
 
   const cols = [
-    { key:'borrador', label:'En bruto', color:'rgba(255,255,255,0.35)', desc:'Material sin procesar' },
-    { key:'pendiente', label:'En producción', color:'rgba(255,176,32,0.85)', desc:'En edición activa' },
-    { key:'listo', label:'Listo', color:GRN, desc:'Aprobado y preparado' },
-    { key:'publicado', label:'Publicado', color:BLU, desc:'Ya en plataformas' },
+    { key:'borrador', label:'En bruto', color:'rgba(255,255,255,0.42)' },
+    { key:'pendiente', label:'En producción', color:'rgba(255,176,32,0.9)' },
+    { key:'listo', label:'Listo', color:GRN },
+    { key:'publicado', label:'Publicado', color:BLU },
   ]
 
   const openItem = (item: any) => {
@@ -2128,7 +2167,6 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
     finally { setSavingNotes(false) }
   }
 
-  // Derive unique accounts across all items
   const allAccounts: string[] = ['Todas', ...Array.from(new Set<string>(data.agenda.filter((a: any)=>a.account_name).map((a: any)=>a.account_name as string)))]
   const filteredAgenda = accountFilter === 'Todas' ? data.agenda : data.agenda.filter((a: any)=>a.account_name===accountFilter)
 
@@ -2140,119 +2178,140 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
     } catch { showToast('Error') }
   }
 
+  const pc = activeItem ? (platColor[activeItem.platform]||BLU) : BLU
+
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Left: Kanban */}
+
+      {/* ── KANBAN ─────────────────────────────────────────────── */}
       <div className="flex-1 overflow-hidden flex flex-col min-w-0">
-        <div className="px-8 pt-6 pb-4 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
+
+        {/* Header */}
+        <div className="px-8 pt-6 pb-5 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
           <div className="flex items-center justify-between mb-4">
             <div>
               <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>PRODUCCIÓN</div>
-              <h1 className="font-figtree text-[24px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Pipeline de Contenido</h1>
+              <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.04em'}}>Pipeline</h1>
             </div>
-            <button onClick={()=>onOpenModal('contenido')} className="px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVA PIEZA</button>
+            <button onClick={()=>onOpenModal('contenido')} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white transition-opacity hover:opacity-85" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
+              + NUEVA PIEZA
+            </button>
           </div>
+          {/* Account filter with platform icons */}
           {allAccounts.length > 1 && (
             <div className="flex gap-1.5 flex-wrap">
-              {allAccounts.map((acc: string)=>(
-                <button key={acc} onClick={()=>setAccountFilter(acc)} className="font-syne text-[8.5px] font-black px-3 py-1.5 rounded-xl transition-all" style={{background:accountFilter===acc?'rgba(27,95,250,0.15)':'rgba(255,255,255,0.04)',color:accountFilter===acc?BLU:'rgba(255,255,255,0.3)',border:accountFilter===acc?`1px solid rgba(27,95,250,0.25)`:'1px solid transparent'}}>
-                  {acc}
-                </button>
-              ))}
+              {allAccounts.map((acc: string)=>{
+                const isAll = acc === 'Todas'
+                const isActive = accountFilter === acc
+                const firstItem = data.agenda.find((a: any)=>a.account_name===acc)
+                const accColor = firstItem ? (platColor[firstItem.platform]||BLU) : BLU
+                return (
+                  <button key={acc} onClick={()=>setAccountFilter(acc)} className="flex items-center gap-1.5 font-syne text-[8.5px] font-black px-3 py-1.5 rounded-xl transition-all" style={{
+                    background: isActive ? (isAll ? 'rgba(27,95,250,0.15)' : accColor+'18') : 'rgba(255,255,255,0.04)',
+                    color: isActive ? (isAll ? BLU : accColor) : 'rgba(255,255,255,0.3)',
+                    border: isActive ? `1px solid ${isAll ? 'rgba(27,95,250,0.3)' : accColor+'35'}` : '1px solid transparent',
+                  }}>
+                    {!isAll && firstItem && <PlatformLogo platform={firstItem.platform} size={10} />}
+                    {acc}
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>
 
+        {/* Empty state */}
         {data.agenda.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6" style={{background:'rgba(27,95,250,0.06)',border:`1px solid rgba(27,95,250,0.12)`}}>
-                <div className="flex gap-1">
-                  {['borrador','pendiente','listo','publicado'].map((_,i)=>(
-                    <div key={i} className="w-1 rounded-full" style={{height:`${10+i*6}px`,background:`rgba(27,95,250,${0.15+i*0.15})`}}/>
+            <div className="text-center max-w-xs">
+              <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-8" style={{background:'rgba(27,95,250,0.06)',border:`1px solid rgba(27,95,250,0.1)`}}>
+                <div className="flex items-end gap-1">
+                  {[12,20,16,24].map((h,i)=>(
+                    <div key={i} className="w-1.5 rounded-sm" style={{height:h,background:`rgba(27,95,250,${0.2+i*0.15})`}}/>
                   ))}
                 </div>
               </div>
-              <div className="font-figtree text-[20px] font-black text-white mb-2" style={{letterSpacing:'-0.02em'}}>Sin contenido aún</div>
-              <div className="text-[13px] mb-6" style={{color:'rgba(255,255,255,0.3)'}}>Añade tu primera pieza para empezar el pipeline</div>
-              <button onClick={()=>onOpenModal('contenido')} className="font-syne text-[10px] font-black px-6 py-3.5 rounded-2xl text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVA PIEZA</button>
+              <div className="font-figtree text-[22px] font-black text-white mb-2.5" style={{letterSpacing:'-0.03em'}}>Sin contenido aún</div>
+              <div className="text-[13px] mb-8 leading-relaxed" style={{color:'rgba(255,255,255,0.28)'}}>Añade tu primera pieza para empezar el pipeline de producción</div>
+              <button onClick={()=>onOpenModal('contenido')} className="font-syne text-[10px] font-black px-7 py-3.5 rounded-2xl text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVA PIEZA</button>
             </div>
           </div>
         ) : (
           <div className="flex-1 overflow-x-auto overflow-y-hidden">
-            <div className="flex h-full gap-3 p-5" style={{minWidth:'860px'}}>
+            <div className="flex h-full gap-4 p-6" style={{minWidth:'920px'}}>
               {cols.map(col=>{
                 const items = filteredAgenda.filter((a: any)=>a.status===col.key)
                 return (
-                  <div key={col.key} className="flex flex-col flex-1 min-w-[210px] rounded-2xl overflow-hidden"
-                    style={{background:SURFACE,border:`1px solid ${BORDER}`,borderTop:`3px solid ${col.color}`}}>
+                  <div key={col.key} className="flex flex-col flex-1 min-w-[218px] rounded-2xl overflow-hidden"
+                    style={{background:'rgba(255,255,255,0.02)',border:`1px solid rgba(255,255,255,0.055)`}}>
                     {/* Column header */}
-                    <div className="px-5 pt-5 pb-4 flex-shrink-0">
-                      <div className="flex items-start justify-between mb-1">
-                        <span className="font-syne text-[9px] font-black tracking-[0.18em]" style={{color:col.color+'cc'}}>{col.label.toUpperCase()}</span>
-                        <span className="font-figtree text-[28px] font-black leading-none" style={{color:items.length>0?col.color+'35':'rgba(255,255,255,0.06)'}}>{items.length}</span>
+                    <div className="px-4 pt-4 pb-3.5 flex-shrink-0 flex items-center justify-between" style={{borderBottom:`1px solid rgba(255,255,255,0.05)`}}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{background:col.color}}/>
+                        <span className="font-syne text-[10px] font-black tracking-wide" style={{color:'rgba(255,255,255,0.62)'}}>{col.label}</span>
                       </div>
-                      <div className="text-[10px]" style={{color:'rgba(255,255,255,0.18)'}}>{col.desc}</div>
+                      {items.length > 0 && (
+                        <span className="font-figtree text-[12px] font-black" style={{color:col.color+'70'}}>{items.length}</span>
+                      )}
                     </div>
-                    <div className="mx-4 mb-3 h-px" style={{background:BORDER}}/>
                     {/* Cards */}
-                    <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-2.5"
+                    <div className="flex-1 overflow-y-auto p-3 space-y-2.5"
                       onDragOver={e=>e.preventDefault()}
-                      onDrop={(e)=>{
+                      onDrop={e=>{
                         const id = e.dataTransfer.getData('text/plain')
                         const item = data.agenda.find((a: any)=>a.id===id)
                         if (item && item.status!==col.key) changeStatus(item, col.key)
                       }}>
                       {items.map((item: any)=>{
-                        const pc = platColor[item.platform]||BLU
+                        const ipc = platColor[item.platform]||BLU
                         const isActive = activeItem?.id===item.id
                         return (
                           <div key={item.id}
                             draggable
                             onDragStart={e=>e.dataTransfer.setData('text/plain',item.id)}
                             onClick={()=>openItem(item)}
-                            className="rounded-xl cursor-pointer transition-all duration-150 hover:-translate-y-0.5"
+                            className="rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 hover:-translate-y-0.5"
                             style={{
-                              background: isActive ? `linear-gradient(135deg,${pc}0F,rgba(255,255,255,0.02))` : 'rgba(255,255,255,0.025)',
-                              border: `1px solid ${isActive ? pc+'30' : 'rgba(255,255,255,0.06)'}`,
-                              borderLeft: `3px solid ${pc}`,
-                              boxShadow: isActive ? `0 0 20px ${pc}12, 0 4px 12px rgba(0,0,0,0.3)` : '0 1px 3px rgba(0,0,0,0.25)',
+                              background: isActive ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.035)',
+                              border: `1px solid ${isActive ? ipc+'40' : 'rgba(255,255,255,0.08)'}`,
+                              boxShadow: isActive ? `0 0 28px ${ipc}16, 0 6px 20px rgba(0,0,0,0.4)` : '0 2px 8px rgba(0,0,0,0.2)',
                             }}>
-                            <div className="p-3.5">
-                              {/* Platform + account row */}
-                              <div className="flex items-center justify-between mb-2.5">
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <div className="w-6 h-6 rounded-md flex items-center justify-center font-bold text-[10px] flex-shrink-0" style={{background:pc+'22',color:pc}}>{platIcon[item.platform]||'●'}</div>
-                                  <div className="min-w-0">
-                                    <div className="font-syne text-[8.5px] font-black leading-none" style={{color:pc}}>{item.platform}</div>
-                                    {item.account_name && <div className="font-syne text-[7.5px] truncate mt-0.5" style={{color:'rgba(255,255,255,0.3)'}}>@{item.account_name}</div>}
-                                  </div>
-                                </div>
-                                <div className="flex gap-1 flex-shrink-0">
-                                  {item.video_url && <div className="w-1.5 h-1.5 rounded-full" style={{background:'rgba(255,0,0,0.5)'}}/>}
-                                  {item.feedback && <div className="w-1.5 h-1.5 rounded-full" style={{background:'rgba(255,176,32,0.5)'}}/>}
-                                  {item.notes && <div className="w-1.5 h-1.5 rounded-full" style={{background:'rgba(255,255,255,0.2)'}}/>}
-                                </div>
+                            {/* Platform strip */}
+                            <div className="flex items-center gap-2 px-3.5 py-2.5" style={{
+                              background:`linear-gradient(90deg,${ipc}1A,${ipc}08)`,
+                              borderBottom:`1px solid ${ipc}16`,
+                            }}>
+                              <PlatformLogo platform={item.platform} size={14} />
+                              <div className="flex-1 min-w-0 flex items-baseline gap-1.5">
+                                <span className="font-syne text-[8px] font-black tracking-widest flex-shrink-0" style={{color:ipc}}>{item.platform.toUpperCase()}</span>
+                                {item.account_name && <span className="font-syne text-[7.5px] truncate" style={{color:`${ipc}65`}}>@{item.account_name}</span>}
                               </div>
-                              {/* Title */}
-                              <div className="font-figtree text-[13px] font-semibold leading-snug line-clamp-2 mb-3" style={{color:'rgba(255,255,255,0.88)'}}>{item.title}</div>
-                              {/* Footer */}
-                              <div className="flex items-center gap-1.5 flex-wrap">
+                              <div className="flex gap-1 flex-shrink-0">
+                                {item.video_url && <div className="w-1.5 h-1.5 rounded-full" style={{background:'rgba(255,80,80,0.6)'}}/>}
+                                {item.feedback && <div className="w-1.5 h-1.5 rounded-full" style={{background:'rgba(255,176,32,0.6)'}}/>}
+                                {item.notes && <div className="w-1.5 h-1.5 rounded-full" style={{background:'rgba(255,255,255,0.22)'}}/>}
+                              </div>
+                            </div>
+                            {/* Card body */}
+                            <div className="px-3.5 pt-3 pb-3.5">
+                              <div className="font-figtree text-[13px] font-semibold leading-snug line-clamp-2 mb-3" style={{color:'rgba(255,255,255,0.9)'}}>{item.title}</div>
+                              <div className="flex items-center gap-2">
                                 {item.client?.name && (
-                                  <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full" style={{background:(item.client.color||BLU)+'18',color:(item.client.color||BLU)+'bb'}}>{item.client.name}</span>
+                                  <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full truncate max-w-[100px]" style={{background:(item.client.color||BLU)+'15',color:(item.client.color||BLU)+'cc'}}>{item.client.name}</span>
                                 )}
                                 {item.publish_date && (
-                                  <span className="font-syne text-[7.5px] ml-auto" style={{color:'rgba(255,255,255,0.2)'}}>{item.publish_date}</span>
+                                  <span className="font-syne text-[8px] ml-auto flex-shrink-0" style={{color:'rgba(255,255,255,0.22)'}}>{item.publish_date}</span>
                                 )}
                               </div>
                             </div>
                           </div>
                         )
                       })}
-                      {items.length===0 && (
-                        <div className="flex flex-col items-center py-10 text-center rounded-xl" style={{border:`1px dashed ${col.color}20`}}>
-                          <div className="w-5 h-5 rounded-full mb-2.5 mx-auto" style={{background:col.color+'12',border:`1px solid ${col.color}30`}}/>
-                          <div className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.12)'}}>ARRASTRA AQUÍ</div>
+                      {/* Empty drop target */}
+                      {items.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-10 rounded-xl" style={{border:`1px dashed ${col.color}22`,minHeight:80}}>
+                          <div className="w-4 h-4 rounded-full mb-2" style={{background:col.color+'0D',border:`1px solid ${col.color}28`}}/>
+                          <div className="font-syne text-[7.5px] font-black tracking-[0.2em]" style={{color:'rgba(255,255,255,0.1)'}}>ARRASTRA AQUÍ</div>
                         </div>
                       )}
                     </div>
@@ -2264,43 +2323,57 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
         )}
       </div>
 
-      {/* Right: Detail panel */}
+      {/* ── DETAIL PANEL ─────────────────────────────────────────── */}
       {activeItem && (
-        <div className="w-[380px] flex-shrink-0 flex flex-col overflow-hidden" style={{borderLeft:`1px solid ${BORDER}`,background:'#050510'}}>
-          {/* Header with platform gradient */}
-          <div className="flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`,background:`linear-gradient(135deg,${platColor[activeItem.platform]||BLU}12,transparent)`}}>
-            <div className="flex items-center justify-between px-6 pt-6 pb-5">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-[14px]" style={{background:(platColor[activeItem.platform]||BLU)+'25',color:platColor[activeItem.platform]||BLU}}>{platIcon[activeItem.platform]||'●'}</div>
-                <div>
-                  <div className="font-syne text-[9px] font-black tracking-widest" style={{color:(platColor[activeItem.platform]||BLU)+'99'}}>{activeItem.platform.toUpperCase()}{activeItem.account_name?` · @${activeItem.account_name}`:''}</div>
-                  <div className="font-figtree text-[15px] font-semibold text-white leading-snug mt-0.5 line-clamp-1">{activeItem.title}</div>
+        <div className="w-[390px] flex-shrink-0 flex flex-col overflow-hidden" style={{borderLeft:`1px solid ${BORDER}`,background:'#050510'}}>
+          {/* Panel header */}
+          <div className="flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
+            <div className="px-6 pt-6 pb-4" style={{background:`linear-gradient(160deg,${pc}16 0%,transparent 60%)`}}>
+              <div className="flex items-start justify-between mb-5">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  {/* Big platform logo */}
+                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0" style={{background:`${pc}18`,border:`1px solid ${pc}28`}}>
+                    <PlatformLogo platform={activeItem.platform} size={26} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                      <span className="font-syne text-[9px] font-black tracking-widest" style={{color:pc}}>{activeItem.platform.toUpperCase()}</span>
+                      {activeItem.account_name && <span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.28)'}}>@{activeItem.account_name}</span>}
+                    </div>
+                    <div className="font-figtree text-[15px] font-bold text-white leading-snug line-clamp-2" style={{letterSpacing:'-0.01em'}}>{activeItem.title}</div>
+                  </div>
                 </div>
-              </div>
-              <button onClick={()=>setActiveItem(null)} className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ml-2" style={{background:'rgba(255,255,255,0.05)'}}><LucideIcon name="x" size={14} color="rgba(240,240,248,0.4)"/></button>
-            </div>
-            {/* Status pills */}
-            <div className="flex gap-1.5 px-6 pb-5">
-              {cols.map(col=>(
-                <button key={col.key} onClick={()=>changeStatus(activeItem, col.key)}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all"
-                  style={{background:activeItem.status===col.key?col.color+'18':SURF2, border:`1.5px solid ${activeItem.status===col.key?col.color+'50':BORDER}`, color:activeItem.status===col.key?col.color:'rgba(255,255,255,0.22)'}}>
-                  <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:activeItem.status===col.key?col.color:'rgba(255,255,255,0.15)'}}/>
-                  <span className="truncate">{col.label.toUpperCase()}</span>
+                <button onClick={()=>setActiveItem(null)} className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ml-3" style={{background:'rgba(255,255,255,0.05)'}}>
+                  <LucideIcon name="x" size={13} color="rgba(255,255,255,0.35)"/>
                 </button>
-              ))}
+              </div>
+              {/* Status track */}
+              <div className="flex gap-1.5">
+                {cols.map(col=>(
+                  <button key={col.key} onClick={()=>changeStatus(activeItem, col.key)}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl font-syne text-[7.5px] font-black tracking-wide transition-all"
+                    style={{
+                      background: activeItem.status===col.key ? col.color+'1A' : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${activeItem.status===col.key ? col.color+'50' : 'rgba(255,255,255,0.06)'}`,
+                      color: activeItem.status===col.key ? col.color : 'rgba(255,255,255,0.22)',
+                    }}>
+                    <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:activeItem.status===col.key ? col.color : 'rgba(255,255,255,0.12)'}}/>
+                    <span className="truncate">{col.label.toUpperCase()}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
+
+          {/* Scrollable fields */}
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
-            {/* Account name */}
             <div>
-              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>CUENTA / PERFIL</div>
-              <input value={editAccountName} onChange={e=>setEditAccountName(e.target.value)} placeholder="Ej: Brutal Studios, Pablo, Julio Flores…" className="w-full px-4 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.22)'}}>CUENTA / PERFIL</div>
+              <input value={editAccountName} onChange={e=>setEditAccountName(e.target.value)} placeholder="Ej: Brutal Studios, Pablo, Julio Flores…" className="w-full px-4 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.35)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
             </div>
-            {/* Video URL + embed */}
             <div>
-              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>LINK DE VÍDEO</div>
-              <input value={editVideoUrl} onChange={e=>setEditVideoUrl(e.target.value)} placeholder="YouTube / Vimeo URL…" className="w-full px-4 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.22)'}}>LINK DE VÍDEO</div>
+              <input value={editVideoUrl} onChange={e=>setEditVideoUrl(e.target.value)} placeholder="YouTube / Vimeo URL…" className="w-full px-4 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.35)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
               {videoEmbed(editVideoUrl) && (
                 <div className="mt-3 rounded-xl overflow-hidden" style={{aspectRatio:'16/9'}}>
                   <iframe src={videoEmbed(editVideoUrl)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
@@ -2312,32 +2385,30 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                 </div>
               )}
             </div>
-            {/* Feedback */}
             <div>
-              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>FEEDBACK / REVISIONES</div>
-              <textarea value={editFeedback} onChange={e=>setEditFeedback(e.target.value)} placeholder="Escribe aquí el feedback del cliente o del equipo…" rows={3} className="w-full px-4 py-3 rounded-xl text-[13px] text-white placeholder-white/20 outline-none resize-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,lineHeight:'1.6'}} onFocus={e=>(e.target.style.borderColor='rgba(255,176,32,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.22)'}}>FEEDBACK DEL CLIENTE</div>
+              <textarea value={editFeedback} onChange={e=>setEditFeedback(e.target.value)} placeholder="Revisiones o comentarios del cliente…" rows={3} className="w-full px-4 py-3 rounded-xl text-[12px] text-white placeholder-white/20 outline-none resize-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,lineHeight:'1.65'}} onFocus={e=>(e.target.style.borderColor='rgba(255,176,32,0.35)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
             </div>
-            {/* Notes */}
             <div>
-              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>NOTAS DEL EQUIPO</div>
-              <textarea value={editNotes} onChange={e=>setEditNotes(e.target.value)} placeholder="Añade notas de producción…" rows={4} className="w-full px-4 py-3.5 rounded-xl text-[13px] text-white placeholder-white/20 outline-none resize-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,lineHeight:'1.6'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.22)'}}>NOTAS DE PRODUCCIÓN</div>
+              <textarea value={editNotes} onChange={e=>setEditNotes(e.target.value)} placeholder="Añade notas del equipo…" rows={4} className="w-full px-4 py-3.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none resize-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,lineHeight:'1.65'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.35)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
             </div>
-            {/* Share with client */}
             <div>
-              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>REVISIÓN DE CLIENTE</div>
+              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.22)'}}>REVISIÓN DE CLIENTE</div>
               <button onClick={()=>{
                 const url = `${window.location.origin}/review/${activeItem.id}`
                 navigator.clipboard.writeText(url).then(()=>showToast('Link copiado al portapapeles'))
-              }} className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.5)'}}>
-                <LucideIcon name="link" size={13} color="rgba(255,255,255,0.4)"/>
+              }} className="w-full flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-opacity hover:opacity-70" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.45)'}}>
+                <LucideIcon name="link" size={12} color="rgba(255,255,255,0.35)"/>
                 <span>Compartir con cliente</span>
-                <LucideIcon name="copy" size={11} color="rgba(255,255,255,0.25)"/>
+                <span className="ml-auto"><LucideIcon name="copy" size={10} color="rgba(255,255,255,0.2)"/></span>
               </button>
             </div>
-            {/* Save + delete */}
-            <div className="flex gap-2">
-              <button onClick={saveNotes} disabled={savingNotes} className="flex-1 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingNotes?'GUARDANDO…':'GUARDAR CAMBIOS'}</button>
-              <button onClick={async()=>{await data.deleteAgenda(activeItem.id);setActiveItem(null);showToast('Pieza eliminada')}} className="px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-colors" style={{color:'rgba(229,29,42,0.4)',border:`1px solid rgba(229,29,42,0.1)`}}>✕</button>
+            <div className="flex gap-2 pt-1">
+              <button onClick={saveNotes} disabled={savingNotes} className="flex-1 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide text-white disabled:opacity-40 transition-opacity" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingNotes?'GUARDANDO…':'GUARDAR CAMBIOS'}</button>
+              <button onClick={async()=>{await data.deleteAgenda(activeItem.id);setActiveItem(null);showToast('Pieza eliminada')}} className="px-4 py-2.5 rounded-xl font-syne text-[9px] font-black transition-all" style={{color:'rgba(229,29,42,0.45)',border:`1px solid rgba(229,29,42,0.12)`}}>
+                <LucideIcon name="trash" size={12} color="rgba(229,29,42,0.45)"/>
+              </button>
             </div>
           </div>
         </div>
