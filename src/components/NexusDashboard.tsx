@@ -390,15 +390,15 @@ export default function NexusDashboard({ profile }: Props) {
                   ) : f.type === 'status' ? (
                     <div className="grid grid-cols-2 gap-2">
                       {[
-                        {v:'borrador',l:'Borrador',e:'✏️',c:'rgba(255,255,255,0.45)'},
-                        {v:'pendiente',l:'Pendiente',e:'🔄',c:'rgba(255,176,32,0.9)'},
-                        {v:'listo',l:'Listo',e:'✅',c:'#22c55e'},
-                        {v:'publicado',l:'Publicado',e:'🚀',c:BLU},
+                        {v:'borrador',l:'En bruto',c:'rgba(255,255,255,0.45)'},
+                        {v:'pendiente',l:'En producción',c:'rgba(255,176,32,0.9)'},
+                        {v:'listo',l:'Listo',c:'#22c55e'},
+                        {v:'publicado',l:'Publicado',c:BLU},
                       ].map(s=>(
                         <button key={s.v} onClick={()=>setMf(m=>({...m,[f.key]:s.v}))}
                           className="flex items-center gap-2.5 px-4 py-3 rounded-2xl font-syne text-[10px] font-black tracking-wide transition-all"
                           style={{background:(mf[f.key]||'borrador')===s.v?s.c+'18':SURF2,border:`1.5px solid ${(mf[f.key]||'borrador')===s.v?s.c+'60':BORDER}`,color:(mf[f.key]||'borrador')===s.v?s.c:'rgba(255,255,255,0.3)'}}>
-                          <span>{s.e}</span>
+                          <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:(mf[f.key]||'borrador')===s.v?s.c:'rgba(255,255,255,0.15)'}}/>
                           <span>{s.l.toUpperCase()}</span>
                         </button>
                       ))}
@@ -760,8 +760,12 @@ function EquipoSection({data, profile, showToast}: any) {
     : [profile, ...data.team]
 
   const PENDING = [
+    { name: 'Javi', role: 'Propietario', initials: 'JV', avatar_color: BLU, email: 'javivalero2002@gmail.com' },
     { name: 'Fer', role: 'Becario', initials: 'FE', avatar_color: '#F97316', email: 'pendiente de registro' },
-  ].filter(p => !allActive.some((m: Profile) => m.name.toLowerCase().includes(p.name.toLowerCase())))
+  ].filter(p => !allActive.some((m: Profile) =>
+    m.name.toLowerCase().includes(p.name.toLowerCase()) ||
+    (p.email !== 'pendiente de registro' && m.email?.toLowerCase() === p.email.toLowerCase())
+  ))
 
   return (
     <div className="p-8 max-w-[1100px] mx-auto">
@@ -1950,10 +1954,10 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
   const platIcon: Record<string,string> = {TikTok:'▶',Instagram:'◆',LinkedIn:'in',YouTube:'▶',Twitter:'✕',Pinterest:'P'}
 
   const cols = [
-    { key:'borrador', label:'En bruto', emoji:'🎬', color:'rgba(255,255,255,0.3)', desc:'Material sin procesar' },
-    { key:'pendiente', label:'En producción', emoji:'⚡', color:'rgba(255,176,32,0.8)', desc:'En edición activa' },
-    { key:'listo', label:'Listo para publicar', emoji:'✅', color:GRN, desc:'Aprobado y preparado' },
-    { key:'publicado', label:'Publicado', emoji:'🚀', color:BLU, desc:'Ya en plataformas' },
+    { key:'borrador', label:'En bruto', color:'rgba(255,255,255,0.35)', desc:'Material sin procesar' },
+    { key:'pendiente', label:'En producción', color:'rgba(255,176,32,0.85)', desc:'En edición activa' },
+    { key:'listo', label:'Listo', color:GRN, desc:'Aprobado y preparado' },
+    { key:'publicado', label:'Publicado', color:BLU, desc:'Ya en plataformas' },
   ]
 
   const openItem = (item: any) => {
@@ -2014,7 +2018,13 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
         {data.agenda.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
-              <div className="w-20 h-20 rounded-3xl flex items-center justify-center text-4xl mx-auto mb-6" style={{background:'rgba(27,95,250,0.07)',border:`1px solid rgba(27,95,250,0.15)`}}>🎬</div>
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6" style={{background:'rgba(27,95,250,0.06)',border:`1px solid rgba(27,95,250,0.12)`}}>
+                <div className="flex gap-1">
+                  {['borrador','pendiente','listo','publicado'].map((_,i)=>(
+                    <div key={i} className="w-1 rounded-full" style={{height:`${10+i*6}px`,background:`rgba(27,95,250,${0.15+i*0.15})`}}/>
+                  ))}
+                </div>
+              </div>
               <div className="font-figtree text-[20px] font-black text-white mb-2" style={{letterSpacing:'-0.02em'}}>Sin contenido aún</div>
               <div className="text-[13px] mb-6" style={{color:'rgba(255,255,255,0.3)'}}>Añade tu primera pieza para empezar el pipeline</div>
               <button onClick={()=>onOpenModal('contenido')} className="font-syne text-[10px] font-black px-6 py-3.5 rounded-2xl text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVA PIEZA</button>
@@ -2071,9 +2081,9 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                                   </div>
                                 </div>
                                 <div className="flex gap-1 flex-shrink-0">
-                                  {item.video_url && <span className="text-[9px] opacity-50">▶</span>}
-                                  {item.feedback && <span className="text-[9px] opacity-50">💬</span>}
-                                  {item.notes && <span className="text-[9px] opacity-50">📝</span>}
+                                  {item.video_url && <div className="w-1.5 h-1.5 rounded-full" style={{background:'rgba(255,0,0,0.5)'}}/>}
+                                  {item.feedback && <div className="w-1.5 h-1.5 rounded-full" style={{background:'rgba(255,176,32,0.5)'}}/>}
+                                  {item.notes && <div className="w-1.5 h-1.5 rounded-full" style={{background:'rgba(255,255,255,0.2)'}}/>}
                                 </div>
                               </div>
                               {/* Title */}
@@ -2092,8 +2102,8 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                         )
                       })}
                       {items.length===0 && (
-                        <div className="flex flex-col items-center py-10 text-center rounded-xl" style={{border:`1px dashed rgba(255,255,255,0.06)`}}>
-                          <div className="text-xl mb-1.5 opacity-20">{col.emoji}</div>
+                        <div className="flex flex-col items-center py-10 text-center rounded-xl" style={{border:`1px dashed ${col.color}20`}}>
+                          <div className="w-5 h-5 rounded-full mb-2.5 mx-auto" style={{background:col.color+'12',border:`1px solid ${col.color}30`}}/>
                           <div className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.12)'}}>ARRASTRA AQUÍ</div>
                         </div>
                       )}
@@ -2125,9 +2135,10 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
             <div className="flex gap-1.5 px-6 pb-5">
               {cols.map(col=>(
                 <button key={col.key} onClick={()=>changeStatus(activeItem, col.key)}
-                  className="flex-1 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all"
-                  style={{background:activeItem.status===col.key?col.color+'20':SURF2, border:`1.5px solid ${activeItem.status===col.key?col.color+'60':BORDER}`, color:activeItem.status===col.key?col.color:'rgba(255,255,255,0.25)'}}>
-                  {col.emoji}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all"
+                  style={{background:activeItem.status===col.key?col.color+'18':SURF2, border:`1.5px solid ${activeItem.status===col.key?col.color+'50':BORDER}`, color:activeItem.status===col.key?col.color:'rgba(255,255,255,0.22)'}}>
+                  <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:activeItem.status===col.key?col.color:'rgba(255,255,255,0.15)'}}/>
+                  <span className="truncate">{col.label.toUpperCase()}</span>
                 </button>
               ))}
             </div>
@@ -2624,56 +2635,176 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
 
 // ── AJUSTES SECTION ──────────────────────────────────────────
 function AjustesSection({profile,data,showToast}: any) {
+  const [editName, setEditName] = useState(profile?.name||'')
+  const [editInitials, setEditInitials] = useState(profile?.initials||'')
+  const [savingProfile, setSavingProfile] = useState(false)
+  // New member form
+  const [newEmail, setNewEmail] = useState('')
+  const [newName, setNewName] = useState('')
+  const [newRole, setNewRole] = useState<'member'|'owner'>('member')
+  const [addingMember, setAddingMember] = useState(false)
+  const [lastCreated, setLastCreated] = useState<{email:string;tempPassword?:string}|null>(null)
+  // Edit member name
+  const [editingMember, setEditingMember] = useState<Profile|null>(null)
+  const [editMemberName, setEditMemberName] = useState('')
+  const [editMemberInitials, setEditMemberInitials] = useState('')
+
+  const saveOwnProfile = async () => {
+    if (!editName.trim()) return
+    setSavingProfile(true)
+    try {
+      const res = await fetch('/api/admin/team', {
+        method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ email: profile.email, name: editName.trim(), initials: editInitials.trim().toUpperCase().slice(0,2)||editName.trim().split(' ').map((n:string)=>n[0]).join('').toUpperCase().slice(0,2) })
+      })
+      if (res.ok) { showToast('Perfil actualizado — recarga para ver los cambios'); }
+      else { showToast('Error actualizando perfil') }
+    } catch { showToast('Error') }
+    finally { setSavingProfile(false) }
+  }
+
+  const addMember = async () => {
+    if (!newEmail.trim() || !newName.trim()) return
+    setAddingMember(true)
+    try {
+      const res = await fetch('/api/admin/team', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ email: newEmail.trim(), name: newName.trim(), role: newRole })
+      })
+      const json = await res.json()
+      if (res.ok) {
+        setLastCreated({ email: newEmail.trim(), tempPassword: json.tempPassword })
+        setNewEmail(''); setNewName(''); setNewRole('member')
+        showToast(`${json.action==='created'?'Cuenta creada':'Perfil actualizado'}: ${newName}`)
+      } else { showToast(json.error||'Error') }
+    } catch { showToast('Error') }
+    finally { setAddingMember(false) }
+  }
+
+  const saveMemberName = async () => {
+    if (!editingMember || !editMemberName.trim()) return
+    try {
+      const res = await fetch('/api/admin/team', {
+        method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ email: editingMember.email, name: editMemberName.trim(), initials: editMemberInitials.trim().toUpperCase().slice(0,2)||editMemberName.trim().split(' ').map((n:string)=>n[0]).join('').toUpperCase().slice(0,2) })
+      })
+      if (res.ok) { showToast('Nombre actualizado'); setEditingMember(null) }
+      else { showToast('Error') }
+    } catch { showToast('Error') }
+  }
+
+  const cardStyle = {background:SURFACE,border:`1px solid ${BORDER}`,borderRadius:'16px'}
+
   return (
-    <div className="p-6 max-w-[700px] mx-auto">
-      <h1 className="font-syne text-2xl font-black text-white mb-6">Ajustes</h1>
+    <div className="p-8 max-w-[680px] mx-auto">
+      <div className="mb-8">
+        <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>CONFIGURACIÓN</div>
+        <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Ajustes</h1>
+      </div>
       <div className="space-y-4">
-        <div className="p-5 rounded-xl" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
-          <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Perfil</div>
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full flex items-center justify-center font-syne text-base font-black" style={{background:profile.avatar_color+'22',border:`2px solid ${profile.avatar_color}44`,color:profile.avatar_color}}>{profile.initials}</div>
+
+        {/* Mi perfil */}
+        <div className="p-6" style={cardStyle}>
+          <div className="font-syne text-[9px] font-black tracking-[0.2em] mb-5" style={{color:'rgba(255,255,255,0.2)'}}>MI PERFIL</div>
+          <div className="flex items-center gap-4 mb-5">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-syne text-base font-black flex-shrink-0" style={{background:profile.avatar_color+'22',border:`1.5px solid ${profile.avatar_color}40`,color:profile.avatar_color}}>{profile.initials}</div>
             <div>
-              <div className="font-semibold text-white">{profile.name}</div>
-              <div className="text-sm text-white/40">{profile.email}</div>
-              <div className="font-syne text-[8px] font-black mt-1 px-2 py-0.5 rounded-full inline-block" style={{background:profile.role==='owner'?'rgba(27,95,250,0.1)':'rgba(255,255,255,0.05)',color:profile.role==='owner'?BLU:'rgba(240,240,248,0.3)'}}>{profile.role==='owner'?'PROPIETARIO':'MIEMBRO'}</div>
+              <div className="font-figtree text-[16px] font-semibold text-white">{profile.name}</div>
+              <div className="text-[12px] mt-0.5" style={{color:'rgba(255,255,255,0.3)'}}>{profile.email}</div>
+              <span className="font-syne text-[7.5px] font-black mt-1.5 px-2 py-0.5 rounded-full inline-block" style={{background:profile.role==='owner'?'rgba(27,95,250,0.1)':'rgba(255,255,255,0.05)',color:profile.role==='owner'?BLU:'rgba(240,240,248,0.3)'}}>{profile.role==='owner'?'PROPIETARIO':'MIEMBRO'}</span>
             </div>
           </div>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <div className="font-syne text-[8.5px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>NOMBRE PARA MOSTRAR</div>
+              <input value={editName} onChange={e=>setEditName(e.target.value)} className="w-full px-4 py-2.5 rounded-xl text-[13px] text-white outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+            </div>
+            <div className="w-24">
+              <div className="font-syne text-[8.5px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>INICIALES</div>
+              <input value={editInitials} onChange={e=>setEditInitials(e.target.value.toUpperCase().slice(0,2))} maxLength={2} className="w-full px-4 py-2.5 rounded-xl text-[13px] text-white outline-none text-center tracking-widest" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+            </div>
+          </div>
+          <button onClick={saveOwnProfile} disabled={savingProfile} className="mt-4 px-5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingProfile?'GUARDANDO…':'GUARDAR NOMBRE'}</button>
         </div>
-        <div className="p-5 rounded-xl" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
-          <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Integraciones</div>
-          <div className="flex items-center justify-between py-3 border-b border-white/5">
-            <div className="flex items-center gap-3"><LucideIcon name="mail" size={16} color={BLU}/><span className="text-sm text-white/70">Gmail</span></div>
+
+        {/* Integraciones */}
+        <div className="p-6" style={cardStyle}>
+          <div className="font-syne text-[9px] font-black tracking-[0.2em] mb-5" style={{color:'rgba(255,255,255,0.2)'}}>INTEGRACIONES</div>
+          <div className="flex items-center justify-between py-3" style={{borderBottom:`1px solid ${BORDER}`}}>
+            <div className="flex items-center gap-3"><LucideIcon name="mail" size={15} color={BLU}/><span className="text-[13px]" style={{color:'rgba(255,255,255,0.7)'}}>Gmail</span></div>
             {profile.gmail_connected ? (
               <span className="font-syne text-[8px] font-black px-3 py-1 rounded-full" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>CONECTADO</span>
             ) : (
-              <a href="/api/gmail/connect" className="font-syne text-[9px] font-black px-3 py-1.5 rounded-lg text-white" style={{background:BLU}}>CONECTAR</a>
+              <a href="/api/gmail/connect" className="font-syne text-[9px] font-black px-3 py-1.5 rounded-xl text-white" style={{background:BLU}}>CONECTAR</a>
             )}
           </div>
           <div className="flex items-center justify-between py-3">
             <div className="flex items-center gap-3">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-              <span className="text-sm text-white/70">WhatsApp Bot</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+              <span className="text-[13px]" style={{color:'rgba(255,255,255,0.7)'}}>WhatsApp Bot</span>
             </div>
-            <span className="text-xs text-white/25">Ver documentación</span>
+            <span className="text-[11px]" style={{color:'rgba(255,255,255,0.2)'}}>Ver documentación</span>
           </div>
         </div>
+
+        {/* Gestión de equipo — owner only */}
         {profile.role === 'owner' && (
-          <div className="p-5 rounded-xl" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
-            <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Equipo</div>
-            {data.team.map((m: Profile)=>(
-              <div key={m.id} className="flex items-center gap-3 py-2.5 border-b border-white/4">
-                <div className="w-7 h-7 rounded-full flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0" style={{background:m.avatar_color+'22',color:m.avatar_color}}>{m.initials}</div>
-                <div className="flex-1"><div className="text-sm text-white/70">{m.name}</div><div className="text-xs text-white/30">{m.email}</div></div>
-                <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:m.role==='owner'?'rgba(27,95,250,0.1)':'rgba(255,255,255,0.04)',color:m.role==='owner'?BLU:'rgba(240,240,248,0.2)'}}>{m.role==='owner'?'OWNER':'MIEMBRO'}</span>
-                <span className="text-[10px]" style={{color:m.gmail_connected?'#22c55e':'rgba(255,255,255,0.2)'}}>{m.gmail_connected?'Gmail ✓':'Sin Gmail'}</span>
+          <div className="p-6" style={cardStyle}>
+            <div className="font-syne text-[9px] font-black tracking-[0.2em] mb-5" style={{color:'rgba(255,255,255,0.2)'}}>GESTIÓN DE EQUIPO</div>
+
+            {/* Member list with edit */}
+            <div className="space-y-0 mb-6">
+              {data.team.map((m: Profile)=>(
+                <div key={m.id}>
+                  {editingMember?.id === m.id ? (
+                    <div className="py-3 flex items-center gap-2" style={{borderBottom:`1px solid ${BORDER}`}}>
+                      <input value={editMemberName} onChange={e=>setEditMemberName(e.target.value)} placeholder="Nombre" className="flex-1 px-3 py-2 rounded-xl text-[12px] text-white outline-none" style={{background:SURF2,border:`1.5px solid rgba(27,95,250,0.3)`,caretColor:BLU}}/>
+                      <input value={editMemberInitials} onChange={e=>setEditMemberInitials(e.target.value.toUpperCase().slice(0,2))} maxLength={2} placeholder="XX" className="w-14 px-2 py-2 rounded-xl text-[12px] text-white outline-none text-center" style={{background:SURF2,border:`1.5px solid rgba(27,95,250,0.3)`,caretColor:BLU}}/>
+                      <button onClick={saveMemberName} className="px-3 py-2 rounded-xl font-syne text-[8.5px] font-black text-white" style={{background:BLU}}>OK</button>
+                      <button onClick={()=>setEditingMember(null)} className="px-3 py-2 rounded-xl font-syne text-[8.5px] font-black" style={{color:'rgba(255,255,255,0.3)'}}>✕</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 py-3 group" style={{borderBottom:`1px solid ${BORDER}`}}>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center font-syne text-[10px] font-black flex-shrink-0" style={{background:m.avatar_color+'22',color:m.avatar_color}}>{m.initials}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-medium text-white truncate">{m.name}</div>
+                        <div className="text-[11px] truncate" style={{color:'rgba(255,255,255,0.3)'}}>{m.email}</div>
+                      </div>
+                      <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full flex-shrink-0" style={{background:m.role==='owner'?'rgba(27,95,250,0.1)':'rgba(255,255,255,0.04)',color:m.role==='owner'?BLU:'rgba(240,240,248,0.2)'}}>{m.role==='owner'?'OWNER':'MIEMBRO'}</span>
+                      <button onClick={()=>{setEditingMember(m);setEditMemberName(m.name);setEditMemberInitials(m.initials)}} className="opacity-0 group-hover:opacity-100 px-2 py-1 rounded-lg font-syne text-[8px] font-black transition-opacity" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>EDITAR</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Add new member */}
+            <div className="font-syne text-[8.5px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.2)'}}>AÑADIR MIEMBRO</div>
+            <div className="space-y-2.5">
+              <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="Nombre (ej: Fer)" className="w-full px-4 py-2.5 rounded-xl text-[12px] text-white outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+              <input value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder="Email" type="email" className="w-full px-4 py-2.5 rounded-xl text-[12px] text-white outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+              <div className="flex gap-2">
+                {(['member','owner'] as const).map(r=>(
+                  <button key={r} onClick={()=>setNewRole(r)} className="flex-1 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:newRole===r?'rgba(27,95,250,0.1)':SURF2,border:`1.5px solid ${newRole===r?'rgba(27,95,250,0.3)':BORDER}`,color:newRole===r?BLU:'rgba(255,255,255,0.3)'}}>
+                    {r==='owner'?'PROPIETARIO':'MIEMBRO'}
+                  </button>
+                ))}
               </div>
-            ))}
+              <button onClick={addMember} disabled={addingMember||!newEmail.trim()||!newName.trim()} className="w-full py-3 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{addingMember?'CREANDO…':'CREAR CUENTA'}</button>
+            </div>
+            {lastCreated && (
+              <div className="mt-4 p-4 rounded-xl" style={{background:'rgba(27,95,250,0.08)',border:`1px solid rgba(27,95,250,0.2)`}}>
+                <div className="font-syne text-[8.5px] font-black tracking-widest mb-2" style={{color:BLU}}>CUENTA CREADA</div>
+                <div className="text-[12px] text-white/70">Email: <span className="text-white">{lastCreated.email}</span></div>
+                {lastCreated.tempPassword && <div className="text-[12px] text-white/70 mt-1">Contraseña temporal: <span className="font-mono text-white">{lastCreated.tempPassword}</span></div>}
+                <div className="text-[10px] mt-2" style={{color:'rgba(255,255,255,0.3)'}}>El usuario puede cambiar su contraseña desde la pantalla de login</div>
+              </div>
+            )}
           </div>
         )}
-        <div className="p-5 rounded-xl" style={{background:'rgba(229,29,42,0.04)',border:'1px solid rgba(229,29,42,0.1)'}}>
-          <div className="font-syne text-[9px] font-bold tracking-widest text-red-400/50 uppercase mb-3">Zona de peligro</div>
-          <p className="text-[12px]" style={{color:'rgba(255,255,255,0.25)'}}>Para exportar reportes, accede a la sección Reportes desde el menú lateral.</p>
-        </div>
       </div>
     </div>
   )
