@@ -8,15 +8,19 @@ export function getOAuthClient() {
   return new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI)
 }
 
-export function getAuthUrl(userId: string) {
+export function getAuthUrl(userId: string, includeCalendar = true) {
   const oauth2Client = getOAuthClient()
+  const scopes = [
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/userinfo.email',
+  ]
+  if (includeCalendar) {
+    scopes.push('https://www.googleapis.com/auth/calendar.readonly')
+  }
   return oauth2Client.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
-    scope: [
-      'https://www.googleapis.com/auth/gmail.readonly',
-      'https://www.googleapis.com/auth/userinfo.email',
-    ],
+    scope: scopes,
     state: userId,
   })
 }
@@ -78,6 +82,36 @@ export async function getEmailsWithRefreshToken(refreshToken: string, maxResults
   )
 
   return emails
+}
+
+export async function getCalendarEvents(refreshToken: string, monthsAhead = 2) {
+  const oauth2Client = getOAuthClient()
+  oauth2Client.setCredentials({ refresh_token: refreshToken })
+  const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
+
+  const now = new Date()
+  const timeMax = new Date(now.getFullYear(), now.getMonth() + monthsAhead, 1)
+
+  const { data } = await calendar.events.list({
+    calendarId: 'primary',
+    timeMin: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(),
+    timeMax: timeMax.toISOString(),
+    maxResults: 100,
+    singleEvents: true,
+    orderBy: 'startTime',
+  })
+
+  return (data.items || []).map((e: any) => ({
+    id: e.id,
+    title: e.summary || '(sin título)',
+    start: e.start?.dateTime || e.start?.date || '',
+    end: e.end?.dateTime || e.end?.date || '',
+    allDay: !e.start?.dateTime,
+    location: e.location || '',
+    description: e.description || '',
+    colorId: e.colorId || '',
+    htmlLink: e.htmlLink || '',
+  }))
 }
 
 function extractBody(payload: any): string {
