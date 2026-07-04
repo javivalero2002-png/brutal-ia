@@ -88,6 +88,8 @@ export interface ContentItem {
   publish_date?: string
   publish_time?: string
   notes?: string
+  video_url?: string
+  feedback?: string
   client?: Client
 }
 

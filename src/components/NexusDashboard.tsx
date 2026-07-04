@@ -9,6 +9,29 @@ const BLU = '#1B5FFA', RED = '#E51D2A', GRN = '#22c55e'
 const SURFACE = '#0A0A14', SURF2 = '#0F0F1E'
 const BORDER = 'rgba(255,255,255,0.06)'
 
+// ── Helpers ─────────────────────────────────────────────────
+const strColor = (s: string) => {
+  const palette = ['#3B82F6','#8B5CF6','#EC4899','#F59E0B','#10B981','#EF4444','#06B6D4','#F97316','#6366F1','#84CC16']
+  let h = 0; for (let i=0;i<s.length;i++) h = s.charCodeAt(i)+((h<<5)-h)
+  return palette[Math.abs(h) % palette.length]
+}
+const relTime = (iso: string) => {
+  const m = Math.floor((Date.now()-new Date(iso).getTime())/60000)
+  if (m<2) return 'ahora'
+  if (m<60) return `${m}m`
+  if (m<1440) return `${Math.floor(m/60)}h`
+  if (m<10080) return `${Math.floor(m/1440)}d`
+  return new Date(iso).toLocaleDateString('es-ES',{day:'numeric',month:'short'})
+}
+const videoEmbed = (url: string) => {
+  if (!url) return null
+  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/)
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}`
+  const vm = url.match(/vimeo\.com\/(\d+)/)
+  if (vm) return `https://player.vimeo.com/video/${vm[1]}`
+  return null
+}
+
 type Section = 'hoy'|'inbox'|'tareas'|'clientes'|'proyectos'|'contenido'|'calendario'|'memoria'|'automatizaciones'|'chat'|'equipo'|'reportes'|'ajustes'
 
 interface Props { profile: Profile }
@@ -570,16 +593,25 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
         <div className="flex-1 overflow-y-auto px-8 pb-8">
           <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
             {filtered.length === 0 && <div className="py-16 text-center text-[13px]" style={{color:'rgba(255,255,255,0.18)'}}>Sin tareas en este filtro</div>}
-            {filtered.map((t: Task, i: number) => (
-              <div key={t.id} onClick={()=>openTask(t)} className="flex items-center gap-4 px-6 py-4 cursor-pointer transition-all group hover:bg-white/2" style={{background:activeTask?.id===t.id?'rgba(27,95,250,0.07)':'transparent',borderBottom:i===filtered.length-1?'none':`1px solid ${BORDER}`,borderLeft:activeTask?.id===t.id?`2px solid ${BLU}`:'2px solid transparent'}}>
-                <button onClick={e=>{e.stopPropagation();data.toggleTask(t.id)}} className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all" style={{background:t.done?BLU:'transparent',border:`2px solid ${t.done?BLU:t.level==='urgent'?RED+'60':t.level==='high'?'rgba(255,176,32,0.4)':'rgba(255,255,255,0.15)'}`}}>
-                  {t.done && <LucideIcon name="check" size={10} color="white"/>}
+            {filtered.map((t: Task, i: number) => {
+              const pc = t.done ? 'rgba(255,255,255,0.08)' : levelColor(t.level)
+              return (
+              <div key={t.id} onClick={()=>openTask(t)} className="flex items-start gap-3 px-5 py-4 cursor-pointer group hover:bg-white/[0.015] transition-all" style={{background:activeTask?.id===t.id?'rgba(27,95,250,0.06)':'transparent',borderBottom:i===filtered.length-1?'none':`1px solid ${BORDER}`,borderLeft:`3px solid ${activeTask?.id===t.id?BLU:t.done?'transparent':pc+'60'}`}}>
+                <button onClick={e=>{e.stopPropagation();data.toggleTask(t.id)}} className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 mt-1 transition-all" style={{background:t.done?pc:'transparent',border:`2px solid ${t.done?pc:pc+'60'}`}}>
+                  {t.done && <LucideIcon name="check" size={8} color="white"/>}
                 </button>
-                <span className="flex-1 text-[14px] transition-all" style={{color:t.done?'rgba(255,255,255,0.2)':'rgba(255,255,255,0.8)',textDecoration:t.done?'line-through':'none'}}>{t.text}</span>
-                {t.assignee && <div className="w-6 h-6 rounded-full flex items-center justify-center font-syne text-[8px] font-black flex-shrink-0" style={{background:t.assignee.avatar_color+'18',color:t.assignee.avatar_color}}>{t.assignee.initials}</div>}
-                <span className="font-syne text-[7px] font-black px-2 py-1 rounded-lg flex-shrink-0" style={{background:t.level==='urgent'?'rgba(229,29,42,0.1)':t.level==='high'?'rgba(255,176,32,0.07)':SURF2,color:levelColor(t.level)}}>{t.level}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="font-figtree text-[14px] font-semibold leading-snug mb-1.5" style={{color:t.done?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.88)',textDecoration:t.done?'line-through':'none'}}>{t.text}</div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {(t.client as any)?.name && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:(t.client as any).color+'18',color:(t.client as any).color+'cc'}}>{(t.client as any).name}</span>}
+                    {t.due_date && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.35)'}}>{new Date(t.due_date).toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
+                    {!t.done && t.level==='urgent' && <span className="font-syne text-[8px] font-black" style={{color:RED}}>● URGENTE</span>}
+                  </div>
+                </div>
+                {t.assignee && <div className="w-7 h-7 rounded-full flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0 mt-0.5" style={{background:t.assignee.avatar_color+'18',border:`1.5px solid ${t.assignee.avatar_color}35`,color:t.assignee.avatar_color}}>{t.assignee.initials}</div>}
               </div>
-            ))}
+            )})}
+
           </div>
         </div>
       </div>
@@ -1021,14 +1053,23 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                 <div className="text-[13px] mb-3" style={{color:'rgba(255,255,255,0.18)'}}>Sin tareas asignadas</div>
                 <button onClick={()=>onOpenModal('tarea')} className="font-syne text-[10px] font-black px-4 py-2 rounded-xl" style={{background:'rgba(27,95,250,0.08)',color:BLU}}>CREAR PRIMERA TAREA</button>
               </div>
-            ) : myTasks.slice(0,7).map((t:Task)=>(
-              <div key={t.id} onClick={()=>data.toggleTask(t.id)} className="flex items-center gap-4 px-6 py-4 cursor-pointer transition-all group" style={{borderBottom:`1px solid ${BORDER}`}}>
-                <div className="w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all group-hover:border-blue-400" style={{borderColor:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.5)':'rgba(255,255,255,0.15)'}}/>
-                <span className="flex-1 text-[14px]" style={{color:'rgba(240,240,248,0.8)'}}>{t.text}</span>
-                {t.assignee && <div className="w-6 h-6 rounded-full flex items-center justify-center font-syne text-[8px] font-black flex-shrink-0" style={{background:t.assignee.avatar_color+'20',color:t.assignee.avatar_color}}>{t.assignee.initials}</div>}
-                <span className="font-syne text-[8px] font-black px-2 py-1 rounded-lg flex-shrink-0" style={{background:t.level==='urgent'?'rgba(229,29,42,0.12)':t.level==='high'?'rgba(255,176,32,0.08)':SURF2,color:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.8)':'rgba(255,255,255,0.22)'}}>{t.level}</span>
+            ) : myTasks.slice(0,7).map((t:Task)=>{
+              const pc = t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.85)':BLU
+              return (
+              <div key={t.id} onClick={()=>data.toggleTask(t.id)} className="flex items-start gap-4 px-6 py-4 cursor-pointer transition-all group hover:bg-white/[0.015]" style={{borderBottom:`1px solid ${BORDER}`,borderLeft:`3px solid ${pc}`}}>
+                <div className="w-4 h-4 rounded-full border-2 mt-1 flex-shrink-0 transition-all" style={{borderColor:pc+'70'}}/>
+                <div className="flex-1 min-w-0">
+                  <div className="font-figtree text-[14px] font-semibold leading-snug mb-1.5" style={{color:'rgba(255,255,255,0.88)'}}>{t.text}</div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {t.client && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:(t.client as any).color+'18',color:(t.client as any).color+'cc'}}>{(t.client as any).name}</span>}
+                    {t.due_date && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.35)'}}>{new Date(t.due_date).toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
+                    {t.level==='urgent' && <span className="font-syne text-[8px] font-black" style={{color:RED}}>● URGENTE</span>}
+                  </div>
+                </div>
+                {t.assignee && <div className="w-7 h-7 rounded-full flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0 mt-0.5" style={{background:t.assignee.avatar_color+'20',border:`1.5px solid ${t.assignee.avatar_color}35`,color:t.assignee.avatar_color}}>{t.assignee.initials}</div>}
               </div>
-            ))}
+            )})}
+
           </div>
 
           {/* Team tasks (owners) */}
@@ -1251,34 +1292,38 @@ function InboxSection({data,showToast,profile}: any) {
                 const urgColor = m.ai_urgency==='urgent'?RED:m.ai_urgency==='high'?'rgba(255,176,32,0.8)':BLU
                 const isInternal = m.source==='internal'
                 const isSelected = selected?.id===m.id
+                const avatarColor = isInternal ? 'rgba(255,176,32,0.85)' : strColor(m.from_name||'?')
+                const accentColor = !m.is_read ? (isInternal?'rgba(255,176,32,0.7)':urgColor) : 'transparent'
                 return (
-                  <div key={m.id} onClick={()=>handleSelect(m)} className="relative cursor-pointer group" style={{borderLeft:`3px solid ${!m.is_read?(isInternal?'rgba(255,176,32,0.7)':urgColor):'transparent'}`,background:isSelected?'rgba(27,95,250,0.07)':'transparent'}}>
-                    <div className="flex items-start gap-3.5 px-5 py-3.5" style={{borderBottom:`1px solid ${BORDER}`}}>
-                      {/* Source indicator */}
-                      <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 font-syne text-[10px] font-black mt-0.5" style={{background:isInternal?'rgba(255,176,32,0.1)':!m.is_read?urgColor+'15':'rgba(255,255,255,0.03)',color:isInternal?'rgba(255,176,32,0.7)':!m.is_read?urgColor:'rgba(255,255,255,0.25)'}}>
-                        {isInternal ? '💬' : (m.from_name||'??').slice(0,2).toUpperCase()}
+                  <div key={m.id} onClick={()=>handleSelect(m)} className="relative cursor-pointer group transition-all" style={{borderLeft:`3px solid ${accentColor}`,background:isSelected?'rgba(27,95,250,0.06)':'transparent'}}>
+                    <div className="flex items-start gap-3 px-4 py-3.5" style={{borderBottom:`1px solid ${BORDER}`}}>
+                      {/* Avatar */}
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-syne text-[10px] font-black mt-0.5" style={{background:avatarColor+'22',border:`1.5px solid ${avatarColor}40`,color:avatarColor}}>
+                        {isInternal ? '💬' : (m.from_name||'?').slice(0,2).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-[13px] font-semibold truncate flex-1" style={{color:m.is_read?'rgba(255,255,255,0.4)':'rgba(255,255,255,0.9)'}}>{m.from_name}</span>
-                          {m.ai_urgency==='urgent'&&!m.is_read && <span className="font-syne text-[6px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(229,29,42,0.12)',color:RED}}>🔴</span>}
-                          {isInternal && <span className="font-syne text-[6px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.7)'}}>DM</span>}
-                          {m.shared && <span className="font-syne text-[6px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(27,95,250,0.1)',color:'rgba(100,140,255,0.8)'}}>🌐</span>}
-                          {!m.is_read && <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:isInternal?'rgba(255,176,32,0.7)':urgColor}}/>}
+                        {/* Row 1: sender + time */}
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-syne text-[9px] font-black tracking-wide truncate flex-1" style={{color:m.is_read?'rgba(255,255,255,0.3)':avatarColor}}>{m.from_name}</span>
+                          {isInternal && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.7)'}}>DM</span>}
+                          {m.ai_urgency==='urgent'&&!m.is_read && <span className="font-syne text-[7px] font-black flex-shrink-0" style={{color:RED}}>●</span>}
+                          {!m.is_read && !isInternal && m.ai_urgency!=='urgent' && <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:urgColor}}/>}
+                          <span className="font-syne text-[8px] flex-shrink-0" style={{color:'rgba(255,255,255,0.2)'}}>{relTime(m.received_at)}</span>
                         </div>
-                        <div className="text-[12px] truncate mb-1" style={{color:m.is_read?'rgba(255,255,255,0.25)':'rgba(255,255,255,0.6)',fontWeight:m.is_read?400:500}}>{m.subject||'Sin asunto'}</div>
-                        {/* AI insight or preview */}
+                        {/* Row 2: subject as hero */}
+                        <div className="font-figtree text-[13px] font-semibold leading-snug mb-1.5 line-clamp-1" style={{color:m.is_read?'rgba(255,255,255,0.35)':'rgba(255,255,255,0.88)'}}>{m.subject||'Sin asunto'}</div>
+                        {/* Row 3: AI insight */}
                         {m.ai_summary ? (
-                          <div className="text-[10px] truncate" style={{color:'rgba(100,140,255,0.6)'}}>⚡ {m.ai_summary}</div>
+                          <div className="font-syne text-[9px] truncate" style={{color:'rgba(100,140,255,0.55)'}}>⚡ {m.ai_summary}</div>
                         ) : m.ai_client&&m.ai_client!=='Desconocido' ? (
-                          <div className="text-[10px] truncate" style={{color:GRN+'aa'}}>👤 {m.ai_client}</div>
+                          <div className="font-syne text-[9px] truncate" style={{color:GRN+'99'}}>↗ {m.ai_client}</div>
                         ) : (
-                          <div className="text-[10px] truncate" style={{color:'rgba(255,255,255,0.18)'}}>{m.body_preview?.slice(0,70)||'—'}</div>
+                          <div className="font-syne text-[9px] truncate" style={{color:'rgba(255,255,255,0.15)'}}>{m.body_preview?.slice(0,60)||'—'}</div>
                         )}
                       </div>
-                      {/* Quick create task */}
+                      {/* Quick task button */}
                       {m.ai_action&&m.ai_action!=='Ninguna acción requerida' && (
-                        <button onClick={e=>{e.stopPropagation();createTaskFromEmail(m)}} className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center transition-all" style={{background:'rgba(27,95,250,0.12)',color:BLU}} title="Crear tarea IA">
+                        <button onClick={e=>{e.stopPropagation();createTaskFromEmail(m)}} className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center mt-0.5 transition-all" style={{background:'rgba(27,95,250,0.12)',color:BLU}} title="Crear tarea IA">
                           <LucideIcon name="plus" size={12} color={BLU}/>
                         </button>
                       )}
@@ -1416,7 +1461,49 @@ function InboxSection({data,showToast,profile}: any) {
 
 // ── CLIENTES SECTION ─────────────────────────────────────────
 function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner}: any) {
+  const [aiAdvice, setAiAdvice] = useState<any[]|null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [expandedProject, setExpandedProject] = useState<string|null>(null)
+  const [comments, setComments] = useState<any[]|null>(null)
+  const [commentsLoading, setCommentsLoading] = useState(false)
+  const [newComment, setNewComment] = useState('')
+  const [postingComment, setPostingComment] = useState(false)
+
   const selected = selectedId ? data.clients.find((c: Client)=>c.id===selectedId) : null
+
+  const loadComments = async (id: string) => {
+    setCommentsLoading(true)
+    try {
+      const r = await fetch(`/api/clients/${id}/comments`)
+      setComments(await r.json())
+    } catch { setComments([]) }
+    finally { setCommentsLoading(false) }
+  }
+
+  const postComment = async () => {
+    if (!newComment.trim() || !selected) return
+    setPostingComment(true)
+    try {
+      const r = await fetch(`/api/clients/${selected.id}/comments`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:newComment.trim()})})
+      const c = await r.json()
+      setComments(prev => [...(prev||[]), c])
+      setNewComment('')
+    } catch { showToast('Error al publicar') }
+    finally { setPostingComment(false) }
+  }
+
+  const loadAiAdvice = async (id: string) => {
+    setAiLoading(true)
+    try {
+      const r = await fetch(`/api/clients/${id}/ai-advice`, {method:'POST'})
+      const d = await r.json()
+      setAiAdvice(d.recommendations || [])
+    } catch { showToast('Error generando recomendaciones') }
+    finally { setAiLoading(false) }
+  }
+
+  // Reset AI + comments when switching client
+  const handleBack = () => { onSelect(null); setAiAdvice(null); setComments(null); setExpandedProject(null) }
 
   if (selected) {
     const clientProjects = data.projects.filter((p: Project)=>p.client_id===selected.id)
@@ -1430,7 +1517,7 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
 
     return (
       <div className="p-8 max-w-[1100px] mx-auto">
-        <button onClick={()=>onSelect(null)} className="flex items-center gap-2 text-[12px] mb-8 transition-colors hover:text-white/70" style={{color:'rgba(255,255,255,0.35)'}}>
+        <button onClick={handleBack} className="flex items-center gap-2 text-[12px] mb-8 transition-colors hover:text-white/70" style={{color:'rgba(255,255,255,0.35)'}}>
           <LucideIcon name="arrow-left" size={14}/> Todos los clientes
         </button>
 
@@ -1444,10 +1531,40 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
               <span className="font-syne text-[8px] font-black px-3 py-1 rounded-full mt-2 inline-block" style={{background:selected.status==='Activo'?'rgba(34,197,94,0.1)':'rgba(255,255,255,0.05)',color:selected.status==='Activo'?GRN:'rgba(255,255,255,0.3)'}}>{selected.status.toUpperCase()}</span>
             </div>
           </div>
-          {isOwner && (
-            <button onClick={()=>data.deleteClient(selected.id).then(()=>{onSelect(null);showToast('Cliente eliminado')})} className="px-3 py-2 rounded-xl text-[11px] transition-colors" style={{color:'rgba(229,29,42,0.45)',border:'1px solid rgba(229,29,42,0.12)'}}>Eliminar</button>
-          )}
+          <div className="flex items-center gap-3">
+            <button onClick={()=>{ if(!aiAdvice&&!aiLoading) loadAiAdvice(selected.id); setAiAdvice(null); loadAiAdvice(selected.id) }} disabled={aiLoading} className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-50 transition-all" style={{background:`linear-gradient(135deg,rgba(139,92,246,0.3),rgba(27,95,250,0.2))`,border:`1px solid rgba(139,92,246,0.35)`}}>
+              <LucideIcon name="zap" size={11} color="#A78BFA"/>{aiLoading?'Analizando…':'IA ESTRATÉGICA'}
+            </button>
+            {isOwner && (
+              <button onClick={()=>data.deleteClient(selected.id).then(()=>{handleBack();showToast('Cliente eliminado')})} className="px-3 py-2 rounded-xl text-[11px] transition-colors" style={{color:'rgba(229,29,42,0.45)',border:'1px solid rgba(229,29,42,0.12)'}}>Eliminar</button>
+            )}
+          </div>
         </div>
+
+        {/* AI Advice panel */}
+        {aiAdvice && aiAdvice.length > 0 && (
+          <div className="mb-8 rounded-2xl p-6" style={{background:'linear-gradient(135deg,rgba(139,92,246,0.08),rgba(27,95,250,0.04))',border:'1px solid rgba(139,92,246,0.2)'}}>
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-lg flex items-center justify-center" style={{background:'rgba(139,92,246,0.2)'}}><LucideIcon name="zap" size={11} color="#A78BFA"/></div>
+                <span className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(167,139,250,0.8)'}}>BRUTAL.IA — PLAN ESTRATÉGICO 30 DÍAS</span>
+              </div>
+              <button onClick={()=>setAiAdvice(null)} className="text-[10px]" style={{color:'rgba(255,255,255,0.2)'}}>✕</button>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              {aiAdvice.map((rec: any, i: number)=>{
+                const pc = rec.priority==='alta'?RED:rec.priority==='media'?'rgba(255,176,32,0.85)':BLU
+                return (
+                  <div key={i} className="rounded-xl p-4" style={{background:'rgba(0,0,0,0.25)',borderLeft:`3px solid ${pc}60`}}>
+                    <div className="font-syne text-[7px] font-black tracking-widest mb-2" style={{color:pc}}>{rec.priority.toUpperCase()}</div>
+                    <div className="font-figtree text-[14px] font-bold text-white mb-2 leading-snug">{rec.title}</div>
+                    <p className="text-[11px] leading-relaxed" style={{color:'rgba(255,255,255,0.5)'}}>{rec.body}</p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* KPI grid */}
         <div className="grid grid-cols-4 gap-4 mb-8">
@@ -1465,8 +1582,8 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
           ))}
         </div>
 
-        <div className="grid gap-5" style={{gridTemplateColumns:'1fr 320px'}}>
-          {/* Projects list */}
+        <div className="grid gap-5 mb-6" style={{gridTemplateColumns:'1fr 320px'}}>
+          {/* Projects list — expandable */}
           <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
             <div className="flex items-center justify-between px-6 py-4" style={{borderBottom:`1px solid ${BORDER}`}}>
               <div className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.25)'}}>PROYECTOS</div>
@@ -1474,34 +1591,59 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
             </div>
             {clientProjects.length===0 ? (
               <div className="px-6 py-10 text-center text-[13px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin proyectos para este cliente</div>
-            ) : clientProjects.map((p: Project,i: number)=>(
-              <div key={p.id} className="flex items-center gap-4 px-6 py-4" style={{borderBottom:i<clientProjects.length-1?`1px solid ${BORDER}`:'none'}}>
-                <ProgressRing pct={p.progress} size={38} stroke={2.5} color={p.color||BLU}/>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-medium truncate" style={{color:'rgba(240,240,248,0.8)'}}>{p.name}</div>
-                  <div className="text-[10px] mt-0.5" style={{color:'rgba(255,255,255,0.25)'}}>{p.status} · hasta {p.deadline}</div>
+            ) : clientProjects.map((p: Project,i: number)=>{
+              const isOpen = expandedProject===p.id
+              const projTasks = data.tasks.filter((t: Task)=>t.project_id===p.id&&!t.done)
+              return (
+                <div key={p.id} style={{borderBottom:i<clientProjects.length-1?`1px solid ${BORDER}`:'none'}}>
+                  <div onClick={()=>setExpandedProject(isOpen?null:p.id)} className="flex items-center gap-4 px-6 py-4 cursor-pointer hover:bg-white/[0.015] transition-all group">
+                    <ProgressRing pct={p.progress} size={38} stroke={2.5} color={p.color||BLU}/>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-figtree text-[14px] font-semibold truncate" style={{color:'rgba(240,240,248,0.85)'}}>{p.name}</div>
+                      <div className="text-[10px] mt-0.5" style={{color:'rgba(255,255,255,0.25)'}}>{p.status} · hasta {p.deadline}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {projTasks.length > 0 && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.3)'}}>{projTasks.length} tareas</span>}
+                      <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-lg" style={{background:p.status==='urgente'?'rgba(229,29,42,0.1)':'rgba(27,95,250,0.07)',color:p.status==='urgente'?RED:BLU}}>{p.progress}%</span>
+                      <LucideIcon name={isOpen?'chevron-up':'chevron-down'} size={13} color="rgba(255,255,255,0.25)"/>
+                    </div>
+                  </div>
+                  {isOpen && projTasks.length > 0 && (
+                    <div className="px-6 pb-3" style={{borderTop:`1px solid ${BORDER}`}}>
+                      {projTasks.slice(0,6).map((t: Task,ti: number)=>(
+                        <div key={t.id} className="flex items-center gap-3 py-2" style={{borderBottom:ti<Math.min(projTasks.length,6)-1?`1px solid rgba(255,255,255,0.03)`:'none'}}>
+                          <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.7)':BLU}}/>
+                          <span className="text-[12px] flex-1 truncate" style={{color:'rgba(255,255,255,0.5)'}}>{t.text}</span>
+                          <span className="font-syne text-[7px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{t.level}</span>
+                        </div>
+                      ))}
+                      {projTasks.length===0 && <div className="py-2 text-[11px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin tareas activas</div>}
+                    </div>
+                  )}
+                  {isOpen && projTasks.length===0 && (
+                    <div className="px-6 pb-3 pt-2" style={{borderTop:`1px solid ${BORDER}`}}>
+                      <div className="text-[11px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin tareas activas en este proyecto</div>
+                    </div>
+                  )}
                 </div>
-                <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-lg" style={{background:p.status==='urgente'?'rgba(229,29,42,0.1)':'rgba(27,95,250,0.07)',color:p.status==='urgente'?RED:BLU}}>{p.progress}%</span>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
-          {/* Right: tasks + content */}
+          {/* Right: tasks + content + notes */}
           <div className="space-y-4">
-            {/* Active tasks */}
             <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
               <div className="px-5 py-4 font-syne text-[9px] font-black tracking-widest" style={{borderBottom:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.25)'}}>TAREAS ACTIVAS</div>
               {activeTasks.length===0 ? (
                 <div className="px-5 py-6 text-center text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Al día ✓</div>
               ) : activeTasks.slice(0,5).map((t: Task,i: number)=>(
-                <div key={t.id} className="flex items-center gap-3 px-5 py-3" style={{borderBottom:i<Math.min(activeTasks.length,5)-1?`1px solid ${BORDER}`:'none'}}>
+                <div key={t.id} className="flex items-center gap-3 px-5 py-3" style={{borderBottom:i<Math.min(activeTasks.length,5)-1?`1px solid ${BORDER}`:'none',borderLeft:`2px solid ${t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.6)':BLU}40`}}>
                   <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.7)':BLU}}/>
-                  <span className="text-[12px] flex-1 truncate" style={{color:'rgba(255,255,255,0.6)'}}>{t.text}</span>
+                  <span className="font-figtree text-[12px] font-medium flex-1 truncate" style={{color:'rgba(255,255,255,0.6)'}}>{t.text}</span>
                 </div>
               ))}
               {activeTasks.length>5 && <div className="px-5 py-2 text-center text-[10px]" style={{color:'rgba(255,255,255,0.2)'}}>+{activeTasks.length-5} más</div>}
             </div>
-            {/* Content */}
             {clientContent.length>0 && (
               <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
                 <div className="px-5 py-4 font-syne text-[9px] font-black tracking-widest" style={{borderBottom:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.25)'}}>CONTENIDO</div>
@@ -1514,7 +1656,6 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
                 ))}
               </div>
             )}
-            {/* Notes */}
             {selected.notes && (
               <div className="rounded-2xl p-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
                 <div className="font-syne text-[9px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.25)'}}>NOTAS</div>
@@ -1522,6 +1663,38 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
               </div>
             )}
           </div>
+        </div>
+
+        {/* Comment thread */}
+        <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+          <div className="flex items-center justify-between px-6 py-4" style={{borderBottom:`1px solid ${BORDER}`}}>
+            <div className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.25)'}}>CONVERSACIÓN INTERNA</div>
+            {comments===null && (
+              <button onClick={()=>loadComments(selected.id)} className="font-syne text-[8px] font-black px-3 py-1.5 rounded-xl transition-all" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>VER COMENTARIOS</button>
+            )}
+          </div>
+          {commentsLoading && <div className="px-6 py-8 text-center text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Cargando…</div>}
+          {comments !== null && !commentsLoading && (
+            <div>
+              {comments.length===0 && <div className="px-6 py-6 text-center text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin comentarios aún. Sé el primero.</div>}
+              {comments.map((c: any)=>(
+                <div key={c.id} className="flex gap-3 px-6 py-4" style={{borderBottom:`1px solid ${BORDER}`}}>
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0 mt-0.5" style={{background:strColor(c.profile?.name||'?')+'22',border:`1.5px solid ${strColor(c.profile?.name||'?')}40`,color:strColor(c.profile?.name||'?')}}>{(c.profile?.initials||'??').slice(0,2)}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-syne text-[9px] font-black" style={{color:strColor(c.profile?.name||'?')}}>{c.profile?.name||'Alguien'}</span>
+                      <span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.2)'}}>{relTime(c.created_at)}</span>
+                    </div>
+                    <p className="text-[13px] leading-relaxed" style={{color:'rgba(255,255,255,0.65)'}}>{c.body}</p>
+                  </div>
+                </div>
+              ))}
+              <div className="flex gap-3 p-4">
+                <input value={newComment} onChange={e=>setNewComment(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&postComment()} placeholder="Escribe un comentario…" className="flex-1 px-4 py-2.5 rounded-xl text-[13px] outline-none" style={{background:SURF2,border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.8)',caretColor:BLU}}/>
+                <button onClick={postComment} disabled={postingComment||!newComment.trim()} className="px-4 py-2.5 rounded-xl font-syne text-[9px] font-black text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{postingComment?'…':'ENVIAR'}</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -1676,6 +1849,8 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
 function ContenidoSection({data,onOpenModal,showToast}: any) {
   const [activeItem, setActiveItem] = useState<any>(null)
   const [editNotes, setEditNotes] = useState('')
+  const [editVideoUrl, setEditVideoUrl] = useState('')
+  const [editFeedback, setEditFeedback] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
 
   const platColor: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
@@ -1691,15 +1866,18 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
   const openItem = (item: any) => {
     setActiveItem(item)
     setEditNotes(item.notes||'')
+    setEditVideoUrl(item.video_url||'')
+    setEditFeedback(item.feedback||'')
   }
 
   const saveNotes = async () => {
     if (!activeItem) return
     setSavingNotes(true)
     try {
-      await data.updateAgenda(activeItem.id, { notes: editNotes })
-      showToast('Notas guardadas')
-      setActiveItem((prev: any) => ({...prev, notes: editNotes}))
+      const updates: any = { notes: editNotes, video_url: editVideoUrl, feedback: editFeedback }
+      await data.updateAgenda(activeItem.id, updates)
+      showToast('Guardado')
+      setActiveItem((prev: any) => ({...prev, ...updates}))
     } catch { showToast('Error guardando') }
     finally { setSavingNotes(false) }
   }
@@ -1769,7 +1947,11 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                             <div className="flex items-center gap-2 mb-3">
                               <div className="w-6 h-6 rounded-lg flex items-center justify-center font-bold text-[10px] flex-shrink-0" style={{background:pc+'20',color:pc}}>{platIcon[item.platform]||'●'}</div>
                               <span className="font-syne text-[9px] font-black" style={{color:pc}}>{item.platform}</span>
-                              {item.notes && <div className="ml-auto w-4 h-4 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.08)'}} title="Tiene notas"><span style={{fontSize:'8px'}}>📝</span></div>}
+                              <div className="ml-auto flex items-center gap-1">
+                                {item.video_url && <div className="w-4 h-4 rounded-full flex items-center justify-center" style={{background:'rgba(255,0,0,0.12)'}} title="Tiene vídeo"><span style={{fontSize:'8px'}}>▶</span></div>}
+                                {item.feedback && <div className="w-4 h-4 rounded-full flex items-center justify-center" style={{background:'rgba(255,176,32,0.12)'}} title="Tiene feedback"><span style={{fontSize:'8px'}}>💬</span></div>}
+                                {item.notes && <div className="w-4 h-4 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.08)'}} title="Tiene notas"><span style={{fontSize:'8px'}}>📝</span></div>}
+                              </div>
                             </div>
                             {/* Title */}
                             <div className="font-syne text-[13px] font-black text-white mb-1.5 leading-snug line-clamp-2">{item.title}</div>
@@ -1832,20 +2014,36 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                 ))}
               </div>
             </div>
-            {/* Notes / feedback */}
+            {/* Video URL + embed */}
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <div className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.25)'}}>NOTAS DEL EQUIPO</div>
-                {editNotes !== (activeItem.notes||'') && (
-                  <button onClick={saveNotes} disabled={savingNotes} className="font-syne text-[8px] font-black px-3 py-1 rounded-lg disabled:opacity-40" style={{background:'rgba(27,95,250,0.15)',color:BLU}}>
-                    {savingNotes?'GUARDANDO…':'GUARDAR'}
-                  </button>
-                )}
-              </div>
-              <textarea value={editNotes} onChange={e=>setEditNotes(e.target.value)} placeholder="Añade notas, feedback, revisiones del equipo…" rows={6} className="w-full px-4 py-3.5 rounded-xl text-[13px] text-white placeholder-white/20 outline-none resize-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,lineHeight:'1.6'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>{e.target.style.borderColor=BORDER}}/>
+              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>LINK DE VÍDEO</div>
+              <input value={editVideoUrl} onChange={e=>setEditVideoUrl(e.target.value)} placeholder="YouTube / Vimeo URL…" className="w-full px-4 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+              {videoEmbed(editVideoUrl) && (
+                <div className="mt-3 rounded-xl overflow-hidden" style={{aspectRatio:'16/9'}}>
+                  <iframe src={videoEmbed(editVideoUrl)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
+                </div>
+              )}
+              {activeItem.video_url && !videoEmbed(editVideoUrl) && videoEmbed(activeItem.video_url) && (
+                <div className="mt-3 rounded-xl overflow-hidden" style={{aspectRatio:'16/9'}}>
+                  <iframe src={videoEmbed(activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
+                </div>
+              )}
             </div>
-            {/* Delete */}
-            <button onClick={async()=>{await data.deleteAgenda(activeItem.id);setActiveItem(null);showToast('Pieza eliminada')}} className="w-full py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-colors" style={{color:'rgba(229,29,42,0.4)',border:`1px solid rgba(229,29,42,0.1)`}}>ELIMINAR PIEZA</button>
+            {/* Feedback */}
+            <div>
+              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>FEEDBACK / REVISIONES</div>
+              <textarea value={editFeedback} onChange={e=>setEditFeedback(e.target.value)} placeholder="Escribe aquí el feedback del cliente o del equipo…" rows={3} className="w-full px-4 py-3 rounded-xl text-[13px] text-white placeholder-white/20 outline-none resize-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,lineHeight:'1.6'}} onFocus={e=>(e.target.style.borderColor='rgba(255,176,32,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+            </div>
+            {/* Notes */}
+            <div>
+              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>NOTAS DEL EQUIPO</div>
+              <textarea value={editNotes} onChange={e=>setEditNotes(e.target.value)} placeholder="Añade notas de producción…" rows={4} className="w-full px-4 py-3.5 rounded-xl text-[13px] text-white placeholder-white/20 outline-none resize-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,lineHeight:'1.6'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+            </div>
+            {/* Save + delete */}
+            <div className="flex gap-2">
+              <button onClick={saveNotes} disabled={savingNotes} className="flex-1 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingNotes?'GUARDANDO…':'GUARDAR CAMBIOS'}</button>
+              <button onClick={async()=>{await data.deleteAgenda(activeItem.id);setActiveItem(null);showToast('Pieza eliminada')}} className="px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-colors" style={{color:'rgba(229,29,42,0.4)',border:`1px solid rgba(229,29,42,0.1)`}}>✕</button>
+            </div>
           </div>
         </div>
       )}
