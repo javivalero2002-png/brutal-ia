@@ -260,42 +260,67 @@ export default function NexusDashboard({ profile }: Props) {
             <div className="ml-auto flex items-center gap-2">
               {/* Notification bell */}
               <div className="relative">
-                <button onClick={()=>setNotifOpen(o=>!o)} className="w-7 h-7 rounded-xl flex items-center justify-center relative transition-all" style={{background:notifOpen?'rgba(27,95,250,0.15)':'transparent'}}>
+                <button onClick={e=>{e.stopPropagation();setNotifOpen(o=>!o)}} className="w-7 h-7 rounded-xl flex items-center justify-center relative transition-all" style={{background:notifOpen?'rgba(27,95,250,0.15)':'transparent'}}>
                   <LucideIcon name="bell" size={13} color={notifData.total>0?BLU:'rgba(255,255,255,0.2)'}/>
-                  {notifData.total>0 && <div className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center" style={{background:RED}}><span className="font-syne text-[7px] font-black text-white">{notifData.total>9?'9+':notifData.total}</span></div>}
+                  {notifData.total>0 && <div className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center pointer-events-none" style={{background:RED,boxShadow:`0 0 6px ${RED}80`}}><span className="font-syne text-[7px] font-black text-white leading-none">{notifData.total>9?'9+':notifData.total}</span></div>}
                 </button>
                 {notifOpen && (
-                  <div onClick={e=>e.stopPropagation()} className="absolute top-9 left-0 w-[300px] rounded-2xl overflow-hidden z-50" style={{background:'#0D0D1E',border:`1px solid ${BORDER}`,boxShadow:'0 20px 60px rgba(0,0,0,0.7)'}}>
-                    <div className="px-4 py-3 flex items-center justify-between" style={{borderBottom:`1px solid ${BORDER}`}}>
-                      <span className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.35)'}}>NOTIFICACIONES</span>
-                      <button onClick={()=>setNotifOpen(false)} className="text-[10px]" style={{color:'rgba(255,255,255,0.25)'}}>✕</button>
+                  <div onClick={e=>e.stopPropagation()} className="rounded-2xl overflow-hidden z-[999]" style={{position:'fixed',top:'62px',left:'12px',width:'268px',background:'#0C0C1C',border:`1px solid rgba(255,255,255,0.1)`,boxShadow:'0 24px 64px rgba(0,0,0,0.8),0 0 0 1px rgba(255,255,255,0.04)'}}>
+                    {/* Header */}
+                    <div className="px-4 py-3 flex items-center justify-between" style={{borderBottom:`1px solid rgba(255,255,255,0.06)`}}>
+                      <div className="flex items-center gap-2">
+                        <LucideIcon name="bell" size={11} color={BLU}/>
+                        <span className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.5)'}}>NOTIFICACIONES</span>
+                      </div>
+                      {notifData.total > 0 && <span className="font-figtree text-[11px] font-black" style={{color:RED}}>{notifData.total}</span>}
                     </div>
                     {notifData.total===0 ? (
-                      <div className="px-4 py-5 text-center text-[12px]" style={{color:'rgba(255,255,255,0.25)'}}>Sin notificaciones</div>
+                      <div className="px-4 py-6 text-center">
+                        <div className="font-syne text-[9px] font-black tracking-widest mb-1" style={{color:'rgba(255,255,255,0.18)'}}>SIN NOTIFICACIONES</div>
+                        <div className="text-[11px]" style={{color:'rgba(255,255,255,0.2)'}}>Todo está al día</div>
+                      </div>
                     ) : (
-                      <div className="max-h-[280px] overflow-y-auto">
+                      <div className="max-h-[320px] overflow-y-auto">
+                        {notifData.dms.length > 0 && (
+                          <div className="px-4 pt-3 pb-1">
+                            <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>MENSAJES DIRECTOS</span>
+                          </div>
+                        )}
                         {notifData.dms.map((dm:any,i:number)=>(
-                          <button key={i} onClick={()=>{setNotifOpen(false);setSection('inbox')}} className="w-full text-left px-4 py-3 transition-colors hover:bg-white/3" style={{borderBottom:`1px solid ${BORDER}`}}>
-                            <div className="flex items-start gap-2.5">
-                              <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{background:BLU}}/>
-                              <div className="min-w-0">
-                                <div className="text-[12px] text-white truncate">{dm.from_name}</div>
-                                <div className="text-[11px] truncate mt-0.5" style={{color:'rgba(255,255,255,0.35)'}}>{dm.subject}</div>
+                          <button key={i} onClick={()=>{setNotifOpen(false);setSection('inbox')}} className="w-full text-left px-4 py-2.5 transition-colors" style={{borderBottom:`1px solid rgba(255,255,255,0.04)`}} onMouseEnter={e=>(e.currentTarget.style.background='rgba(27,95,250,0.06)')} onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center font-syne text-[8px] font-black" style={{background:BLU+'18',color:BLU}}>{(dm.from_name||'?').slice(0,2).toUpperCase()}</div>
+                              <div className="min-w-0 flex-1">
+                                <div className="font-syne text-[9px] font-black truncate" style={{color:'rgba(255,255,255,0.8)'}}>{dm.from_name}</div>
+                                <div className="text-[10px] truncate mt-0.5" style={{color:'rgba(255,255,255,0.3)'}}>{dm.subject}</div>
                               </div>
+                              <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:BLU}}/>
                             </div>
                           </button>
                         ))}
+                        {notifData.urgent.length > 0 && (
+                          <div className="px-4 pt-3 pb-1">
+                            <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(229,29,42,0.6)'}}>TAREAS URGENTES</span>
+                          </div>
+                        )}
                         {notifData.urgent.map((t:any,i:number)=>(
-                          <button key={i} onClick={()=>{setNotifOpen(false);setSection('tareas')}} className="w-full text-left px-4 py-3 transition-colors hover:bg-white/3" style={{borderBottom:`1px solid ${BORDER}`}}>
-                            <div className="flex items-start gap-2.5">
-                              <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{background:RED}}/>
-                              <div className="min-w-0">
-                                <div className="text-[12px] text-white truncate">{t.text}</div>
-                                <div className="text-[11px] mt-0.5" style={{color:RED+'99'}}>Tarea urgente</div>
+                          <button key={i} onClick={()=>{setNotifOpen(false);setSection('tareas')}} className="w-full text-left px-4 py-2.5 transition-colors" style={{borderBottom:i<notifData.urgent.length-1?`1px solid rgba(255,255,255,0.04)`:'none'}} onMouseEnter={e=>(e.currentTarget.style.background='rgba(229,29,42,0.05)')} onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center" style={{background:`${RED}18`}}>
+                                <div className="w-1.5 h-1.5 rounded-full" style={{background:RED}}/>
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[10.5px] truncate" style={{color:'rgba(255,255,255,0.75)'}}>{t.text}</div>
+                                <div className="font-syne text-[8px] font-black mt-0.5" style={{color:`${RED}80`}}>URGENTE</div>
                               </div>
                             </div>
                           </button>
                         ))}
+                      </div>
+                    )}
+                    {notifData.total > 0 && (
+                      <div className="px-4 py-2.5" style={{borderTop:`1px solid rgba(255,255,255,0.06)`}}>
+                        <button onClick={()=>{setNotifOpen(false);setSection('inbox')}} className="w-full text-center font-syne text-[8.5px] font-black tracking-wide transition-opacity hover:opacity-60" style={{color:BLU}}>VER TODO EL INBOX</button>
                       </div>
                     )}
                   </div>
@@ -586,6 +611,7 @@ function LucideIcon({ name, size=16, color='currentColor' }: {name:string;size?:
     'film':'M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM2 8h20M2 16h20M6 2v4M18 2v4M6 18v4M18 18v4',
     link:'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
     copy:'M20 9h-9a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2zM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1',
+    'sparkles':'M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z',
   }
   const d = icons[name]
   return (
@@ -1356,7 +1382,6 @@ function InboxSection({data,showToast,profile}: any) {
     if (filter==='Clientes') return m.ai_client&&m.ai_client!=='Desconocido'
     if (filter==='Interno') return m.source==='internal'
     if (filter==='Gmail') return m.source==='gmail'
-    if (filter==='WhatsApp') return m.source==='whatsapp'
     return true
   })
 
@@ -1365,150 +1390,141 @@ function InboxSection({data,showToast,profile}: any) {
     if (!m.is_read) data.markRead(m.id)
   }
 
-  const createTaskFromEmail = async (m: any, text?: string) => {
-    const taskText = text || m.ai_action
-    if (!taskText) return
+  const createTaskFromEmail = async (m: any) => {
+    if (!m.ai_action) return
     setCreatingTask(true)
     try {
-      await data.createTask({ text: taskText, level: m.ai_urgency === 'urgent' ? 'urgent' : 'high', source: 'gmail' })
+      await data.createTask({ text: m.ai_action, level: m.ai_urgency==='urgent'?'urgent':'high', source:'gmail' })
       showToast('Tarea creada')
-    } catch { showToast('Error creando tarea') }
+    } catch { showToast('Error') }
     finally { setCreatingTask(false) }
   }
 
-  // Group by date label
   const getDateLabel = (dateStr: string) => {
-    const d = new Date(dateStr)
-    const now = new Date()
-    const diffMs = now.getTime() - d.getTime()
-    const diffDays = Math.floor(diffMs / 86400000)
+    const diffDays = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000)
     if (diffDays === 0) return 'HOY'
     if (diffDays === 1) return 'AYER'
     if (diffDays < 7) return 'ESTA SEMANA'
     return 'ANTERIORES'
   }
 
-  // Build grouped list
   const groups: {label:string; items:any[]}[] = []
-  const labelOrder = ['HOY','AYER','ESTA SEMANA','ANTERIORES']
   const byLabel: Record<string,any[]> = {}
-  filtered.forEach(m => {
-    const l = getDateLabel(m.received_at)
-    if (!byLabel[l]) byLabel[l] = []
-    byLabel[l].push(m)
-  })
-  labelOrder.forEach(l => { if (byLabel[l]?.length) groups.push({label:l, items:byLabel[l]}) })
+  filtered.forEach(m => { const l = getDateLabel(m.received_at); if (!byLabel[l]) byLabel[l] = []; byLabel[l].push(m) })
+  ;['HOY','AYER','ESTA SEMANA','ANTERIORES'].forEach(l => { if (byLabel[l]?.length) groups.push({label:l, items:byLabel[l]}) })
 
-  // Find matching client in data for selected message
-  const matchedClient = selected?.ai_client ? data.clients.find((c: any) => c.name.toLowerCase().includes(selected.ai_client.toLowerCase()) || selected.ai_client.toLowerCase().includes(c.name.toLowerCase().split(' ')[0])) : null
-  const relatedTasks = matchedClient ? data.tasks.filter((t: any) => !t.done && t.client_id === matchedClient.id).slice(0, 4) : []
+  const matchedClient = selected?.ai_client
+    ? data.clients.find((c: any) => c.name.toLowerCase().includes(selected.ai_client.toLowerCase()) || selected.ai_client.toLowerCase().includes(c.name.toLowerCase().split(' ')[0]))
+    : null
+  const relatedTasks = matchedClient ? data.tasks.filter((t: any) => !t.done && t.client_id===matchedClient.id).slice(0, 4) : []
+
+  const uc = (u: string) => u==='urgent'?RED:u==='high'?'rgba(255,176,32,0.9)':BLU
+  const ul = (u: string) => u==='urgent'?'URGENTE':u==='high'?'ALTA':'NORMAL'
 
   const tabs = [
-    {id:'Todos', n: allMsgs.length},
-    {id:'Sin leer', n: unread, accent: BLU},
-    {id:'Urgente', n: urgent, accent: RED},
-    {id:'Clientes', n: fromClients, accent: GRN},
-    {id:'Interno', n: internal, accent: 'rgba(255,176,32,0.8)'},
-    {id:'Gmail', n: 0},
-    {id:'WhatsApp', n: 0},
+    {id:'Todos', label:'Todos', n: allMsgs.length, accent:'rgba(255,255,255,0.35)'},
+    {id:'Sin leer', label:'Sin leer', n: unread, accent: BLU},
+    {id:'Urgente', label:'Urgente', n: urgent, accent: RED},
+    {id:'Clientes', label:'Clientes', n: fromClients, accent: GRN},
+    {id:'Interno', label:'Interno', n: internal, accent: 'rgba(255,176,32,0.8)'},
+    {id:'Gmail', label:'Gmail', n: allMsgs.filter((m:any)=>m.source==='gmail').length, accent:'rgba(255,255,255,0.25)'},
   ]
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* ── LIST COLUMN ── */}
-      <div className="flex flex-col overflow-hidden flex-shrink-0" style={{width: selected?'380px':'100%', borderRight: selected?`1px solid ${BORDER}`:'none'}}>
 
-        {/* Header with stats */}
-        <div className="flex-shrink-0 px-6 py-5" style={{borderBottom:`1px solid ${BORDER}`}}>
-          <div className="flex items-center justify-between mb-4">
+      {/* ── LIST PANEL ─────────────────────────────────────────── */}
+      <div className="flex flex-col overflow-hidden flex-shrink-0" style={{width:selected?'360px':'100%',borderRight:selected?`1px solid ${BORDER}`:'none',maxWidth:selected?'360px':'none'}}>
+
+        {/* Header */}
+        <div className="flex-shrink-0 px-6 pt-6 pb-4" style={{borderBottom:`1px solid ${BORDER}`}}>
+          <div className="flex items-center justify-between mb-5">
             <div>
-              <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1" style={{color:'rgba(255,255,255,0.18)'}}>SEÑALES</div>
-              <h1 className="font-figtree text-[22px] font-black text-white" style={{letterSpacing:'-0.03em'}}>Inbox IA</h1>
+              <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>SEÑALES</div>
+              <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.04em'}}>Inbox</h1>
             </div>
-            <button onClick={()=>data.syncGmail()} disabled={data.syncing} className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black disabled:opacity-40 transition-all" style={{background:SURF2,color:data.syncing?BLU:data.syncResult?.ok?GRN:'rgba(240,240,248,0.35)'}}>
-              <LucideIcon name="refresh-cw" size={12} color={data.syncing?BLU:'rgba(255,255,255,0.3)'}/>{data.syncing?'Sincronizando…':'Sync Gmail'}
+            <button onClick={()=>data.syncGmail()} disabled={data.syncing} className="flex items-center gap-2 px-3.5 py-2 rounded-xl font-syne text-[8.5px] font-black disabled:opacity-40 transition-all" style={{background:SURF2,color:data.syncing?BLU:data.syncResult?.ok?GRN:'rgba(240,240,248,0.35)',border:`1px solid ${BORDER}`}}>
+              <LucideIcon name="refresh-cw" size={11} color={data.syncing?BLU:'rgba(255,255,255,0.25)'}/>{data.syncing?'Sync…':'Sync'}
             </button>
           </div>
-          {/* Intelligence stats strip */}
-          <div className="grid grid-cols-4 gap-2">
+          {/* Stats row */}
+          <div className="flex gap-2">
             {[
-              {n:unread, l:'Sin leer', c:BLU, act:()=>setFilter('Sin leer')},
-              {n:urgent, l:'Urgentes', c:RED, act:()=>setFilter('Urgente')},
-              {n:fromClients, l:'Clientes', c:GRN, act:()=>setFilter('Clientes')},
-              {n:internal, l:'Mensajes', c:'rgba(255,176,32,0.8)', act:()=>setFilter('Interno')},
+              {n:unread, l:'Sin leer', c:BLU, f:'Sin leer'},
+              {n:urgent, l:'Urgentes', c:RED, f:'Urgente'},
+              {n:fromClients, l:'Clientes', c:GRN, f:'Clientes'},
+              {n:internal, l:'Internos', c:'rgba(255,176,32,0.8)', f:'Interno'},
             ].map((s,i)=>(
-              <button key={i} onClick={s.act} className="rounded-xl py-2.5 px-3 text-left transition-all hover:opacity-80" style={{background:SURF2,border:`1px solid ${BORDER}`}}>
-                <div className="font-figtree text-[22px] font-black leading-none mb-0.5" style={{color:s.n>0?s.c:'rgba(255,255,255,0.2)'}}>{s.n}</div>
-                <div className="font-syne text-[8px] font-black tracking-wide" style={{color:'rgba(255,255,255,0.3)'}}>{s.l.toUpperCase()}</div>
+              <button key={i} onClick={()=>setFilter(s.f)} className="flex-1 rounded-2xl py-3 px-2 text-center transition-all" style={{background:filter===s.f?s.c+'15':SURF2,border:filter===s.f?`1px solid ${s.c}30`:`1px solid ${BORDER}`}} onMouseEnter={e=>{ if(filter!==s.f)(e.currentTarget.style.background='rgba(255,255,255,0.04)') }} onMouseLeave={e=>{ if(filter!==s.f)(e.currentTarget.style.background=SURF2) }}>
+                <div className="font-figtree text-[20px] font-black leading-none mb-1" style={{color:s.n>0?s.c:'rgba(255,255,255,0.15)'}}>{s.n}</div>
+                <div className="font-syne text-[7.5px] font-black tracking-wide" style={{color:'rgba(255,255,255,0.25)'}}>{s.l.toUpperCase()}</div>
               </button>
             ))}
           </div>
         </div>
 
         {/* Filter tabs */}
-        <div className="flex gap-1 px-4 py-2.5 flex-shrink-0 overflow-x-auto" style={{borderBottom:`1px solid ${BORDER}`}}>
+        <div className="flex gap-1 px-4 py-2 flex-shrink-0 overflow-x-auto" style={{borderBottom:`1px solid ${BORDER}`}}>
           {tabs.map(t=>(
-            <button key={t.id} onClick={()=>setFilter(t.id)} className="px-3 py-1.5 rounded-xl font-syne text-[8.5px] font-black tracking-wide flex-shrink-0 transition-all" style={{background:filter===t.id?'rgba(27,95,250,0.12)':'transparent',color:filter===t.id?'#F0F0F8':'rgba(240,240,248,0.3)',border:filter===t.id?`1px solid rgba(27,95,250,0.2)`:'1px solid transparent'}}>
-              {t.id}
+            <button key={t.id} onClick={()=>setFilter(t.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide flex-shrink-0 whitespace-nowrap transition-all" style={{background:filter===t.id?'rgba(27,95,250,0.12)':'transparent',color:filter===t.id?'rgba(255,255,255,0.9)':'rgba(255,255,255,0.3)',border:filter===t.id?`1px solid rgba(27,95,250,0.2)`:'1px solid transparent'}}>
+              {t.n > 0 && filter!==t.id && <span className="font-figtree text-[9px] font-black" style={{color:t.accent}}>{t.n}</span>}
+              {t.label}
             </button>
           ))}
         </div>
 
-        {/* Message list with date groups */}
+        {/* Message list */}
         <div className="flex-1 overflow-y-auto">
           {groups.length === 0 && (
-            <div className="py-20 text-center">
-              <div className="text-4xl mb-4">📭</div>
+            <div className="py-20 text-center px-6">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{background:SURF2,border:`1px solid ${BORDER}`}}>
+                <LucideIcon name="inbox" size={22} color="rgba(255,255,255,0.15)"/>
+              </div>
               <div className="font-syne text-[10px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.15)'}}>{allMsgs.length===0?'SIN CUENTA CONECTADA':'BANDEJA VACÍA'}</div>
-              <div className="text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>{allMsgs.length===0?'Conecta Gmail en Ajustes para empezar':'No hay mensajes en este filtro'}</div>
+              <div className="text-[12px] leading-relaxed" style={{color:'rgba(255,255,255,0.2)'}}>{allMsgs.length===0?'Conecta Gmail en Ajustes para empezar':'No hay mensajes con este filtro'}</div>
             </div>
           )}
           {groups.map(group=>(
             <div key={group.label}>
-              <div className="px-5 py-2 flex items-center gap-3 sticky top-0 z-10" style={{background:'rgba(5,5,16,0.92)',backdropFilter:'blur(8px)'}}>
-                <span className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>{group.label}</span>
+              <div className="px-5 py-2 flex items-center gap-3 sticky top-0 z-10" style={{background:'rgba(5,5,16,0.94)',backdropFilter:'blur(10px)'}}>
+                <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.18)'}}>{group.label}</span>
                 <div className="flex-1 h-px" style={{background:BORDER}}/>
-                <span className="font-syne text-[8px] font-black" style={{color:'rgba(255,255,255,0.15)'}}>{group.items.length}</span>
+                <span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.12)'}}>{group.items.length}</span>
               </div>
               {group.items.map((m: any)=>{
-                const urgColor = m.ai_urgency==='urgent'?RED:m.ai_urgency==='high'?'rgba(255,176,32,0.8)':BLU
                 const isInternal = m.source==='internal'
                 const isSelected = selected?.id===m.id
-                const avatarColor = isInternal ? 'rgba(255,176,32,0.85)' : strColor(m.from_name||'?')
-                const accentColor = !m.is_read ? (isInternal?'rgba(255,176,32,0.7)':urgColor) : 'transparent'
+                const isUnread = !m.is_read
+                const avatarBg = isInternal ? 'rgba(255,176,32,0.85)' : strColor(m.from_name||'?')
+                const leftBar = isUnread ? (m.ai_urgency==='urgent' ? RED : isInternal ? 'rgba(255,176,32,0.7)' : BLU) : 'transparent'
                 return (
-                  <div key={m.id} onClick={()=>handleSelect(m)} className="relative cursor-pointer group transition-all" style={{borderLeft:`3px solid ${accentColor}`,background:isSelected?'rgba(27,95,250,0.06)':'transparent'}}>
-                    <div className="flex items-start gap-3 px-4 py-3.5" style={{borderBottom:`1px solid ${BORDER}`}}>
+                  <div key={m.id} onClick={()=>handleSelect(m)} className="relative cursor-pointer transition-colors group"
+                    style={{borderLeft:`2.5px solid ${leftBar}`,background:isSelected?'rgba(27,95,250,0.07)':isUnread?'rgba(255,255,255,0.014)':'transparent',borderBottom:`1px solid ${BORDER}`}}
+                    onMouseEnter={e=>{ if(!isSelected)(e.currentTarget.style.background='rgba(255,255,255,0.02)') }}
+                    onMouseLeave={e=>{ if(!isSelected)(e.currentTarget.style.background=isUnread?'rgba(255,255,255,0.014)':'transparent') }}>
+                    <div className="flex items-start gap-3 px-4 py-3.5">
                       {/* Avatar */}
-                      <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-syne text-[10px] font-black mt-0.5" style={{background:avatarColor+'22',border:`1.5px solid ${avatarColor}40`,color:avatarColor}}>
-                        {isInternal ? '💬' : (m.from_name||'?').slice(0,2).toUpperCase()}
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-syne text-[9px] font-black mt-0.5" style={{background:avatarBg+'20',color:avatarBg}}>
+                        {isInternal
+                          ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={avatarBg} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                          : (m.from_name||'?').slice(0,2).toUpperCase()
+                        }
                       </div>
                       <div className="flex-1 min-w-0">
-                        {/* Row 1: sender + time */}
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-syne text-[9px] font-black tracking-wide truncate flex-1" style={{color:m.is_read?'rgba(255,255,255,0.3)':avatarColor}}>{m.from_name}</span>
-                          {isInternal && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.7)'}}>DM</span>}
-                          {m.ai_urgency==='urgent'&&!m.is_read && <span className="font-syne text-[7px] font-black flex-shrink-0" style={{color:RED}}>●</span>}
-                          {!m.is_read && !isInternal && m.ai_urgency!=='urgent' && <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:urgColor}}/>}
-                          <span className="font-syne text-[8px] flex-shrink-0" style={{color:'rgba(255,255,255,0.2)'}}>{relTime(m.received_at)}</span>
+                        {/* Row 1 */}
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="font-syne text-[9px] font-black truncate flex-1" style={{color:isUnread?'rgba(255,255,255,0.88)':'rgba(255,255,255,0.32)'}}>{m.from_name||'Desconocido'}</span>
+                          {isInternal && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.75)'}}>DM</span>}
+                          {isUnread && m.ai_urgency==='urgent' && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:`${RED}16`,color:RED,border:`1px solid ${RED}30`}}>URG</span>}
+                          <span className="font-syne text-[7.5px] flex-shrink-0" style={{color:'rgba(255,255,255,0.2)'}}>{relTime(m.received_at)}</span>
                         </div>
-                        {/* Row 2: subject as hero */}
-                        <div className="font-figtree text-[13px] font-semibold leading-snug mb-1.5 line-clamp-1" style={{color:m.is_read?'rgba(255,255,255,0.35)':'rgba(255,255,255,0.88)'}}>{m.subject||'Sin asunto'}</div>
-                        {/* Row 3: AI insight */}
-                        {m.ai_summary ? (
-                          <div className="font-syne text-[9px] truncate" style={{color:'rgba(100,140,255,0.55)'}}>⚡ {m.ai_summary}</div>
-                        ) : m.ai_client&&m.ai_client!=='Desconocido' ? (
-                          <div className="font-syne text-[9px] truncate" style={{color:GRN+'99'}}>↗ {m.ai_client}</div>
-                        ) : (
-                          <div className="font-syne text-[9px] truncate" style={{color:'rgba(255,255,255,0.15)'}}>{m.body_preview?.slice(0,60)||'—'}</div>
-                        )}
+                        {/* Row 2: subject */}
+                        <div className="font-figtree text-[12.5px] font-semibold leading-snug truncate mb-1" style={{color:isUnread?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.3)'}}>{m.subject||'Sin asunto'}</div>
+                        {/* Row 3: AI summary or preview */}
+                        <div className="text-[9px] truncate" style={{color:m.ai_summary?'rgba(100,140,255,0.5)':'rgba(255,255,255,0.18)'}}>
+                          {m.ai_summary || m.body_preview?.slice(0,60) || '—'}
+                        </div>
                       </div>
-                      {/* Quick task button */}
-                      {m.ai_action&&m.ai_action!=='Ninguna acción requerida' && (
-                        <button onClick={e=>{e.stopPropagation();createTaskFromEmail(m)}} className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center mt-0.5 transition-all" style={{background:'rgba(27,95,250,0.12)',color:BLU}} title="Crear tarea IA">
-                          <LucideIcon name="plus" size={12} color={BLU}/>
-                        </button>
-                      )}
                     </div>
                   </div>
                 )
@@ -1518,95 +1534,116 @@ function InboxSection({data,showToast,profile}: any) {
         </div>
       </div>
 
-      {/* ── DETAIL PANEL ── */}
+      {/* ── DETAIL PANEL ───────────────────────────────────────── */}
       {selected && (
         <div className="flex-1 overflow-y-auto min-w-0" style={{background:'#050510'}}>
-          {/* Sticky bar */}
-          <div className="flex items-center justify-between px-6 py-4 sticky top-0 z-10" style={{background:'rgba(5,5,16,0.95)',backdropFilter:'blur(12px)',borderBottom:`1px solid ${BORDER}`}}>
-            <button onClick={()=>setSelected(null)} className="flex items-center gap-2 text-[12px] transition-colors hover:text-white/70" style={{color:'rgba(255,255,255,0.35)'}}>
-              <LucideIcon name="arrow-left" size={13}/> Bandeja
+
+          {/* Sticky top bar */}
+          <div className="flex items-center justify-between px-6 py-3.5 sticky top-0 z-10" style={{background:'rgba(5,5,16,0.96)',backdropFilter:'blur(12px)',borderBottom:`1px solid ${BORDER}`}}>
+            <button onClick={()=>setSelected(null)} className="flex items-center gap-1.5 transition-opacity hover:opacity-60" style={{color:'rgba(255,255,255,0.35)'}}>
+              <LucideIcon name="chevron-left" size={14} color="rgba(255,255,255,0.35)"/>
+              <span className="font-syne text-[9px] font-black tracking-wide">VOLVER</span>
             </button>
             <div className="flex items-center gap-2">
               {selected.source==='internal' && (
-                <span className="font-syne text-[8px] font-black px-3 py-1.5 rounded-xl" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.8)'}}>💬 MENSAJE INTERNO</span>
+                <span className="font-syne text-[7.5px] font-black px-2.5 py-1 rounded-full" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.75)',border:'1px solid rgba(255,176,32,0.15)'}}>MENSAJE INTERNO</span>
               )}
               {selected.ai_action&&selected.ai_action!=='Ninguna acción requerida' && (
-                <button onClick={()=>createTaskFromEmail(selected)} disabled={creatingTask} className="flex items-center gap-2 px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-40 transition-all" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
-                  <LucideIcon name="plus" size={11} color="white"/>{creatingTask?'…':'CREAR TAREA'}
+                <button onClick={()=>createTaskFromEmail(selected)} disabled={creatingTask} className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest text-white disabled:opacity-40 transition-opacity" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
+                  <LucideIcon name="plus" size={10} color="white"/>{creatingTask?'…':'CREAR TAREA'}
                 </button>
               )}
             </div>
           </div>
 
           <div className="p-6 space-y-5">
-            {/* Subject */}
+
+            {/* Subject + sender */}
             <div>
-              <div className="flex items-start gap-3 mb-3">
-                {selected.ai_urgency==='urgent' && <span className="font-syne text-[7px] font-black px-2.5 py-1 rounded-full flex-shrink-0 mt-1" style={{background:'rgba(229,29,42,0.12)',color:RED}}>🔴 URGENTE</span>}
-                <h2 className="font-figtree text-[19px] font-black text-white leading-tight" style={{letterSpacing:'-0.025em'}}>{selected.subject||selected.from_phone||'Sin asunto'}</h2>
+              <div className="flex items-start gap-2.5 mb-4">
+                {selected.ai_urgency==='urgent' && (
+                  <span className="flex items-center gap-1.5 font-syne text-[7px] font-black px-2.5 py-1 rounded-full flex-shrink-0 mt-1" style={{background:`${RED}14`,color:RED,border:`1px solid ${RED}28`}}>
+                    <div className="w-1.5 h-1.5 rounded-full" style={{background:RED}}/>URGENTE
+                  </span>
+                )}
+                <h2 className="font-figtree text-[20px] font-black text-white leading-tight" style={{letterSpacing:'-0.025em'}}>{selected.subject||selected.from_phone||'Sin asunto'}</h2>
               </div>
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center font-syne text-[9px] font-black" style={{background:selected.source==='internal'?'rgba(255,176,32,0.1)':BLU+'15',color:selected.source==='internal'?'rgba(255,176,32,0.7)':BLU}}>{(selected.from_name||'??').slice(0,2).toUpperCase()}</div>
-                  <span className="text-[13px] font-medium" style={{color:'rgba(255,255,255,0.7)'}}>{selected.from_name}</span>
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center font-syne text-[10px] font-black flex-shrink-0" style={{background:selected.source==='internal'?'rgba(255,176,32,0.12)':strColor(selected.from_name||'?')+'20',color:selected.source==='internal'?'rgba(255,176,32,0.75)':strColor(selected.from_name||'?')}}>{(selected.from_name||'?').slice(0,2).toUpperCase()}</div>
+                  <span className="text-[13px] font-semibold" style={{color:'rgba(255,255,255,0.75)'}}>{selected.from_name}</span>
                 </div>
                 {selected.from_email && <span className="text-[11px]" style={{color:'rgba(255,255,255,0.28)'}}>{selected.from_email}</span>}
                 <span className="ml-auto text-[11px]" style={{color:'rgba(255,255,255,0.22)'}}>{new Date(selected.received_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
               </div>
             </div>
 
-            {/* AI Analysis — PROMINENTE */}
+            {/* ── AI ANALYSIS BLOCK ── */}
             {(selected.ai_summary||selected.ai_action||selected.ai_urgency) && (
-              <div className="rounded-2xl p-5" style={{background:'linear-gradient(135deg,rgba(27,95,250,0.09) 0%,rgba(20,64,204,0.04) 100%)',border:`1px solid rgba(27,95,250,0.2)`}}>
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-5 h-5 rounded-lg flex items-center justify-center" style={{background:BLU+'20'}}><LucideIcon name="zap" size={11} color={BLU}/></div>
-                  <span className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(100,140,255,0.7)'}}>ANÁLISIS BRUTAL.IA</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="rounded-xl p-3.5" style={{background:'rgba(0,0,0,0.25)'}}>
-                    <div className="font-syne text-[7px] font-black tracking-widest mb-1.5" style={{color:'rgba(255,255,255,0.2)'}}>URGENCIA</div>
-                    <div className="font-syne text-[13px] font-black" style={{color:selected.ai_urgency==='urgent'?RED:selected.ai_urgency==='high'?'rgba(255,176,32,0.9)':BLU}}>{selected.ai_urgency==='urgent'?'🔴 Urgente':selected.ai_urgency==='high'?'🟡 Alta':'🔵 Normal'}</div>
+              <div className="rounded-2xl overflow-hidden" style={{border:`1px solid rgba(27,95,250,0.18)`}}>
+                {/* AI block header with urgency in it */}
+                <div className="flex items-center gap-2.5 px-5 py-3.5" style={{background:'rgba(27,95,250,0.08)',borderBottom:`1px solid rgba(27,95,250,0.12)`}}>
+                  <div className="w-5 h-5 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:`${BLU}28`}}>
+                    <LucideIcon name="sparkles" size={11} color={BLU}/>
                   </div>
-                  <div className="rounded-xl p-3.5" style={{background:'rgba(0,0,0,0.25)'}}>
-                    <div className="font-syne text-[7px] font-black tracking-widest mb-1.5" style={{color:'rgba(255,255,255,0.2)'}}>CLIENTE IA</div>
-                    <div className="text-[13px] font-medium truncate" style={{color:matchedClient?matchedClient.color:'rgba(255,255,255,0.55)'}}>{selected.ai_client&&selected.ai_client!=='Desconocido'?selected.ai_client:'—'}</div>
+                  <span className="font-syne text-[8.5px] font-black tracking-widest flex-1" style={{color:'rgba(120,155,255,0.85)'}}>BRUTAL.IA — ANÁLISIS</span>
+                  {/* Urgency badge — no emoji, dot + label */}
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{background:uc(selected.ai_urgency)+'14',border:`1px solid ${uc(selected.ai_urgency)}28`}}>
+                    <div className="w-1.5 h-1.5 rounded-full" style={{background:uc(selected.ai_urgency)}}/>
+                    <span className="font-syne text-[7.5px] font-black" style={{color:uc(selected.ai_urgency)}}>{ul(selected.ai_urgency)}</span>
                   </div>
                 </div>
-                {selected.ai_summary && (
-                  <div className="mb-4">
-                    <div className="font-syne text-[7px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>RESUMEN</div>
-                    <p className="text-[13px] leading-relaxed" style={{color:'rgba(240,240,248,0.75)'}}>{selected.ai_summary}</p>
+
+                <div className="p-5 space-y-4" style={{background:'rgba(0,0,0,0.18)'}}>
+                  {/* Summary */}
+                  {selected.ai_summary && (
+                    <div>
+                      <div className="font-syne text-[7.5px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>RESUMEN</div>
+                      <p className="text-[13px] leading-relaxed" style={{color:'rgba(235,235,250,0.78)'}}>{selected.ai_summary}</p>
+                    </div>
+                  )}
+                  {/* Client + source row */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="rounded-xl p-3.5" style={{background:'rgba(255,255,255,0.04)',border:`1px solid rgba(255,255,255,0.06)`}}>
+                      <div className="font-syne text-[7px] font-black tracking-widest mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>CLIENTE</div>
+                      <div className="text-[12px] font-semibold truncate" style={{color:matchedClient?matchedClient.color:'rgba(255,255,255,0.45)'}}>{selected.ai_client&&selected.ai_client!=='Desconocido'?selected.ai_client:'—'}</div>
+                    </div>
+                    <div className="rounded-xl p-3.5" style={{background:'rgba(255,255,255,0.04)',border:`1px solid rgba(255,255,255,0.06)`}}>
+                      <div className="font-syne text-[7px] font-black tracking-widest mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>CANAL</div>
+                      <div className="text-[12px] font-semibold capitalize" style={{color:'rgba(255,255,255,0.5)'}}>{selected.source==='gmail'?'Gmail':selected.source==='internal'?'Interno':selected.source||'—'}</div>
+                    </div>
                   </div>
-                )}
-                {selected.ai_action&&selected.ai_action!=='Ninguna acción requerida' && (
-                  <div className="rounded-xl p-4 cursor-pointer hover:opacity-80 transition-opacity" onClick={()=>createTaskFromEmail(selected)} style={{background:'rgba(27,95,250,0.1)',border:`1px solid rgba(27,95,250,0.18)`}}>
-                    <div className="font-syne text-[7px] font-black tracking-widest mb-2" style={{color:'rgba(100,140,255,0.6)'}}>ACCIÓN SUGERIDA — CLICK PARA CREAR TAREA</div>
-                    <div className="text-[13px]" style={{color:'rgba(240,240,248,0.7)'}}>{selected.ai_action}</div>
-                  </div>
-                )}
+                  {/* Action suggestion */}
+                  {selected.ai_action&&selected.ai_action!=='Ninguna acción requerida' && (
+                    <button onClick={()=>createTaskFromEmail(selected)} className="w-full text-left rounded-xl p-4 transition-opacity hover:opacity-75" style={{background:'rgba(27,95,250,0.1)',border:`1px solid rgba(27,95,250,0.2)`}}>
+                      <div className="font-syne text-[7px] font-black tracking-widest mb-2" style={{color:'rgba(100,140,255,0.6)'}}>ACCIÓN SUGERIDA — CLICK PARA CREAR TAREA</div>
+                      <div className="text-[12.5px]" style={{color:'rgba(235,235,250,0.7)'}}>{selected.ai_action}</div>
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
-            {/* Client context card */}
+            {/* Client context */}
             {matchedClient && (
               <div className="rounded-2xl p-4" style={{background:SURFACE,border:`1px solid ${matchedClient.color}25`}}>
-                <div className="font-syne text-[8px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.2)'}}>CLIENTE DETECTADO</div>
+                <div className="font-syne text-[8px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.2)'}}>CLIENTE</div>
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-9 h-9 rounded-xl flex items-center justify-center font-syne text-[11px] font-black flex-shrink-0" style={{background:matchedClient.color+'18',border:`1.5px solid ${matchedClient.color}30`,color:matchedClient.color}}>{matchedClient.initials}</div>
                   <div className="flex-1">
-                    <div className="font-syne text-[14px] font-black text-white">{matchedClient.name}</div>
+                    <div className="font-syne text-[13px] font-black text-white">{matchedClient.name}</div>
                     <div className="text-[11px] mt-0.5" style={{color:'rgba(255,255,255,0.3)'}}>{matchedClient.industry}</div>
                   </div>
-                  <span className="font-syne text-[8px] font-black px-2 py-1 rounded-full" style={{background:matchedClient.status==='Activo'?'rgba(34,197,94,0.1)':'rgba(255,255,255,0.05)',color:matchedClient.status==='Activo'?GRN:'rgba(255,255,255,0.3)'}}>{matchedClient.status}</span>
+                  <span className="font-syne text-[8px] font-black px-2 py-1 rounded-full" style={{background:matchedClient.status==='Activo'?`${GRN}12`:'rgba(255,255,255,0.05)',color:matchedClient.status==='Activo'?GRN:'rgba(255,255,255,0.3)'}}>{matchedClient.status}</span>
                 </div>
-                <div className="flex gap-2 text-[10px]">
+                <div className="flex gap-2">
                   {[
                     {n:data.projects.filter((p: any)=>p.client_id===matchedClient.id).length, l:'proyectos'},
                     {n:data.tasks.filter((t: any)=>!t.done&&t.client_id===matchedClient.id).length, l:'tareas activas'},
                   ].map((s,i)=>(
-                    <div key={i} className="flex-1 text-center rounded-lg py-2" style={{background:SURF2}}>
+                    <div key={i} className="flex-1 text-center rounded-xl py-2.5" style={{background:SURF2}}>
                       <div className="font-figtree text-[18px] font-black" style={{color:matchedClient.color}}>{s.n}</div>
-                      <div style={{color:'rgba(255,255,255,0.3)'}}>{s.l}</div>
+                      <div className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.28)'}}>{s.l}</div>
                     </div>
                   ))}
                 </div>
@@ -1616,11 +1653,11 @@ function InboxSection({data,showToast,profile}: any) {
             {/* Related tasks */}
             {relatedTasks.length > 0 && (
               <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-                <div className="px-5 py-3.5 font-syne text-[8px] font-black tracking-widest" style={{borderBottom:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.2)'}}>TAREAS RELACIONADAS · {matchedClient?.name}</div>
+                <div className="px-5 py-3.5 font-syne text-[8px] font-black tracking-widest" style={{borderBottom:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.2)'}}>TAREAS ACTIVAS — {matchedClient?.name}</div>
                 {relatedTasks.map((t: any,i: number)=>(
                   <div key={t.id} className="flex items-center gap-3 px-5 py-3" style={{borderBottom:i<relatedTasks.length-1?`1px solid ${BORDER}`:'none'}}>
                     <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.7)':BLU}}/>
-                    <span className="text-[12px] flex-1 truncate" style={{color:'rgba(255,255,255,0.55)'}}>{t.text}</span>
+                    <span className="text-[12px] flex-1 truncate" style={{color:'rgba(255,255,255,0.5)'}}>{t.text}</span>
                     {t.assignee && <div className="w-5 h-5 rounded-full flex items-center justify-center font-syne text-[7px] font-black flex-shrink-0" style={{background:t.assignee.avatar_color+'20',color:t.assignee.avatar_color}}>{t.assignee.initials}</div>}
                   </div>
                 ))}
@@ -1630,21 +1667,21 @@ function InboxSection({data,showToast,profile}: any) {
             {/* Attachments */}
             {selected.attachments && selected.attachments.length > 0 && (
               <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-                <div className="px-5 py-3.5 font-syne text-[8px] font-black tracking-widest" style={{borderBottom:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.2)'}}>ADJUNTOS · {selected.attachments.length}</div>
+                <div className="px-5 py-3.5 font-syne text-[8px] font-black tracking-widest" style={{borderBottom:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.2)'}}>ADJUNTOS — {selected.attachments.length}</div>
                 {selected.attachments.map((att: any, i: number) => {
                   const ext = att.filename.split('.').pop()?.toUpperCase() || '?'
                   const sizeKb = Math.round(att.size / 1024)
                   const downloadUrl = `/api/inbox/attachment?msgId=${selected.gmail_id}&attId=${encodeURIComponent(att.attachmentId)}&filename=${encodeURIComponent(att.filename)}`
                   return (
                     <a key={i} href={downloadUrl} download={att.filename} target="_blank" rel="noopener noreferrer"
-                      className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-white/[0.02] group"
+                      className="flex items-center gap-3 px-5 py-3 group"
                       style={{borderBottom:i<selected.attachments.length-1?`1px solid ${BORDER}`:'none',textDecoration:'none'}}>
                       <div className="w-8 h-8 rounded-lg flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>{ext}</div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[12px] font-medium truncate" style={{color:'rgba(255,255,255,0.75)'}}>{att.filename}</div>
+                        <div className="text-[12px] font-medium truncate" style={{color:'rgba(255,255,255,0.72)'}}>{att.filename}</div>
                         <div className="font-syne text-[9px]" style={{color:'rgba(255,255,255,0.25)'}}>{sizeKb > 0 ? `${sizeKb} KB` : att.mimeType}</div>
                       </div>
-                      <LucideIcon name="download" size={13} color="rgba(27,95,250,0.6)"/>
+                      <LucideIcon name="download" size={13} color="rgba(27,95,250,0.5)"/>
                     </a>
                   )
                 })}
@@ -1655,7 +1692,7 @@ function InboxSection({data,showToast,profile}: any) {
             {selected.body_preview && (
               <div className="rounded-2xl p-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
                 <div className="font-syne text-[8px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.18)'}}>CONTENIDO</div>
-                <p className="text-[12px] leading-relaxed whitespace-pre-wrap" style={{color:'rgba(255,255,255,0.4)'}}>{selected.body_preview}</p>
+                <p className="text-[12px] leading-relaxed whitespace-pre-wrap" style={{color:'rgba(255,255,255,0.38)'}}>{selected.body_preview}</p>
               </div>
             )}
           </div>
