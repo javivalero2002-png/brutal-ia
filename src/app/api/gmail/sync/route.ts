@@ -80,6 +80,7 @@ export async function POST() {
       is_unread: email.is_unread,
       received_at: email.received_at,
       shared: isCompanyAccount,
+      attachments: email.attachments?.length ? email.attachments : [],
     })
 
     if (insertErr) continue

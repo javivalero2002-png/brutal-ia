@@ -68,6 +68,7 @@ export async function getEmailsWithRefreshToken(refreshToken: string, maxResults
       const fromEmail = fromMatch ? fromMatch[2] : from
 
       const body = extractBody(full.data.payload)
+      const attachments = extractAttachments(full.data.payload)
 
       return {
         gmail_id: msg.id!,
@@ -77,6 +78,7 @@ export async function getEmailsWithRefreshToken(refreshToken: string, maxResults
         body_preview: body.slice(0, 500),
         received_at: new Date(date).toISOString(),
         is_unread: (full.data.labelIds || []).includes('UNREAD'),
+        attachments,
       }
     })
   )
@@ -112,6 +114,28 @@ export async function getCalendarEvents(refreshToken: string, monthsAhead = 2) {
     colorId: e.colorId || '',
     htmlLink: e.htmlLink || '',
   }))
+}
+
+function extractAttachments(payload: any): {attachmentId: string; filename: string; mimeType: string; size: number}[] {
+  const results: {attachmentId: string; filename: string; mimeType: string; size: number}[] = []
+  if (!payload) return results
+
+  const scan = (parts: any[]) => {
+    for (const part of parts) {
+      if (part.filename && part.body?.attachmentId) {
+        results.push({
+          attachmentId: part.body.attachmentId,
+          filename: part.filename,
+          mimeType: part.mimeType || 'application/octet-stream',
+          size: part.body.size || 0,
+        })
+      }
+      if (part.parts) scan(part.parts)
+    }
+  }
+
+  if (payload.parts) scan(payload.parts)
+  return results
 }
 
 function extractBody(payload: any): string {

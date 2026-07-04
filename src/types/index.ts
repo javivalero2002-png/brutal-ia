@@ -49,6 +49,13 @@ export interface Task {
   client?: Client
 }
 
+export interface AttachmentMeta {
+  attachmentId: string
+  filename: string
+  mimeType: string
+  size: number
+}
+
 export interface InboxMessage {
   id: string
   user_id: string
@@ -67,6 +74,7 @@ export interface InboxMessage {
   is_unread?: boolean
   shared?: boolean
   received_at: string
+  attachments?: AttachmentMeta[]
 }
 
 export interface MemoriaEntry {
@@ -83,6 +91,7 @@ export interface ContentItem {
   id: string
   title: string
   platform: string
+  account_name?: string
   content_type: string
   status: 'borrador' | 'pendiente' | 'listo' | 'publicado'
   publish_date?: string

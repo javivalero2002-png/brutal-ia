@@ -163,7 +163,7 @@ export default function NexusDashboard({ profile }: Props) {
         showToast('Regla creada')
       } else if (modal === 'contenido') {
         if (!mf.titulo?.trim()) { showToast('Escribe el título'); return }
-        await data.createAgenda({ title:mf.titulo.trim(), platform:mf.plataforma||'Instagram', content_type:'Post', status:'borrador', publish_date:mf.fecha })
+        await data.createAgenda({ title:mf.titulo.trim(), platform:mf.plataforma||'Instagram', account_name:mf.cuenta?.trim()||undefined, content_type:'Post', status:'borrador', publish_date:mf.fecha })
         showToast('Pieza añadida')
       }
       setModal(null); setMf({})
@@ -193,13 +193,33 @@ export default function NexusDashboard({ profile }: Props) {
   const navItem = (id: Section, label: string, icon: string, badge?: number) => {
     const act = section === id
     return (
-      <button key={id} onClick={()=>setSection(id)} className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-left transition-all" style={{ background:act?'rgba(27,95,250,0.1)':'transparent', color:act?'#F0F0F8':'rgba(240,240,248,0.38)', border:act?`1px solid rgba(27,95,250,0.2)`:'1px solid transparent', fontSize:'13.5px', fontWeight:act?'600':'400', marginBottom:'2px' }}>
-        <LucideIcon name={icon} size={15} color={act?BLU:'rgba(240,240,248,0.2)'}/>
+      <button key={id} onClick={()=>setSection(id)}
+        className="flex items-center gap-2.5 w-full py-2.5 rounded-lg text-left transition-all duration-150 group"
+        style={{
+          background: act ? 'rgba(27,95,250,0.1)' : 'transparent',
+          color: act ? '#F0F0F8' : 'rgba(240,240,248,0.38)',
+          borderLeft: act ? `2px solid ${BLU}` : '2px solid transparent',
+          paddingLeft: act ? '10px' : '10px',
+          paddingRight: '10px',
+          fontSize: '13px',
+          fontWeight: act ? '600' : '400',
+          marginBottom: '1px',
+          boxShadow: act ? `inset 0 0 20px rgba(27,95,250,0.05)` : 'none',
+        }}>
+        <LucideIcon name={icon} size={14} color={act ? BLU : 'rgba(240,240,248,0.2)'}/>
         <span className="flex-1 truncate">{label}</span>
-        {badge !== undefined && badge > 0 && <span className="font-syne text-[8.5px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center" style={{background:act?BLU:'rgba(229,29,42,0.15)',color:act?'white':RED}}>{badge}</span>}
+        {badge !== undefined && badge > 0 && (
+          <span className="font-syne text-[8px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center" style={{background: act ? BLU+'30' : 'rgba(229,29,42,0.15)', color: act ? BLU : RED}}>{badge}</span>
+        )}
       </button>
     )
   }
+
+  const navLabel = (text: string) => (
+    <div className="px-2 pt-3 pb-1">
+      <span className="font-syne text-[8px] font-black tracking-[0.2em]" style={{color:'rgba(255,255,255,0.12)'}}>{text}</span>
+    </div>
+  )
 
   if (data.loading) {
     return (
@@ -232,31 +252,27 @@ export default function NexusDashboard({ profile }: Props) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto px-3 pb-2 space-y-0.5">
-          <div className="mb-1 mt-1">
-            {navItem('hoy','Hoy','sun',urgentCount)}
-            {navItem('inbox','Inbox','inbox',unreadCount)}
-            {navItem('calendario','Calendario','calendar')}
-            {navItem('equipo','Equipo','users-2')}
-          </div>
-          <div className="my-2" style={{height:'1px',background:BORDER}}/>
-          <div className="mb-1">
-            {navItem('tareas','Tareas','check-square',data.tasks.filter((t:Task)=>!t.done&&t.level==='urgent').length||undefined)}
-            {navItem('clientes','Clientes','users')}
-            {navItem('proyectos','Proyectos','folder-open')}
-            {navItem('contenido','Contenido','film')}
-          </div>
-          <div className="my-2" style={{height:'1px',background:BORDER}}/>
-          <div className="mb-1">
-            {navItem('memoria','Memoria','database')}
-            {navItem('automatizaciones','Automatizaciones','zap',data.reglas.filter(r=>r.active).length||undefined)}
-            {isOwner && navItem('reportes','Reportes','bar-chart-2')}
-          </div>
-          <div className="my-2" style={{height:'1px',background:BORDER}}/>
-          <div>
-            {navItem('chat','Brutal.IA','message-square')}
-            {navItem('ajustes','Ajustes','settings')}
-          </div>
+        <nav className="flex-1 overflow-y-auto px-2 pb-2">
+          {navLabel('TRABAJO')}
+          {navItem('hoy','Hoy','sun',urgentCount)}
+          {navItem('inbox','Inbox','inbox',unreadCount)}
+          {navItem('calendario','Calendario','calendar')}
+          {navItem('equipo','Equipo','users-2')}
+
+          {navLabel('GESTIÓN')}
+          {navItem('tareas','Tareas','check-square',data.tasks.filter((t:Task)=>!t.done&&t.level==='urgent').length||undefined)}
+          {navItem('clientes','Clientes','users')}
+          {navItem('proyectos','Proyectos','folder-open')}
+          {navItem('contenido','Contenido','film')}
+
+          {navLabel('ANÁLISIS')}
+          {navItem('memoria','Memoria','database')}
+          {navItem('automatizaciones','Automatizaciones','zap',data.reglas.filter(r=>r.active).length||undefined)}
+          {isOwner && navItem('reportes','Reportes','bar-chart-2')}
+
+          {navLabel('IA')}
+          {navItem('chat','Brutal.IA','message-square')}
+          {navItem('ajustes','Ajustes','settings')}
         </nav>
 
         {/* Footer */}
@@ -448,7 +464,8 @@ function modalFields(type: string, team: Profile[]) {
     contenido: [
       f('Título de la pieza','titulo','Ej: Stories lanzamiento verano Nike'),
       f('Cliente','cliente','Ej: Nike España'),
-      f('Plataforma','plataforma','TikTok / Instagram / LinkedIn / YouTube'),
+      f('Plataforma','plataforma','Instagram / TikTok / LinkedIn / YouTube'),
+      f('Cuenta / Perfil','cuenta','Ej: Brutal Studios, Pablo, Julio Flores'),
       f('Fecha de publicación','fecha','Ej: 10 Jul 2026'),
     ],
   }
@@ -722,17 +739,26 @@ function EquipoSection({data, profile, showToast}: any) {
     finally { setSending(false) }
   }
 
+  // Ensure owner always appears; add Fer placeholder
+  const allActive: Profile[] = data.team.some((m: Profile) => m.id === profile?.id)
+    ? data.team
+    : [profile, ...data.team]
+
+  const PENDING = [
+    { name: 'Fer', role: 'Becario', initials: 'FE', avatar_color: '#F97316', email: 'pendiente de registro' },
+  ].filter(p => !allActive.some((m: Profile) => m.name.toLowerCase().includes(p.name.toLowerCase())))
+
   return (
     <div className="p-8 max-w-[1100px] mx-auto">
       <div className="mb-10">
         <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>BRUTAL STUDIOS</div>
         <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Equipo</h1>
       </div>
-      {data.team.length === 0 ? (
+      {allActive.length === 0 ? (
         <div className="text-center py-16 text-[13px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin datos de equipo</div>
       ) : (
         <div className="grid grid-cols-2 gap-5">
-          {data.team.map((member: Profile) => {
+          {allActive.map((member: Profile) => {
             const memberTasks = data.tasks.filter((t: Task) => t.assignee?.name === member.name)
             const pending = memberTasks.filter((t: Task) => !t.done)
             const done = memberTasks.filter((t: Task) => t.done)
@@ -783,6 +809,32 @@ function EquipoSection({data, profile, showToast}: any) {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Pending members */}
+      {PENDING.length > 0 && (
+        <div className="mt-8">
+          <div className="font-syne text-[9px] font-black tracking-widest mb-4" style={{color:'rgba(255,255,255,0.2)'}}>PENDIENTES DE REGISTRO</div>
+          <div className="grid grid-cols-2 gap-5">
+            {PENDING.map((p, i) => (
+              <div key={i} className="rounded-2xl overflow-hidden opacity-60" style={{background:SURFACE,border:`1px dashed ${BORDER}`}}>
+                <div className="flex items-center gap-4 p-6" style={{borderBottom:`1px solid ${BORDER}`}}>
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center font-syne text-[13px] font-black flex-shrink-0" style={{background:p.avatar_color+'18',border:`1.5px dashed ${p.avatar_color}50`,color:p.avatar_color}}>{p.initials}</div>
+                  <div className="flex-1">
+                    <div className="font-syne text-[16px] font-black text-white flex items-center gap-2">
+                      {p.name}
+                      <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.7)'}}>SIN CUENTA</span>
+                    </div>
+                    <div className="text-[11px] mt-0.5" style={{color:'rgba(255,255,255,0.25)'}}>{p.role} · {p.email}</div>
+                  </div>
+                </div>
+                <div className="px-6 py-4 text-[11px]" style={{color:'rgba(255,255,255,0.25)'}}>
+                  Para aparecer aquí, {p.name} debe registrarse en <span style={{color:BLU}}>brutalstudios-ia.vercel.app</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -1445,6 +1497,30 @@ function InboxSection({data,showToast,profile}: any) {
               </div>
             )}
 
+            {/* Attachments */}
+            {selected.attachments && selected.attachments.length > 0 && (
+              <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+                <div className="px-5 py-3.5 font-syne text-[8px] font-black tracking-widest" style={{borderBottom:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.2)'}}>ADJUNTOS · {selected.attachments.length}</div>
+                {selected.attachments.map((att: any, i: number) => {
+                  const ext = att.filename.split('.').pop()?.toUpperCase() || '?'
+                  const sizeKb = Math.round(att.size / 1024)
+                  const downloadUrl = `/api/inbox/attachment?msgId=${selected.gmail_id}&attId=${encodeURIComponent(att.attachmentId)}&filename=${encodeURIComponent(att.filename)}`
+                  return (
+                    <a key={i} href={downloadUrl} download={att.filename} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-white/[0.02] group"
+                      style={{borderBottom:i<selected.attachments.length-1?`1px solid ${BORDER}`:'none',textDecoration:'none'}}>
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>{ext}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-medium truncate" style={{color:'rgba(255,255,255,0.75)'}}>{att.filename}</div>
+                        <div className="font-syne text-[9px]" style={{color:'rgba(255,255,255,0.25)'}}>{sizeKb > 0 ? `${sizeKb} KB` : att.mimeType}</div>
+                      </div>
+                      <LucideIcon name="download" size={13} color="rgba(27,95,250,0.6)"/>
+                    </a>
+                  )
+                })}
+              </div>
+            )}
+
             {/* Email body */}
             {selected.body_preview && (
               <div className="rounded-2xl p-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
@@ -1851,6 +1927,8 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
   const [editNotes, setEditNotes] = useState('')
   const [editVideoUrl, setEditVideoUrl] = useState('')
   const [editFeedback, setEditFeedback] = useState('')
+  const [editAccountName, setEditAccountName] = useState('')
+  const [accountFilter, setAccountFilter] = useState('Todas')
   const [savingNotes, setSavingNotes] = useState(false)
 
   const platColor: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
@@ -1868,19 +1946,24 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
     setEditNotes(item.notes||'')
     setEditVideoUrl(item.video_url||'')
     setEditFeedback(item.feedback||'')
+    setEditAccountName(item.account_name||'')
   }
 
   const saveNotes = async () => {
     if (!activeItem) return
     setSavingNotes(true)
     try {
-      const updates: any = { notes: editNotes, video_url: editVideoUrl, feedback: editFeedback }
+      const updates: any = { notes: editNotes, video_url: editVideoUrl, feedback: editFeedback, account_name: editAccountName }
       await data.updateAgenda(activeItem.id, updates)
       showToast('Guardado')
       setActiveItem((prev: any) => ({...prev, ...updates}))
     } catch { showToast('Error guardando') }
     finally { setSavingNotes(false) }
   }
+
+  // Derive unique accounts across all items
+  const allAccounts: string[] = ['Todas', ...Array.from(new Set<string>(data.agenda.filter((a: any)=>a.account_name).map((a: any)=>a.account_name as string)))]
+  const filteredAgenda = accountFilter === 'Todas' ? data.agenda : data.agenda.filter((a: any)=>a.account_name===accountFilter)
 
   const changeStatus = async (item: any, newStatus: string) => {
     try {
@@ -1894,12 +1977,23 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
     <div className="flex h-full overflow-hidden">
       {/* Left: Kanban */}
       <div className="flex-1 overflow-hidden flex flex-col min-w-0">
-        <div className="flex items-center justify-between px-8 py-6 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
-          <div>
-            <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>PRODUCCIÓN</div>
-            <h1 className="font-figtree text-[24px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Pipeline de Contenido</h1>
+        <div className="px-8 pt-6 pb-4 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>PRODUCCIÓN</div>
+              <h1 className="font-figtree text-[24px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Pipeline de Contenido</h1>
+            </div>
+            <button onClick={()=>onOpenModal('contenido')} className="px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVA PIEZA</button>
           </div>
-          <button onClick={()=>onOpenModal('contenido')} className="px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVA PIEZA</button>
+          {allAccounts.length > 1 && (
+            <div className="flex gap-1.5 flex-wrap">
+              {allAccounts.map((acc: string)=>(
+                <button key={acc} onClick={()=>setAccountFilter(acc)} className="font-syne text-[8.5px] font-black px-3 py-1.5 rounded-xl transition-all" style={{background:accountFilter===acc?'rgba(27,95,250,0.15)':'rgba(255,255,255,0.04)',color:accountFilter===acc?BLU:'rgba(255,255,255,0.3)',border:accountFilter===acc?`1px solid rgba(27,95,250,0.25)`:'1px solid transparent'}}>
+                  {acc}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {data.agenda.length === 0 ? (
@@ -1914,7 +2008,7 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
           <div className="flex-1 overflow-x-auto overflow-y-hidden">
             <div className="flex h-full gap-4 p-6" style={{minWidth:'900px'}}>
               {cols.map(col=>{
-                const items = data.agenda.filter((a: any)=>a.status===col.key)
+                const items = filteredAgenda.filter((a: any)=>a.status===col.key)
                 return (
                   <div key={col.key} className="flex flex-col rounded-2xl overflow-hidden flex-1 min-w-[220px]" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
                     {/* Column header */}
@@ -1953,10 +2047,16 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                                 {item.notes && <div className="w-4 h-4 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.08)'}} title="Tiene notas"><span style={{fontSize:'8px'}}>📝</span></div>}
                               </div>
                             </div>
+                            {/* Account name badge */}
+                            {item.account_name && (
+                              <div className="mb-2">
+                                <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:pc+'15',color:pc+'cc'}}>@{item.account_name}</span>
+                              </div>
+                            )}
                             {/* Title */}
-                            <div className="font-syne text-[13px] font-black text-white mb-1.5 leading-snug line-clamp-2">{item.title}</div>
+                            <div className="font-figtree text-[13px] font-semibold text-white mb-1.5 leading-snug line-clamp-2">{item.title}</div>
                             {/* Client + date */}
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between mt-2">
                               <span className="text-[10px]" style={{color:'rgba(255,255,255,0.3)'}}>{item.client?.name||'—'}</span>
                               {item.publish_date && <span className="font-syne text-[9px] font-black px-2 py-0.5 rounded-lg" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.3)'}}>{item.publish_date}</span>}
                             </div>
@@ -2013,6 +2113,11 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                   </button>
                 ))}
               </div>
+            </div>
+            {/* Account name */}
+            <div>
+              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>CUENTA / PERFIL</div>
+              <input value={editAccountName} onChange={e=>setEditAccountName(e.target.value)} placeholder="Ej: Brutal Studios, Pablo, Julio Flores…" className="w-full px-4 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
             </div>
             {/* Video URL + embed */}
             <div>
