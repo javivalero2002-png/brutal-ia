@@ -163,7 +163,7 @@ export default function NexusDashboard({ profile }: Props) {
         showToast('Regla creada')
       } else if (modal === 'contenido') {
         if (!mf.titulo?.trim()) { showToast('Escribe el título'); return }
-        await data.createAgenda({ title:mf.titulo.trim(), platform:mf.plataforma||'Instagram', account_name:mf.cuenta?.trim()||undefined, content_type:'Post', status:'borrador', publish_date:mf.fecha })
+        await data.createAgenda({ title:mf.titulo.trim(), platform:mf.plataforma||'Instagram', account_name:mf.cuenta?.trim()||undefined, content_type:'Post', status:(mf.estado||'borrador') as 'borrador'|'pendiente'|'listo'|'publicado', publish_date:mf.fecha })
         showToast('Pieza añadida')
       }
       setModal(null); setMf({})
@@ -267,8 +267,6 @@ export default function NexusDashboard({ profile }: Props) {
 
           {navLabel('ANÁLISIS')}
           {navItem('memoria','Memoria','database')}
-          {navItem('automatizaciones','Automatizaciones','zap',data.reglas.filter(r=>r.active).length||undefined)}
-          {isOwner && navItem('reportes','Reportes','bar-chart-2')}
 
           {navLabel('IA')}
           {navItem('chat','Brutal.IA','message-square')}
@@ -389,6 +387,22 @@ export default function NexusDashboard({ profile }: Props) {
                         </button>
                       ))}
                     </div>
+                  ) : f.type === 'status' ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        {v:'borrador',l:'Borrador',e:'✏️',c:'rgba(255,255,255,0.45)'},
+                        {v:'pendiente',l:'Pendiente',e:'🔄',c:'rgba(255,176,32,0.9)'},
+                        {v:'listo',l:'Listo',e:'✅',c:'#22c55e'},
+                        {v:'publicado',l:'Publicado',e:'🚀',c:BLU},
+                      ].map(s=>(
+                        <button key={s.v} onClick={()=>setMf(m=>({...m,[f.key]:s.v}))}
+                          className="flex items-center gap-2.5 px-4 py-3 rounded-2xl font-syne text-[10px] font-black tracking-wide transition-all"
+                          style={{background:(mf[f.key]||'borrador')===s.v?s.c+'18':SURF2,border:`1.5px solid ${(mf[f.key]||'borrador')===s.v?s.c+'60':BORDER}`,color:(mf[f.key]||'borrador')===s.v?s.c:'rgba(255,255,255,0.3)'}}>
+                          <span>{s.e}</span>
+                          <span>{s.l.toUpperCase()}</span>
+                        </button>
+                      ))}
+                    </div>
                   ) : (
                     <input value={mf[f.key]||''} onChange={e=>setMf(m=>({...m,[f.key]:e.target.value}))} placeholder={f.placeholder} className="w-full px-5 py-3.5 rounded-2xl text-[14px] text-white placeholder-white/20 outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.45)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
                   )}
@@ -467,6 +481,7 @@ function modalFields(type: string, team: Profile[]) {
       f('Plataforma','plataforma','Instagram / TikTok / LinkedIn / YouTube'),
       f('Cuenta / Perfil','cuenta','Ej: Brutal Studios, Pablo, Julio Flores'),
       f('Fecha de publicación','fecha','Ej: 10 Jul 2026'),
+      { label:'Estado', key:'estado', type:'status' },
     ],
   }
   return maps[type] || []
@@ -1999,29 +2014,31 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
         {data.agenda.length === 0 ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
-              <div className="text-5xl mb-4">🎬</div>
-              <div className="font-syne text-[11px] font-black tracking-widest mb-4" style={{color:'rgba(255,255,255,0.15)'}}>SIN CONTENIDO</div>
-              <button onClick={()=>onOpenModal('contenido')} className="font-syne text-[10px] font-black px-5 py-3 rounded-2xl" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>AÑADIR PRIMERA PIEZA</button>
+              <div className="w-20 h-20 rounded-3xl flex items-center justify-center text-4xl mx-auto mb-6" style={{background:'rgba(27,95,250,0.07)',border:`1px solid rgba(27,95,250,0.15)`}}>🎬</div>
+              <div className="font-figtree text-[20px] font-black text-white mb-2" style={{letterSpacing:'-0.02em'}}>Sin contenido aún</div>
+              <div className="text-[13px] mb-6" style={{color:'rgba(255,255,255,0.3)'}}>Añade tu primera pieza para empezar el pipeline</div>
+              <button onClick={()=>onOpenModal('contenido')} className="font-syne text-[10px] font-black px-6 py-3.5 rounded-2xl text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVA PIEZA</button>
             </div>
           </div>
         ) : (
           <div className="flex-1 overflow-x-auto overflow-y-hidden">
-            <div className="flex h-full gap-4 p-6" style={{minWidth:'900px'}}>
+            <div className="flex h-full gap-3 p-5" style={{minWidth:'860px'}}>
               {cols.map(col=>{
                 const items = filteredAgenda.filter((a: any)=>a.status===col.key)
                 return (
-                  <div key={col.key} className="flex flex-col rounded-2xl overflow-hidden flex-1 min-w-[220px]" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+                  <div key={col.key} className="flex flex-col flex-1 min-w-[210px] rounded-2xl overflow-hidden"
+                    style={{background:SURFACE,border:`1px solid ${BORDER}`,borderTop:`3px solid ${col.color}`}}>
                     {/* Column header */}
-                    <div className="flex items-center gap-2.5 px-5 py-4 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
-                      <span>{col.emoji}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-syne text-[10px] font-black" style={{color:col.color}}>{col.label.toUpperCase()}</div>
-                        <div className="text-[9px] mt-0.5" style={{color:'rgba(255,255,255,0.2)'}}>{col.desc}</div>
+                    <div className="px-5 pt-5 pb-4 flex-shrink-0">
+                      <div className="flex items-start justify-between mb-1">
+                        <span className="font-syne text-[9px] font-black tracking-[0.18em]" style={{color:col.color+'cc'}}>{col.label.toUpperCase()}</span>
+                        <span className="font-figtree text-[28px] font-black leading-none" style={{color:items.length>0?col.color+'35':'rgba(255,255,255,0.06)'}}>{items.length}</span>
                       </div>
-                      <span className="font-figtree text-[18px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{items.length}</span>
+                      <div className="text-[10px]" style={{color:'rgba(255,255,255,0.18)'}}>{col.desc}</div>
                     </div>
+                    <div className="mx-4 mb-3 h-px" style={{background:BORDER}}/>
                     {/* Cards */}
-                    <div className="flex-1 overflow-y-auto p-3 space-y-3"
+                    <div className="flex-1 overflow-y-auto px-3 pb-3 space-y-2.5"
                       onDragOver={e=>e.preventDefault()}
                       onDrop={(e)=>{
                         const id = e.dataTransfer.getData('text/plain')
@@ -2030,43 +2047,54 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                       }}>
                       {items.map((item: any)=>{
                         const pc = platColor[item.platform]||BLU
+                        const isActive = activeItem?.id===item.id
                         return (
                           <div key={item.id}
                             draggable
                             onDragStart={e=>e.dataTransfer.setData('text/plain',item.id)}
                             onClick={()=>openItem(item)}
-                            className="rounded-xl p-4 cursor-pointer transition-all hover:scale-[1.01]"
-                            style={{background:activeItem?.id===item.id?'rgba(27,95,250,0.1)':SURF2,border:`1px solid ${activeItem?.id===item.id?'rgba(27,95,250,0.3)':BORDER}`}}>
-                            {/* Platform badge */}
-                            <div className="flex items-center gap-2 mb-3">
-                              <div className="w-6 h-6 rounded-lg flex items-center justify-center font-bold text-[10px] flex-shrink-0" style={{background:pc+'20',color:pc}}>{platIcon[item.platform]||'●'}</div>
-                              <span className="font-syne text-[9px] font-black" style={{color:pc}}>{item.platform}</span>
-                              <div className="ml-auto flex items-center gap-1">
-                                {item.video_url && <div className="w-4 h-4 rounded-full flex items-center justify-center" style={{background:'rgba(255,0,0,0.12)'}} title="Tiene vídeo"><span style={{fontSize:'8px'}}>▶</span></div>}
-                                {item.feedback && <div className="w-4 h-4 rounded-full flex items-center justify-center" style={{background:'rgba(255,176,32,0.12)'}} title="Tiene feedback"><span style={{fontSize:'8px'}}>💬</span></div>}
-                                {item.notes && <div className="w-4 h-4 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.08)'}} title="Tiene notas"><span style={{fontSize:'8px'}}>📝</span></div>}
+                            className="rounded-xl cursor-pointer transition-all duration-150 hover:-translate-y-0.5"
+                            style={{
+                              background: isActive ? `linear-gradient(135deg,${pc}0F,rgba(255,255,255,0.02))` : 'rgba(255,255,255,0.025)',
+                              border: `1px solid ${isActive ? pc+'30' : 'rgba(255,255,255,0.06)'}`,
+                              borderLeft: `3px solid ${pc}`,
+                              boxShadow: isActive ? `0 0 20px ${pc}12, 0 4px 12px rgba(0,0,0,0.3)` : '0 1px 3px rgba(0,0,0,0.25)',
+                            }}>
+                            <div className="p-3.5">
+                              {/* Platform + account row */}
+                              <div className="flex items-center justify-between mb-2.5">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-6 h-6 rounded-md flex items-center justify-center font-bold text-[10px] flex-shrink-0" style={{background:pc+'22',color:pc}}>{platIcon[item.platform]||'●'}</div>
+                                  <div className="min-w-0">
+                                    <div className="font-syne text-[8.5px] font-black leading-none" style={{color:pc}}>{item.platform}</div>
+                                    {item.account_name && <div className="font-syne text-[7.5px] truncate mt-0.5" style={{color:'rgba(255,255,255,0.3)'}}>@{item.account_name}</div>}
+                                  </div>
+                                </div>
+                                <div className="flex gap-1 flex-shrink-0">
+                                  {item.video_url && <span className="text-[9px] opacity-50">▶</span>}
+                                  {item.feedback && <span className="text-[9px] opacity-50">💬</span>}
+                                  {item.notes && <span className="text-[9px] opacity-50">📝</span>}
+                                </div>
                               </div>
-                            </div>
-                            {/* Account name badge */}
-                            {item.account_name && (
-                              <div className="mb-2">
-                                <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:pc+'15',color:pc+'cc'}}>@{item.account_name}</span>
+                              {/* Title */}
+                              <div className="font-figtree text-[13px] font-semibold leading-snug line-clamp-2 mb-3" style={{color:'rgba(255,255,255,0.88)'}}>{item.title}</div>
+                              {/* Footer */}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {item.client?.name && (
+                                  <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full" style={{background:(item.client.color||BLU)+'18',color:(item.client.color||BLU)+'bb'}}>{item.client.name}</span>
+                                )}
+                                {item.publish_date && (
+                                  <span className="font-syne text-[7.5px] ml-auto" style={{color:'rgba(255,255,255,0.2)'}}>{item.publish_date}</span>
+                                )}
                               </div>
-                            )}
-                            {/* Title */}
-                            <div className="font-figtree text-[13px] font-semibold text-white mb-1.5 leading-snug line-clamp-2">{item.title}</div>
-                            {/* Client + date */}
-                            <div className="flex items-center justify-between mt-2">
-                              <span className="text-[10px]" style={{color:'rgba(255,255,255,0.3)'}}>{item.client?.name||'—'}</span>
-                              {item.publish_date && <span className="font-syne text-[9px] font-black px-2 py-0.5 rounded-lg" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.3)'}}>{item.publish_date}</span>}
                             </div>
                           </div>
                         )
                       })}
                       {items.length===0 && (
-                        <div className="flex flex-col items-center py-8 text-center">
-                          <div className="text-2xl mb-2 opacity-30">{col.emoji}</div>
-                          <div className="text-[10px]" style={{color:'rgba(255,255,255,0.12)'}}>Arrastra aquí</div>
+                        <div className="flex flex-col items-center py-10 text-center rounded-xl" style={{border:`1px dashed rgba(255,255,255,0.06)`}}>
+                          <div className="text-xl mb-1.5 opacity-20">{col.emoji}</div>
+                          <div className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.12)'}}>ARRASTRA AQUÍ</div>
                         </div>
                       )}
                     </div>
@@ -2080,40 +2108,31 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
 
       {/* Right: Detail panel */}
       {activeItem && (
-        <div className="w-[360px] flex-shrink-0 flex flex-col overflow-hidden" style={{borderLeft:`1px solid ${BORDER}`,background:'#050510'}}>
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-5 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
-            <div className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(100,140,255,0.6)'}}>DETALLE</div>
-            <button onClick={()=>setActiveItem(null)} className="w-8 h-8 rounded-xl flex items-center justify-center" style={{background:SURF2}}><LucideIcon name="x" size={14} color="rgba(240,240,248,0.45)"/></button>
+        <div className="w-[380px] flex-shrink-0 flex flex-col overflow-hidden" style={{borderLeft:`1px solid ${BORDER}`,background:'#050510'}}>
+          {/* Header with platform gradient */}
+          <div className="flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`,background:`linear-gradient(135deg,${platColor[activeItem.platform]||BLU}12,transparent)`}}>
+            <div className="flex items-center justify-between px-6 pt-6 pb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-[14px]" style={{background:(platColor[activeItem.platform]||BLU)+'25',color:platColor[activeItem.platform]||BLU}}>{platIcon[activeItem.platform]||'●'}</div>
+                <div>
+                  <div className="font-syne text-[9px] font-black tracking-widest" style={{color:(platColor[activeItem.platform]||BLU)+'99'}}>{activeItem.platform.toUpperCase()}{activeItem.account_name?` · @${activeItem.account_name}`:''}</div>
+                  <div className="font-figtree text-[15px] font-semibold text-white leading-snug mt-0.5 line-clamp-1">{activeItem.title}</div>
+                </div>
+              </div>
+              <button onClick={()=>setActiveItem(null)} className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ml-2" style={{background:'rgba(255,255,255,0.05)'}}><LucideIcon name="x" size={14} color="rgba(240,240,248,0.4)"/></button>
+            </div>
+            {/* Status pills */}
+            <div className="flex gap-1.5 px-6 pb-5">
+              {cols.map(col=>(
+                <button key={col.key} onClick={()=>changeStatus(activeItem, col.key)}
+                  className="flex-1 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all"
+                  style={{background:activeItem.status===col.key?col.color+'20':SURF2, border:`1.5px solid ${activeItem.status===col.key?col.color+'60':BORDER}`, color:activeItem.status===col.key?col.color:'rgba(255,255,255,0.25)'}}>
+                  {col.emoji}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
-            {/* Platform */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-[13px]" style={{background:(platColor[activeItem.platform]||BLU)+'20',color:platColor[activeItem.platform]||BLU}}>{platIcon[activeItem.platform]||'●'}</div>
-              <div>
-                <div className="font-syne text-[10px] font-black" style={{color:platColor[activeItem.platform]||BLU}}>{activeItem.platform}</div>
-                <div className="text-[11px]" style={{color:'rgba(255,255,255,0.3)'}}>{activeItem.content_type||'Post'}</div>
-              </div>
-            </div>
-            {/* Title */}
-            <div>
-              <div className="font-syne text-[18px] font-black text-white leading-snug">{activeItem.title}</div>
-              {activeItem.client && <div className="text-[12px] mt-1" style={{color:'rgba(255,255,255,0.3)'}}>{activeItem.client.name}</div>}
-              {activeItem.publish_date && <div className="text-[11px] mt-0.5" style={{color:'rgba(255,255,255,0.25)'}}>Publicación: {activeItem.publish_date}</div>}
-            </div>
-            {/* Status change */}
-            <div>
-              <div className="font-syne text-[9px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.25)'}}>MOVER A</div>
-              <div className="space-y-2">
-                {cols.map(col=>(
-                  <button key={col.key} onClick={()=>changeStatus(activeItem, col.key)} className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-left transition-all" style={{background:activeItem.status===col.key?col.color+'15':SURF2,border:`1px solid ${activeItem.status===col.key?col.color+'40':BORDER}`,opacity:activeItem.status===col.key?1:0.6}}>
-                    <span>{col.emoji}</span>
-                    <span className="font-syne text-[10px] font-black flex-1" style={{color:activeItem.status===col.key?col.color:'rgba(255,255,255,0.5)'}}>{col.label}</span>
-                    {activeItem.status===col.key && <LucideIcon name="check" size={12} color={col.color}/>}
-                  </button>
-                ))}
-              </div>
-            </div>
             {/* Account name */}
             <div>
               <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>CUENTA / PERFIL</div>
