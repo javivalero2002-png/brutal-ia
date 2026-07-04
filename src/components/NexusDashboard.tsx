@@ -70,6 +70,15 @@ export default function NexusDashboard({ profile }: Props) {
   const [mf, setMf] = useState<Record<string,string>>({})
   const [modalSaving, setModalSaving] = useState(false)
   const [toast, setToast] = useState<string|null>(null)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [notifData, setNotifData] = useState<{dmCount:number;urgentCount:number;total:number;dms:any[];urgent:any[]}>({dmCount:0,urgentCount:0,total:0,dms:[],urgent:[]})
+
+  useEffect(() => {
+    const fetchNotifs = () => fetch('/api/notifications').then(r=>r.ok?r.json():null).then(d=>{if(d)setNotifData(d)}).catch(()=>{})
+    fetchNotifs()
+    const iv = setInterval(fetchNotifs, 30000)
+    return () => clearInterval(iv)
+  }, [])
   const [selectedClient, setSelectedClient] = useState<string|null>(null)
   const [selectedProject, setSelectedProject] = useState<string|null>(null)
   const [chatInput, setChatInput] = useState('')
@@ -237,7 +246,8 @@ export default function NexusDashboard({ profile }: Props) {
   }
 
   return (
-    <div className="flex h-screen w-full font-figtree overflow-hidden" style={{ background:'radial-gradient(ellipse 1400px 700px at 80% -10%,rgba(27,95,250,0.055) 0%,transparent 60%),radial-gradient(ellipse 500px 400px at 5% 95%,rgba(27,95,250,0.025) 0%,transparent 55%),#030308', color:'#F0F0F8' }}>
+    <div className="flex h-screen w-full font-figtree overflow-hidden" style={{ background:'radial-gradient(ellipse 1400px 700px at 80% -10%,rgba(27,95,250,0.055) 0%,transparent 60%),radial-gradient(ellipse 500px 400px at 5% 95%,rgba(27,95,250,0.025) 0%,transparent 55%),#030308', color:'#F0F0F8' }}
+      onClick={()=>notifOpen&&setNotifOpen(false)}>
 
       {/* SIDEBAR */}
       <aside className="flex-shrink-0 flex flex-col overflow-hidden transition-all duration-200" style={{ width:sidebarOpen?'248px':'0', background:'rgba(8,8,18,0.95)', borderRight:`1px solid ${BORDER}` }}>
@@ -247,7 +257,52 @@ export default function NexusDashboard({ profile }: Props) {
             <img src="https://brutal.thehook-produccion.es/wp-content/themes/brutal-studios/assets/img/brutal-logo-white.svg" alt="Brutal Studios" className="h-5 opacity-90" />
             <div className="h-5 w-px" style={{background:BORDER}}/>
             <span className="font-syne text-[11px] font-black tracking-widest" style={{color:BLU}}>IA</span>
-            <div className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0 animate-glowPulse" style={{background:BLU}}/>
+            <div className="ml-auto flex items-center gap-2">
+              {/* Notification bell */}
+              <div className="relative">
+                <button onClick={()=>setNotifOpen(o=>!o)} className="w-7 h-7 rounded-xl flex items-center justify-center relative transition-all" style={{background:notifOpen?'rgba(27,95,250,0.15)':'transparent'}}>
+                  <LucideIcon name="bell" size={13} color={notifData.total>0?BLU:'rgba(255,255,255,0.2)'}/>
+                  {notifData.total>0 && <div className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center" style={{background:RED}}><span className="font-syne text-[7px] font-black text-white">{notifData.total>9?'9+':notifData.total}</span></div>}
+                </button>
+                {notifOpen && (
+                  <div onClick={e=>e.stopPropagation()} className="absolute top-9 left-0 w-[300px] rounded-2xl overflow-hidden z-50" style={{background:'#0D0D1E',border:`1px solid ${BORDER}`,boxShadow:'0 20px 60px rgba(0,0,0,0.7)'}}>
+                    <div className="px-4 py-3 flex items-center justify-between" style={{borderBottom:`1px solid ${BORDER}`}}>
+                      <span className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.35)'}}>NOTIFICACIONES</span>
+                      <button onClick={()=>setNotifOpen(false)} className="text-[10px]" style={{color:'rgba(255,255,255,0.25)'}}>✕</button>
+                    </div>
+                    {notifData.total===0 ? (
+                      <div className="px-4 py-5 text-center text-[12px]" style={{color:'rgba(255,255,255,0.25)'}}>Sin notificaciones</div>
+                    ) : (
+                      <div className="max-h-[280px] overflow-y-auto">
+                        {notifData.dms.map((dm:any,i:number)=>(
+                          <button key={i} onClick={()=>{setNotifOpen(false);setSection('inbox')}} className="w-full text-left px-4 py-3 transition-colors hover:bg-white/3" style={{borderBottom:`1px solid ${BORDER}`}}>
+                            <div className="flex items-start gap-2.5">
+                              <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{background:BLU}}/>
+                              <div className="min-w-0">
+                                <div className="text-[12px] text-white truncate">{dm.from_name}</div>
+                                <div className="text-[11px] truncate mt-0.5" style={{color:'rgba(255,255,255,0.35)'}}>{dm.subject}</div>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                        {notifData.urgent.map((t:any,i:number)=>(
+                          <button key={i} onClick={()=>{setNotifOpen(false);setSection('tareas')}} className="w-full text-left px-4 py-3 transition-colors hover:bg-white/3" style={{borderBottom:`1px solid ${BORDER}`}}>
+                            <div className="flex items-start gap-2.5">
+                              <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{background:RED}}/>
+                              <div className="min-w-0">
+                                <div className="text-[12px] text-white truncate">{t.text}</div>
+                                <div className="text-[11px] mt-0.5" style={{color:RED+'99'}}>Tarea urgente</div>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="w-1.5 h-1.5 rounded-full animate-glowPulse" style={{background:BLU}}/>
+            </div>
           </div>
         </div>
 
@@ -529,6 +584,8 @@ function LucideIcon({ name, size=16, color='currentColor' }: {name:string;size?:
     'users-2':'M14 19a6 6 0 0 0-12 0M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm3 7a5 5 0 0 0-5-5',
     'check-square':'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
     'film':'M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM2 8h20M2 16h20M6 2v4M18 2v4M6 18v4M18 18v4',
+    link:'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
+    copy:'M20 9h-9a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2zM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1',
   }
   const d = icons[name]
   return (
@@ -738,26 +795,15 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
 
 // ── EQUIPO SECTION ────────────────────────────────────────────
 function EquipoSection({data, profile, showToast}: any) {
-  const [compose, setCompose] = useState<Profile|null>(null)
-  const [msgSubject, setMsgSubject] = useState('')
+  const [selected, setSelected] = useState<Profile|null>(null)
+  const [thread, setThread] = useState<any[]>([])
+  const [loadingThread, setLoadingThread] = useState(false)
   const [msgBody, setMsgBody] = useState('')
   const [sending, setSending] = useState(false)
 
-  const sendMessage = async () => {
-    if (!compose || !msgBody.trim()) return
-    setSending(true)
-    try {
-      await data.sendInternalMessage(compose.id, msgSubject||'Mensaje directo', msgBody, profile?.name||'Equipo')
-      showToast(`Mensaje enviado a ${compose.name.split(' ')[0]}`)
-      setCompose(null); setMsgSubject(''); setMsgBody('')
-    } catch { showToast('Error enviando mensaje') }
-    finally { setSending(false) }
-  }
-
-  // Ensure owner always appears; add Fer placeholder
   const allActive: Profile[] = data.team.some((m: Profile) => m.id === profile?.id)
     ? data.team
-    : [profile, ...data.team]
+    : (profile ? [profile, ...data.team] : data.team)
 
   const PENDING = [
     { name: 'Javi', role: 'Propietario', initials: 'JV', avatar_color: BLU, email: 'javivalero2002@gmail.com' },
@@ -767,127 +813,192 @@ function EquipoSection({data, profile, showToast}: any) {
     (p.email !== 'pendiente de registro' && m.email?.toLowerCase() === p.email.toLowerCase())
   ))
 
+  const openThread = async (member: Profile) => {
+    if (member.id === profile?.id) return
+    setSelected(member)
+    setLoadingThread(true)
+    try {
+      const msgs = await fetch(`/api/inbox/thread?withUserId=${member.id}&withName=${encodeURIComponent(member.name)}`).then(r=>r.json())
+      setThread(Array.isArray(msgs) ? msgs : [])
+    } catch { setThread([]) }
+    finally { setLoadingThread(false) }
+  }
+
+  const sendMessage = async () => {
+    if (!selected || !msgBody.trim()) return
+    setSending(true)
+    try {
+      await data.sendInternalMessage(selected.id, 'Mensaje directo', msgBody, profile?.name||'Equipo')
+      const optimistic = {id:Date.now()+'',_dir:'sent',subject:'Mensaje directo',body_preview:msgBody,received_at:new Date().toISOString(),from_name:profile?.name}
+      setThread(prev=>[...prev, optimistic])
+      setMsgBody('')
+      showToast(`Enviado a ${selected.name.split(' ')[0]}`)
+    } catch { showToast('Error enviando') }
+    finally { setSending(false) }
+  }
+
+  const isMe = (m: Profile) => m.id === profile?.id
+
   return (
-    <div className="p-8 max-w-[1100px] mx-auto">
-      <div className="mb-10">
-        <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>BRUTAL STUDIOS</div>
-        <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Equipo</h1>
-      </div>
-      {allActive.length === 0 ? (
-        <div className="text-center py-16 text-[13px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin datos de equipo</div>
-      ) : (
-        <div className="grid grid-cols-2 gap-5">
+    <div className="flex h-full overflow-hidden">
+      {/* Left: team list */}
+      <div className="flex flex-col overflow-hidden" style={{width:'360px',flexShrink:0,borderRight:`1px solid ${BORDER}`}}>
+        <div className="px-6 pt-6 pb-4 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
+          <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1" style={{color:'rgba(255,255,255,0.18)'}}>BRUTAL STUDIOS</div>
+          <h1 className="font-figtree text-[22px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Equipo</h1>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {allActive.map((member: Profile) => {
             const memberTasks = data.tasks.filter((t: Task) => t.assignee?.name === member.name)
             const pending = memberTasks.filter((t: Task) => !t.done)
             const done = memberTasks.filter((t: Task) => t.done)
-            const urgent = pending.filter((t: Task) => t.level === 'urgent')
             const completePct = memberTasks.length > 0 ? Math.round((done.length/memberTasks.length)*100) : 0
-            const isMe = member.id === profile?.id
+            const urgent = pending.filter((t: Task) => t.level === 'urgent')
+            const sel = selected?.id === member.id
             return (
-              <div key={member.id} className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-                <div className="flex items-center gap-4 p-6" style={{borderBottom:`1px solid ${BORDER}`}}>
+              <button key={member.id} onClick={()=>openThread(member)}
+                className="w-full text-left rounded-2xl p-4 transition-all duration-150"
+                style={{background:sel?`linear-gradient(135deg,${member.avatar_color}0F,rgba(255,255,255,0.02))`:'rgba(255,255,255,0.02)',border:`1px solid ${sel?member.avatar_color+'30':BORDER}`,cursor:isMe(member)?'default':'pointer'}}>
+                <div className="flex items-center gap-3">
                   <div className="relative flex-shrink-0">
-                    <ProgressRing pct={completePct} size={52} stroke={3} color={member.avatar_color}/>
-                    <div className="absolute inset-0 flex items-center justify-center font-syne text-[11px] font-black" style={{color:member.avatar_color}}>{member.initials}</div>
+                    <ProgressRing pct={completePct} size={44} stroke={2.5} color={member.avatar_color}/>
+                    <div className="absolute inset-0 flex items-center justify-center font-syne text-[10px] font-black" style={{color:member.avatar_color}}>{member.initials}</div>
                   </div>
-                  <div className="flex-1">
-                    <div className="font-syne text-[16px] font-black text-white flex items-center gap-2">
-                      {member.name}
-                      {isMe && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>TÚ</span>}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-figtree text-[14px] font-semibold text-white truncate">{member.name}</span>
+                      {isMe(member) && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>TÚ</span>}
+                      {urgent.length > 0 && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(229,29,42,0.1)',color:RED}}>{urgent.length} URG</span>}
                     </div>
-                    <div className="text-[11px] mt-0.5" style={{color:'rgba(255,255,255,0.3)'}}>{member.role==='owner'?'Propietario':'Equipo'} · {member.email}</div>
+                    <div className="text-[11px] mt-0.5 truncate" style={{color:'rgba(255,255,255,0.3)'}}>{member.role==='owner'?'Propietario':'Equipo'} · {pending.length} tareas</div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {urgent.length > 0 && <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full" style={{background:'rgba(229,29,42,0.1)',color:RED}}>{urgent.length} URG</span>}
-                    {!isMe && (
-                      <button onClick={()=>setCompose(member)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(27,95,250,0.1)',color:BLU,border:`1px solid rgba(27,95,250,0.2)`}}>
-                        <LucideIcon name="send" size={11} color={BLU}/>MENSAJE
-                      </button>
-                    )}
-                  </div>
+                  {!isMe(member) && <LucideIcon name="message-square" size={13} color={sel?member.avatar_color:'rgba(255,255,255,0.15)'}/>}
                 </div>
-                <div className="grid grid-cols-3" style={{borderBottom:`1px solid ${BORDER}`}}>
-                  {[{v:pending.length,l:'Pendientes'},{v:done.length,l:'Completadas'},{v:`${completePct}%`,l:'Ratio'}].map((s,i)=>(
-                    <div key={i} className="p-4 text-center" style={{borderRight:i<2?`1px solid ${BORDER}`:'none'}}>
-                      <div className="font-figtree text-[24px] font-black mb-0.5" style={{color:i===0&&pending.length>0?BLU:'rgba(255,255,255,0.8)'}}>{s.v}</div>
-                      <div className="text-[9px]" style={{color:'rgba(255,255,255,0.25)'}}>{s.l}</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="px-5 py-4">
-                  {pending.slice(0,3).map((t: Task) => (
-                    <div key={t.id} className="flex items-center gap-3 py-2.5" style={{borderBottom:`1px solid ${BORDER}`}}>
-                      <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.7)':BLU}}/>
-                      <span className="text-[12px] flex-1 truncate" style={{color:'rgba(255,255,255,0.55)'}}>{t.text}</span>
-                    </div>
-                  ))}
-                  {pending.length===0 && <div className="text-center text-[11px] py-3" style={{color:'rgba(255,255,255,0.2)'}}>Sin tareas asignadas</div>}
-                  {pending.length > 3 && <div className="text-center text-[11px] pt-2" style={{color:'rgba(255,255,255,0.25)'}}>+{pending.length-3} más</div>}
-                </div>
-              </div>
+              </button>
             )
           })}
-        </div>
-      )}
-
-      {/* Pending members */}
-      {PENDING.length > 0 && (
-        <div className="mt-8">
-          <div className="font-syne text-[9px] font-black tracking-widest mb-4" style={{color:'rgba(255,255,255,0.2)'}}>PENDIENTES DE REGISTRO</div>
-          <div className="grid grid-cols-2 gap-5">
-            {PENDING.map((p, i) => (
-              <div key={i} className="rounded-2xl overflow-hidden opacity-60" style={{background:SURFACE,border:`1px dashed ${BORDER}`}}>
-                <div className="flex items-center gap-4 p-6" style={{borderBottom:`1px solid ${BORDER}`}}>
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center font-syne text-[13px] font-black flex-shrink-0" style={{background:p.avatar_color+'18',border:`1.5px dashed ${p.avatar_color}50`,color:p.avatar_color}}>{p.initials}</div>
-                  <div className="flex-1">
-                    <div className="font-syne text-[16px] font-black text-white flex items-center gap-2">
-                      {p.name}
-                      <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.7)'}}>SIN CUENTA</span>
+          {PENDING.length > 0 && (
+            <div className="pt-3">
+              <div className="font-syne text-[8px] font-black tracking-widest px-2 pb-2" style={{color:'rgba(255,255,255,0.15)'}}>PENDIENTES</div>
+              {PENDING.map((p,i)=>(
+                <div key={i} className="rounded-2xl p-4 opacity-50" style={{background:'rgba(255,255,255,0.015)',border:`1px dashed ${BORDER}`}}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-full flex items-center justify-center font-syne text-[11px] font-black flex-shrink-0" style={{background:p.avatar_color+'18',border:`1.5px dashed ${p.avatar_color}40`,color:p.avatar_color}}>{p.initials}</div>
+                    <div>
+                      <div className="font-figtree text-[14px] font-semibold text-white flex items-center gap-2">{p.name}<span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.6)'}}>SIN CUENTA</span></div>
+                      <div className="text-[10px]" style={{color:'rgba(255,255,255,0.2)'}}>{p.role}</div>
                     </div>
-                    <div className="text-[11px] mt-0.5" style={{color:'rgba(255,255,255,0.25)'}}>{p.role} · {p.email}</div>
                   </div>
                 </div>
-                <div className="px-6 py-4 text-[11px]" style={{color:'rgba(255,255,255,0.25)'}}>
-                  Para aparecer aquí, {p.name} debe registrarse en <span style={{color:BLU}}>brutalstudios-ia.vercel.app</span>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Compose modal */}
-      {compose && (
-        <div onClick={()=>setCompose(null)} className="fixed inset-0 z-[100] flex items-center justify-center" style={{background:'rgba(2,2,10,0.8)',backdropFilter:'blur(8px)'}}>
-          <div onClick={e=>e.stopPropagation()} className="w-[480px] max-w-[94vw] rounded-3xl overflow-hidden" style={{background:'linear-gradient(180deg,#0D0D1E 0%,#080810 100%)',border:`1px solid rgba(27,95,250,0.25)`,boxShadow:'0 40px 100px rgba(0,0,0,0.8)'}}>
-            <div className="h-[2px] rounded-t-3xl" style={{background:`linear-gradient(90deg,transparent,${BLU},transparent)`}}/>
-            <div className="flex items-center justify-between px-7 py-6" style={{borderBottom:`1px solid ${BORDER}`}}>
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center font-syne text-[11px] font-black" style={{background:compose.avatar_color+'25',border:`1.5px solid ${compose.avatar_color}55`,color:compose.avatar_color}}>{compose.initials}</div>
-                <div>
-                  <div className="font-syne text-[9px] font-black tracking-widest mb-0.5" style={{color:'rgba(100,140,255,0.6)'}}>MENSAJE DIRECTO</div>
-                  <div className="font-syne text-[18px] font-black text-white">{compose.name}</div>
+      {/* Right: DM panel */}
+      {selected ? (
+        <div className="flex-1 flex flex-col overflow-hidden" style={{background:'#050510'}}>
+          {/* Header */}
+          <div className="flex items-center gap-4 px-6 py-5 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`,background:`linear-gradient(135deg,${selected.avatar_color}0C,transparent)`}}>
+            <div className="relative flex-shrink-0">
+              <ProgressRing pct={Math.round((data.tasks.filter((t:Task)=>t.assignee?.name===selected.name&&t.done).length/Math.max(1,data.tasks.filter((t:Task)=>t.assignee?.name===selected.name).length))*100)} size={40} stroke={2} color={selected.avatar_color}/>
+              <div className="absolute inset-0 flex items-center justify-center font-syne text-[9px] font-black" style={{color:selected.avatar_color}}>{selected.initials}</div>
+            </div>
+            <div className="flex-1">
+              <div className="font-figtree text-[17px] font-semibold text-white">{selected.name}</div>
+              <div className="text-[11px]" style={{color:'rgba(255,255,255,0.3)'}}>{selected.email} · {selected.role==='owner'?'Propietario':'Equipo'}</div>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Task stats */}
+              {(() => {
+                const mt = data.tasks.filter((t:Task)=>t.assignee?.name===selected.name)
+                const pend = mt.filter((t:Task)=>!t.done)
+                const urg = pend.filter((t:Task)=>t.level==='urgent')
+                return (
+                  <div className="flex gap-3">
+                    {urg.length>0 && <div className="text-center"><div className="font-figtree text-[18px] font-black" style={{color:RED}}>{urg.length}</div><div className="font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.25)'}}>URG</div></div>}
+                    <div className="text-center"><div className="font-figtree text-[18px] font-black" style={{color:BLU}}>{pend.length}</div><div className="font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.25)'}}>PENDIENTES</div></div>
+                  </div>
+                )
+              })()}
+              <button onClick={()=>{setSelected(null);setThread([])}} className="w-8 h-8 rounded-xl flex items-center justify-center" style={{background:'rgba(255,255,255,0.05)'}}><LucideIcon name="x" size={13} color="rgba(240,240,248,0.4)"/></button>
+            </div>
+          </div>
+
+          {/* Tasks list */}
+          <div className="flex-shrink-0 px-6 py-4 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
+            <div className="font-syne text-[8.5px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.2)'}}>TAREAS ASIGNADAS</div>
+            <div className="flex gap-2 flex-wrap">
+              {data.tasks.filter((t:Task)=>t.assignee?.name===selected.name&&!t.done).slice(0,4).map((t:Task)=>(
+                <div key={t.id} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl" style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${t.level==='urgent'?RED+'25':t.level==='high'?'rgba(255,176,32,0.15)':BORDER}`}}>
+                  <div className="w-1 h-1 rounded-full flex-shrink-0" style={{background:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.8)':BLU}}/>
+                  <span className="text-[11px] truncate max-w-[200px]" style={{color:'rgba(255,255,255,0.5)'}}>{t.text}</span>
                 </div>
-              </div>
-              <button onClick={()=>setCompose(null)} className="w-9 h-9 rounded-xl flex items-center justify-center" style={{background:SURF2}}><LucideIcon name="x" size={16} color="rgba(240,240,248,0.45)"/></button>
+              ))}
+              {data.tasks.filter((t:Task)=>t.assignee?.name===selected.name&&!t.done).length===0 && (
+                <span className="text-[11px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin tareas pendientes</span>
+              )}
             </div>
-            <div className="px-7 py-6 space-y-4">
-              <div>
-                <label className="block font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>ASUNTO</label>
-                <input value={msgSubject} onChange={e=>setMsgSubject(e.target.value)} placeholder="Ej: Revisión propuesta Nike" className="w-full px-5 py-3.5 rounded-2xl text-[14px] text-white placeholder-white/20 outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.45)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+          </div>
+
+          {/* Thread */}
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+            <div className="font-syne text-[8.5px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.18)'}}>CONVERSACIÓN</div>
+            {loadingThread && <div className="text-center py-8 text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Cargando mensajes…</div>}
+            {!loadingThread && thread.length===0 && (
+              <div className="flex flex-col items-center py-12 text-center">
+                <div className="w-10 h-10 rounded-2xl flex items-center justify-center mb-3" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`}}><LucideIcon name="message-square" size={16} color="rgba(255,255,255,0.2)"/></div>
+                <div className="text-[13px] text-white mb-1">Sin mensajes aún</div>
+                <div className="text-[11px]" style={{color:'rgba(255,255,255,0.25)'}}>Empieza la conversación abajo</div>
               </div>
-              <div>
-                <label className="block font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>MENSAJE</label>
-                <textarea value={msgBody} onChange={e=>setMsgBody(e.target.value)} placeholder="Escribe tu mensaje…" rows={5} className="w-full px-5 py-4 rounded-2xl text-[14px] text-white placeholder-white/20 outline-none resize-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.45)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 px-7 py-5" style={{borderTop:`1px solid ${BORDER}`}}>
-              <button onClick={()=>setCompose(null)} className="px-5 py-3 rounded-2xl text-[13px]" style={{color:'rgba(255,255,255,0.4)',border:`1px solid ${BORDER}`}}>Cancelar</button>
-              <button onClick={sendMessage} disabled={sending||!msgBody.trim()} className="flex items-center gap-2 px-6 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
-                <LucideIcon name="send" size={12} color="white"/>{sending?'ENVIANDO…':'ENVIAR'}
+            )}
+            {thread.map((msg: any) => {
+              const isSent = msg._dir === 'sent'
+              return (
+                <div key={msg.id} className={`flex ${isSent?'justify-end':'justify-start'}`}>
+                  <div className="max-w-[75%]">
+                    <div className="px-4 py-3 rounded-2xl" style={{background:isSent?`linear-gradient(135deg,${BLU},#1440CC)`:'rgba(255,255,255,0.06)',borderBottomRightRadius:isSent?'4px':'16px',borderBottomLeftRadius:isSent?'16px':'4px'}}>
+                      <p className="text-[13px] leading-relaxed" style={{color:isSent?'white':'rgba(255,255,255,0.8)'}}>{msg.body_preview}</p>
+                    </div>
+                    <div className={`text-[10px] mt-1 px-1 ${isSent?'text-right':''}`} style={{color:'rgba(255,255,255,0.2)'}}>
+                      {relTime(msg.received_at)}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Compose */}
+          <div className="flex-shrink-0 p-4" style={{borderTop:`1px solid ${BORDER}`}}>
+            <div className="flex gap-2 items-end">
+              <textarea
+                value={msgBody}
+                onChange={e=>setMsgBody(e.target.value)}
+                onKeyDown={e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){sendMessage()}}}
+                placeholder={`Mensaje a ${selected.name.split(' ')[0]}…`}
+                rows={1}
+                className="flex-1 px-4 py-3 rounded-2xl text-[13px] text-white outline-none resize-none"
+                style={{background:'rgba(255,255,255,0.05)',border:`1.5px solid ${BORDER}`,caretColor:BLU,maxHeight:'120px',lineHeight:'1.5'}}
+                onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.35)')}
+                onBlur={e=>(e.target.style.borderColor=BORDER)}
+              />
+              <button onClick={sendMessage} disabled={sending||!msgBody.trim()}
+                className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 disabled:opacity-30 transition-all"
+                style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
+                <LucideIcon name="send" size={14} color="white"/>
               </button>
             </div>
+            <div className="text-center text-[9px] mt-2" style={{color:'rgba(255,255,255,0.15)'}}>⌘↵ para enviar</div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 flex items-center justify-center" style={{background:'#050510'}}>
+          <div className="text-center">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${BORDER}`}}><LucideIcon name="message-square" size={22} color="rgba(255,255,255,0.15)"/></div>
+            <div className="font-figtree text-[16px] font-semibold text-white mb-1">Selecciona un compañero</div>
+            <div className="text-[12px]" style={{color:'rgba(255,255,255,0.3)'}}>Haz clic en su nombre para ver la conversación</div>
           </div>
         </div>
       )}
@@ -1795,15 +1906,52 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
     )
   }
 
+  // Parse revenue string → number (handles "€12.000/mes", "12000", "12.000€", etc.)
+  const parseRevenue = (s: string): number => {
+    if (!s || s === '—') return 0
+    return parseFloat(s.replace(/[€$£\s]/g,'').replace(/\./g,'').replace(',','.').replace(/\/.*$/,'')) || 0
+  }
+  const activeClients = data.clients.filter((c: Client)=>c.status==='Activo')
+  const totalMRR = activeClients.reduce((sum: number, c: Client) => sum + parseRevenue(c.revenue||''), 0)
+  const maxRevenue = Math.max(...data.clients.map((c: Client)=>parseRevenue(c.revenue||'')), 1)
+
   return (
     <div className="p-8 max-w-[1200px] mx-auto">
-      <div className="flex items-end justify-between mb-10">
+      <div className="flex items-end justify-between mb-6">
         <div>
           <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>GESTIÓN</div>
           <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Clientes</h1>
         </div>
         {isOwner && <button onClick={()=>onOpenModal('cliente')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVO CLIENTE</button>}
       </div>
+      {/* MRR Summary */}
+      {totalMRR > 0 && (
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="col-span-1 rounded-2xl p-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+            <div className="font-syne text-[8.5px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>MRR TOTAL</div>
+            <div className="font-figtree text-[32px] font-black leading-none text-white" style={{letterSpacing:'-0.02em'}}>€{totalMRR.toLocaleString('es-ES')}</div>
+            <div className="text-[11px] mt-1.5" style={{color:'rgba(255,255,255,0.3)'}}>{activeClients.length} clientes activos</div>
+          </div>
+          <div className="col-span-2 rounded-2xl p-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+            <div className="font-syne text-[8.5px] font-black tracking-widest mb-4" style={{color:'rgba(255,255,255,0.2)'}}>REVENUE POR CLIENTE</div>
+            <div className="space-y-2.5">
+              {data.clients.filter((c: Client)=>parseRevenue(c.revenue||'')>0).sort((a: Client,b: Client)=>parseRevenue(b.revenue||'')-parseRevenue(a.revenue||'')).slice(0,4).map((c: Client)=>{
+                const rev = parseRevenue(c.revenue||'')
+                const pct = Math.round((rev/maxRevenue)*100)
+                return (
+                  <div key={c.id} className="flex items-center gap-3">
+                    <div className="font-syne text-[10px] font-black w-20 truncate" style={{color:'rgba(255,255,255,0.5)'}}>{c.name.split(' ')[0]}</div>
+                    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{background:'rgba(255,255,255,0.05)'}}>
+                      <div className="h-full rounded-full transition-all" style={{width:`${pct}%`,background:`linear-gradient(90deg,${c.color},${c.color}88)`}}/>
+                    </div>
+                    <div className="font-syne text-[9px] font-black w-16 text-right" style={{color:c.color}}>€{rev.toLocaleString('es-ES')}</div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
       {data.clients.length === 0 ? (
         <div className="py-24 text-center">
           <div className="font-syne text-[11px] font-black tracking-widest mb-4" style={{color:'rgba(255,255,255,0.15)'}}>SIN CLIENTES</div>
@@ -2174,6 +2322,18 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
               <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>NOTAS DEL EQUIPO</div>
               <textarea value={editNotes} onChange={e=>setEditNotes(e.target.value)} placeholder="Añade notas de producción…" rows={4} className="w-full px-4 py-3.5 rounded-xl text-[13px] text-white placeholder-white/20 outline-none resize-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,lineHeight:'1.6'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
             </div>
+            {/* Share with client */}
+            <div>
+              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>REVISIÓN DE CLIENTE</div>
+              <button onClick={()=>{
+                const url = `${window.location.origin}/review/${activeItem.id}`
+                navigator.clipboard.writeText(url).then(()=>showToast('Link copiado al portapapeles'))
+              }} className="w-full flex items-center gap-2.5 px-4 py-3 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.5)'}}>
+                <LucideIcon name="link" size={13} color="rgba(255,255,255,0.4)"/>
+                <span>Compartir con cliente</span>
+                <LucideIcon name="copy" size={11} color="rgba(255,255,255,0.25)"/>
+              </button>
+            </div>
             {/* Save + delete */}
             <div className="flex gap-2">
               <button onClick={saveNotes} disabled={savingNotes} className="flex-1 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingNotes?'GUARDANDO…':'GUARDAR CAMBIOS'}</button>
@@ -2411,19 +2571,22 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
       <div className="w-[320px] flex-shrink-0 flex flex-col overflow-hidden" style={{borderLeft:`1px solid ${BORDER}`,background:'#050510'}}>
         {selectedDay ? (
           <>
-            <div className="px-6 py-5 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
+            <div className="px-6 pt-5 pb-4 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
               <div className="font-syne text-[8px] font-black tracking-widest mb-1" style={{color:'rgba(255,255,255,0.2)'}}>DÍA SELECCIONADO</div>
               <div className="font-figtree text-[20px] font-black text-white" style={{letterSpacing:'-0.025em'}}>
                 {selectedDay.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())}
               </div>
               {selKey === todayKey && <div className="font-syne text-[8px] font-black mt-1" style={{color:BLU}}>● HOY</div>}
+              <button onClick={()=>onOpenModal('contenido')} className="mt-3 w-full flex items-center gap-2 px-3 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(27,95,250,0.08)',border:`1px solid rgba(27,95,250,0.15)`,color:BLU}}>
+                <LucideIcon name="plus" size={11} color={BLU}/>
+                Añadir pieza para este día
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {selEvents.length === 0 ? (
-                <div className="text-center py-12">
-                  <div className="text-3xl mb-3">📅</div>
-                  <div className="text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Día libre</div>
-                  <button onClick={()=>onOpenModal('contenido')} className="mt-4 font-syne text-[8px] font-black px-3 py-2 rounded-lg" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>+ AÑADIR PIEZA</button>
+                <div className="text-center py-10">
+                  <div className="w-10 h-10 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${BORDER}`}}><LucideIcon name="calendar" size={16} color="rgba(255,255,255,0.15)"/></div>
+                  <div className="text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Día libre · sin eventos</div>
                 </div>
               ) : (
                 <>
