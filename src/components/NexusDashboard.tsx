@@ -39,7 +39,7 @@ interface Props { profile: Profile }
 export default function NexusDashboard({ profile }: Props) {
   const data = useNexusData(profile, (msg) => {
     const sender = msg.from_name || 'Alguien'
-    const label = msg.source === 'internal' ? `💬 Mensaje de ${sender}` : `📩 Nuevo mensaje de ${sender}`
+    const label = msg.source === 'internal' ? `Mensaje de ${sender}` : `Nuevo mensaje de ${sender}`
     setToast(label)
     setTimeout(() => setToast(null), 4000)
   })
@@ -698,9 +698,13 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
               ))}
             </div>
             {isOwner && assignees.length > 1 && (
-              <select value={assigneeFilter} onChange={e=>setAssigneeFilter(e.target.value)} className="px-3 py-2 rounded-xl text-[12px] outline-none" style={{background:SURFACE,border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.5)'}}>
-                {assignees.map(a=><option key={a} value={a}>{a}</option>)}
-              </select>
+              <div className="flex gap-1 flex-wrap">
+                {assignees.map(a=>(
+                  <button key={a} onClick={()=>setAssigneeFilter(a)} className="px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:assigneeFilter===a?BLU+'18':SURFACE,border:`1px solid ${assigneeFilter===a?BLU+'50':BORDER}`,color:assigneeFilter===a?BLU:'rgba(255,255,255,0.28)'}}>
+                    {a.toUpperCase()}
+                  </button>
+                ))}
+              </div>
             )}
             <span className="ml-auto font-syne text-[10px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{filtered.length}</span>
           </div>
@@ -1212,6 +1216,12 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
   const otherTasks = isOwner ? data.tasks.filter((t:Task) => !t.done && t.assigned_to && t.assigned_to !== profile.id) : []
   const recentInbox = data.inbox.filter((m:any) => !m.is_read).slice(0, 4)
   const activeProjects = data.projects.filter((p:Project)=>p.status==='activo'||p.status==='urgente')
+  const todayStr = new Date().toISOString().split('T')[0]
+  const todayContent = (data.agenda||[]).filter((a:any)=>{
+    if (!a.publish_date) return false
+    return a.publish_date.toString().slice(0,10) === todayStr
+  })
+  const platC: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
 
   return (
     <div className="p-8 max-w-[1240px] mx-auto">
@@ -1327,6 +1337,28 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
               </div>
             ))}
           </div>
+
+          {/* Today's content */}
+          {todayContent.length > 0 && (
+            <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+              <div className="flex items-center justify-between px-5 py-4" style={{borderBottom:`1px solid ${BORDER}`}}>
+                <div>
+                  <div className="font-syne text-[8.5px] font-black tracking-widest mb-0.5" style={{color:'rgba(255,255,255,0.2)'}}>PUBLICAR HOY</div>
+                  <span className="font-syne text-[15px] font-black text-white">Contenido</span>
+                </div>
+                <span className="font-syne text-[9px] font-black w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{background:'rgba(255,176,32,0.15)',color:'rgba(255,176,32,0.9)'}}>{todayContent.length}</span>
+              </div>
+              {todayContent.slice(0,3).map((a:any)=>{
+                const pc = platC[a.platform] || BLU
+                return (
+                  <div key={a.id} className="px-5 py-3.5" style={{borderBottom:`1px solid ${BORDER}`,borderLeft:`3px solid ${pc}55`}}>
+                    <div className="text-[12px] font-semibold line-clamp-1 mb-0.5" style={{color:'rgba(255,255,255,0.82)'}}>{a.title}</div>
+                    <span className="font-syne text-[7.5px] font-black" style={{color:`${pc}99`}}>{a.platform?.toUpperCase()}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           {/* Quick actions */}
           <div className="rounded-2xl p-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
@@ -2851,6 +2883,7 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
 // ── CHAT SECTION ─────────────────────────────────────────────
 function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoading,showToast}: any) {
   const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}) },[data.chatMessages])
 
@@ -2858,47 +2891,137 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
     const txt = chatInput.trim()
     if (!txt || chatLoading) return
     setChatInput('')
+    if (inputRef.current) { inputRef.current.style.height = 'auto' }
     setChatLoading(true)
     try { await data.sendChatMessage(txt) }
     catch { showToast('Error enviando mensaje') }
     finally { setChatLoading(false) }
   }
 
+  const PROMPTS = [
+    {text:'¿Qué proyectos urgentes tengo?', cat:'URGENTE'},
+    {text:'¿Cuántas tareas pendientes hay?', cat:'TAREAS'},
+    {text:'Resume el estado del equipo', cat:'EQUIPO'},
+    {text:'¿Qué contenido hay que publicar esta semana?', cat:'CONTENIDO'},
+  ]
+
+  const isEmpty = data.chatMessages.length === 0
+
   return (
     <div className="flex flex-col h-full">
-      <div className="px-6 py-4 border-b border-white/5 flex-shrink-0">
-        <h1 className="font-figtree text-xl font-black text-white" style={{letterSpacing:'-0.025em'}}>BRUTAL<span style={{color:'#1B5FFA'}}>.IA</span></h1>
-        <p className="text-xs text-white/30 mt-0.5">IA con contexto de clientes, proyectos y tareas</p>
-      </div>
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
-        {data.chatMessages.length===0&&(
-          <div className="py-12 text-center">
-            <div className="font-syne text-sm text-white/25 mb-4">Buenos días. ¿En qué puedo ayudarte?</div>
-            {['¿Qué proyectos tengo urgentes?','¿Cuántas tareas pendientes hay?','Resume el estado del equipo'].map(s=>(
-              <button key={s} onClick={()=>{ setChatInput(s); }} className="block mx-auto mb-2 px-4 py-2 rounded-xl text-xs text-white/40 hover:text-white/60 transition-colors" style={{border:'1px solid rgba(255,255,255,0.07)'}}>{s}</button>
-            ))}
-          </div>
-        )}
-        {data.chatMessages.map((m: any)=>(
-          <div key={m.id} className={`flex ${m.role==='user'?'justify-end':''}`}>
-            {m.role==='ai'&&<div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center mr-2 mt-1 overflow-hidden p-1" style={{background:'rgba(27,95,250,0.12)',border:'1px solid rgba(27,95,250,0.2)'}}><img src="https://brutal.thehook-produccion.es/wp-content/themes/brutal-studios/assets/img/brutal-logo-white.svg" className="w-full opacity-80" alt="Brutal.IA"/></div>}
-            <div className="max-w-[75%] px-4 py-3 rounded-2xl text-sm leading-relaxed" style={{background:m.role==='user'?BLU:'#0C0C15',color:m.role==='user'?'white':'rgba(240,240,248,0.8)',border:m.role==='ai'?'1px solid rgba(255,255,255,0.07)':'none'}}>
-              {m.content}
+      {/* Header */}
+      <div className="flex-shrink-0 px-6 py-5" style={{borderBottom:`1px solid ${BORDER}`}}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden p-1.5" style={{background:'rgba(27,95,250,0.1)',border:'1px solid rgba(27,95,250,0.2)'}}>
+              <img src="https://brutal.thehook-produccion.es/wp-content/themes/brutal-studios/assets/img/brutal-logo-white.svg" className="w-full opacity-80" alt=""/>
+            </div>
+            <div>
+              <div className="font-figtree text-[16px] font-black text-white leading-none" style={{letterSpacing:'-0.025em'}}>BRUTAL<span style={{color:BLU}}>.IA</span></div>
+              <div className="font-syne text-[7.5px] font-bold tracking-widest mt-0.5" style={{color:'rgba(255,255,255,0.2)'}}>ASISTENTE CON CONTEXTO COMPLETO</div>
             </div>
           </div>
-        ))}
-        {chatLoading&&<div className="flex gap-1.5 px-4 py-3 w-fit rounded-2xl" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
-          <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-dot1"/><div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-dot2"/><div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-dot3"/>
-        </div>}
-        <div ref={bottomRef}/>
+          {!isEmpty && (
+            <button onClick={()=>data.clearChat?.()} className="font-syne text-[8px] font-black tracking-widest px-3 py-1.5 rounded-xl transition-all hover:bg-white/5" style={{color:'rgba(255,255,255,0.2)',border:`1px solid ${BORDER}`}}>LIMPIAR</button>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {[
+            {n:data.clients?.length||0, l:'clientes'},
+            {n:data.tasks?.filter((t:any)=>!t.done).length||0, l:'tareas activas'},
+            {n:data.projects?.filter((p:any)=>p.status==='activo').length||0, l:'proyectos'},
+            {n:data.inbox?.filter((m:any)=>!m.is_read).length||0, l:'sin leer'},
+          ].map((c,i)=>(
+            <span key={i} className="font-syne text-[7.5px] font-black px-2 py-1 rounded-lg" style={{background:SURF2,color:'rgba(255,255,255,0.28)'}}>
+              <span style={{color:'rgba(255,255,255,0.75)'}}>{c.n}</span> {c.l}
+            </span>
+          ))}
+          <span className="font-syne text-[7px] font-black tracking-widest px-2 py-1 rounded-lg" style={{background:'rgba(27,95,250,0.08)',color:BLU}}>SONNET 4.6</span>
+        </div>
       </div>
-      <div className="px-6 py-4 border-t border-white/5 flex-shrink-0">
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{background:'#0C0C15',border:'1px solid rgba(27,95,250,0.15)'}}>
-          <input value={chatInput} onChange={e=>setChatInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&(e.preventDefault(),send())} placeholder="Pregunta a Brutal.IA…" className="flex-1 bg-transparent text-sm text-white placeholder-white/25 outline-none" style={{caretColor:BLU}}/>
-          <button onClick={send} disabled={!chatInput.trim()||chatLoading} className="w-8 h-8 rounded-lg flex items-center justify-center disabled:opacity-30 transition-opacity" style={{background:BLU}}>
+
+      {/* Messages / Empty state */}
+      <div className="flex-1 overflow-y-auto">
+        {isEmpty ? (
+          <div className="flex flex-col items-center justify-center h-full px-6 py-10">
+            <div className="relative mb-7">
+              <div className="w-16 h-16 rounded-3xl flex items-center justify-center" style={{background:'rgba(27,95,250,0.08)',border:'1px solid rgba(27,95,250,0.16)'}}>
+                <LucideIcon name="sparkles" size={22} color={BLU}/>
+              </div>
+              <div className="absolute inset-0 rounded-3xl pointer-events-none" style={{background:'radial-gradient(circle,rgba(27,95,250,0.10) 0%,transparent 70%)'}}/>
+            </div>
+            <div className="font-figtree text-[15px] font-black text-white mb-1" style={{letterSpacing:'-0.02em'}}>¿En qué puedo ayudarte?</div>
+            <div className="font-syne text-[8.5px] font-bold tracking-widest mb-7" style={{color:'rgba(255,255,255,0.18)'}}>TENGO ACCESO A TODOS TUS DATOS</div>
+            <div className="grid grid-cols-2 gap-2 w-full max-w-[340px]">
+              {PROMPTS.map(p=>(
+                <button key={p.text} onClick={()=>{setChatInput(p.text);inputRef.current?.focus()}} className="text-left p-4 rounded-2xl transition-all" style={{background:SURF2,border:`1px solid ${BORDER}`}}
+                  onMouseEnter={e=>(e.currentTarget.style.borderColor='rgba(27,95,250,0.3)')}
+                  onMouseLeave={e=>(e.currentTarget.style.borderColor=BORDER)}>
+                  <div className="font-syne text-[7px] font-black tracking-widest mb-1.5" style={{color:'rgba(27,95,250,0.65)'}}>{p.cat}</div>
+                  <div className="text-[11.5px] leading-snug" style={{color:'rgba(255,255,255,0.48)'}}>{p.text}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="px-5 py-5 space-y-4">
+            {data.chatMessages.map((m: any)=>(
+              <div key={m.id} className={`flex gap-2.5 ${m.role==='user'?'justify-end':'items-start'}`} style={{flexDirection:m.role==='user'?'row-reverse':'row'}}>
+                {m.role==='ai' && (
+                  <div className="w-7 h-7 rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden mt-0.5 p-1" style={{background:'rgba(27,95,250,0.12)',border:'1px solid rgba(27,95,250,0.2)'}}>
+                    <img src="https://brutal.thehook-produccion.es/wp-content/themes/brutal-studios/assets/img/brutal-logo-white.svg" className="w-full opacity-80" alt=""/>
+                  </div>
+                )}
+                <div className="max-w-[76%] px-4 py-3 text-[13px] leading-relaxed whitespace-pre-wrap" style={{
+                  background:m.role==='user'?`linear-gradient(135deg,${BLU},#1440CC)`:'rgba(12,12,22,0.95)',
+                  color:m.role==='user'?'white':'rgba(240,240,248,0.82)',
+                  border:m.role==='ai'?`1px solid ${BORDER}`:'none',
+                  borderRadius:'16px',
+                  borderTopLeftRadius:m.role==='ai'?'5px':'16px',
+                  borderTopRightRadius:m.role==='user'?'5px':'16px',
+                }}>
+                  {m.content}
+                </div>
+              </div>
+            ))}
+            {chatLoading && (
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-xl flex items-center justify-center overflow-hidden p-1" style={{background:'rgba(27,95,250,0.12)',border:'1px solid rgba(27,95,250,0.2)'}}>
+                  <img src="https://brutal.thehook-produccion.es/wp-content/themes/brutal-studios/assets/img/brutal-logo-white.svg" className="w-full opacity-80" alt=""/>
+                </div>
+                <div className="flex gap-1 px-4 py-3.5 rounded-2xl" style={{background:'rgba(12,12,22,0.95)',border:`1px solid ${BORDER}`}}>
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-dot1"/>
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-dot2"/>
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-dot3"/>
+                </div>
+              </div>
+            )}
+            <div ref={bottomRef}/>
+          </div>
+        )}
+      </div>
+
+      {/* Input */}
+      <div className="flex-shrink-0 px-5 py-4" style={{borderTop:`1px solid ${BORDER}`}}>
+        <div className="flex items-end gap-2.5 px-4 py-3 rounded-2xl" style={{background:SURF2,border:`1.5px solid rgba(27,95,250,0.12)`}}>
+          <textarea
+            ref={inputRef}
+            value={chatInput}
+            onChange={e=>setChatInput(e.target.value)}
+            onInput={e=>{e.currentTarget.style.height='auto';e.currentTarget.style.height=Math.min(e.currentTarget.scrollHeight,120)+'px'}}
+            onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}}}
+            onFocus={e=>(e.currentTarget.parentElement!.style.borderColor='rgba(27,95,250,0.35)')}
+            onBlur={e=>(e.currentTarget.parentElement!.style.borderColor='rgba(27,95,250,0.12)')}
+            placeholder="Pregunta a Brutal.IA…"
+            rows={1}
+            className="flex-1 bg-transparent text-[13px] outline-none resize-none leading-relaxed"
+            style={{caretColor:BLU,color:'rgba(255,255,255,0.88)',maxHeight:'120px'}}
+          />
+          <button onClick={send} disabled={!chatInput.trim()||chatLoading} className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 disabled:opacity-25 transition-all" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
             <LucideIcon name="send" size={13} color="white"/>
           </button>
         </div>
+        <div className="font-syne text-[7.5px] font-bold tracking-widest text-center mt-2" style={{color:'rgba(255,255,255,0.1)'}}>ENTER para enviar · SHIFT+ENTER nueva línea</div>
       </div>
     </div>
   )
