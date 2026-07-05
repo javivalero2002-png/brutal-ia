@@ -727,6 +727,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
   const [activeTask, setActiveTask] = useState<Task|null>(null)
   const [editing, setEditing] = useState<Partial<Task>>({})
   const [saving, setSaving] = useState(false)
+  const [confirmDeleteTask, setConfirmDeleteTask] = useState(false)
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && activeTask) setActiveTask(null) }
@@ -737,6 +738,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
   const openTask = (t: Task) => {
     setActiveTask(t)
     setEditing({ text: t.text, level: t.level, assigned_to: t.assigned_to, done: t.done, due_date: t.due_date })
+    setConfirmDeleteTask(false)
   }
 
   const saveTask = async () => {
@@ -853,7 +855,12 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
             </button>
             <div className="flex items-center gap-2">
               {isOwner && (
-                <button onClick={async()=>{await data.deleteTask(activeTask.id);setActiveTask(null);showToast('Tarea eliminada')}} className="px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-colors" style={{color:'rgba(229,29,42,0.5)',border:`1px solid rgba(229,29,42,0.15)`}}>ELIMINAR</button>
+                confirmDeleteTask
+                  ? <div className="flex items-center gap-1">
+                      <button onClick={async()=>{await data.deleteTask(activeTask.id);setActiveTask(null);showToast('Tarea eliminada')}} className="px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
+                      <button onClick={()=>setConfirmDeleteTask(false)} className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.3)"/></button>
+                    </div>
+                  : <button onClick={()=>setConfirmDeleteTask(true)} className="px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-colors" style={{color:'rgba(229,29,42,0.5)',border:`1px solid rgba(229,29,42,0.15)`}}>ELIMINAR</button>
               )}
               <button onClick={saveTask} disabled={saving} className="px-5 py-2.5 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white disabled:opacity-40 transition-all" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
                 {saving?'GUARDANDO…':'GUARDAR'}
@@ -1536,7 +1543,7 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
             {recentInbox.length === 0 ? (
               <div className="px-5 py-8 text-center text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin mensajes nuevos</div>
             ) : recentInbox.map((m:any)=>(
-              <div key={m.id} className="px-5 py-4 transition-colors" style={{borderBottom:`1px solid ${BORDER}`}}>
+              <button key={m.id} onClick={()=>onNavigate('inbox')} className="w-full text-left px-5 py-4 transition-colors" style={{borderBottom:`1px solid ${BORDER}`}} onMouseEnter={e=>(e.currentTarget.style.background='rgba(255,255,255,0.025)')} onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
                 <div className="flex items-center gap-2.5 mb-1">
                   <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 font-syne text-[9px] font-black" style={{background:m.ai_urgency==='urgent'?'rgba(229,29,42,0.12)':'rgba(27,95,250,0.1)',color:m.ai_urgency==='urgent'?RED:BLU}}>{(m.from_name||'??').slice(0,2).toUpperCase()}</div>
                   <div className="flex-1 min-w-0">
@@ -1547,8 +1554,9 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                     </div>
                     <div className="text-[11px] truncate mt-0.5" style={{color:'rgba(255,255,255,0.35)'}}>{m.subject||'Sin asunto'}</div>
                   </div>
+                  <LucideIcon name="chevron-right" size={11} color="rgba(255,255,255,0.1)"/>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
 
@@ -2682,6 +2690,7 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
   const [editPublishTime, setEditPublishTime] = useState('')
   const [accountFilter, setAccountFilter] = useState('Todas')
   const [savingNotes, setSavingNotes] = useState(false)
+  const [confirmDeleteContent, setConfirmDeleteContent] = useState(false)
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && activeItem) setActiveItem(null) }
@@ -2706,6 +2715,7 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
     setEditAccountName(item.account_name||'')
     setEditPublishDate(item.publish_date||'')
     setEditPublishTime(item.publish_time||'')
+    setConfirmDeleteContent(false)
   }
 
   const saveNotes = async () => {
@@ -2974,9 +2984,15 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
             </div>
             <div className="flex gap-2 pt-1">
               <button onClick={saveNotes} disabled={savingNotes} className="flex-1 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide text-white disabled:opacity-40 transition-opacity" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingNotes?'GUARDANDO…':'GUARDAR CAMBIOS'}</button>
-              <button onClick={async()=>{await data.deleteAgenda(activeItem.id);setActiveItem(null);showToast('Pieza eliminada')}} className="px-4 py-2.5 rounded-xl font-syne text-[9px] font-black transition-all" style={{color:'rgba(229,29,42,0.45)',border:`1px solid rgba(229,29,42,0.12)`}}>
-                <LucideIcon name="trash" size={12} color="rgba(229,29,42,0.45)"/>
-              </button>
+              {confirmDeleteContent
+                ? <div className="flex items-center gap-1">
+                    <button onClick={async()=>{await data.deleteAgenda(activeItem.id);setActiveItem(null);showToast('Pieza eliminada')}} className="px-3 py-2.5 rounded-xl font-syne text-[8px] font-black transition-all" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
+                    <button onClick={()=>setConfirmDeleteContent(false)} className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={12} color="rgba(255,255,255,0.3)"/></button>
+                  </div>
+                : <button onClick={()=>setConfirmDeleteContent(true)} className="px-4 py-2.5 rounded-xl font-syne text-[9px] font-black transition-all" style={{color:'rgba(229,29,42,0.45)',border:`1px solid rgba(229,29,42,0.12)`}}>
+                    <LucideIcon name="trash" size={12} color="rgba(229,29,42,0.45)"/>
+                  </button>
+              }
             </div>
             <div className="font-syne text-[7.5px] font-bold tracking-widest text-center" style={{color:'rgba(255,255,255,0.1)'}}>⌘+ENTER PARA GUARDAR</div>
           </div>
