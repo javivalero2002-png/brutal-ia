@@ -1296,6 +1296,14 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
     if (!a.publish_date) return false
     return a.publish_date.toString().slice(0,10) === todayStr
   })
+  const todayCalEvents = (data.calendarEvents||[]).filter((e: any)=>{
+    if (!e.start) return false
+    return e.start.slice(0,10) === todayStr
+  }).sort((a: any, b: any)=>{
+    if (a.allDay && !b.allDay) return -1
+    if (!a.allDay && b.allDay) return 1
+    return (a.start||'').localeCompare(b.start||'')
+  })
   const platC: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
 
   return (
@@ -1424,6 +1432,29 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
               </div>
             ))}
           </div>
+
+          {/* Today's Google Calendar events */}
+          {todayCalEvents.length > 0 && (
+            <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+              <div className="flex items-center justify-between px-5 py-4" style={{borderBottom:`1px solid ${BORDER}`}}>
+                <div>
+                  <div className="font-syne text-[8.5px] font-black tracking-widest mb-0.5" style={{color:'rgba(255,255,255,0.2)'}}>AGENDA HOY</div>
+                  <span className="font-syne text-[15px] font-black text-white">Calendario</span>
+                </div>
+                <span className="font-syne text-[9px] font-black w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{background:'rgba(167,139,250,0.15)',color:'#a78bfa'}}>{todayCalEvents.length}</span>
+              </div>
+              {todayCalEvents.slice(0,4).map((ev:any,i:number)=>{
+                const timeStr = ev.allDay ? 'Todo el día' : new Date(ev.start).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})
+                return (
+                  <div key={ev.id||i} className="flex items-center gap-3 px-5 py-3.5" style={{borderBottom:i<Math.min(todayCalEvents.length,4)-1?`1px solid ${BORDER}`:'none'}}>
+                    <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:'#a78bfa'}}/>
+                    <span className="font-figtree text-[12px] font-medium flex-1 truncate" style={{color:'rgba(255,255,255,0.75)'}}>{ev.title}</span>
+                    <span className="font-syne text-[8px] font-black flex-shrink-0" style={{color:'rgba(167,139,250,0.6)'}}>{timeStr}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           {/* Today's content */}
           {todayContent.length > 0 && (
@@ -2466,8 +2497,15 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
   const [editFeedback, setEditFeedback] = useState('')
   const [editAccountName, setEditAccountName] = useState('')
   const [editPublishDate, setEditPublishDate] = useState('')
+  const [editPublishTime, setEditPublishTime] = useState('')
   const [accountFilter, setAccountFilter] = useState('Todas')
   const [savingNotes, setSavingNotes] = useState(false)
+
+  useEffect(()=>{
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && activeItem) setActiveItem(null) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [activeItem])
 
   const platColor: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
 
@@ -2485,13 +2523,14 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
     setEditFeedback(item.feedback||'')
     setEditAccountName(item.account_name||'')
     setEditPublishDate(item.publish_date||'')
+    setEditPublishTime(item.publish_time||'')
   }
 
   const saveNotes = async () => {
     if (!activeItem) return
     setSavingNotes(true)
     try {
-      const updates: any = { notes: editNotes, video_url: editVideoUrl, feedback: editFeedback, account_name: editAccountName, publish_date: editPublishDate||undefined }
+      const updates: any = { notes: editNotes, video_url: editVideoUrl, feedback: editFeedback, account_name: editAccountName, publish_date: editPublishDate||undefined, publish_time: editPublishTime||undefined }
       await data.updateAgenda(activeItem.id, updates)
       showToast('Guardado')
       setActiveItem((prev: any) => ({...prev, ...updates}))
@@ -2634,7 +2673,7 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                                   const isToday2 = item.publish_date.slice(0,10)===todayStr2
                                   const dOver = !isToday2 && new Date(item.publish_date+'T23:59:59')<new Date()
                                   const dSoon = !dOver && !isToday2 && new Date(item.publish_date+'T23:59:59')<new Date(Date.now()+3*24*3600*1000)
-                                  const label = isToday2 ? 'HOY' : new Date(item.publish_date+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})
+                                  const label = isToday2 ? (item.publish_time?`HOY ${item.publish_time.slice(0,5)}`:'HOY') : new Date(item.publish_date+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})
                                   return <span className="font-syne text-[8px] ml-auto flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:isToday2?`rgba(255,176,32,0.18)`:dOver?`${RED}15`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:isToday2?'rgba(255,176,32,0.95)':dOver?RED:dSoon?'rgba(255,176,32,0.8)':'rgba(255,255,255,0.22)'}}>{label}</span>
                                 })()}
                               </div>
@@ -2704,7 +2743,10 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
             <div>
               <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.22)'}}>FECHA DE PUBLICACIÓN</div>
-              <input type="date" value={editPublishDate} onChange={e=>setEditPublishDate(e.target.value)} className="w-full px-4 py-2.5 rounded-xl text-[12px] text-white outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,colorScheme:'dark'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.35)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+              <div className="flex gap-2">
+                <input type="date" value={editPublishDate} onChange={e=>setEditPublishDate(e.target.value)} className="flex-1 px-4 py-2.5 rounded-xl text-[12px] text-white outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,colorScheme:'dark'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.35)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+                <input type="time" value={editPublishTime} onChange={e=>setEditPublishTime(e.target.value)} className="w-[112px] px-3 py-2.5 rounded-xl text-[12px] text-white outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,colorScheme:'dark'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.35)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+              </div>
             </div>
             <div>
               <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.22)'}}>CUENTA / PERFIL</div>
@@ -3128,6 +3170,12 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
+
+  useEffect(()=>{
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && editing) setEditing(null) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [editing])
   const cats = ['Todos','Clientes','Procesos','Decisiones','Aprendizajes']
   const byFilter = memFilter==='Todos' ? data.memoria : data.memoria.filter((m: any)=>m.category===memFilter)
   const filtered = memSearch.trim()
