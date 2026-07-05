@@ -777,7 +777,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
 
   const openTask = (t: Task) => {
     setActiveTask(t)
-    setEditing({ text: t.text, level: t.level, assigned_to: t.assigned_to, done: t.done, due_date: t.due_date })
+    setEditing({ text: t.text, level: t.level, assigned_to: t.assigned_to, done: t.done, due_date: t.due_date, project_id: t.project_id })
     setConfirmDeleteTask(false)
   }
 
@@ -965,6 +965,19 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                 ))}
               </div>
             </div>
+
+            {/* Project */}
+            {data.projects.length > 0 && (
+              <div>
+                <label className="block font-syne text-[9px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.25)'}}>PROYECTO</label>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={()=>setEditing(x=>({...x,project_id:undefined}))} className="px-3 py-2 rounded-2xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:!editing.project_id?BLU+'18':SURF2,border:`1.5px solid ${!editing.project_id?BLU+'60':BORDER}`,color:!editing.project_id?BLU:'rgba(255,255,255,0.3)'}}>—</button>
+                  {data.projects.filter((p: Project)=>p.status!=='completado').slice(0,8).map((p: Project)=>(
+                    <button key={p.id} onClick={()=>setEditing(x=>({...x,project_id:x.project_id===p.id?undefined:p.id}))} className="px-3 py-2 rounded-2xl font-syne text-[9px] font-black tracking-wide transition-all max-w-[160px] truncate" style={{background:editing.project_id===p.id?(p.color||BLU)+'18':SURF2,border:`1.5px solid ${editing.project_id===p.id?(p.color||BLU)+'60':BORDER}`,color:editing.project_id===p.id?(p.color||BLU):'rgba(255,255,255,0.3)'}}>{p.name}</button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Due date */}
             <div>
