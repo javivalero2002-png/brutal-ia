@@ -1384,13 +1384,21 @@ function ReportesSection({data, onNavigate}: any) {
     {label:'Atrasados', count:overdueProjects.length, color:overdueProjects.length>0?RED:'rgba(255,255,255,0.15)'},
   ]
 
-  const tasksByMember = data.team.map((m: Profile) => ({
-    name: m.name,
-    initials: m.initials,
-    color: m.avatar_color,
-    pending: tasks.filter(t=>!t.done&&t.assignee?.name===m.name).length,
-    done: tasks.filter(t=>t.done&&t.assignee?.name===m.name).length,
-  }))
+  const tasksByMember = data.team.map((m: Profile) => {
+    const memberPending = tasks.filter(t=>!t.done&&t.assignee?.name===m.name)
+    const memberDone = tasks.filter(t=>t.done&&t.assignee?.name===m.name)
+    const urgentCount = memberPending.filter(t=>t.level==='urgent').length
+    const highCount = memberPending.filter(t=>t.level==='high').length
+    const normalCount = memberPending.length - urgentCount - highCount
+    return {
+      name: m.name,
+      initials: m.initials,
+      color: m.avatar_color,
+      pending: memberPending.length,
+      done: memberDone.length,
+      workload: urgentCount*3 + highCount*2 + normalCount,
+    }
+  })
 
   const urgencyBreakdown = [
     {label:'Urgente', count:inbox.filter(m=>m.ai_urgency==='urgent').length, color:RED},
@@ -1492,6 +1500,9 @@ function ReportesSection({data, onNavigate}: any) {
                   <div className="w-6 h-6 rounded-full flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0" style={{background:m.color+'22',color:m.color}}>{m.initials}</div>
                   <span className="text-sm text-white/60 flex-1">{m.name}</span>
                   <span className="text-xs text-white/40">{m.pending} pend. · {m.done} hechas</span>
+                  {m.workload > 0 && (
+                    <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full flex-shrink-0" style={{background:m.workload>8?'rgba(229,29,42,0.12)':m.workload>4?'rgba(255,176,32,0.1)':'rgba(255,255,255,0.04)',color:m.workload>8?RED:m.workload>4?'rgba(255,176,32,0.8)':'rgba(255,255,255,0.3)'}} title="Índice de carga (urgentes×3 + altas×2 + normales×1)">{m.workload}pts</span>
+                  )}
                 </div>
                 <div className="h-2 rounded-full ml-9" style={{background:'rgba(255,255,255,0.04)'}}>
                   <div className="h-full rounded-full flex overflow-hidden">
@@ -4515,6 +4526,8 @@ function AjustesSection({profile,data,showToast}: any) {
               {key:'G·M', label:'Memoria'},
               {key:'G·E', label:'Equipo'},
               {key:'G·R', label:'Reportes'},
+              {key:'G·V', label:'Automatizaciones'},
+              {key:'G·S', label:'Ajustes'},
               {key:'G·N', label:'Chat IA'},
               {key:'N', label:'Nueva entrada (Memoria)'},
               {key:'Esc', label:'Cerrar modal / panel'},
