@@ -139,11 +139,12 @@ export default function NexusDashboard({ profile }: Props) {
       ...data.tasks.map(t => ({ type:'Tarea', title:t.text, sub:t.level==='urgent'?'Urgente':t.level==='high'?'Alta':'Normal', act:()=>{ setSection('hoy'); setSearchOpen(false) }})),
       ...data.memoria.map(m => ({ type:'Memoria', title:m.title, sub:m.category, act:()=>{ setSection('memoria'); setSearchOpen(false) }})),
       ...data.agenda.map((a: any) => ({ type:'Contenido', title:a.title, sub:a.platform, act:()=>{ setSection('contenido'); setSearchOpen(false) }})),
+      ...data.inbox.map((m: any) => ({ type:'Inbox', title:m.subject||m.from_name||'Sin asunto', sub:m.from_name||'', act:()=>{ setSection('inbox'); setSearchOpen(false) }})),
     ].filter(r => r.title.toLowerCase().includes(q) || r.sub.toLowerCase().includes(q)).slice(0, 8)
   })()
   sr.current = searchResults
 
-  const typeColor: Record<string,string> = { Cliente:BLU, Proyecto:'rgba(255,176,32,0.9)', Tarea:RED, Memoria:'rgba(240,240,248,0.4)', Contenido:'#C13584' }
+  const typeColor: Record<string,string> = { Cliente:BLU, Proyecto:'rgba(255,176,32,0.9)', Tarea:RED, Memoria:'rgba(240,240,248,0.4)', Contenido:'#C13584', Inbox:'rgba(100,180,255,0.7)' }
 
   const ACCENT_COLORS = ['#1B5FFA','#E51D2A','#22c55e','#F97316','#A78BFA','#06B6D4','#EC4899','#84CC16','#F59E0B','#10B981']
 
@@ -1453,15 +1454,26 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
           {activeProjects.length > 0 && (
             <div className="rounded-2xl p-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
               <div className="font-syne text-[8.5px] font-black tracking-widest mb-4" style={{color:'rgba(255,255,255,0.2)'}}>PROYECTOS</div>
-              {activeProjects.slice(0,3).map((p:Project)=>(
+              {activeProjects.slice(0,3).map((p:Project)=>{
+                const isOverdue = p.deadline && p.deadline!=='TBD' && new Date(p.deadline+'T23:59:59') < new Date()
+                const isSoon = p.deadline && p.deadline!=='TBD' && !isOverdue && new Date(p.deadline+'T23:59:59') < new Date(Date.now()+7*24*3600*1000)
+                return (
                 <div key={p.id} className="flex items-center gap-3 mb-4">
-                  <ProgressRing pct={p.progress} size={40} stroke={3} color={p.color||BLU}/>
+                  <ProgressRing pct={p.progress} size={40} stroke={3} color={isOverdue?RED:p.color||BLU}/>
                   <div className="flex-1 min-w-0">
                     <div className="text-[13px] font-medium truncate" style={{color:'rgba(240,240,248,0.8)'}}>{p.name}</div>
-                    <div className="text-[10px] mt-0.5" style={{color:'rgba(255,255,255,0.25)'}}>{p.progress}% · {p.deadline ? new Date(p.deadline+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'}) : 'Sin fecha'}</div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[10px]" style={{color:'rgba(255,255,255,0.25)'}}>{p.progress}%</span>
+                      {p.deadline && p.deadline!=='TBD' && (
+                        <span className="font-syne text-[8px] font-black px-1.5 py-0.5 rounded-full" style={{background:isOverdue?`${RED}18`:isSoon?'rgba(255,176,32,0.1)':'transparent',color:isOverdue?RED:isSoon?'rgba(255,176,32,0.8)':'rgba(255,255,255,0.25)'}}>
+                          {isOverdue && '⚠ '}{new Date(p.deadline+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              ))}
+              )})}
+
             </div>
           )}
         </div>
@@ -2267,7 +2279,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
         ))}
       </div>
       {projView === 'board' ? (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid gap-4" style={{gridTemplateColumns:`repeat(${kanbanCols.length},minmax(0,1fr))`}}>
           {kanbanCols.map((col: any)=>(
             <div key={col.status} className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}
               onDragOver={(e)=>e.preventDefault()}
@@ -2758,6 +2770,14 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
     }
   })
 
+  // Project deadlines
+  data.projects?.forEach((p: any) => {
+    if (p.deadline && p.deadline !== 'TBD' && p.status !== 'completado') {
+      const d = new Date(p.deadline+'T00:00:00')
+      if (!isNaN(d.getTime())) addEvent(p.deadline, {type:'project', label:p.name, color:p.color||GRN, raw:p})
+    }
+  })
+
   // Selected day events
   const selEvents = selKey ? (eventsByDay[selKey]||[]) : []
 
@@ -2830,7 +2850,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
           <button onClick={()=>{setViewMonth(today.getMonth());setViewYear(today.getFullYear());setSelectedDay(today)}} className="ml-2 px-3 py-1.5 rounded-lg font-syne text-[8px] font-black tracking-wide transition-colors" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>HOY</button>
           {/* Legend */}
           <div className="ml-auto flex items-center gap-4 text-[10px]" style={{color:'rgba(255,255,255,0.3)'}}>
-            {[{c:'#a78bfa',l:'Google Cal'},{c:BLU,l:'Contenido'},{c:'rgba(255,176,32,0.8)',l:'Tarea'}].map(x=>(
+            {[{c:'#a78bfa',l:'Google Cal'},{c:BLU,l:'Contenido'},{c:'rgba(255,176,32,0.8)',l:'Tarea'},{c:GRN,l:'Proyecto'}].map(x=>(
               <div key={x.l} className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full" style={{background:x.c}}/>{x.l}</div>
             ))}
           </div>
@@ -2947,11 +2967,11 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
               ) : (
                 <>
                   {/* Group by type */}
-                  {(['gcal','content','task'] as const).map(type=>{
+                  {(['gcal','content','task','project'] as const).map(type=>{
                     const evs = selEvents.filter(e=>e.type===type)
                     if (!evs.length) return null
-                    const typeLabel = type==='gcal'?'GOOGLE CALENDAR':type==='content'?'CONTENIDO A PUBLICAR':'TAREAS CON DEADLINE'
-                    const typeColor = type==='gcal'?'#a78bfa':type==='content'?BLU:'rgba(255,176,32,0.8)'
+                    const typeLabel = type==='gcal'?'GOOGLE CALENDAR':type==='content'?'CONTENIDO A PUBLICAR':type==='project'?'DEADLINE PROYECTO':'TAREAS CON DEADLINE'
+                    const typeColor = type==='gcal'?'#a78bfa':type==='content'?BLU:type==='project'?GRN:'rgba(255,176,32,0.8)'
                     return (
                       <div key={type}>
                         <div className="font-syne text-[8px] font-black tracking-widest mb-3 flex items-center gap-2">
@@ -2994,6 +3014,21 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
                                   <span className="text-[10px]" style={{color:'rgba(255,255,255,0.35)'}}>{e.raw.assignee.name}</span>
                                 </div>
                               )}
+                              {type==='project' && (
+                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                  {e.raw?.client?.name && (
+                                    <span className="flex items-center gap-1 text-[10px]" style={{color:'rgba(255,255,255,0.4)'}}>
+                                      <LucideIcon name="building-2" size={10} color="rgba(255,255,255,0.3)"/>{e.raw.client.name}
+                                    </span>
+                                  )}
+                                  {e.raw?.progress !== undefined && (
+                                    <span className="flex items-center gap-1.5 text-[9px] font-syne font-black" style={{color:GRN+'cc'}}>
+                                      <div className="w-12 h-1 rounded-full" style={{background:'rgba(255,255,255,0.08)'}}><div className="h-full rounded-full" style={{background:GRN,width:`${e.raw.progress}%`}}/></div>
+                                      {e.raw.progress}%
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -3019,7 +3054,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
                     <div key={i} className="flex items-center gap-2.5 py-2.5" style={{borderBottom:i<Math.min(u.events.length,3)-1?`1px solid ${BORDER}`:'none'}}>
                       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:e.color}}/>
                       <span className="text-[12px] flex-1 truncate" style={{color:'rgba(255,255,255,0.55)'}}>{e.label}</span>
-                      <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:e.color+'15',color:e.color+'cc'}}>{e.type==='gcal'?'CAL':e.type==='content'?'CTN':'TSK'}</span>
+                      <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:e.color+'15',color:e.color+'cc'}}>{e.type==='gcal'?'CAL':e.type==='content'?'CTN':e.type==='project'?'PRY':'TSK'}</span>
                     </div>
                   ))}
                 </div>
