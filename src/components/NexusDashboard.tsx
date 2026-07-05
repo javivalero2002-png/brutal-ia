@@ -3434,6 +3434,9 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                                   const label = isToday2 ? (item.publish_time?`HOY ${item.publish_time.slice(0,5)}`:'HOY') : new Date(item.publish_date+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})
                                   return <span className="font-syne text-[8px] ml-auto flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:isToday2?`rgba(255,176,32,0.18)`:dOver?`${RED}15`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:isToday2?'rgba(255,176,32,0.95)':dOver?RED:dSoon?'rgba(255,176,32,0.8)':'rgba(255,255,255,0.22)'}}>{label}</span>
                                 })()}
+                                {!item.publish_date && item.status!=='publicado' && (
+                                  <span className="font-syne text-[7px] font-black ml-auto flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.18)',border:'1px dashed rgba(255,255,255,0.1)'}}>SIN FECHA</span>
+                                )}
                                 {(()=>{
                                   const nextMap: Record<string,string> = {borrador:'pendiente',pendiente:'listo',listo:'publicado'}
                                   const nextStatus = nextMap[item.status]
@@ -4298,12 +4301,21 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
 
   const send = () => sendText(chatInput.trim())
 
+  const urgentN = data.tasks.filter((t: Task)=>!t.done&&t.level==='urgent').length
+  const overdueN = data.projects.filter((p: Project)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&new Date(p.deadline+'T23:59:59')<new Date()).length
+  const unreadN = data.inbox.filter((m: any)=>!m.is_read).length
   const PROMPTS = [
-    {text:'¿Qué proyectos urgentes tengo?', cat:'URGENTE'},
+    urgentN > 0
+      ? {text:`Tengo ${urgentN} tarea${urgentN>1?'s':''} urgente${urgentN>1?'s':''}, ¿cuál priorizo primero?`, cat:'URGENTE'}
+      : {text:'¿Qué proyectos urgentes tengo?', cat:'URGENTE'},
     {text:'¿Cuántas tareas pendientes hay?', cat:'TAREAS'},
     {text:'Resume el estado del equipo', cat:'EQUIPO'},
-    {text:'¿Qué contenido hay que publicar esta semana?', cat:'CONTENIDO'},
-    {text:'¿Qué clientes no tienen proyectos activos?', cat:'CLIENTES'},
+    overdueN > 0
+      ? {text:`${overdueN} proyecto${overdueN>1?'s':''} atrasado${overdueN>1?'s':''}, ¿cómo lo${overdueN>1?'s':''} gestiono?`, cat:'PROYECTOS'}
+      : {text:'¿Qué contenido hay que publicar esta semana?', cat:'CONTENIDO'},
+    unreadN > 0
+      ? {text:`Tengo ${unreadN} mensaje${unreadN>1?'s':''} sin leer, ¿cuáles necesitan respuesta?`, cat:'INBOX'}
+      : {text:'¿Qué clientes no tienen proyectos activos?', cat:'CLIENTES'},
     {text:'Dame prioridades para hoy', cat:'HOY'},
   ]
 
@@ -4626,6 +4638,7 @@ function AjustesSection({profile,data,showToast}: any) {
               {key:'G·S', label:'Ajustes'},
               {key:'G·N', label:'Chat IA'},
               {key:'N', label:'Nueva entrada (Memoria)'},
+              {key:'J / K', label:'Navegar lista (Tareas, Inbox)'},
               {key:'Esc', label:'Cerrar modal / panel'},
               {key:'Enter', label:'Enviar en Chat'},
             ].map((s,i)=>(
