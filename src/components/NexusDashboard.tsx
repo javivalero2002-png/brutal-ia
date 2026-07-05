@@ -2088,27 +2088,55 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
 
 // ── PROYECTOS SECTION ────────────────────────────────────────
 function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView,projStatusFilter,setProjStatusFilter,dragRef,selectedId,onSelect,onOpenModal,showToast,isOwner}: any) {
-  const statusTabs = ['Todos','plan.','activo','urgente','revisión']
+  const statusTabs: {id:string;label:string}[] = [
+    {id:'Todos',label:'Todos'},
+    {id:'plan.',label:'Planificación'},
+    {id:'activo',label:'Activo'},
+    {id:'urgente',label:'Urgente'},
+    {id:'revisión',label:'Revisión'},
+  ]
+  const fmtDate = (s: string) => {
+    if (!s || s==='HOY') return s
+    const d = new Date(s+'T00:00:00')
+    if (isNaN(d.getTime())) return s
+    return d.toLocaleDateString('es-ES',{day:'numeric',month:'short'})
+  }
+  const statusLabel = (s: string) => {
+    const m: Record<string,string> = {'activo':'ACTIVO','urgente':'URGENTE','plan.':'PLANIF.','revisión':'REVISIÓN'}
+    return m[s] || s.toUpperCase()
+  }
+  const statusColor = (s: string) => s==='urgente'?RED:s==='activo'?GRN:s==='revisión'?'rgba(167,139,250,0.9)':BLU
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-5">
-        <h1 className="font-figtree text-2xl font-black text-white" style={{letterSpacing:'-0.03em'}}>Proyectos</h1>
+    <div className="p-8">
+      <div className="flex items-end justify-between mb-8">
+        <div>
+          <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>GESTIÓN</div>
+          <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Proyectos</h1>
+        </div>
         <div className="flex items-center gap-2">
-          <div className="flex rounded-lg overflow-hidden" style={{border:'1px solid rgba(255,255,255,0.08)'}}>
-            {(['board','list'] as const).map(v=><button key={v} onClick={()=>setProjView(v)} className="px-3 py-1.5 text-xs transition-colors" style={{background:projView===v?'rgba(27,95,250,0.15)':'transparent',color:projView===v?'#F0F0F8':'rgba(240,240,248,0.4)'}}>{v==='board'?'Tablero':'Lista'}</button>)}
+          <div className="flex p-1 rounded-xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+            {(['board','list'] as const).map(v=>(
+              <button key={v} onClick={()=>setProjView(v)} className="px-3 py-2 rounded-lg font-syne text-[9px] font-black tracking-wide transition-all" style={{background:projView===v?SURF2:'transparent',color:projView===v?'rgba(255,255,255,0.9)':'rgba(240,240,248,0.3)'}}>
+                {v==='board'?'TABLERO':'LISTA'}
+              </button>
+            ))}
           </div>
-          {isOwner && <button onClick={()=>onOpenModal('proyecto')} className="px-4 py-2 rounded-xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:BLU}}>+ PROYECTO</button>}
+          {isOwner && <button onClick={()=>onOpenModal('proyecto')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ PROYECTO</button>}
         </div>
       </div>
-      <div className="flex gap-2 mb-5">
-        {statusTabs.map(s=><button key={s} onClick={()=>setProjStatusFilter(s)} className="px-3 py-1.5 rounded-lg font-syne text-[9px] font-black tracking-wide capitalize transition-colors" style={{background:projStatusFilter===s?'rgba(27,95,250,0.12)':'transparent',color:projStatusFilter===s?'#F0F0F8':'rgba(240,240,248,0.35)'}}>{s}</button>)}
+      <div className="flex items-center gap-1 mb-6 p-1 rounded-2xl w-fit" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+        {statusTabs.map(s=>(
+          <button key={s.id} onClick={()=>setProjStatusFilter(s.id)} className="px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:projStatusFilter===s.id?SURF2:'transparent',color:projStatusFilter===s.id?'rgba(255,255,255,0.9)':'rgba(240,240,248,0.28)'}}>
+            {s.label.toUpperCase()}
+          </button>
+        ))}
       </div>
       {projView === 'board' ? (
         <div className="grid grid-cols-4 gap-4">
           {kanbanCols.map((col: any)=>(
             <div key={col.status} className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}
               onDragOver={(e)=>e.preventDefault()}
-              onDrop={()=>{ if(dragRef.current) { data.updateProject(dragRef.current,{status:col.status}).then(()=>showToast(`→ ${col.title}`)); dragRef.current=null }}}>
+              onDrop={()=>{ if(dragRef.current) { data.updateProject(dragRef.current,{status:col.status}).then(()=>showToast(`Movido a ${col.title}`)); dragRef.current=null }}}>
               <div className="flex items-center gap-2.5 px-5 py-4" style={{borderBottom:`1px solid ${BORDER}`}}>
                 <div className="w-2 h-2 rounded-full" style={{background:col.color}}/>
                 <span className="font-syne text-[9px] font-black tracking-widest uppercase flex-1" style={{color:'rgba(255,255,255,0.4)'}}>{col.title}</span>
@@ -2128,8 +2156,8 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="font-syne text-[8px] font-black px-2 py-1 rounded-lg" style={{background:p.status==='urgente'?'rgba(229,29,42,0.1)':'rgba(27,95,250,0.07)',color:p.status==='urgente'?RED:'rgba(100,140,255,0.7)'}}>{p.status}</span>
-                      <span className="text-[10px]" style={{color:p.deadline==='HOY'?RED:'rgba(255,255,255,0.22)'}}>{p.deadline}</span>
+                      <span className="font-syne text-[8px] font-black px-2 py-1 rounded-lg" style={{background:statusColor(p.status)+'14',color:statusColor(p.status)}}>{statusLabel(p.status)}</span>
+                      {p.deadline && <span className="font-syne text-[8px] font-black" style={{color:p.deadline==='HOY'?RED:'rgba(255,255,255,0.22)'}}>{fmtDate(p.deadline)}</span>}
                     </div>
                   </div>
                 ))}
@@ -2139,18 +2167,25 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
           ))}
         </div>
       ) : (
-        <div className="rounded-xl overflow-hidden" style={{border:'1px solid rgba(255,255,255,0.07)'}}>
-          {filteredProjects.map((p: Project)=>(
-            <div key={p.id} className="flex items-center gap-4 px-5 py-4 border-b border-white/4 hover:bg-white/2 transition-colors">
-              <div className="flex-1"><div className="font-medium text-sm text-white/85">{p.name}</div><div className="text-xs text-white/30">{p.client?.name||'—'}</div></div>
-              <span className="font-syne text-[9px] font-black px-2 py-1 rounded-full capitalize" style={{background:'rgba(27,95,250,0.08)',color:BLU}}>{p.status}</span>
-              <div className="w-24 h-1 rounded-full bg-white/5"><div className="h-full rounded-full" style={{width:p.progress+'%',background:p.color||BLU}}/></div>
-              <span className="text-xs text-white/30 w-8 text-right">{p.progress}%</span>
-              <span className="text-xs text-white/30 w-12 text-right">{p.deadline}</span>
-              {isOwner && <button onClick={()=>data.deleteProject(p.id).then(()=>showToast('Proyecto eliminado'))} className="opacity-20 hover:opacity-60 transition-opacity"><LucideIcon name="trash" size={13} color={RED}/></button>}
+        <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+          {filteredProjects.map((p: Project, i: number)=>(
+            <div key={p.id} className="flex items-center gap-4 px-6 py-4 transition-colors" style={{borderBottom:i<filteredProjects.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${statusColor(p.status)}40`}}
+              onMouseEnter={e=>(e.currentTarget.style.background='rgba(255,255,255,0.015)')}
+              onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
+              <div className="relative flex-shrink-0">
+                <ProgressRing pct={p.progress} size={34} stroke={2.5} color={p.color||BLU}/>
+                <div className="absolute inset-0 flex items-center justify-center font-syne text-[7.5px] font-black" style={{color:'rgba(255,255,255,0.5)'}}>{p.progress}</div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-figtree text-[14px] font-semibold text-white/88 truncate">{p.name}</div>
+                <div className="text-[11px] mt-0.5" style={{color:'rgba(255,255,255,0.3)'}}>{p.client?.name||'—'}</div>
+              </div>
+              <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full flex-shrink-0" style={{background:statusColor(p.status)+'14',color:statusColor(p.status)}}>{statusLabel(p.status)}</span>
+              {p.deadline && <span className="font-syne text-[9px] font-black flex-shrink-0" style={{color:'rgba(255,255,255,0.28)'}}>{fmtDate(p.deadline)}</span>}
+              {isOwner && <button onClick={()=>data.deleteProject(p.id).then(()=>showToast('Proyecto eliminado'))} className="opacity-0 hover:opacity-60 transition-opacity flex-shrink-0" onMouseEnter={e=>(e.currentTarget.style.opacity='0.6')} onMouseLeave={e=>(e.currentTarget.style.opacity='0')}><LucideIcon name="trash" size={13} color={RED}/></button>}
             </div>
           ))}
-          {filteredProjects.length===0&&<div className="py-12 text-center text-white/20 text-sm">Sin proyectos</div>}
+          {filteredProjects.length===0&&<div className="py-16 text-center text-[13px]" style={{color:'rgba(255,255,255,0.18)'}}>Sin proyectos en este filtro</div>}
         </div>
       )}
     </div>
