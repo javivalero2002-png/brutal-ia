@@ -1113,12 +1113,21 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                   <span className="text-[13px]" style={{color:'rgba(255,255,255,0.55)'}}>{activeTask.client.name}</span>
                 </div>
               )}
-              {activeTask.project_id && (() => { const proj = data.projects.find((p: Project)=>p.id===activeTask.project_id); return proj ? (
-                <div className="flex items-center justify-between">
-                  <span className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>PROYECTO</span>
-                  <span className="text-[12px]" style={{color:(proj.color||BLU)+'cc'}}>{proj.name}</span>
-                </div>
-              ) : null })()}
+              {activeTask.project_id && (() => { const proj = data.projects.find((p: Project)=>p.id===activeTask.project_id); if (!proj) return null
+                const pdl = proj.deadline && proj.deadline!=='TBD' ? new Date(proj.deadline+'T23:59:59') : null
+                const pdDiff = pdl ? Math.round((pdl.getTime()-Date.now())/86400000) : null
+                const pdLabel = pdDiff===null?null:pdDiff<0?`−${Math.abs(pdDiff)}d`:pdDiff===0?'HOY':`${pdDiff}d`
+                const pdColor = pdDiff===null?null:pdDiff<0?RED:pdDiff<=7?'rgba(255,176,32,0.9)':'rgba(255,255,255,0.28)'
+                return (
+                  <div className="flex items-center justify-between">
+                    <span className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>PROYECTO</span>
+                    <div className="flex items-center gap-2">
+                      {pdLabel && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-lg" style={{background:(pdColor||'')+'18',color:pdColor||''}}>{pdLabel}</span>}
+                      <span className="text-[12px]" style={{color:(proj.color||BLU)+'cc'}}>{proj.name}</span>
+                    </div>
+                  </div>
+                )
+              })()}
               <div className="flex items-center justify-between">
                 <span className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>CREADA</span>
                 <span className="text-[12px]" style={{color:'rgba(255,255,255,0.35)'}}>{new Date(activeTask.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})}</span>
@@ -2000,11 +2009,16 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                     <div className="text-[13px] font-medium truncate" style={{color:'rgba(240,240,248,0.8)'}}>{p.name}</div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-[10px]" style={{color:'rgba(255,255,255,0.25)'}}>{p.progress}%</span>
-                      {p.deadline && p.deadline!=='TBD' && (
-                        <span className="font-syne text-[8px] font-black px-1.5 py-0.5 rounded-full" style={{background:isOverdue?`${RED}18`:isSoon?'rgba(255,176,32,0.1)':'transparent',color:isOverdue?RED:isSoon?'rgba(255,176,32,0.8)':'rgba(255,255,255,0.25)'}}>
-                          {isOverdue && '⚠ '}{new Date(p.deadline+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}
-                        </span>
-                      )}
+                      {p.deadline && p.deadline!=='TBD' && (()=>{
+                        const dl = new Date(p.deadline+'T23:59:59')
+                        const diffDays = Math.round(Math.abs(dl.getTime()-Date.now())/(1000*60*60*24))
+                        const dlLabel = isOverdue ? `−${diffDays}d` : diffDays===0 ? 'HOY' : `${diffDays}d`
+                        return (
+                          <span className="font-syne text-[8px] font-black px-1.5 py-0.5 rounded-full" style={{background:isOverdue?`${RED}18`:isSoon?'rgba(255,176,32,0.1)':'transparent',color:isOverdue?RED:isSoon?'rgba(255,176,32,0.8)':'rgba(255,255,255,0.25)'}}>
+                            {dlLabel}
+                          </span>
+                        )
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -2998,7 +3012,9 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                       {p.deadline && p.deadline!=='TBD' && (()=>{
                         const dOver = new Date(p.deadline+'T23:59:59')<new Date()
                         const dSoon = !dOver && new Date(p.deadline+'T23:59:59')<new Date(Date.now()+7*24*3600*1000)
-                        return <span className="font-syne text-[8px] font-black px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.25)'}}>{dOver&&'⚠ '}{fmtDate(p.deadline)}</span>
+                        const diffDays = Math.round(Math.abs(new Date(p.deadline+'T23:59:59').getTime()-Date.now())/(1000*60*60*24))
+                        const dLabel = dOver ? `−${diffDays}d` : diffDays===0 ? 'HOY' : `${diffDays}d`
+                        return <span className="font-syne text-[8px] font-black px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.25)'}}>{dLabel}</span>
                       })()}
                       {(() => { const n = data.tasks.filter((t: Task)=>t.project_id===p.id&&!t.done).length; return n>0?<span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.6)'}}>{n}t</span>:null })()}
                     </div>
@@ -3027,7 +3043,9 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               {p.deadline && p.deadline!=='TBD' && (()=>{
                 const dOver = new Date(p.deadline+'T23:59:59')<new Date()
                 const dSoon = !dOver && new Date(p.deadline+'T23:59:59')<new Date(Date.now()+7*24*3600*1000)
-                return <span className="font-syne text-[9px] font-black flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.28)'}}>{dOver&&'⚠ '}{fmtDate(p.deadline)}</span>
+                const diffDays = Math.round(Math.abs(new Date(p.deadline+'T23:59:59').getTime()-Date.now())/(1000*60*60*24))
+                const dLabel = dOver ? `−${diffDays}d` : diffDays===0 ? 'HOY' : `${diffDays}d`
+                return <span className="font-syne text-[9px] font-black flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.28)'}}>{dLabel}</span>
               })()}
               {(()=>{ const n=data.tasks.filter((t:Task)=>t.project_id===p.id&&!t.done).length; return n>0?<span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.55)'}}>{n}t</span>:null })()}
               {isOwner && (
