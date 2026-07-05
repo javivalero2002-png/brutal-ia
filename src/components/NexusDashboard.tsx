@@ -899,11 +899,15 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
             </div>
             {isOwner && assignees.length > 1 && (
               <div className="flex gap-1 flex-wrap">
-                {assignees.map(a=>(
-                  <button key={a} onClick={()=>setAssigneeFilter(a)} className="px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:assigneeFilter===a?BLU+'18':SURFACE,border:`1px solid ${assigneeFilter===a?BLU+'50':BORDER}`,color:assigneeFilter===a?BLU:'rgba(255,255,255,0.28)'}}>
-                    {a.toUpperCase()}
-                  </button>
-                ))}
+                {assignees.map(a=>{
+                  const cnt = a === 'Todos' ? data.tasks.filter((t: Task)=>!t.done).length : data.tasks.filter((t: Task)=>!t.done&&t.assignee?.name===a).length
+                  return (
+                    <button key={a} onClick={()=>setAssigneeFilter(a)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:assigneeFilter===a?BLU+'18':SURFACE,border:`1px solid ${assigneeFilter===a?BLU+'50':BORDER}`,color:assigneeFilter===a?BLU:'rgba(255,255,255,0.28)'}}>
+                      {a.toUpperCase()}
+                      {cnt > 0 && <span className="text-[7.5px] font-black opacity-60">{cnt}</span>}
+                    </button>
+                  )
+                })}
               </div>
             )}
             {filter === 'hecho' && filtered.length > 0 && isOwner && (
@@ -1186,7 +1190,33 @@ function EquipoSection({data, profile, showToast}: any) {
       <div className="flex flex-col overflow-hidden" style={{width:'360px',flexShrink:0,borderRight:`1px solid ${BORDER}`}}>
         <div className="px-6 pt-6 pb-4 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
           <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1" style={{color:'rgba(255,255,255,0.18)'}}>BRUTAL STUDIOS</div>
-          <h1 className="font-figtree text-[22px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Equipo</h1>
+          <h1 className="font-figtree text-[22px] font-black text-white leading-none mb-3" style={{letterSpacing:'-0.03em'}}>Equipo</h1>
+          {(()=>{
+            const teamPending = data.tasks.filter((t: Task)=>!t.done&&!!t.assignee).length
+            const teamOverdue = data.tasks.filter((t: Task)=>!t.done&&!!t.assignee&&!!t.due_date&&new Date(t.due_date+'T23:59:59')<new Date()).length
+            const teamUrgent = data.tasks.filter((t: Task)=>!t.done&&!!t.assignee&&t.level==='urgent').length
+            if (teamPending === 0) return null
+            return (
+              <div className="flex items-center gap-3">
+                <div className="text-center">
+                  <div className="font-figtree text-[22px] font-black leading-none" style={{color:'rgba(255,255,255,0.75)',letterSpacing:'-0.03em'}}>{teamPending}</div>
+                  <div className="font-syne text-[7px] font-black tracking-widest mt-0.5" style={{color:'rgba(255,255,255,0.2)'}}>PENDIENTES</div>
+                </div>
+                {teamUrgent > 0 && (
+                  <div className="text-center">
+                    <div className="font-figtree text-[22px] font-black leading-none" style={{color:RED,letterSpacing:'-0.03em'}}>{teamUrgent}</div>
+                    <div className="font-syne text-[7px] font-black tracking-widest mt-0.5" style={{color:'rgba(255,255,255,0.2)'}}>URGENTES</div>
+                  </div>
+                )}
+                {teamOverdue > 0 && (
+                  <div className="text-center">
+                    <div className="font-figtree text-[22px] font-black leading-none" style={{color:'rgba(255,176,32,0.9)',letterSpacing:'-0.03em'}}>{teamOverdue}</div>
+                    <div className="font-syne text-[7px] font-black tracking-widest mt-0.5" style={{color:'rgba(255,255,255,0.2)'}}>ATRASADAS</div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {allActive.map((member: Profile) => {
