@@ -768,9 +768,20 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
   const [saving, setSaving] = useState(false)
   const [confirmDeleteTask, setConfirmDeleteTask] = useState(false)
   const [confirmLimpiar, setConfirmLimpiar] = useState(false)
+  const filteredTasksRef = useRef<Task[]>([])
 
   useEffect(()=>{
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && activeTask) setActiveTask(null) }
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && activeTask) { setActiveTask(null); return }
+      if ((e.key === 'j' || e.key === 'k') && activeTask && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
+        e.preventDefault()
+        const tasks = filteredTasksRef.current
+        const idx = tasks.findIndex(t=>t.id===activeTask.id)
+        const next = e.key==='j' ? Math.min(idx+1, tasks.length-1) : Math.max(idx-1, 0)
+        const t = tasks[next]
+        if (t) { setActiveTask(t); setEditing({ text:t.text, level:t.level, assigned_to:t.assigned_to, done:t.done, due_date:t.due_date, project_id:t.project_id }); setConfirmDeleteTask(false) }
+      }
+    }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [activeTask])
@@ -805,6 +816,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
     if (aOver !== bOver) return aOver - bOver
     return levelPriority(a.level) - levelPriority(b.level)
   })
+  filteredTasksRef.current = filtered
 
   const tabCounts: Record<string,number> = {
     todas: data.tasks.filter((t: Task)=>!t.done).length,
@@ -913,6 +925,15 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
             )})}
 
           </div>
+          {activeTask && filtered.length > 1 && (
+            <div className="flex items-center justify-center gap-3 py-2.5">
+              <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>
+                <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.06)',fontFamily:'inherit'}}>J</kbd> siguiente
+                {' · '}
+                <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.06)',fontFamily:'inherit'}}>K</kbd> anterior
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1818,9 +1839,23 @@ function InboxSection({data,showToast,profile}: any) {
   const [filter, setFilter] = useState('Todos')
   const [selected, setSelected] = useState<any>(null)
   const [creatingTask, setCreatingTask] = useState(false)
+  const filteredRef = useRef<any[]>([])
 
   useEffect(()=>{
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && selected) setSelected(null) }
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selected) { setSelected(null); return }
+      if ((e.key === 'j' || e.key === 'k') && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
+        e.preventDefault()
+        const msgs = filteredRef.current
+        setSelected((sel: any) => {
+          const idx = sel ? msgs.findIndex((m: any)=>m.id===sel.id) : -1
+          const next = e.key==='j' ? Math.min(idx+1, msgs.length-1) : Math.max(idx-1, 0)
+          const m = msgs[next]
+          if (m && !m.is_read) data.markRead(m.id)
+          return m || sel
+        })
+      }
+    }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [selected])
@@ -1841,6 +1876,7 @@ function InboxSection({data,showToast,profile}: any) {
     if (filter==='WhatsApp') return m.source==='whatsapp'
     return true
   })
+  filteredRef.current = filtered
 
   const handleSelect = (m: any) => {
     setSelected(m)
@@ -1948,6 +1984,15 @@ function InboxSection({data,showToast,profile}: any) {
               </div>
               <div className="font-syne text-[10px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.15)'}}>{allMsgs.length===0?'SIN CUENTA CONECTADA':'BANDEJA VACÍA'}</div>
               <div className="text-[12px] leading-relaxed" style={{color:'rgba(255,255,255,0.2)'}}>{allMsgs.length===0?'Conecta Gmail en Ajustes para empezar':'No hay mensajes con este filtro'}</div>
+            </div>
+          )}
+          {selected && filtered.length > 1 && (
+            <div className="flex items-center justify-center gap-3 py-2 sticky top-0 z-20" style={{background:'rgba(5,5,16,0.9)',backdropFilter:'blur(8px)',borderBottom:`1px solid ${BORDER}`}}>
+              <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.12)'}}>
+                <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.06)',fontFamily:'inherit'}}>J</kbd> siguiente
+                {' · '}
+                <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.06)',fontFamily:'inherit'}}>K</kbd> anterior
+              </span>
             </div>
           )}
           {groups.map(group=>(
