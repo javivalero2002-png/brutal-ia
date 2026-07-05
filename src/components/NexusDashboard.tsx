@@ -206,6 +206,7 @@ export default function NexusDashboard({ profile }: Props) {
     { title:'Progreso', color:BLU, status:'activo', items:filteredProjects.filter(p=>p.status==='activo') },
     { title:'Urgente', color:RED, status:'urgente', items:filteredProjects.filter(p=>p.status==='urgente') },
     { title:'Revisión', color:'rgba(255,176,32,0.7)', status:'revisión', items:filteredProjects.filter(p=>p.status==='revisión') },
+    { title:'Completado', color:GRN, status:'completado', items:filteredProjects.filter(p=>p.status==='completado') },
   ]
 
   const dragRef = useRef<string|null>(null)
@@ -2227,6 +2228,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
     {id:'activo',label:'Activo'},
     {id:'urgente',label:'Urgente'},
     {id:'revisión',label:'Revisión'},
+    {id:'completado',label:'Completado'},
   ]
   const fmtDate = (s: string) => {
     if (!s || s==='HOY') return s
@@ -2235,10 +2237,10 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
     return d.toLocaleDateString('es-ES',{day:'numeric',month:'short'})
   }
   const statusLabel = (s: string) => {
-    const m: Record<string,string> = {'activo':'ACTIVO','urgente':'URGENTE','plan.':'PLANIF.','revisión':'REVISIÓN'}
+    const m: Record<string,string> = {'activo':'ACTIVO','urgente':'URGENTE','plan.':'PLANIF.','revisión':'REVISIÓN','completado':'COMPLETADO'}
     return m[s] || s.toUpperCase()
   }
-  const statusColor = (s: string) => s==='urgente'?RED:s==='activo'?GRN:s==='revisión'?'rgba(167,139,250,0.9)':BLU
+  const statusColor = (s: string) => s==='urgente'?RED:s==='activo'?GRN:s==='revisión'?'rgba(167,139,250,0.9)':s==='completado'?'rgba(34,197,94,0.5)':BLU
   return (
     <div className="p-8">
       <div className="flex items-end justify-between mb-8">
@@ -2344,7 +2346,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
           <div className="mb-5">
             <div className="font-syne text-[8px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>ESTADO</div>
             <div className="flex gap-1.5 flex-wrap">
-              {[{s:'plan.',l:'Planif.',c:'rgba(255,255,255,0.4)'},{s:'activo',l:'Activo',c:GRN},{s:'urgente',l:'Urgente',c:RED},{s:'revisión',l:'Revisión',c:'rgba(167,139,250,0.9)'}].map(opt=>(
+              {[{s:'plan.',l:'Planif.',c:'rgba(255,255,255,0.4)'},{s:'activo',l:'Activo',c:GRN},{s:'urgente',l:'Urgente',c:RED},{s:'revisión',l:'Revisión',c:'rgba(167,139,250,0.9)'},{s:'completado',l:'Completado',c:'rgba(34,197,94,0.6)'}].map(opt=>(
                 <button key={opt.s} onClick={async()=>{ await data.updateProject(selectedProject.id,{status:opt.s}); showToast(`Estado: ${opt.l}`) }} className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:selectedProject.status===opt.s?opt.c+'18':SURF2,border:`1px solid ${selectedProject.status===opt.s?opt.c+'50':BORDER}`,color:selectedProject.status===opt.s?opt.c:'rgba(255,255,255,0.3)'}}>{opt.l.toUpperCase()}</button>
               ))}
             </div>
@@ -2925,10 +2927,16 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
                 {selectedDay.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())}
               </div>
               {selKey === todayKey && <div className="font-syne text-[8px] font-black mt-1" style={{color:BLU}}>● HOY</div>}
-              <button onClick={()=>{ onSetMf?.({fecha:selKey}); onOpenModal('contenido') }} className="mt-3 w-full flex items-center gap-2 px-3 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(27,95,250,0.08)',border:`1px solid rgba(27,95,250,0.15)`,color:BLU}}>
-                <LucideIcon name="plus" size={11} color={BLU}/>
-                Añadir pieza para este día
-              </button>
+              <div className="mt-3 flex gap-2">
+                <button onClick={()=>{ onSetMf?.({fecha:selKey}); onOpenModal('contenido') }} className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(27,95,250,0.08)',border:`1px solid rgba(27,95,250,0.15)`,color:BLU}}>
+                  <LucideIcon name="film" size={11} color={BLU}/>
+                  Añadir pieza
+                </button>
+                <button onClick={()=>{ onSetMf?.({due_date:selKey}); onOpenModal('tarea') }} className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.4)'}}>
+                  <LucideIcon name="check-square" size={11} color="rgba(255,255,255,0.4)"/>
+                  Nueva tarea
+                </button>
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {selEvents.length === 0 ? (
@@ -3027,6 +3035,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
 // ── MEMORIA SECTION ──────────────────────────────────────────
 function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any) {
   const [memSearch, setMemSearch] = useState('')
+  const [expanded, setExpanded] = useState<string|null>(null)
   const cats = ['Todos','Clientes','Procesos','Decisiones','Aprendizajes']
   const byFilter = memFilter==='Todos' ? data.memoria : data.memoria.filter((m: any)=>m.category===memFilter)
   const filtered = memSearch.trim()
@@ -3060,21 +3069,31 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
         })}
       </div>
       <div className="space-y-2">
-        {filtered.map((m: any)=>(
-          <div key={m.id} className="flex items-start gap-4 p-5 rounded-2xl transition-all group" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:'rgba(27,95,250,0.08)',border:`1px solid rgba(27,95,250,0.12)`}}>
-              <LucideIcon name="database" size={15} color="rgba(27,95,250,0.55)"/>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="font-figtree text-[14px] font-semibold text-white">{m.title}</span>
-                <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-lg" style={{background:SURF2,color:'rgba(255,255,255,0.25)'}}>{m.category}</span>
+        {filtered.map((m: any)=>{
+          const isExp = expanded===m.id
+          const isLong = (m.content||'').length > 120
+          return (
+          <div key={m.id} className="rounded-2xl transition-all group" style={{background:SURFACE,border:`1px solid ${isExp?'rgba(27,95,250,0.2)':BORDER}`}}>
+            <div className="flex items-start gap-4 p-5 cursor-pointer" onClick={()=>setExpanded(isExp?null:m.id)}>
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{background:'rgba(27,95,250,0.08)',border:`1px solid rgba(27,95,250,0.12)`}}>
+                <LucideIcon name="database" size={15} color="rgba(27,95,250,0.55)"/>
               </div>
-              <div className="text-[12px] line-clamp-2 leading-relaxed" style={{color:'rgba(255,255,255,0.42)'}}>{m.content}</div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                  <span className="font-figtree text-[14px] font-semibold text-white">{m.title}</span>
+                  <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-lg" style={{background:SURF2,color:'rgba(255,255,255,0.25)'}}>{m.category}</span>
+                  {m.created_at && <span className="font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.18)'}}>{new Date(m.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})}</span>}
+                </div>
+                <div className={`text-[12px] leading-relaxed ${isExp?'':'line-clamp-2'}`} style={{color:'rgba(255,255,255,0.45)'}}>{m.content}</div>
+                {!isExp && isLong && <div className="font-syne text-[8px] font-black mt-1.5 transition-colors" style={{color:'rgba(27,95,250,0.5)'}}>VER MÁS</div>}
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {isLong && <LucideIcon name={isExp?'chevron-up':'chevron-down'} size={13} color="rgba(255,255,255,0.2)"/>}
+                <button onClick={e=>{e.stopPropagation();data.deleteMemoria(m.id).then(()=>showToast('Eliminado'))}} className="opacity-0 group-hover:opacity-30 hover:!opacity-60 transition-opacity"><LucideIcon name="trash" size={14} color={RED}/></button>
+              </div>
             </div>
-            <button onClick={()=>data.deleteMemoria(m.id).then(()=>showToast('Eliminado'))} className="opacity-0 group-hover:opacity-30 hover:!opacity-60 transition-opacity flex-shrink-0"><LucideIcon name="trash" size={14} color={RED}/></button>
           </div>
-        ))}
+        )})}
         {filtered.length===0 && (
           <div className="py-20 text-center">
             <div className="font-syne text-[11px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.12)'}}>
@@ -3113,7 +3132,10 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
               <LucideIcon name="zap" size={14} color={r.active?BLU:'rgba(255,255,255,0.2)'}/>
             </div>
             <div className="flex-1 min-w-0">
-              <div className="font-figtree text-[14px] font-semibold mb-0.5" style={{color:r.active?'rgba(240,240,248,0.9)':'rgba(240,240,248,0.4)'}}>{r.name}</div>
+              <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                <span className="font-figtree text-[14px] font-semibold" style={{color:r.active?'rgba(240,240,248,0.9)':'rgba(240,240,248,0.4)'}}>{r.name}</span>
+                {r.trigger_count > 0 && <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.6)'}}>{r.trigger_count}× ejecutada</span>}
+              </div>
               {(r.condition_text||r.action_text) && (
                 <div className="flex items-center gap-1.5 text-[11px]" style={{color:'rgba(255,255,255,0.28)'}}>
                   {r.condition_text && <span>{r.condition_text}</span>}
