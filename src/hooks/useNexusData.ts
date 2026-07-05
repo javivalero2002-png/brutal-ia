@@ -166,6 +166,11 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     setInbox(prev => prev.map(m => m.id === id ? { ...m, is_read: true, is_unread: false } : m))
   }, [])
 
+  const markUnread = useCallback(async (id: string) => {
+    await apiFetch('/api/inbox', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, is_read: false }) })
+    setInbox(prev => prev.map(m => m.id === id ? { ...m, is_read: false, is_unread: true } : m))
+  }, [])
+
   const sendInternalMessage = useCallback(async (toUserId: string, subject: string, body: string, fromName: string) => {
     await apiFetch('/api/inbox', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to_user_id: toUserId, subject, body, from_name: fromName }) })
   }, [])
@@ -234,7 +239,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     clients, createClient: createClientRecord, updateClient: updateClientRecord, deleteClient,
     projects, createProject, updateProject, deleteProject,
     tasks, createTask, updateTask, deleteTask, toggleTask,
-    inbox, markRead, sendInternalMessage,
+    inbox, markRead, markUnread, sendInternalMessage,
     memoria, createMemoria, updateMemoria, deleteMemoria,
     agenda, createAgenda, updateAgenda, deleteAgenda,
     reglas, createRegla, updateRegla, deleteRegla,

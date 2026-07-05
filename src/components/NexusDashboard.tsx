@@ -1935,6 +1935,11 @@ function InboxSection({data,showToast,profile}: any) {
               {selected.source==='internal' && (
                 <span className="font-syne text-[7.5px] font-black px-2.5 py-1 rounded-full" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.75)',border:'1px solid rgba(255,176,32,0.15)'}}>MENSAJE INTERNO</span>
               )}
+              {selected.is_read && (
+                <button onClick={()=>{ data.markUnread(selected.id); setSelected((s: any)=>({...s,is_read:false})) }} className="font-syne text-[7.5px] font-black px-3 py-1.5 rounded-xl transition-all hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>
+                  NO LEÍDO
+                </button>
+              )}
               {selected.ai_action&&selected.ai_action!=='Ninguna acción requerida' && (
                 <button onClick={()=>createTaskFromEmail(selected)} disabled={creatingTask} className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest text-white disabled:opacity-40 transition-opacity" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
                   <LucideIcon name="plus" size={10} color="white"/>{creatingTask?'…':'CREAR TAREA'}
@@ -3808,6 +3813,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
             {n:data.tasks?.filter((t:any)=>!t.done).length||0, l:'tareas activas'},
             {n:data.projects?.filter((p:any)=>p.status==='activo').length||0, l:'proyectos'},
             {n:data.inbox?.filter((m:any)=>!m.is_read).length||0, l:'sin leer'},
+            ...(data.chatMessages?.length > 0 ? [{n:data.chatMessages.length, l:'mensajes'}] : []),
           ].map((c,i)=>(
             <span key={i} className="font-syne text-[7.5px] font-black px-2 py-1 rounded-lg" style={{background:SURF2,color:'rgba(255,255,255,0.28)'}}>
               <span style={{color:'rgba(255,255,255,0.75)'}}>{c.n}</span> {c.l}
