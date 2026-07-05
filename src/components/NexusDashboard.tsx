@@ -787,7 +787,7 @@ function ProgressRing({ pct, size=52, stroke=3, color=BLU }: { pct:number, size?
 // ── HOY SECTION ─────────────────────────────────────────────
 // ── TAREAS SECTION ───────────────────────────────────────────
 function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectProject,onSelectClient}: any) {
-  const [filter, setFilter] = useState<'todas'|'urgente'|'high'|'normal'|'hecho'|'hoy'|'semana'|'sin_fecha'>('todas')
+  const [filter, setFilter] = useState<'todas'|'urgente'|'high'|'normal'|'hecho'|'hoy'|'semana'|'sin_fecha'|'atrasadas'>('todas')
   const [assigneeFilter, setAssigneeFilter] = useState('Todos')
   const [taskSort, setTaskSort] = useState<'prioridad'|'fecha'>('prioridad')
   const [taskGroup, setTaskGroup] = useState<'none'|'proyecto'|'prioridad'>('none')
@@ -840,7 +840,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
   const weekEnd = new Date(Date.now() + 7*24*60*60*1000)
   const filtered = data.tasks.filter((t: Task) => {
     const todayKey = new Date().toISOString().split('T')[0]
-    const byStatus = filter === 'todas' ? !t.done : filter === 'hecho' ? t.done : filter === 'hoy' ? (!t.done && !!t.due_date && new Date(t.due_date+'T23:59:59') <= new Date(todayKey+'T23:59:59')) : filter === 'semana' ? (!t.done && !!t.due_date && new Date(t.due_date+'T23:59:59') <= weekEnd) : filter === 'sin_fecha' ? (!t.done && !t.due_date) : (!t.done && t.level === filter)
+    const byStatus = filter === 'todas' ? !t.done : filter === 'hecho' ? t.done : filter === 'hoy' ? (!t.done && !!t.due_date && t.due_date.slice(0,10) === todayKey) : filter === 'atrasadas' ? (!t.done && !!t.due_date && new Date(t.due_date+'T23:59:59') < new Date(todayKey+'T00:00:00')) : filter === 'semana' ? (!t.done && !!t.due_date && new Date(t.due_date+'T23:59:59') <= weekEnd) : filter === 'sin_fecha' ? (!t.done && !t.due_date) : (!t.done && t.level === filter)
     const byAssignee = assigneeFilter === 'Todos' || t.assignee?.name === assigneeFilter
     return byStatus && byAssignee
   }).sort((a: Task, b: Task) => {
@@ -865,16 +865,18 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
     high: data.tasks.filter((t: Task)=>!t.done&&t.level==='high').length,
     normal: data.tasks.filter((t: Task)=>!t.done&&t.level==='normal').length,
     hecho: data.tasks.filter((t: Task)=>t.done).length,
-    hoy: data.tasks.filter((t: Task)=>!t.done&&!!t.due_date&&new Date(t.due_date+'T23:59:59')<=new Date(todayFilterKey+'T23:59:59')).length,
+    atrasadas: data.tasks.filter((t: Task)=>!t.done&&!!t.due_date&&new Date(t.due_date+'T23:59:59')<new Date(todayFilterKey+'T00:00:00')).length,
+    hoy: data.tasks.filter((t: Task)=>!t.done&&!!t.due_date&&t.due_date.slice(0,10)===todayFilterKey).length,
     semana: data.tasks.filter((t: Task)=>!t.done&&!!t.due_date&&new Date(t.due_date+'T23:59:59')<=weekEnd).length,
     sin_fecha: data.tasks.filter((t: Task)=>!t.done&&!t.due_date).length,
   }
-  const tabs: {id: 'todas'|'urgente'|'high'|'normal'|'hecho'|'hoy'|'semana'|'sin_fecha', label: string, color?: string}[] = [
+  const tabs: {id: 'todas'|'urgente'|'high'|'normal'|'hecho'|'hoy'|'semana'|'sin_fecha'|'atrasadas', label: string, color?: string}[] = [
     {id:'todas', label:'Todas'},
     {id:'urgente', label:'Urgente', color:RED},
     {id:'high', label:'Alta', color:'rgba(255,176,32,0.8)'},
     {id:'normal', label:'Normal', color:BLU},
-    {id:'hoy', label:'Hoy', color:'rgba(229,29,42,0.85)'},
+    ...(tabCounts.atrasadas > 0 ? [{id:'atrasadas' as const, label:'Atrasadas', color:RED}] : []),
+    {id:'hoy', label:'Hoy', color:'rgba(255,176,32,0.85)'},
     {id:'semana', label:'Esta sem.', color:'rgba(167,139,250,0.85)'},
     {id:'sin_fecha', label:'Sin fecha', color:'rgba(255,255,255,0.3)'},
     {id:'hecho', label:'Hechas'},
@@ -1864,6 +1866,18 @@ function ReportesSection({data, onNavigate}: any) {
 function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,isOwner,onNavigate}: any) {
   const [quickText, setQuickText] = useState('')
   const [quickCreating, setQuickCreating] = useState(false)
+  const quickInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(()=>{
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'n' && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
+        e.preventDefault()
+        quickInputRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
   const now = new Date()
   const hour = now.getHours()
   const greeting = hour < 13 ? 'Buenos días' : hour < 20 ? 'Buenas tardes' : 'Buenas noches'
@@ -2016,7 +2030,7 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
             </div>
             <div className="flex items-center gap-2.5 px-6 py-2.5" style={{borderBottom:`1px solid ${BORDER}`}}>
               <LucideIcon name="plus-circle" size={12} color="rgba(255,255,255,0.15)"/>
-              <input value={quickText} onChange={e=>setQuickText(e.target.value)} onKeyDown={async e=>{if(e.key==='Enter'&&quickText.trim()&&!quickCreating){setQuickCreating(true);try{await data.createTask({text:quickText.trim(),level:'normal',due_date:new Date().toISOString().split('T')[0],source:'manual'});setQuickText('');showToast('Tarea creada')}catch{showToast('Error')}finally{setQuickCreating(false)}}}} placeholder="Captura rápida… (Enter para crear)" disabled={quickCreating} className="flex-1 bg-transparent text-[12px] outline-none disabled:opacity-40" style={{caretColor:BLU,color:'rgba(255,255,255,0.65)'}}/>
+              <input ref={quickInputRef} value={quickText} onChange={e=>setQuickText(e.target.value)} onKeyDown={async e=>{if(e.key==='Enter'&&quickText.trim()&&!quickCreating){setQuickCreating(true);try{await data.createTask({text:quickText.trim(),level:'normal',due_date:new Date().toISOString().split('T')[0],source:'manual'});setQuickText('');showToast('Tarea creada')}catch{showToast('Error')}finally{setQuickCreating(false)}}}} placeholder="Captura rápida… (Enter para crear)" disabled={quickCreating} className="flex-1 bg-transparent text-[12px] outline-none disabled:opacity-40" style={{caretColor:BLU,color:'rgba(255,255,255,0.65)'}}/>
             </div>
             {myTasks.length === 0 ? (
               <div className="px-6 py-10 text-center">
@@ -3939,6 +3953,18 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
 
   const prevMonth = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear(y=>y-1) } else setViewMonth(m=>m-1) }
   const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear(y=>y+1) } else setViewMonth(m=>m+1) }
+
+  useEffect(()=>{
+    const handler = (e: KeyboardEvent) => {
+      if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.key === 'ArrowLeft') { e.preventDefault(); prevMonth() }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); nextMonth() }
+      else if (e.key === 't') { e.preventDefault(); setViewMonth(today.getMonth()); setViewYear(today.getFullYear()); setSelectedDay(today) }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMonth, viewYear])
 
   // Helpers
   const toKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
