@@ -1475,8 +1475,11 @@ function InboxSection({data,showToast,profile}: any) {
     if (!m.ai_action) return
     setCreatingTask(true)
     try {
-      await data.createTask({ text: m.ai_action, level: m.ai_urgency==='urgent'?'urgent':'high', source:'gmail' })
-      showToast('Tarea creada')
+      const client = m.ai_client && m.ai_client !== 'Desconocido'
+        ? data.clients.find((c: any) => c.name.toLowerCase().includes(m.ai_client.toLowerCase()) || m.ai_client.toLowerCase().includes(c.name.toLowerCase().split(' ')[0]))
+        : null
+      await data.createTask({ text: m.ai_action, level: m.ai_urgency==='urgent'?'urgent':'high', source:'gmail', client_id: client?.id })
+      showToast('Tarea creada' + (client ? ` · ${client.name}` : ''))
     } catch { showToast('Error') }
     finally { setCreatingTask(false) }
   }
@@ -1856,7 +1859,7 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={()=>{ if(!aiAdvice&&!aiLoading) loadAiAdvice(selected.id); setAiAdvice(null); loadAiAdvice(selected.id) }} disabled={aiLoading} className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-50 transition-all" style={{background:`linear-gradient(135deg,rgba(139,92,246,0.3),rgba(27,95,250,0.2))`,border:`1px solid rgba(139,92,246,0.35)`}}>
+            <button onClick={()=>{ setAiAdvice(null); loadAiAdvice(selected.id) }} disabled={aiLoading} className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-50 transition-all" style={{background:`linear-gradient(135deg,rgba(139,92,246,0.3),rgba(27,95,250,0.2))`,border:`1px solid rgba(139,92,246,0.35)`}}>
               <LucideIcon name="zap" size={11} color="#A78BFA"/>{aiLoading?'Analizando…':'IA ESTRATÉGICA'}
             </button>
             {isOwner && (
