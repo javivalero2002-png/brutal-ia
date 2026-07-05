@@ -187,6 +187,11 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     setMemoria(prev => [created, ...prev])
   }, [])
 
+  const updateMemoria = useCallback(async (id: string, updates: Partial<MemoriaEntry>) => {
+    const updated = await apiFetch(`/api/memoria/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
+    setMemoria(prev => prev.map(m => m.id === id ? updated : m))
+  }, [])
+
   const deleteMemoria = useCallback(async (id: string) => {
     await apiFetch(`/api/memoria/${id}`, { method: 'DELETE' })
     setMemoria(prev => prev.filter(m => m.id !== id))
@@ -230,7 +235,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     projects, createProject, updateProject, deleteProject,
     tasks, createTask, updateTask, deleteTask, toggleTask,
     inbox, markRead, sendInternalMessage,
-    memoria, createMemoria, deleteMemoria,
+    memoria, createMemoria, updateMemoria, deleteMemoria,
     agenda, createAgenda, updateAgenda, deleteAgenda,
     reglas, createRegla, updateRegla, deleteRegla,
     chatMessages, sendChatMessage, clearChat,

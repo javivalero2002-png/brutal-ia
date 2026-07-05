@@ -83,7 +83,7 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
               </div>
               <h1 className="text-white text-2xl font-black leading-snug" style={{ letterSpacing: '-0.02em' }}>{item.title}</h1>
               {item.publish_date && (
-                <p className="mt-2 text-sm" style={{ color: 'rgba(255,255,255,0.35)' }}>Fecha de publicación: {item.publish_date}</p>
+                <p className="mt-2 text-sm" style={{ color: 'rgba(255,255,255,0.35)' }}>Publicación: {new Date(item.publish_date+'T12:00:00').toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p>
               )}
             </div>
 
