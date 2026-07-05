@@ -758,7 +758,10 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                   <div className="font-figtree text-[14px] font-semibold leading-snug mb-1.5" style={{color:t.done?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.88)',textDecoration:t.done?'line-through':'none'}}>{t.text}</div>
                   <div className="flex items-center gap-2 flex-wrap">
                     {(t.client as any)?.name && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:(t.client as any).color+'18',color:(t.client as any).color+'cc'}}>{(t.client as any).name}</span>}
-                    {t.due_date && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.35)'}}>{new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
+                    {t.due_date && (() => {
+                      const overdue = !t.done && new Date(t.due_date+'T23:59:59') < new Date()
+                      return <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:overdue?'rgba(229,29,42,0.1)':'rgba(255,255,255,0.05)',color:overdue?RED:'rgba(255,255,255,0.35)'}}>{overdue?'● ':''}{new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>
+                    })()}
                     {!t.done && t.level==='urgent' && <span className="font-syne text-[8px] font-black" style={{color:RED}}>● URGENTE</span>}
                     {t.source==='gmail' && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.55)'}}>GMAIL</span>}
                     {t.source==='whatsapp' && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:'rgba(37,211,102,0.06)',color:'rgba(37,211,102,0.55)'}}>WA</span>}
@@ -1234,7 +1237,7 @@ function ReportesSection({data}: any) {
           </div>
           <div className="pt-4 border-t border-white/6">
             <div className="text-xs text-white/25 mb-2">Clientes con más proyectos</div>
-            {clients.slice(0,3).map((c: Client,i: number)=>{
+            {[...clients].sort((a,b)=>projects.filter((p:Project)=>p.client_id===b.id).length-projects.filter((p:Project)=>p.client_id===a.id).length).slice(0,3).map((c: Client,i: number)=>{
               const n = projects.filter((p: Project)=>p.client_id===c.id).length
               return (
                 <div key={i} className="flex items-center gap-2 py-1.5">
@@ -1324,7 +1327,10 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                   <div className="font-figtree text-[14px] font-semibold leading-snug mb-1.5" style={{color:'rgba(255,255,255,0.88)'}}>{t.text}</div>
                   <div className="flex items-center gap-2 flex-wrap">
                     {t.client && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:(t.client as any).color+'18',color:(t.client as any).color+'cc'}}>{(t.client as any).name}</span>}
-                    {t.due_date && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.35)'}}>{new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
+                    {t.due_date && (() => {
+                      const overdue = new Date(t.due_date+'T23:59:59') < new Date()
+                      return <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:overdue?'rgba(229,29,42,0.1)':'rgba(255,255,255,0.05)',color:overdue?RED:'rgba(255,255,255,0.35)'}}>{overdue?'● ':''}{new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>
+                    })()}
                     {t.level==='urgent' && <span className="font-syne text-[8px] font-black" style={{color:RED}}>● URGENTE</span>}
                   </div>
                 </div>
@@ -1543,9 +1549,14 @@ function InboxSection({data,showToast,profile}: any) {
               <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>SEÑALES</div>
               <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.04em'}}>Inbox</h1>
             </div>
-            <button onClick={()=>data.syncGmail()} disabled={data.syncing} className="flex items-center gap-2 px-3.5 py-2 rounded-xl font-syne text-[8.5px] font-black disabled:opacity-40 transition-all" style={{background:SURF2,color:data.syncing?BLU:data.syncResult?.ok?GRN:'rgba(240,240,248,0.35)',border:`1px solid ${BORDER}`}}>
-              <LucideIcon name="refresh-cw" size={11} color={data.syncing?BLU:'rgba(255,255,255,0.25)'}/>{data.syncing?'Sync…':'Sync'}
-            </button>
+            <div className="flex items-center gap-2">
+              {data.inbox.filter((m: any)=>!m.is_read).length > 0 && (
+                <button onClick={()=>{ const unread = data.inbox.filter((m: any)=>!m.is_read); Promise.all(unread.map((m: any)=>data.markRead(m.id))); showToast('Todo marcado como leído') }} className="font-syne text-[8px] font-black px-2.5 py-2 rounded-xl transition-all" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}} onMouseEnter={e=>(e.currentTarget.style.color='rgba(255,255,255,0.6)')} onMouseLeave={e=>(e.currentTarget.style.color='rgba(255,255,255,0.3)')}>TODO LEÍDO</button>
+              )}
+              <button onClick={()=>data.syncGmail()} disabled={data.syncing} className="flex items-center gap-2 px-3.5 py-2 rounded-xl font-syne text-[8.5px] font-black disabled:opacity-40 transition-all" style={{background:SURF2,color:data.syncing?BLU:data.syncResult?.ok?GRN:'rgba(240,240,248,0.35)',border:`1px solid ${BORDER}`}}>
+                <LucideIcon name="refresh-cw" size={11} color={data.syncing?BLU:'rgba(255,255,255,0.25)'}/>{data.syncing?'Sync…':'Sync'}
+              </button>
+            </div>
           </div>
           {/* Stats row */}
           <div className="flex gap-2">
