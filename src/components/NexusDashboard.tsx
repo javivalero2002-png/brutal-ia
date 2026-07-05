@@ -3146,7 +3146,7 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                             draggable
                             onDragStart={e=>e.dataTransfer.setData('text/plain',item.id)}
                             onClick={()=>openItem(item)}
-                            className="rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 hover:-translate-y-0.5"
+                            className="group rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 hover:-translate-y-0.5"
                             style={{
                               background: isActive ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.035)',
                               border: `1px solid ${isActive ? ipc+'40' : 'rgba(255,255,255,0.08)'}`,
@@ -3180,6 +3180,17 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                                   const dSoon = !dOver && !isToday2 && new Date(item.publish_date+'T23:59:59')<new Date(Date.now()+3*24*3600*1000)
                                   const label = isToday2 ? (item.publish_time?`HOY ${item.publish_time.slice(0,5)}`:'HOY') : new Date(item.publish_date+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})
                                   return <span className="font-syne text-[8px] ml-auto flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:isToday2?`rgba(255,176,32,0.18)`:dOver?`${RED}15`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:isToday2?'rgba(255,176,32,0.95)':dOver?RED:dSoon?'rgba(255,176,32,0.8)':'rgba(255,255,255,0.22)'}}>{label}</span>
+                                })()}
+                                {(()=>{
+                                  const nextMap: Record<string,string> = {borrador:'pendiente',pendiente:'listo',listo:'publicado'}
+                                  const nextStatus = nextMap[item.status]
+                                  const nextLabel: Record<string,string> = {pendiente:'En prod.',listo:'Listo',publicado:'Publicado'}
+                                  if (!nextStatus) return null
+                                  return (
+                                    <button onClick={e=>{e.stopPropagation();changeStatus(item, nextStatus)}} className="ml-auto flex-shrink-0 opacity-0 group-hover:opacity-100 font-syne text-[7px] font-black px-2 py-1 rounded-lg transition-all" style={{background:col.color+'18',color:col.color+'cc',border:`1px solid ${col.color}30`}}>
+                                      → {nextLabel[nextStatus]}
+                                    </button>
+                                  )
                                 })()}
                               </div>
                             </div>
@@ -3685,6 +3696,18 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
   const [savingEdit, setSavingEdit] = useState(false)
   const [confirmDeleteMemId, setConfirmDeleteMemId] = useState<string|null>(null)
   const [copiedId, setCopiedId] = useState<string|null>(null)
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(()=>{
+    try { return new Set(JSON.parse(localStorage.getItem('pinned_memoria')||'[]')) } catch { return new Set() }
+  })
+
+  const togglePin = (id: string) => {
+    setPinnedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      try { localStorage.setItem('pinned_memoria', JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && editing) setEditing(null) }
@@ -3694,9 +3717,9 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
   const cats = ['Todos','Clientes','Procesos','Decisiones','Aprendizajes','General']
   const catColor: Record<string,string> = { Clientes:BLU, Procesos:'rgba(255,176,32,0.9)', Decisiones:RED, Aprendizajes:GRN, General:'rgba(167,139,250,0.8)' }
   const byFilter = memFilter==='Todos' ? data.memoria : data.memoria.filter((m: any)=>m.category===memFilter)
-  const filtered = memSearch.trim()
+  const filtered = (memSearch.trim()
     ? byFilter.filter((m: any)=>(m.title+' '+m.content).toLowerCase().includes(memSearch.toLowerCase()))
-    : byFilter
+    : byFilter).sort((a: any, b: any) => (pinnedIds.has(b.id)?1:0) - (pinnedIds.has(a.id)?1:0))
   return (
     <div className="p-8 max-w-[900px] mx-auto">
       <div className="flex items-end justify-between mb-6">
@@ -3741,12 +3764,14 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
                   <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-lg" style={{background:(catColor[m.category]||'rgba(255,255,255,0.3)')+'18',color:(catColor[m.category]||'rgba(255,255,255,0.3)')+'99'}}>{m.category}</span>
                   {m.created_at && <span className="font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.18)'}}>{new Date(m.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})}</span>}
                   {m.created_at && Date.now()-new Date(m.created_at).getTime() < 7*24*60*60*1000 && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(34,197,94,0.12)',color:'rgba(34,197,94,0.65)'}}>NUEVO</span>}
+                  {pinnedIds.has(m.id) && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.7)'}}>FIJADA</span>}
                 </div>
                 <div className={`text-[12px] leading-relaxed ${isExp?'':'line-clamp-2'}`} style={{color:'rgba(255,255,255,0.45)'}}>{m.content}</div>
                 {!isExp && isLong && <div className="font-syne text-[8px] font-black mt-1.5 transition-colors" style={{color:'rgba(27,95,250,0.5)'}}>VER MÁS</div>}
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {isLong && <LucideIcon name={isExp?'chevron-up':'chevron-down'} size={13} color="rgba(255,255,255,0.2)"/>}
+                <button onClick={e=>{e.stopPropagation();togglePin(m.id)}} className={`transition-opacity ${pinnedIds.has(m.id)?'opacity-60':'opacity-0 group-hover:opacity-30 hover:!opacity-60'}`} title={pinnedIds.has(m.id)?'Desfijar':'Fijar arriba'}><LucideIcon name="pin" size={12} color={pinnedIds.has(m.id)?'rgba(255,176,32,0.9)':'rgba(255,255,255,0.6)'}/></button>
                 <button onClick={e=>{e.stopPropagation();navigator.clipboard.writeText(`# ${m.title}\n\n${m.content||''}`).then(()=>{setCopiedId(m.id);setTimeout(()=>setCopiedId(null),2000)})}} className="opacity-0 group-hover:opacity-30 hover:!opacity-60 transition-opacity"><LucideIcon name={copiedId===m.id?'check':'copy'} size={12} color={copiedId===m.id?GRN:BLU}/></button>
                 <button onClick={e=>{e.stopPropagation();if(editing===m.id){setEditing(null)}else{setEditing(m.id);setEditTitle(m.title);setEditContent(m.content||'');setEditCategory(m.category||'General');setExpanded(m.id)}}} className="opacity-0 group-hover:opacity-30 hover:!opacity-60 transition-opacity"><LucideIcon name="pencil" size={13} color={BLU}/></button>
                 {confirmDeleteMemId === m.id
