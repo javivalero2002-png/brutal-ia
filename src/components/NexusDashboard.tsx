@@ -2999,9 +2999,18 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 <div className="flex items-center gap-2 flex-wrap mt-0.5">
                   <span className="text-[12px]" style={{color:'rgba(255,255,255,0.3)'}}>{selectedProject.client?.name||'Sin cliente'}</span>
                   {selectedProject.deadline&&selectedProject.deadline!=='TBD'&&(()=>{
-                    const dOver = new Date(selectedProject.deadline+'T23:59:59')<new Date()
-                    const dSoon = !dOver && new Date(selectedProject.deadline+'T23:59:59')<new Date(Date.now()+7*24*3600*1000)
-                    return <span className="font-syne text-[8px] font-black px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'rgba(255,255,255,0.04)',color:dOver?RED:dSoon?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.3)'}}>{dOver&&'⚠ '}Deadline {fmtDate(selectedProject.deadline)}</span>
+                    const dl = new Date(selectedProject.deadline+'T23:59:59')
+                    const dOver = dl < new Date()
+                    const dSoon = !dOver && dl < new Date(Date.now()+7*24*3600*1000)
+                    const diffMs = dl.getTime() - Date.now()
+                    const diffDays = Math.round(Math.abs(diffMs)/(1000*60*60*24))
+                    const daysLabel = dOver ? `hace ${diffDays}d` : diffDays === 0 ? 'HOY' : `en ${diffDays}d`
+                    return (
+                      <span className="flex items-center gap-1.5 font-syne text-[8px] font-black px-2 py-1 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'rgba(255,255,255,0.04)',color:dOver?RED:dSoon?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.3)'}}>
+                        {dOver&&'⚠ '}Deadline {fmtDate(selectedProject.deadline)}
+                        <span className="font-black" style={{color:dOver?RED+'cc':dSoon?'rgba(255,176,32,0.7)':'rgba(255,255,255,0.2)',opacity:0.9}}>· {daysLabel}</span>
+                      </span>
+                    )
                   })()}
                 </div>
               </div>
@@ -3859,10 +3868,15 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
   }
 
   useEffect(()=>{
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && editing) setEditing(null) }
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && editing) { setEditing(null); return }
+      if (e.key === 'n' && !editing && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
+        e.preventDefault(); onOpenModal('memoria')
+      }
+    }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [editing])
+  }, [editing, onOpenModal])
   const cats = ['Todos','Clientes','Procesos','Decisiones','Aprendizajes','General']
   const catColor: Record<string,string> = { Clientes:BLU, Procesos:'rgba(255,176,32,0.9)', Decisiones:RED, Aprendizajes:GRN, General:'rgba(167,139,250,0.8)' }
   const byFilter = memFilter==='Todos' ? data.memoria : data.memoria.filter((m: any)=>m.category===memFilter)
@@ -4485,6 +4499,7 @@ function AjustesSection({profile,data,showToast}: any) {
               {key:'G·E', label:'Equipo'},
               {key:'G·R', label:'Reportes'},
               {key:'G·N', label:'Chat IA'},
+              {key:'N', label:'Nueva entrada (Memoria)'},
               {key:'Esc', label:'Cerrar modal / panel'},
               {key:'Enter', label:'Enviar en Chat'},
             ].map((s,i)=>(
