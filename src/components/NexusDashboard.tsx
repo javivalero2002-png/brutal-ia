@@ -761,7 +761,7 @@ function ProgressRing({ pct, size=52, stroke=3, color=BLU }: { pct:number, size?
 // ── HOY SECTION ─────────────────────────────────────────────
 // ── TAREAS SECTION ───────────────────────────────────────────
 function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
-  const [filter, setFilter] = useState<'todas'|'urgente'|'high'|'normal'|'hecho'>('todas')
+  const [filter, setFilter] = useState<'todas'|'urgente'|'high'|'normal'|'hecho'|'semana'>('todas')
   const [assigneeFilter, setAssigneeFilter] = useState('Todos')
   const [activeTask, setActiveTask] = useState<Task|null>(null)
   const [editing, setEditing] = useState<Partial<Task>>({})
@@ -793,8 +793,9 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
   }
 
   const levelPriority = (l: string) => l==='urgent'?0:l==='high'?1:2
+  const weekEnd = new Date(Date.now() + 7*24*60*60*1000)
   const filtered = data.tasks.filter((t: Task) => {
-    const byStatus = filter === 'todas' ? !t.done : filter === 'hecho' ? t.done : (!t.done && t.level === filter)
+    const byStatus = filter === 'todas' ? !t.done : filter === 'hecho' ? t.done : filter === 'semana' ? (!t.done && !!t.due_date && new Date(t.due_date+'T23:59:59') <= weekEnd) : (!t.done && t.level === filter)
     const byAssignee = assigneeFilter === 'Todos' || t.assignee?.name === assigneeFilter
     return byStatus && byAssignee
   }).sort((a: Task, b: Task) => {
@@ -811,12 +812,14 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
     high: data.tasks.filter((t: Task)=>!t.done&&t.level==='high').length,
     normal: data.tasks.filter((t: Task)=>!t.done&&t.level==='normal').length,
     hecho: data.tasks.filter((t: Task)=>t.done).length,
+    semana: data.tasks.filter((t: Task)=>!t.done&&!!t.due_date&&new Date(t.due_date+'T23:59:59')<=weekEnd).length,
   }
-  const tabs: {id: 'todas'|'urgente'|'high'|'normal'|'hecho', label: string, color?: string}[] = [
+  const tabs: {id: 'todas'|'urgente'|'high'|'normal'|'hecho'|'semana', label: string, color?: string}[] = [
     {id:'todas', label:'Todas'},
     {id:'urgente', label:'Urgente', color:RED},
     {id:'high', label:'Alta', color:'rgba(255,176,32,0.8)'},
     {id:'normal', label:'Normal', color:BLU},
+    {id:'semana', label:'Esta sem.', color:'rgba(167,139,250,0.85)'},
     {id:'hecho', label:'Hechas'},
   ]
 
@@ -1442,6 +1445,41 @@ function ReportesSection({data, onNavigate}: any) {
           </div>
         </div>
       )}
+
+      {/* Upcoming deadlines */}
+      {(()=>{
+        const horizon = new Date(Date.now()+30*24*60*60*1000)
+        const upcoming = projects
+          .filter((p:Project)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&new Date(p.deadline+'T23:59:59')<=horizon)
+          .sort((a:Project,b:Project)=>new Date(a.deadline+'T23:59:59').getTime()-new Date(b.deadline+'T23:59:59').getTime())
+          .slice(0,8)
+        if (!upcoming.length) return null
+        return (
+          <div className="mt-4 rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+            <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Próximos vencimientos</div>
+            <div className="space-y-1">
+              {upcoming.map((p:Project,i:number)=>{
+                const daysLeft = Math.ceil((new Date(p.deadline+'T23:59:59').getTime()-Date.now())/86400000)
+                const isOver = daysLeft < 0
+                const isSoon = !isOver && daysLeft <= 7
+                return (
+                  <div key={p.id} className="flex items-center gap-3 py-2" style={{borderBottom:i<upcoming.length-1?'1px solid rgba(255,255,255,0.04)':'none'}}>
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:p.color||BLU}}/>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-[12px] text-white/70 truncate block">{p.name}</span>
+                      {(p as any).client?.name && <span className="text-[10px] text-white/30">{(p as any).client.name}</span>}
+                    </div>
+                    <span className="font-syne text-[9px] font-black flex-shrink-0 mr-2" style={{color:isOver?RED:isSoon?'rgba(255,176,32,0.9)':'rgba(255,255,255,0.3)'}}>
+                      {isOver?`⚠ hace ${Math.abs(daysLeft)}d`:daysLeft===0?'HOY':`${daysLeft}d`}
+                    </span>
+                    <span className="font-syne text-[8px] text-white/25 flex-shrink-0">{new Date(p.deadline+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -3526,6 +3564,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
   const [editCategory, setEditCategory] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
   const [confirmDeleteMemId, setConfirmDeleteMemId] = useState<string|null>(null)
+  const [copiedId, setCopiedId] = useState<string|null>(null)
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && editing) setEditing(null) }
@@ -3581,12 +3620,14 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
                   <span className="font-figtree text-[14px] font-semibold text-white">{m.title}</span>
                   <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-lg" style={{background:(catColor[m.category]||'rgba(255,255,255,0.3)')+'18',color:(catColor[m.category]||'rgba(255,255,255,0.3)')+'99'}}>{m.category}</span>
                   {m.created_at && <span className="font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.18)'}}>{new Date(m.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})}</span>}
+                  {m.created_at && Date.now()-new Date(m.created_at).getTime() < 7*24*60*60*1000 && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(34,197,94,0.12)',color:'rgba(34,197,94,0.65)'}}>NUEVO</span>}
                 </div>
                 <div className={`text-[12px] leading-relaxed ${isExp?'':'line-clamp-2'}`} style={{color:'rgba(255,255,255,0.45)'}}>{m.content}</div>
                 {!isExp && isLong && <div className="font-syne text-[8px] font-black mt-1.5 transition-colors" style={{color:'rgba(27,95,250,0.5)'}}>VER MÁS</div>}
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {isLong && <LucideIcon name={isExp?'chevron-up':'chevron-down'} size={13} color="rgba(255,255,255,0.2)"/>}
+                <button onClick={e=>{e.stopPropagation();navigator.clipboard.writeText(`# ${m.title}\n\n${m.content||''}`).then(()=>{setCopiedId(m.id);setTimeout(()=>setCopiedId(null),2000)})}} className="opacity-0 group-hover:opacity-30 hover:!opacity-60 transition-opacity"><LucideIcon name={copiedId===m.id?'check':'copy'} size={12} color={copiedId===m.id?GRN:BLU}/></button>
                 <button onClick={e=>{e.stopPropagation();if(editing===m.id){setEditing(null)}else{setEditing(m.id);setEditTitle(m.title);setEditContent(m.content||'');setEditCategory(m.category||'General');setExpanded(m.id)}}} className="opacity-0 group-hover:opacity-30 hover:!opacity-60 transition-opacity"><LucideIcon name="pencil" size={13} color={BLU}/></button>
                 {confirmDeleteMemId === m.id
                   ? <div className="flex items-center gap-1" onClick={e=>e.stopPropagation()}>
