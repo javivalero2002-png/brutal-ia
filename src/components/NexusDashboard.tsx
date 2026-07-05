@@ -166,6 +166,7 @@ export default function NexusDashboard({ profile }: Props) {
   const typeColor: Record<string,string> = { Cliente:BLU, Proyecto:'rgba(255,176,32,0.9)', Tarea:RED, Memoria:'rgba(240,240,248,0.4)', Contenido:'#C13584', Inbox:'rgba(100,180,255,0.7)', Equipo:GRN }
 
   const ACCENT_COLORS = ['#1B5FFA','#E51D2A','#22c55e','#F97316','#A78BFA','#06B6D4','#EC4899','#84CC16','#F59E0B','#10B981']
+  const overdueProjs = data.projects.filter((p: Project) => p.deadline && p.deadline !== 'TBD' && p.status !== 'completado' && new Date(p.deadline+'T23:59:59') < new Date())
 
   const saveModal = async () => {
     setModalSaving(true)
@@ -306,8 +307,8 @@ export default function NexusDashboard({ profile }: Props) {
               {/* Notification bell */}
               <div className="relative">
                 <button onClick={e=>{e.stopPropagation();setNotifOpen(o=>!o)}} className="w-7 h-7 rounded-xl flex items-center justify-center relative transition-all" style={{background:notifOpen?'rgba(27,95,250,0.15)':'transparent'}}>
-                  <LucideIcon name="bell" size={13} color={notifData.total>0?BLU:'rgba(255,255,255,0.2)'}/>
-                  {notifData.total>0 && <div className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center pointer-events-none" style={{background:RED,boxShadow:`0 0 6px ${RED}80`}}><span className="font-syne text-[7px] font-black text-white leading-none">{notifData.total>9?'9+':notifData.total}</span></div>}
+                  <LucideIcon name="bell" size={13} color={(notifData.total+overdueProjs.length)>0?BLU:'rgba(255,255,255,0.2)'}/>
+                  {(notifData.total+overdueProjs.length)>0 && <div className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center pointer-events-none" style={{background:RED,boxShadow:`0 0 6px ${RED}80`}}><span className="font-syne text-[7px] font-black text-white leading-none">{(notifData.total+overdueProjs.length)>9?'9+':(notifData.total+overdueProjs.length)}</span></div>}
                 </button>
                 {notifOpen && (
                   <div onClick={e=>e.stopPropagation()} className="rounded-2xl overflow-hidden z-[999]" style={{position:'fixed',top:'62px',left:'12px',width:'268px',background:'#0C0C1C',border:`1px solid rgba(255,255,255,0.1)`,boxShadow:'0 24px 64px rgba(0,0,0,0.8),0 0 0 1px rgba(255,255,255,0.04)'}}>
@@ -317,9 +318,9 @@ export default function NexusDashboard({ profile }: Props) {
                         <LucideIcon name="bell" size={11} color={BLU}/>
                         <span className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.5)'}}>NOTIFICACIONES</span>
                       </div>
-                      {notifData.total > 0 && <span className="font-figtree text-[11px] font-black" style={{color:RED}}>{notifData.total}</span>}
+                      {(notifData.total+overdueProjs.length) > 0 && <span className="font-figtree text-[11px] font-black" style={{color:RED}}>{notifData.total+overdueProjs.length}</span>}
                     </div>
-                    {notifData.total===0 ? (
+                    {(notifData.total+overdueProjs.length)===0 ? (
                       <div className="px-4 py-6 text-center">
                         <div className="font-syne text-[9px] font-black tracking-widest mb-1" style={{color:'rgba(255,255,255,0.18)'}}>SIN NOTIFICACIONES</div>
                         <div className="text-[11px]" style={{color:'rgba(255,255,255,0.2)'}}>Todo está al día</div>
@@ -364,9 +365,33 @@ export default function NexusDashboard({ profile }: Props) {
                             </div>
                           </button>
                         ))}
+                        {overdueProjs.length > 0 && (
+                          <div className="px-4 pt-3 pb-1">
+                            <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,176,32,0.6)'}}>PROYECTOS ATRASADOS</span>
+                          </div>
+                        )}
+                        {overdueProjs.slice(0,3).map((p:any,i:number)=>{
+                          const daysOver = Math.round((Date.now()-new Date(p.deadline+'T23:59:59').getTime())/86400000)
+                          return (
+                            <button key={i} onClick={()=>{setNotifOpen(false);setSection('proyectos')}} className="w-full text-left px-4 py-2.5 transition-colors" style={{borderBottom:i<Math.min(overdueProjs.length,3)-1?`1px solid rgba(255,255,255,0.04)`:'none'}} onMouseEnter={e=>(e.currentTarget.style.background='rgba(255,176,32,0.05)')} onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center" style={{background:'rgba(255,176,32,0.12)',border:'1px solid rgba(255,176,32,0.2)'}}>
+                                  <div className="w-1.5 h-1.5 rounded-full" style={{background:'rgba(255,176,32,0.9)'}}/>
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-[10.5px] truncate" style={{color:'rgba(255,255,255,0.75)'}}>{p.name}</div>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <div className="font-syne text-[8px] font-black" style={{color:'rgba(255,176,32,0.7)'}}>ATRASADO</div>
+                                    <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.9)'}}>{daysOver}d</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          )
+                        })}
                       </div>
                     )}
-                    {notifData.total > 0 && (
+                    {(notifData.total+overdueProjs.length) > 0 && (
                       <div className="px-4 py-2.5" style={{borderTop:`1px solid rgba(255,255,255,0.06)`}}>
                         <button onClick={()=>{setNotifOpen(false);setSection('inbox')}} className="w-full text-center font-syne text-[8.5px] font-black tracking-wide transition-opacity hover:opacity-60" style={{color:BLU}}>VER TODO EL INBOX</button>
                       </div>
@@ -3789,7 +3814,10 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
                   return (
                     <div key={i} onClick={()=>setSelectedDay(d)} className="rounded-2xl overflow-hidden cursor-pointer transition-all hover:bg-white/2" style={{background:isSel?'rgba(27,95,250,0.08)':'transparent',border:`1px solid ${isSel?'rgba(27,95,250,0.25)':isToday?'rgba(27,95,250,0.12)':BORDER}`}}>
                       <div className="px-3 py-3" style={{borderBottom:`1px solid ${BORDER}`}}>
-                        <div className="font-syne text-[8px] font-black tracking-widest mb-0.5" style={{color:'rgba(255,255,255,0.3)'}}>{DAYS_ES[i]}</div>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <div className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.3)'}}>{DAYS_ES[i]}</div>
+                          {evs.length > 0 && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full" style={{background:isToday?`${BLU}20`:'rgba(255,255,255,0.06)',color:isToday?BLU:'rgba(255,255,255,0.3)'}}>{evs.length}</span>}
+                        </div>
                         <div className="font-figtree text-[22px] font-black" style={{color:isToday?BLU:'rgba(255,255,255,0.7)',letterSpacing:'-0.02em'}}>{d.getDate()}</div>
                       </div>
                       <div className="p-2 min-h-[160px] space-y-1">
@@ -3933,6 +3961,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
                     <div key={i} className="flex items-center gap-2.5 py-2.5" style={{borderBottom:i<Math.min(u.events.length,3)-1?`1px solid ${BORDER}`:'none'}}>
                       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:e.color}}/>
                       <span className="text-[12px] flex-1 truncate" style={{color:'rgba(255,255,255,0.55)'}}>{e.label}</span>
+                      {e.type==='gcal'&&e.raw?.start&&e.raw.start.includes('T') && <span className="font-syne text-[8px] font-black" style={{color:'rgba(255,255,255,0.25)'}}>{formatTime(e.raw.start)}</span>}
                       <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:e.color+'15',color:e.color+'cc'}}>{e.type==='gcal'?'CAL':e.type==='content'?'CTN':e.type==='project'?'PRY':'TSK'}</span>
                     </div>
                   ))}
