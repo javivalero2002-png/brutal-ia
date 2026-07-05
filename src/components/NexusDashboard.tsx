@@ -344,9 +344,11 @@ export default function NexusDashboard({ profile }: Props) {
           {navItem('clientes','Clientes','users')}
           {navItem('proyectos','Proyectos','folder-open')}
           {navItem('contenido','Contenido','film')}
+          {navItem('automatizaciones','Automatizaciones','zap')}
 
           {navLabel('ANÁLISIS')}
           {navItem('memoria','Memoria','database')}
+          {navItem('reportes','Reportes','printer')}
 
           {navLabel('IA')}
           {navItem('chat','Brutal.IA','message-square')}
@@ -2813,7 +2815,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
                                     </span>
                                   )}
                                   {e.raw?.htmlLink && (
-                                    <a href={e.raw.htmlLink} target="_blank" rel="noopener noreferrer" className="font-syne text-[8px] font-black" style={{color:'#a78bfa'}}>VER →</a>
+                                    <a href={e.raw.htmlLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 font-syne text-[8px] font-black" style={{color:'#a78bfa'}}>VER<LucideIcon name="external-link" size={9} color="#a78bfa"/></a>
                                   )}
                                 </div>
                               )}
