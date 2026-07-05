@@ -1107,11 +1107,13 @@ function ReportesSection({data}: any) {
   const urgentTasks = tasks.filter(t=>!t.done&&t.level==='urgent').length
   const completionRate = totalTasks > 0 ? Math.round((doneTasks/totalTasks)*100) : 0
 
+  const activeClients = clients.filter(c=>c.status==='Activo')
   const projectsByStatus = [
     {label:'En progreso', count:projects.filter(p=>p.status==='activo').length, color:BLU},
     {label:'Urgente', count:projects.filter(p=>p.status==='urgente').length, color:RED},
     {label:'Revisión', count:projects.filter(p=>p.status==='revisión').length, color:'rgba(255,176,32,0.8)'},
     {label:'Planificación', count:projects.filter(p=>p.status==='plan.').length, color:'rgba(255,255,255,0.3)'},
+    {label:'Completado', count:projects.filter(p=>p.status==='completado').length, color:'rgba(34,197,94,0.5)'},
   ]
 
   const tasksByMember = data.team.map((m: Profile) => ({
@@ -1156,7 +1158,7 @@ function ReportesSection({data}: any) {
           {v:`${completionRate}%`, l:'Tareas completadas', accent:completionRate>60?'#22c55e':BLU},
           {v:urgentTasks+'', l:'Urgentes pendientes', accent:urgentTasks>0?RED:BLU},
           {v:projects.length+'', l:'Proyectos totales', accent:null},
-          {v:clients.length+'', l:'Clientes activos', accent:null},
+          {v:activeClients.length+'', l:'Clientes activos', accent:null},
         ].map((k,i)=>(
           <div key={i} className="rounded-xl p-4" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)',borderTop:`2px solid ${k.accent||'rgba(255,255,255,0.1)'}`}}>
             <div className="font-syne text-4xl font-black mb-1" style={{color:k.accent||'#F0F0F8'}}>{k.v}</div>
@@ -1271,8 +1273,9 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
   const hour = now.getHours()
   const greeting = hour < 13 ? 'Buenos días' : hour < 20 ? 'Buenas tardes' : 'Buenas noches'
   const dateStr = now.toLocaleDateString('es-ES', { weekday:'long', day:'numeric', month:'long' })
-  const myTasks = data.tasks.filter((t:Task) => !t.done && (t.assigned_to === profile.id || (!t.assigned_to && t.created_by === profile.id)))
-  const otherTasks = isOwner ? data.tasks.filter((t:Task) => !t.done && t.assigned_to && t.assigned_to !== profile.id) : []
+  const taskUrgencyOrder = (t: Task) => { const lp = t.level==='urgent'?0:t.level==='high'?1:2; const over = t.due_date && new Date(t.due_date+'T23:59:59')<new Date() ? -10 : 0; return lp + over }
+  const myTasks = data.tasks.filter((t:Task) => !t.done && (t.assigned_to === profile.id || (!t.assigned_to && t.created_by === profile.id))).sort((a:Task,b:Task)=>taskUrgencyOrder(a)-taskUrgencyOrder(b))
+  const otherTasks = isOwner ? data.tasks.filter((t:Task) => !t.done && t.assigned_to && t.assigned_to !== profile.id).sort((a:Task,b:Task)=>taskUrgencyOrder(a)-taskUrgencyOrder(b)) : []
   const recentInbox = data.inbox.filter((m:any) => !m.is_read).slice(0, 4)
   const activeProjects = data.projects.filter((p:Project)=>p.status==='activo'||p.status==='urgente')
   const todayStr = new Date().toISOString().split('T')[0]
