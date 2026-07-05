@@ -209,6 +209,11 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     setReglas(prev => [...prev, created])
   }, [])
 
+  const updateRegla = useCallback(async (id: string, updates: Partial<Regla>) => {
+    const updated = await apiFetch(`/api/reglas/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
+    setReglas(prev => prev.map(r => r.id === id ? updated : r))
+  }, [])
+
   const deleteRegla = useCallback(async (id: string) => {
     await apiFetch(`/api/reglas/${id}`, { method: 'DELETE' })
     setReglas(prev => prev.filter(r => r.id !== id))
@@ -222,7 +227,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     inbox, markRead, sendInternalMessage,
     memoria, createMemoria, deleteMemoria,
     agenda, createAgenda, updateAgenda, deleteAgenda,
-    reglas, createRegla, deleteRegla,
+    reglas, createRegla, updateRegla, deleteRegla,
     chatMessages, sendChatMessage, clearChat,
     team, calendarEvents, reload: load,
   }

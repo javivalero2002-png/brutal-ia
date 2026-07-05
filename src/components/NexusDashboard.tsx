@@ -504,6 +504,8 @@ export default function NexusDashboard({ profile }: Props) {
                         )
                       })}
                     </div>
+                  ) : f.type === 'date-input' ? (
+                    <input type="date" value={mf[f.key]||''} onChange={e=>setMf(m=>({...m,[f.key]:e.target.value}))} className="w-full px-5 py-3.5 rounded-2xl text-[14px] text-white outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,colorScheme:'dark'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.45)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
                   ) : (
                     <input value={mf[f.key]||''} onChange={e=>setMf(m=>({...m,[f.key]:e.target.value}))} placeholder={f.placeholder} className="w-full px-5 py-3.5 rounded-2xl text-[14px] text-white placeholder-white/20 outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.45)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
                   )}
@@ -565,7 +567,7 @@ function modalFields(type: string, team: Profile[]) {
       f('Descripción de la tarea','text','Ej: Preparar deck propuesta Q3 para Nike'),
       { label:'Prioridad', key:'priority', type:'priority' },
       { label:'Asignar a', key:'asignado', type:'assignee' },
-      f('Fecha límite','due_date','Ej: 15 Jul 2026 (opcional)'),
+      { label:'Fecha límite', key:'due_date', type:'date-input', placeholder:'' },
     ],
     memoria: [
       f('Título','titulo','Ej: Nike — Guía de tono de voz 2026'),
@@ -745,7 +747,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                   <div className="font-figtree text-[14px] font-semibold leading-snug mb-1.5" style={{color:t.done?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.88)',textDecoration:t.done?'line-through':'none'}}>{t.text}</div>
                   <div className="flex items-center gap-2 flex-wrap">
                     {(t.client as any)?.name && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:(t.client as any).color+'18',color:(t.client as any).color+'cc'}}>{(t.client as any).name}</span>}
-                    {t.due_date && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.35)'}}>{new Date(t.due_date).toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
+                    {t.due_date && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.35)'}}>{new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
                     {!t.done && t.level==='urgent' && <span className="font-syne text-[8px] font-black" style={{color:RED}}>● URGENTE</span>}
                   </div>
                 </div>
@@ -822,7 +824,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
             {/* Due date */}
             <div>
               <label className="block font-syne text-[9px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.25)'}}>FECHA LÍMITE</label>
-              <input value={editing.due_date||''} onChange={e=>setEditing(x=>({...x,due_date:e.target.value||undefined}))} placeholder="Ej: 15 Jul 2026" className="w-full px-5 py-3 rounded-2xl text-[13px] text-white placeholder-white/20 outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+              <input type="date" value={editing.due_date||''} onChange={e=>setEditing(x=>({...x,due_date:e.target.value||undefined}))} className="w-full px-5 py-3 rounded-2xl text-[13px] text-white outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,colorScheme:'dark'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
             </div>
 
             {/* Meta info */}
@@ -1309,7 +1311,7 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                   <div className="font-figtree text-[14px] font-semibold leading-snug mb-1.5" style={{color:'rgba(255,255,255,0.88)'}}>{t.text}</div>
                   <div className="flex items-center gap-2 flex-wrap">
                     {t.client && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:(t.client as any).color+'18',color:(t.client as any).color+'cc'}}>{(t.client as any).name}</span>}
-                    {t.due_date && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.35)'}}>{new Date(t.due_date).toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
+                    {t.due_date && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.35)'}}>{new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
                     {t.level==='urgent' && <span className="font-syne text-[8px] font-black" style={{color:RED}}>● URGENTE</span>}
                   </div>
                 </div>
@@ -2137,6 +2139,20 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
 
 // ── PROYECTOS SECTION ────────────────────────────────────────
 function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView,projStatusFilter,setProjStatusFilter,dragRef,selectedId,onSelect,onOpenModal,showToast,isOwner}: any) {
+  const [editProgress, setEditProgress] = useState<number|null>(null)
+  const [savingProgress, setSavingProgress] = useState(false)
+  const selectedProject: Project|null = selectedId ? data.projects.find((p: Project)=>p.id===selectedId)||null : null
+
+  const saveProgress = async () => {
+    if (!selectedProject || editProgress === null) return
+    setSavingProgress(true)
+    try {
+      await data.updateProject(selectedProject.id, { progress: editProgress })
+      showToast('Progreso actualizado')
+    } catch { showToast('Error') }
+    finally { setSavingProgress(false) }
+  }
+
   const statusTabs: {id:string;label:string}[] = [
     {id:'Todos',label:'Todos'},
     {id:'plan.',label:'Planificación'},
@@ -2193,7 +2209,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               </div>
               <div className="p-3 space-y-2">
                 {col.items.map((p: Project)=>(
-                  <div key={p.id} draggable onDragStart={()=>dragRef.current=p.id} className="p-4 rounded-xl cursor-grab active:cursor-grabbing transition-all" style={{background:selectedId===p.id?`rgba(27,95,250,0.08)`:SURF2,border:`1px solid ${selectedId===p.id?'rgba(27,95,250,0.3)':BORDER}`,boxShadow:selectedId===p.id?`0 0 0 1px rgba(27,95,250,0.15)`:'none'}}>
+                  <div key={p.id} draggable onDragStart={()=>dragRef.current=p.id} onClick={()=>onSelect(selectedId===p.id?null:p.id)} className="p-4 rounded-xl cursor-pointer transition-all" style={{background:selectedId===p.id?`rgba(27,95,250,0.08)`:SURF2,border:`1px solid ${selectedId===p.id?'rgba(27,95,250,0.3)':BORDER}`,boxShadow:selectedId===p.id?`0 0 0 1px rgba(27,95,250,0.15)`:'none'}}>
                     <div className="flex items-start gap-3 mb-3">
                       <div className="relative flex-shrink-0">
                         <ProgressRing pct={p.progress} size={38} stroke={2.5} color={p.color||BLU}/>
@@ -2218,7 +2234,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
       ) : (
         <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
           {filteredProjects.map((p: Project, i: number)=>(
-            <div key={p.id} className="flex items-center gap-4 px-6 py-4 transition-colors" style={{borderBottom:i<filteredProjects.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${selectedId===p.id?statusColor(p.status):statusColor(p.status)+'40'}`,background:selectedId===p.id?'rgba(27,95,250,0.06)':'transparent'}}
+            <div key={p.id} onClick={()=>onSelect(selectedId===p.id?null:p.id)} className="flex items-center gap-4 px-6 py-4 transition-colors cursor-pointer" style={{borderBottom:i<filteredProjects.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${selectedId===p.id?statusColor(p.status):statusColor(p.status)+'40'}`,background:selectedId===p.id?'rgba(27,95,250,0.06)':'transparent'}}
               onMouseEnter={e=>{ if(selectedId!==p.id)(e.currentTarget.style.background='rgba(255,255,255,0.015)') }}
               onMouseLeave={e=>{ if(selectedId!==p.id)(e.currentTarget.style.background='transparent') }}>
               <div className="relative flex-shrink-0">
@@ -2235,6 +2251,66 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
             </div>
           ))}
           {filteredProjects.length===0&&<div className="py-16 text-center text-[13px]" style={{color:'rgba(255,255,255,0.18)'}}>Sin proyectos en este filtro</div>}
+        </div>
+      )}
+
+      {/* Project detail drawer */}
+      {selectedProject && (
+        <div className="mt-6 rounded-2xl p-6 transition-all" style={{background:SURFACE,border:`1px solid ${selectedProject.color||BLU}30`,boxShadow:`0 0 40px ${selectedProject.color||BLU}0D`}}>
+          <div className="flex items-start justify-between mb-6">
+            <div className="flex items-center gap-4">
+              <div className="relative flex-shrink-0">
+                <ProgressRing pct={editProgress??selectedProject.progress} size={52} stroke={3} color={selectedProject.color||BLU}/>
+                <div className="absolute inset-0 flex items-center justify-center font-syne text-[10px] font-black" style={{color:selectedProject.color||BLU}}>{editProgress??selectedProject.progress}%</div>
+              </div>
+              <div>
+                <div className="font-figtree text-[18px] font-black text-white leading-none mb-1" style={{letterSpacing:'-0.02em'}}>{selectedProject.name}</div>
+                <div className="text-[12px]" style={{color:'rgba(255,255,255,0.3)'}}>{selectedProject.client?.name||'Sin cliente'} · Creado {selectedProject.deadline&&selectedProject.deadline!=='TBD'?`hasta ${fmtDate(selectedProject.deadline)}`:''}</div>
+              </div>
+            </div>
+            <button onClick={()=>onSelect(null)} className="w-8 h-8 rounded-xl flex items-center justify-center" style={{background:'rgba(255,255,255,0.05)'}}>
+              <LucideIcon name="x" size={13} color="rgba(255,255,255,0.35)"/>
+            </button>
+          </div>
+          <div className="grid grid-cols-[1fr_auto] gap-6 items-end">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.25)'}}>PROGRESO</div>
+                <span className="font-syne text-[10px] font-black" style={{color:selectedProject.color||BLU}}>{editProgress??selectedProject.progress}%</span>
+              </div>
+              <input type="range" min={0} max={100} step={5} value={editProgress??selectedProject.progress}
+                onChange={e=>setEditProgress(Number(e.target.value))}
+                className="w-full h-1.5 rounded-full outline-none cursor-pointer appearance-none"
+                style={{accentColor:selectedProject.color||BLU,background:`linear-gradient(to right,${selectedProject.color||BLU} ${editProgress??selectedProject.progress}%,rgba(255,255,255,0.1) ${editProgress??selectedProject.progress}%)`}}
+              />
+            </div>
+            <div className="flex gap-2">
+              {editProgress !== null && editProgress !== selectedProject.progress && (
+                <button onClick={saveProgress} disabled={savingProgress} className="px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingProgress?'…':'GUARDAR'}</button>
+              )}
+              {isOwner && (
+                <button onClick={()=>data.deleteProject(selectedProject.id).then(()=>{onSelect(null);showToast('Proyecto eliminado')})} className="px-3 py-2 rounded-xl font-syne text-[9px] font-black transition-all" style={{color:'rgba(229,29,42,0.45)',border:`1px solid rgba(229,29,42,0.12)`}}>
+                  <LucideIcon name="trash" size={12} color="rgba(229,29,42,0.45)"/>
+                </button>
+              )}
+            </div>
+          </div>
+          {/* Related tasks */}
+          {(() => {
+            const projTasks = data.tasks.filter((t: Task) => !t.done && (t.project_id === selectedProject.id || t.client_id === selectedProject.client_id))
+            if (!projTasks.length) return null
+            return (
+              <div className="mt-5 pt-5" style={{borderTop:`1px solid ${BORDER}`}}>
+                <div className="font-syne text-[8px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.2)'}}>TAREAS ACTIVAS</div>
+                <div className="flex flex-wrap gap-2">
+                  {projTasks.slice(0,6).map((t: Task)=>{
+                    const tc = t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.85)':BLU
+                    return <span key={t.id} className="font-syne text-[8px] font-black px-2.5 py-1.5 rounded-lg" style={{background:tc+'12',color:tc+'cc'}}>{t.text.slice(0,40)}{t.text.length>40?'…':''}</span>
+                  })}
+                </div>
+              </div>
+            )
+          })()}
         </div>
       )}
     </div>
@@ -2965,7 +3041,15 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
                 </div>
               )}
             </div>
-            <span className="font-syne text-[7.5px] font-black px-2.5 py-1 rounded-full flex-shrink-0" style={{background:r.active?'rgba(27,95,250,0.1)':'rgba(255,255,255,0.04)',color:r.active?BLU:'rgba(240,240,248,0.2)',border:`1px solid ${r.active?'rgba(27,95,250,0.2)':'transparent'}`}}>{r.active?'ACTIVO':'PAUSADO'}</span>
+            {isOwner && (
+              <button onClick={()=>data.updateRegla(r.id, {active:!r.active}).then(()=>showToast(r.active?'Regla pausada':'Regla activada'))}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[7.5px] font-black transition-all flex-shrink-0"
+                style={{background:r.active?'rgba(27,95,250,0.1)':'rgba(255,255,255,0.04)',color:r.active?BLU:'rgba(240,240,248,0.2)',border:`1px solid ${r.active?'rgba(27,95,250,0.2)':'transparent'}`}}>
+                <div className="w-1.5 h-1.5 rounded-full" style={{background:r.active?BLU:'rgba(255,255,255,0.2)'}}/>
+                {r.active?'ACTIVO':'PAUSADO'}
+              </button>
+            )}
+            {!isOwner && <span className="font-syne text-[7.5px] font-black px-2.5 py-1 rounded-full flex-shrink-0" style={{background:r.active?'rgba(27,95,250,0.1)':'rgba(255,255,255,0.04)',color:r.active?BLU:'rgba(240,240,248,0.2)',border:`1px solid ${r.active?'rgba(27,95,250,0.2)':'transparent'}`}}>{r.active?'ACTIVO':'PAUSADO'}</span>}
             {isOwner && <button onClick={()=>data.deleteRegla(r.id).then(()=>showToast('Regla eliminada'))} className="opacity-0 hover:opacity-60 transition-opacity flex-shrink-0" onMouseEnter={e=>(e.currentTarget.style.opacity='0.6')} onMouseLeave={e=>(e.currentTarget.style.opacity='0')}><LucideIcon name="trash" size={13} color={RED}/></button>}
           </div>
         ))}
