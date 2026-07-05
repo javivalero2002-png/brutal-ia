@@ -2457,6 +2457,9 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
     )
   }
 
+  const [clientSearch, setClientSearch] = useState('')
+  const [clientStatusFilter, setClientStatusFilter] = useState('Todos')
+
   // Parse revenue string → number (handles "€12.000/mes", "12000", "12.000€", etc.)
   const parseRevenue = (s: string): number => {
     if (!s || s === '—') return 0
@@ -2465,6 +2468,11 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
   const activeClients = data.clients.filter((c: Client)=>c.status==='Activo')
   const totalMRR = activeClients.reduce((sum: number, c: Client) => sum + parseRevenue(c.revenue||''), 0)
   const maxRevenue = Math.max(...data.clients.map((c: Client)=>parseRevenue(c.revenue||'')), 1)
+  const visibleClients = data.clients.filter((c: Client) => {
+    const matchStatus = clientStatusFilter === 'Todos' || c.status === clientStatusFilter
+    const matchSearch = !clientSearch.trim() || c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.industry?.toLowerCase().includes(clientSearch.toLowerCase())
+    return matchStatus && matchSearch
+  })
 
   return (
     <div className="p-8 max-w-[1200px] mx-auto">
@@ -2503,14 +2511,35 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
           </div>
         </div>
       )}
+      {data.clients.length > 0 && (
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl flex-1 max-w-xs" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+            <LucideIcon name="search" size={13} color="rgba(255,255,255,0.2)"/>
+            <input value={clientSearch} onChange={e=>setClientSearch(e.target.value)} placeholder="Busca cliente o sector…" className="flex-1 bg-transparent text-[12px] outline-none" style={{caretColor:BLU,color:'rgba(255,255,255,0.75)'}}/>
+            {clientSearch && <button onClick={()=>setClientSearch('')}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.2)"/></button>}
+          </div>
+          <div className="flex gap-1 p-1 rounded-2xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+            {(['Todos','Activo','Inactivo'] as const).map(s=>(
+              <button key={s} onClick={()=>setClientStatusFilter(s)} className="px-3.5 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all" style={{background:clientStatusFilter===s?SURF2:'transparent',color:clientStatusFilter===s?s==='Activo'?GRN:s==='Inactivo'?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.9)':'rgba(255,255,255,0.28)'}}>
+                {s.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          {(clientSearch||clientStatusFilter!=='Todos') && <span className="font-syne text-[9px] font-black" style={{color:'rgba(255,255,255,0.25)'}}>{visibleClients.length}</span>}
+        </div>
+      )}
       {data.clients.length === 0 ? (
         <div className="py-24 text-center">
           <div className="font-syne text-[11px] font-black tracking-widest mb-4" style={{color:'rgba(255,255,255,0.15)'}}>SIN CLIENTES</div>
           {isOwner && <button onClick={()=>onOpenModal('cliente')} className="font-syne text-[10px] font-black px-5 py-3 rounded-2xl" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>CREAR PRIMER CLIENTE</button>}
         </div>
+      ) : visibleClients.length === 0 ? (
+        <div className="py-16 text-center">
+          <div className="font-syne text-[10px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.15)'}}>SIN RESULTADOS</div>
+        </div>
       ) : (
         <div className="grid grid-cols-3 gap-5">
-          {data.clients.map((c: Client)=>{
+          {visibleClients.map((c: Client)=>{
             const nProj = data.projects.filter((p:Project)=>p.client_id===c.id).length
             const nTaskPending = data.tasks.filter((t:Task)=>t.client_id===c.id&&!t.done).length
             const nUrgent = data.tasks.filter((t:Task)=>t.client_id===c.id&&!t.done&&t.level==='urgent').length
@@ -2582,6 +2611,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   const [savingProgress, setSavingProgress] = useState(false)
   const [confirmDeleteProjId, setConfirmDeleteProjId] = useState<string|null>(null)
   const [confirmDeleteDetail, setConfirmDeleteDetail] = useState(false)
+  const [projSearch, setProjSearch] = useState('')
   const selectedProject: Project|null = selectedId ? data.projects.find((p: Project)=>p.id===selectedId)||null : null
 
   useEffect(() => { setEditProgress(null); setConfirmDeleteDetail(false) }, [selectedId])
@@ -2639,15 +2669,22 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
           {isOwner && <button onClick={()=>onOpenModal('proyecto')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ PROYECTO</button>}
         </div>
       </div>
-      <div className="flex items-center gap-1 mb-6 p-1 rounded-2xl w-fit" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-        {statusTabs.map(s=>{
-          const cnt = s.id==='Todos' ? data.projects.length : data.projects.filter((p: Project)=>p.status===s.id).length
-          return (
-          <button key={s.id} onClick={()=>setProjStatusFilter(s.id)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:projStatusFilter===s.id?SURF2:'transparent',color:projStatusFilter===s.id?'rgba(255,255,255,0.9)':'rgba(240,240,248,0.28)'}}>
-            {s.label.toUpperCase()}
-            {cnt > 0 && <span className="text-[7.5px] font-black opacity-60">{cnt}</span>}
-          </button>
-        )})}
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <div className="flex items-center gap-1 p-1 rounded-2xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+          {statusTabs.map(s=>{
+            const cnt = s.id==='Todos' ? data.projects.length : data.projects.filter((p: Project)=>p.status===s.id).length
+            return (
+            <button key={s.id} onClick={()=>setProjStatusFilter(s.id)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:projStatusFilter===s.id?SURF2:'transparent',color:projStatusFilter===s.id?'rgba(255,255,255,0.9)':'rgba(240,240,248,0.28)'}}>
+              {s.label.toUpperCase()}
+              {cnt > 0 && <span className="text-[7.5px] font-black opacity-60">{cnt}</span>}
+            </button>
+          )})}
+        </div>
+        <div className="flex items-center gap-2 px-3 py-2 rounded-2xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+          <LucideIcon name="search" size={12} color="rgba(255,255,255,0.2)"/>
+          <input value={projSearch} onChange={e=>setProjSearch(e.target.value)} placeholder="Busca proyecto…" className="bg-transparent text-[12px] outline-none w-36" style={{caretColor:BLU,color:'rgba(255,255,255,0.75)'}}/>
+          {projSearch && <button onClick={()=>setProjSearch('')}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.2)"/></button>}
+        </div>
       </div>
       {projView === 'board' ? (
         <div className="grid gap-4" style={{gridTemplateColumns:`repeat(${kanbanCols.length},minmax(0,1fr))`}}>
@@ -2661,7 +2698,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 <span className="font-syne text-[13px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{col.items.length}</span>
               </div>
               <div className="p-3 space-y-2">
-                {col.items.map((p: Project)=>(
+                {col.items.filter((p: Project)=>!projSearch.trim()||p.name.toLowerCase().includes(projSearch.toLowerCase())||(p.client as any)?.name?.toLowerCase().includes(projSearch.toLowerCase())).map((p: Project)=>(
                   <div key={p.id} draggable onDragStart={()=>dragRef.current=p.id} onClick={()=>onSelect(selectedId===p.id?null:p.id)} className="p-4 rounded-xl cursor-pointer transition-all" style={{background:selectedId===p.id?`rgba(27,95,250,0.08)`:SURF2,border:`1px solid ${selectedId===p.id?'rgba(27,95,250,0.3)':BORDER}`,boxShadow:selectedId===p.id?`0 0 0 1px rgba(27,95,250,0.15)`:'none'}}>
                     <div className="flex items-start gap-3 mb-3">
                       <div className="relative flex-shrink-0">
@@ -2691,8 +2728,8 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
         </div>
       ) : (
         <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-          {filteredProjects.map((p: Project, i: number)=>(
-            <div key={p.id} onClick={()=>onSelect(selectedId===p.id?null:p.id)} className="group flex items-center gap-4 px-6 py-4 transition-colors cursor-pointer" style={{borderBottom:i<filteredProjects.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${selectedId===p.id?statusColor(p.status):statusColor(p.status)+'40'}`,background:selectedId===p.id?'rgba(27,95,250,0.06)':'transparent'}}
+          {filteredProjects.filter((p: Project)=>!projSearch.trim()||p.name.toLowerCase().includes(projSearch.toLowerCase())||(p.client as any)?.name?.toLowerCase().includes(projSearch.toLowerCase())).map((p: Project, i: number, arr: Project[])=>(
+            <div key={p.id} onClick={()=>onSelect(selectedId===p.id?null:p.id)} className="group flex items-center gap-4 px-6 py-4 transition-colors cursor-pointer" style={{borderBottom:i<arr.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${selectedId===p.id?statusColor(p.status):statusColor(p.status)+'40'}`,background:selectedId===p.id?'rgba(27,95,250,0.06)':'transparent'}}
               onMouseEnter={e=>{ if(selectedId!==p.id)(e.currentTarget.style.background='rgba(255,255,255,0.015)') }}
               onMouseLeave={e=>{ if(selectedId!==p.id)(e.currentTarget.style.background='transparent') }}>
               <div className="relative flex-shrink-0">
@@ -2720,7 +2757,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               )}
             </div>
           ))}
-          {filteredProjects.length===0&&<div className="py-16 text-center text-[13px]" style={{color:'rgba(255,255,255,0.18)'}}>Sin proyectos en este filtro</div>}
+          {filteredProjects.filter((p: Project)=>!projSearch.trim()||p.name.toLowerCase().includes(projSearch.toLowerCase())||(p.client as any)?.name?.toLowerCase().includes(projSearch.toLowerCase())).length===0&&<div className="py-16 text-center text-[13px]" style={{color:'rgba(255,255,255,0.18)'}}>{projSearch?'Sin resultados':' Sin proyectos en este filtro'}</div>}
         </div>
       )}
 
@@ -2842,6 +2879,7 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
   const [editPublishTime, setEditPublishTime] = useState('')
   const [accountFilter, setAccountFilter] = useState('Todas')
   const [clientFilter, setClientFilter] = useState('Todos')
+  const [contentSearch, setContentSearch] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
   const [confirmDeleteContent, setConfirmDeleteContent] = useState(false)
 
@@ -2886,7 +2924,8 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
   const allAccounts: string[] = ['Todas', ...Array.from(new Set<string>(data.agenda.filter((a: any)=>a.account_name).map((a: any)=>a.account_name as string)))]
   const allContentClients: string[] = ['Todos', ...Array.from(new Set<string>(data.agenda.filter((a: any)=>a.client?.name||a.client_id).map((a: any)=>a.client?.name||(data.clients.find((c: any)=>c.id===a.client_id)?.name)||'').filter(Boolean)))]
   const filteredByClient = clientFilter === 'Todos' ? data.agenda : data.agenda.filter((a: any) => (a.client?.name||data.clients.find((c: any)=>c.id===a.client_id)?.name) === clientFilter)
-  const filteredAgenda = accountFilter === 'Todas' ? filteredByClient : filteredByClient.filter((a: any)=>a.account_name===accountFilter)
+  const filteredByAccount = accountFilter === 'Todas' ? filteredByClient : filteredByClient.filter((a: any)=>a.account_name===accountFilter)
+  const filteredAgenda = !contentSearch.trim() ? filteredByAccount : filteredByAccount.filter((a: any)=>a.title?.toLowerCase().includes(contentSearch.toLowerCase()))
 
   const changeStatus = async (item: any, newStatus: string) => {
     try {
@@ -2934,6 +2973,12 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
             <button onClick={()=>onOpenModal('contenido')} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white transition-opacity hover:opacity-85" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
               + NUEVA PIEZA
             </button>
+          </div>
+          {/* Content search */}
+          <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl mb-3" style={{background:SURFACE,border:`1px solid ${BORDER}`,maxWidth:'320px'}}>
+            <LucideIcon name="search" size={12} color="rgba(255,255,255,0.2)"/>
+            <input value={contentSearch} onChange={e=>setContentSearch(e.target.value)} placeholder="Busca por título…" className="flex-1 bg-transparent text-[12px] outline-none" style={{caretColor:BLU,color:'rgba(255,255,255,0.75)'}}/>
+            {contentSearch && <button onClick={()=>setContentSearch('')}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.2)"/></button>}
           </div>
           {/* Client filter */}
           {allContentClients.length > 1 && (
