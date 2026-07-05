@@ -814,6 +814,10 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
         const t = tasks[next]
         if (t) { setActiveTask(t); setEditing({ text:t.text, level:t.level, assigned_to:t.assigned_to, done:t.done, due_date:t.due_date, project_id:t.project_id }); setConfirmDeleteTask(false) }
       }
+      if (e.key === 'c' && activeTask && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
+        e.preventDefault()
+        setEditing(x => ({...x, done: !x.done}))
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -1206,7 +1210,9 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
             <div className="flex items-center justify-center gap-4 pt-2">
               <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>⌘+ENTER GUARDAR</span>
               <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
-              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>J ↓  K ↑ NAVEGAR</span>
+              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>J/K NAVEGAR</span>
+              <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
+              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>C ESTADO</span>
             </div>
           </div>
         </div>
@@ -3202,6 +3208,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   const [confirmDeleteProjId, setConfirmDeleteProjId] = useState<string|null>(null)
   const [confirmDeleteDetail, setConfirmDeleteDetail] = useState(false)
   const [projSearch, setProjSearch] = useState('')
+  const [projListSort, setProjListSort] = useState<'default'|'deadline'|'progress'|'status'>('default')
   const [quickProjTask, setQuickProjTask] = useState('')
   const [quickProjCreating, setQuickProjCreating] = useState(false)
   const selectedProject: Project|null = selectedId ? data.projects.find((p: Project)=>p.id===selectedId)||null : null
@@ -3243,6 +3250,14 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
     return m[s] || s.toUpperCase()
   }
   const statusColor = (s: string) => s==='urgente'?RED:s==='activo'?GRN:s==='revisión'?'rgba(167,139,250,0.9)':s==='completado'?'rgba(34,197,94,0.5)':BLU
+  const listProjectsSorted: Project[] = (()=>{
+    const baseL = filteredProjects.filter((p: Project)=>!projSearch.trim()||p.name.toLowerCase().includes(projSearch.toLowerCase())||(p.client as any)?.name?.toLowerCase().includes(projSearch.toLowerCase()))
+    if (projListSort==='progress') return [...baseL].sort((a:Project,b:Project)=>b.progress-a.progress)
+    if (projListSort==='deadline') return [...baseL].sort((a:Project,b:Project)=>{const da=a.deadline&&a.deadline!=='TBD'?new Date(a.deadline+'T23:59:59').getTime():Infinity;const db=b.deadline&&b.deadline!=='TBD'?new Date(b.deadline+'T23:59:59').getTime():Infinity;return da-db})
+    if (projListSort==='status') return [...baseL].sort((a:Project,b:Project)=>{const o:Record<string,number>={urgente:0,activo:1,'revisión':2,'plan.':3,completado:4};return (o[a.status]??3)-(o[b.status]??3)})
+    return baseL
+  })()
+
   return (
     <div className="p-8">
       <div className="flex items-end justify-between mb-8">
@@ -3277,6 +3292,14 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
           <input value={projSearch} onChange={e=>setProjSearch(e.target.value)} placeholder="Busca proyecto…" className="bg-transparent text-[12px] outline-none w-36" style={{caretColor:BLU,color:'rgba(255,255,255,0.75)'}}/>
           {projSearch && <button onClick={()=>setProjSearch('')}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.2)"/></button>}
         </div>
+        {projView==='list'&&(
+          <div className="flex items-center gap-0.5 p-1 rounded-xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+            <span className="font-syne text-[7.5px] font-black tracking-wide px-2" style={{color:'rgba(255,255,255,0.15)'}}>ORDEN</span>
+            {([['default','—'],['progress','Progreso'],['deadline','Deadline'],['status','Estado']] as [string,string][]).map(([v,l])=>(
+              <button key={v} onClick={()=>setProjListSort(v as 'default'|'deadline'|'progress'|'status')} className="px-2.5 py-1.5 rounded-lg font-syne text-[8px] font-black tracking-wide transition-all" style={{background:projListSort===v?SURF2:'transparent',color:projListSort===v?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.25)'}}>{l}</button>
+            ))}
+          </div>
+        )}
       </div>
       {/* Quick project stats */}
       {data.projects.length > 0 && (()=>{
@@ -3346,7 +3369,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
         </div>
       ) : (
         <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-          {filteredProjects.filter((p: Project)=>!projSearch.trim()||p.name.toLowerCase().includes(projSearch.toLowerCase())||(p.client as any)?.name?.toLowerCase().includes(projSearch.toLowerCase())).map((p: Project, i: number, arr: Project[])=>(
+          {listProjectsSorted.map((p: Project, i: number, arr: Project[])=>(
             <div key={p.id} onClick={()=>onSelect(selectedId===p.id?null:p.id)} className="group flex items-center gap-4 px-6 py-4 transition-colors cursor-pointer" style={{borderBottom:i<arr.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${selectedId===p.id?statusColor(p.status):statusColor(p.status)+'40'}`,background:selectedId===p.id?'rgba(27,95,250,0.06)':'transparent'}}
               onMouseEnter={e=>{ if(selectedId!==p.id)(e.currentTarget.style.background='rgba(255,255,255,0.015)') }}
               onMouseLeave={e=>{ if(selectedId!==p.id)(e.currentTarget.style.background='transparent') }}>
@@ -3377,7 +3400,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               )}
             </div>
           ))}
-          {filteredProjects.filter((p: Project)=>!projSearch.trim()||p.name.toLowerCase().includes(projSearch.toLowerCase())||(p.client as any)?.name?.toLowerCase().includes(projSearch.toLowerCase())).length===0&&<div className="py-16 text-center text-[13px]" style={{color:'rgba(255,255,255,0.18)'}}>{projSearch?'Sin resultados':' Sin proyectos en este filtro'}</div>}
+          {listProjectsSorted.length===0&&<div className="py-16 text-center text-[13px]" style={{color:'rgba(255,255,255,0.18)'}}>{projSearch?'Sin resultados':' Sin proyectos en este filtro'}</div>}
         </div>
       )}
 
@@ -4685,6 +4708,17 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
   const [confirmClear, setConfirmClear] = useState(false)
 
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}) },[data.chatMessages])
+
+  useEffect(()=>{
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'n' && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
+        e.preventDefault()
+        inputRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   const copyMsg = (id: string, text: string) => {
     navigator.clipboard.writeText(text).then(()=>{
