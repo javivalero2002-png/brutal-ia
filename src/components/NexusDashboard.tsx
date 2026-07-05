@@ -167,10 +167,12 @@ export default function NexusDashboard({ profile }: Props) {
       } else if (modal === 'tarea') {
         if (!mf.text?.trim()) { showToast('Escribe la tarea'); return }
         const level: 'urgent'|'high'|'normal' = mf.priority==='urgente'?'urgent':mf.priority==='high'?'high':'normal'
-        // mf.asignado stores the member NAME; find by name
         const assignee = data.team.find((m: Profile) => m.name === mf.asignado)
-        await data.createTask({ text:mf.text.trim(), level, assigned_to:assignee?.id, source:'manual', due_date:mf.due_date?.trim()||undefined })
-        showToast('Tarea creada')
+        const taskClient = mf.cliente?.trim()
+          ? data.clients.find((c: Client) => c.name.toLowerCase().includes(mf.cliente.toLowerCase()) || mf.cliente.toLowerCase().includes(c.name.toLowerCase().split(' ')[0]))
+          : null
+        await data.createTask({ text:mf.text.trim(), level, assigned_to:assignee?.id, source:'manual', due_date:mf.due_date?.trim()||undefined, client_id:taskClient?.id })
+        showToast('Tarea creada' + (taskClient ? ` · ${taskClient.name}` : ''))
       } else if (modal === 'memoria') {
         if (!mf.titulo?.trim()) { showToast('Escribe el título'); return }
         await data.createMemoria({ title:mf.titulo.trim(), category:mf.categoria||'General', content:mf.contenido||'' })
@@ -580,6 +582,7 @@ function modalFields(type: string, team: Profile[]) {
       f('Descripción de la tarea','text','Ej: Preparar deck propuesta Q3 para Nike'),
       { label:'Prioridad', key:'priority', type:'priority' },
       { label:'Asignar a', key:'asignado', type:'assignee' },
+      f('Cliente (opcional)','cliente','Ej: Nike España'),
       { label:'Fecha límite', key:'due_date', type:'date-input', placeholder:'' },
     ],
     memoria: [
@@ -1032,7 +1035,13 @@ function EquipoSection({data, profile, showToast}: any) {
               {data.tasks.filter((t:Task)=>t.assignee?.name===selected.name&&!t.done).slice(0,4).map((t:Task)=>(
                 <div key={t.id} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl" style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${t.level==='urgent'?RED+'25':t.level==='high'?'rgba(255,176,32,0.15)':BORDER}`}}>
                   <div className="w-1 h-1 rounded-full flex-shrink-0" style={{background:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.8)':BLU}}/>
-                  <span className="text-[11px] truncate max-w-[200px]" style={{color:'rgba(255,255,255,0.5)'}}>{t.text}</span>
+                  <span className="text-[11px] truncate max-w-[180px]" style={{color:'rgba(255,255,255,0.5)'}}>{t.text}</span>
+                  {t.due_date && (()=>{
+                    const todayStr = new Date().toISOString().split('T')[0]
+                    const isToday = t.due_date.slice(0,10)===todayStr
+                    const over = !isToday && new Date(t.due_date+'T23:59:59')<new Date()
+                    return <span className="font-syne text-[7px] font-black px-1 py-0.5 rounded flex-shrink-0" style={{background:isToday?'rgba(255,176,32,0.15)':over?`${RED}15`:'rgba(255,255,255,0.04)',color:isToday?'rgba(255,176,32,0.9)':over?RED:'rgba(255,255,255,0.2)'}}>{isToday?'HOY':new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>
+                  })()}
                 </div>
               ))}
               {data.tasks.filter((t:Task)=>t.assignee?.name===selected.name&&!t.done).length===0 && (
@@ -3313,6 +3322,65 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
   )
 }
 
+// ── Markdown renderer (inline) ───────────────────────────────
+function MarkdownMsg({ text }: { text: string }) {
+  const lines = text.split('\n')
+  const result: React.ReactNode[] = []
+  let listItems: string[] = []
+
+  const flushList = (key: string) => {
+    if (listItems.length === 0) return
+    result.push(
+      <ul key={key} className="my-1.5 space-y-0.5 list-none pl-3">
+        {listItems.map((item, i) => (
+          <li key={i} className="flex gap-2 items-start text-[12.5px] leading-relaxed" style={{color:'rgba(240,240,248,0.78)'}}>
+            <span className="mt-1.5 w-1 h-1 rounded-full flex-shrink-0" style={{background:'rgba(27,95,250,0.7)'}}/>
+            <span>{formatInline(item)}</span>
+          </li>
+        ))}
+      </ul>
+    )
+    listItems = []
+  }
+
+  const formatInline = (s: string): React.ReactNode[] => {
+    const parts: React.ReactNode[] = []
+    const regex = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g
+    let last = 0, m: RegExpExecArray|null
+    while ((m = regex.exec(s)) !== null) {
+      if (m.index > last) parts.push(s.slice(last, m.index))
+      const raw = m[0]
+      if (raw.startsWith('**')) parts.push(<strong key={m.index} style={{color:'rgba(255,255,255,0.95)',fontWeight:700}}>{raw.slice(2,-2)}</strong>)
+      else if (raw.startsWith('*')) parts.push(<em key={m.index} style={{color:'rgba(240,240,248,0.85)'}}>{raw.slice(1,-1)}</em>)
+      else parts.push(<code key={m.index} className="px-1 py-0.5 rounded text-[11px] font-mono" style={{background:'rgba(27,95,250,0.12)',color:'rgba(100,140,255,0.9)'}}>{raw.slice(1,-1)}</code>)
+      last = m.index + raw.length
+    }
+    if (last < s.length) parts.push(s.slice(last))
+    return parts
+  }
+
+  lines.forEach((line, i) => {
+    const trimmed = line.trimStart()
+    const isBullet = trimmed.startsWith('- ') || trimmed.startsWith('• ') || trimmed.startsWith('* ')
+    if (isBullet) {
+      listItems.push(trimmed.slice(2))
+    } else {
+      flushList(`list-${i}`)
+      if (trimmed === '') {
+        if (i < lines.length - 1) result.push(<div key={`br-${i}`} className="h-2"/>)
+      } else if (trimmed.startsWith('### ')) {
+        result.push(<div key={i} className="font-syne text-[9px] font-black tracking-widest mt-3 mb-1" style={{color:'rgba(255,255,255,0.45)'}}>{trimmed.slice(4).toUpperCase()}</div>)
+      } else if (trimmed.startsWith('## ')) {
+        result.push(<div key={i} className="font-figtree text-[13px] font-black mt-3 mb-1" style={{color:'rgba(255,255,255,0.9)'}}>{trimmed.slice(3)}</div>)
+      } else {
+        result.push(<p key={i} className="text-[13px] leading-relaxed" style={{color:'rgba(240,240,248,0.78)'}}>{formatInline(trimmed)}</p>)
+      }
+    }
+  })
+  flushList('list-end')
+  return <div className="space-y-0.5">{result}</div>
+}
+
 // ── CHAT SECTION ─────────────────────────────────────────────
 function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoading,showToast}: any) {
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -3405,15 +3473,17 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
                     <img src="https://brutal.thehook-produccion.es/wp-content/themes/brutal-studios/assets/img/brutal-logo-white.svg" className="w-full opacity-80" alt=""/>
                   </div>
                 )}
-                <div className="max-w-[76%] px-4 py-3 text-[13px] leading-relaxed whitespace-pre-wrap" style={{
+                <div className="max-w-[76%] px-4 py-3" style={{
                   background:m.role==='user'?`linear-gradient(135deg,${BLU},#1440CC)`:'rgba(12,12,22,0.95)',
-                  color:m.role==='user'?'white':'rgba(240,240,248,0.82)',
                   border:m.role==='ai'?`1px solid ${BORDER}`:'none',
                   borderRadius:'16px',
                   borderTopLeftRadius:m.role==='ai'?'5px':'16px',
                   borderTopRightRadius:m.role==='user'?'5px':'16px',
                 }}>
-                  {m.content}
+                  {m.role==='user'
+                    ? <span className="text-[13px] leading-relaxed text-white whitespace-pre-wrap">{m.content}</span>
+                    : <MarkdownMsg text={m.content}/>
+                  }
                 </div>
               </div>
             ))}
