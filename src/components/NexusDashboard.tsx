@@ -468,9 +468,9 @@ export default function NexusDashboard({ profile }: Props) {
           {section === 'tareas' && <TareasSection data={data} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} onNavigate={setSection} onSelectProject={setSelectedProject} onSelectClient={setSelectedClient} />}
           {section === 'equipo' && <EquipoSection data={data} profile={profile} showToast={showToast} />}
           {section === 'reportes' && <ReportesSection data={data} onNavigate={setSection} />}
-          {section === 'clientes' && <ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={setModal} onSetMf={setMf} showToast={showToast} isOwner={profile.role==='owner'} />}
-          {section === 'proyectos' && <ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={setModal} onSetMf={setMf} showToast={showToast} isOwner={profile.role==='owner'} />}
-          {section === 'contenido' && <ContenidoSection data={data} onOpenModal={setModal} showToast={showToast} />}
+          {section === 'clientes' && <ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={setModal} onSetMf={setMf} showToast={showToast} isOwner={profile.role==='owner'} onNavigate={setSection} onSelectProject={setSelectedProject} />}
+          {section === 'proyectos' && <ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={setModal} onSetMf={setMf} showToast={showToast} isOwner={profile.role==='owner'} onNavigate={setSection} onSelectClient={setSelectedClient} />}
+          {section === 'contenido' && <ContenidoSection data={data} onOpenModal={setModal} showToast={showToast} onNavigate={setSection} onSelectClient={setSelectedClient} />}
           {section === 'calendario' && <CalendarioSection data={data} profile={profile} showToast={showToast} onOpenModal={setModal} onSetMf={setMf} />}
           {section === 'memoria' && <MemoriaSection data={data} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={setModal} showToast={showToast} />}
           {section === 'automatizaciones' && <AutomatizacionesSection data={data} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
@@ -2607,7 +2607,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient}: any) {
 }
 
 // ── CLIENTES SECTION ─────────────────────────────────────────
-function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast,isOwner}: any) {
+function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast,isOwner,onNavigate,onSelectProject}: any) {
   const [aiAdvice, setAiAdvice] = useState<any[]|null>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [expandedProject, setExpandedProject] = useState<string|null>(null)
@@ -2826,6 +2826,7 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
                     <div className="flex items-center gap-2">
                       {projTasks.length > 0 && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.3)'}}>{projTasks.length} tareas</span>}
                       <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-lg" style={{background:p.status==='urgente'?'rgba(229,29,42,0.1)':'rgba(27,95,250,0.07)',color:p.status==='urgente'?RED:BLU}}>{p.progress}%</span>
+                      {onNavigate && onSelectProject && <button onClick={e=>{e.stopPropagation();onSelectProject(p.id);onNavigate('proyectos')}} className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center w-7 h-7 rounded-xl" style={{background:'rgba(27,95,250,0.1)',color:BLU}} title="Ver en Proyectos"><LucideIcon name="arrow-right" size={11} color={BLU}/></button>}
                       <LucideIcon name={isOpen?'chevron-up':'chevron-down'} size={13} color="rgba(255,255,255,0.25)"/>
                     </div>
                   </div>
@@ -3089,7 +3090,7 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
 }
 
 // ── PROYECTOS SECTION ────────────────────────────────────────
-function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView,projStatusFilter,setProjStatusFilter,dragRef,selectedId,onSelect,onOpenModal,onSetMf,showToast,isOwner}: any) {
+function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView,projStatusFilter,setProjStatusFilter,dragRef,selectedId,onSelect,onOpenModal,onSetMf,showToast,isOwner,onNavigate,onSelectClient}: any) {
   const [editProgress, setEditProgress] = useState<number|null>(null)
   const [savingProgress, setSavingProgress] = useState(false)
   const [confirmDeleteProjId, setConfirmDeleteProjId] = useState<string|null>(null)
@@ -3284,7 +3285,11 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               <div>
                 <div className="font-figtree text-[18px] font-black text-white leading-none mb-1" style={{letterSpacing:'-0.02em'}}>{selectedProject.name}</div>
                 <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                  <span className="text-[12px]" style={{color:'rgba(255,255,255,0.3)'}}>{selectedProject.client?.name||'Sin cliente'}</span>
+                  {selectedProject.client ? (
+                    <button onClick={()=>{const cid=(selectedProject.client as any)?.id;if(cid){onSelectClient?.(cid);onNavigate?.('clientes')}}} className="text-[12px] transition-all hover:opacity-70" style={{color:'rgba(255,255,255,0.3)'}}>{(selectedProject.client as any).name}</button>
+                  ) : (
+                    <span className="text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin cliente</span>
+                  )}
                   {selectedProject.deadline&&selectedProject.deadline!=='TBD'&&(()=>{
                     const dl = new Date(selectedProject.deadline+'T23:59:59')
                     const dOver = dl < new Date()
@@ -3411,7 +3416,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
 }
 
 // ── CONTENIDO SECTION ────────────────────────────────────────
-function ContenidoSection({data,onOpenModal,showToast}: any) {
+function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient}: any) {
   const [activeItem, setActiveItem] = useState<any>(null)
   const [editNotes, setEditNotes] = useState('')
   const [editVideoUrl, setEditVideoUrl] = useState('')
@@ -3646,7 +3651,7 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                             <div className="px-3.5 pt-3 pb-3.5">
                               <div className="font-figtree text-[13px] font-semibold leading-snug line-clamp-2 mb-3" style={{color:'rgba(255,255,255,0.9)'}}>{item.title}</div>
                               <div className="flex items-center gap-2">
-                                {(() => { const ic = item.client || (item.client_id ? data.clients.find((c: any)=>c.id===item.client_id) : null); return ic ? <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full truncate max-w-[100px]" style={{background:(ic.color||BLU)+'15',color:(ic.color||BLU)+'cc'}}>{ic.name}</span> : null })()}
+                                {(() => { const ic = item.client || (item.client_id ? data.clients.find((c: any)=>c.id===item.client_id) : null); return ic ? <button onClick={e=>{e.stopPropagation();onSelectClient?.(ic.id);onNavigate?.('clientes')}} className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full truncate max-w-[100px] transition-all hover:opacity-75" style={{background:(ic.color||BLU)+'15',color:(ic.color||BLU)+'cc'}}>{ic.name}</button> : null })()}
                                 {item.publish_date && item.status!=='publicado' && (()=>{
                                   const todayStr2 = new Date().toISOString().split('T')[0]
                                   const isToday2 = item.publish_date.slice(0,10)===todayStr2
