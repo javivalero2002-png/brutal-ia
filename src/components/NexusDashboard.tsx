@@ -2030,6 +2030,39 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
             )
           })()}
 
+          {/* Active projects mini-panel */}
+          {activeProjects.length > 0 && (
+            <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+              <div className="flex items-center justify-between px-6 py-4" style={{borderBottom:`1px solid ${BORDER}`}}>
+                <div>
+                  <div className="font-syne text-[8.5px] font-black tracking-widest mb-0.5" style={{color:'rgba(255,255,255,0.2)'}}>PIPELINE</div>
+                  <span className="font-syne text-[15px] font-black text-white">Proyectos activos</span>
+                </div>
+                <button onClick={()=>onNavigate('proyectos')} className="font-syne text-[8px] font-black px-3 py-1.5 rounded-xl transition-all hover:opacity-80" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>VER TODOS</button>
+              </div>
+              {activeProjects.slice(0,4).map((p: Project, i: number)=>{
+                const dl = p.deadline && p.deadline!=='TBD' ? new Date(p.deadline+'T23:59:59') : null
+                const dOver = dl && dl < new Date()
+                const dSoon = dl && !dOver && dl < new Date(Date.now()+7*24*3600*1000)
+                const daysLeft = dl ? Math.round(Math.abs(dl.getTime()-Date.now())/(1000*60*60*24)) : null
+                const pendingTasks = data.tasks.filter((t: Task)=>!t.done&&t.project_id===p.id).length
+                return (
+                  <div key={p.id} className="px-6 py-4 transition-all hover:bg-white/[0.015]" style={{borderBottom:i<Math.min(activeProjects.length,4)-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${p.color||BLU}60`}}>
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="font-figtree text-[13px] font-semibold flex-1 truncate" style={{color:'rgba(255,255,255,0.82)'}}>{p.name}</span>
+                      {dOver && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:`${RED}15`,color:RED}}>−{daysLeft}d</span>}
+                      {dSoon && !dOver && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(255,176,32,0.12)',color:'rgba(255,176,32,0.85)'}}>{daysLeft}d</span>}
+                      {pendingTasks > 0 && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.55)'}}>{pendingTasks}t</span>}
+                    </div>
+                    <div className="h-1 rounded-full" style={{background:'rgba(255,255,255,0.05)'}}>
+                      <div className="h-full rounded-full transition-all" style={{width:`${p.progress}%`,background:p.color||BLU}}/>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           {/* Team tasks (owners) */}
           {isOwner && otherTasks.length > 0 && (
             <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
@@ -3100,9 +3133,11 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   const [confirmDeleteProjId, setConfirmDeleteProjId] = useState<string|null>(null)
   const [confirmDeleteDetail, setConfirmDeleteDetail] = useState(false)
   const [projSearch, setProjSearch] = useState('')
+  const [quickProjTask, setQuickProjTask] = useState('')
+  const [quickProjCreating, setQuickProjCreating] = useState(false)
   const selectedProject: Project|null = selectedId ? data.projects.find((p: Project)=>p.id===selectedId)||null : null
 
-  useEffect(() => { setEditProgress(null); setConfirmDeleteDetail(false) }, [selectedId])
+  useEffect(() => { setEditProgress(null); setConfirmDeleteDetail(false); setQuickProjTask('') }, [selectedId])
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && selectedId) onSelect(null) }
@@ -3365,29 +3400,34 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               )}
             </div>
           </div>
-          {/* Related tasks */}
-          {(() => {
+          {/* Related tasks + quick add */}
+          {(()=>{
             const projTasks = data.tasks.filter((t: Task) => !t.done && (t.project_id === selectedProject.id || t.client_id === selectedProject.client_id))
-            if (!projTasks.length) return null
             return (
               <div className="mt-5 pt-5" style={{borderTop:`1px solid ${BORDER}`}}>
                 <div className="font-syne text-[8px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.2)'}}>TAREAS ACTIVAS</div>
-                <div className="space-y-2">
-                  {projTasks.slice(0,6).map((t: Task)=>{
-                    const tc = t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.85)':BLU
-                    const ptodayStr = new Date().toISOString().split('T')[0]
-                    const ptIsToday = t.due_date && t.due_date.slice(0,10) === ptodayStr
-                    const ptOver = t.due_date && !ptIsToday && new Date(t.due_date+'T23:59:59') < new Date()
-                    return (
-                      <div key={t.id} className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{background:tc+'10',border:`1px solid ${tc}25`}}>
-                        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:tc}}/>
-                        <span className="text-[11.5px] flex-1 truncate" style={{color:'rgba(255,255,255,0.65)'}}>{t.text}</span>
-                        {t.due_date && <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:ptIsToday?'rgba(255,176,32,0.15)':ptOver?`${RED}18`:'rgba(255,255,255,0.05)',color:ptIsToday?'rgba(255,176,32,0.9)':ptOver?RED:'rgba(255,255,255,0.25)'}}>{ptIsToday?'HOY':new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
-                        {t.assignee && <div className="w-5 h-5 rounded-full flex items-center justify-center font-syne text-[7px] font-black flex-shrink-0" style={{background:t.assignee.avatar_color+'22',color:t.assignee.avatar_color}}>{t.assignee.initials}</div>}
-                      </div>
-                    )
-                  })}
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl mb-3" style={{background:'rgba(255,255,255,0.02)',border:`1px dashed ${BORDER}`}}>
+                  <LucideIcon name="plus-circle" size={11} color="rgba(255,255,255,0.15)"/>
+                  <input value={quickProjTask} onChange={e=>setQuickProjTask(e.target.value)} onKeyDown={async e=>{if(e.key==='Enter'&&quickProjTask.trim()&&!quickProjCreating){setQuickProjCreating(true);try{await data.createTask({text:quickProjTask.trim(),level:'normal',project_id:selectedProject.id,client_id:selectedProject.client_id||undefined,source:'manual'});setQuickProjTask('');showToast('Tarea creada')}catch{showToast('Error')}finally{setQuickProjCreating(false)}}}} placeholder="Añadir tarea… (Enter)" disabled={quickProjCreating} className="flex-1 bg-transparent text-[11.5px] outline-none disabled:opacity-40" style={{caretColor:selectedProject.color||BLU,color:'rgba(255,255,255,0.55)'}}/>
                 </div>
+                {projTasks.length > 0 && (
+                  <div className="space-y-2">
+                    {projTasks.slice(0,6).map((t: Task)=>{
+                      const tc = t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.85)':BLU
+                      const ptodayStr = new Date().toISOString().split('T')[0]
+                      const ptIsToday = t.due_date && t.due_date.slice(0,10) === ptodayStr
+                      const ptOver = t.due_date && !ptIsToday && new Date(t.due_date+'T23:59:59') < new Date()
+                      return (
+                        <div key={t.id} className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{background:tc+'10',border:`1px solid ${tc}25`}}>
+                          <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:tc}}/>
+                          <span className="text-[11.5px] flex-1 truncate" style={{color:'rgba(255,255,255,0.65)'}}>{t.text}</span>
+                          {t.due_date && <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:ptIsToday?'rgba(255,176,32,0.15)':ptOver?`${RED}18`:'rgba(255,255,255,0.05)',color:ptIsToday?'rgba(255,176,32,0.9)':ptOver?RED:'rgba(255,255,255,0.25)'}}>{ptIsToday?'HOY':new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
+                          {t.assignee && <div className="w-5 h-5 rounded-full flex items-center justify-center font-syne text-[7px] font-black flex-shrink-0" style={{background:t.assignee.avatar_color+'22',color:t.assignee.avatar_color}}>{t.assignee.initials}</div>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             )
           })()}
