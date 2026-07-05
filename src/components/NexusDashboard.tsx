@@ -903,6 +903,12 @@ function EquipoSection({data, profile, showToast}: any) {
   const [msgBody, setMsgBody] = useState('')
   const [sending, setSending] = useState(false)
 
+  useEffect(()=>{
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && selected) setSelected(null) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [selected])
+
   const allActive: Profile[] = data.team.some((m: Profile) => m.id === profile?.id)
     ? data.team
     : (profile ? [profile, ...data.team] : data.team)
@@ -2315,6 +2321,12 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
 
   useEffect(() => { setEditProgress(null) }, [selectedId])
 
+  useEffect(()=>{
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && selectedId) onSelect(null) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [selectedId, onSelect])
+
   const saveProgress = async () => {
     if (!selectedProject || editProgress === null) return
     setSavingProgress(true)
@@ -2498,10 +2510,20 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
             return (
               <div className="mt-5 pt-5" style={{borderTop:`1px solid ${BORDER}`}}>
                 <div className="font-syne text-[8px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.2)'}}>TAREAS ACTIVAS</div>
-                <div className="flex flex-wrap gap-2">
+                <div className="space-y-2">
                   {projTasks.slice(0,6).map((t: Task)=>{
                     const tc = t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.85)':BLU
-                    return <span key={t.id} className="font-syne text-[8px] font-black px-2.5 py-1.5 rounded-lg" style={{background:tc+'12',color:tc+'cc'}}>{t.text.slice(0,40)}{t.text.length>40?'…':''}</span>
+                    const ptodayStr = new Date().toISOString().split('T')[0]
+                    const ptIsToday = t.due_date && t.due_date.slice(0,10) === ptodayStr
+                    const ptOver = t.due_date && !ptIsToday && new Date(t.due_date+'T23:59:59') < new Date()
+                    return (
+                      <div key={t.id} className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{background:tc+'10',border:`1px solid ${tc}25`}}>
+                        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:tc}}/>
+                        <span className="text-[11.5px] flex-1 truncate" style={{color:'rgba(255,255,255,0.65)'}}>{t.text}</span>
+                        {t.due_date && <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:ptIsToday?'rgba(255,176,32,0.15)':ptOver?`${RED}18`:'rgba(255,255,255,0.05)',color:ptIsToday?'rgba(255,176,32,0.9)':ptOver?RED:'rgba(255,255,255,0.25)'}}>{ptIsToday?'HOY':new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
+                        {t.assignee && <div className="w-5 h-5 rounded-full flex items-center justify-center font-syne text-[7px] font-black flex-shrink-0" style={{background:t.assignee.avatar_color+'22',color:t.assignee.avatar_color}}>{t.assignee.initials}</div>}
+                      </div>
+                    )
                   })}
                 </div>
               </div>
@@ -3038,7 +3060,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
                             <div className="flex items-center gap-1 mb-0.5">
                               {e.type==='content'
                                 ? <><PlatformLogo platform={e.raw?.platform} size={9}/><span className="font-syne text-[7px] font-black tracking-wide" style={{color:e.color+'cc'}}>{e.raw?.platform}</span></>
-                                : <span className="font-syne text-[7px] font-black tracking-wide" style={{color:e.color+'cc'}}>{e.type==='gcal'?'GCAL':'TAREA'}</span>
+                                : <span className="font-syne text-[7px] font-black tracking-wide" style={{color:e.color+'cc'}}>{e.type==='gcal'?'GCAL':e.type==='project'?'PROY.':'TAREA'}</span>
                               }
                             </div>
                             <div className="text-[10px] font-medium line-clamp-2 leading-tight" style={{color:'rgba(255,255,255,0.7)'}}>{e.label}</div>
