@@ -764,6 +764,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
   const [filter, setFilter] = useState<'todas'|'urgente'|'high'|'normal'|'hecho'|'semana'|'sin_fecha'>('todas')
   const [assigneeFilter, setAssigneeFilter] = useState('Todos')
   const [taskSort, setTaskSort] = useState<'prioridad'|'fecha'>('prioridad')
+  const [taskGroup, setTaskGroup] = useState<'none'|'proyecto'>('none')
   const [activeTask, setActiveTask] = useState<Task|null>(null)
   const [editing, setEditing] = useState<Partial<Task>>({})
   const [saving, setSaving] = useState(false)
@@ -863,6 +864,9 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                     <LucideIcon name={s.icon} size={12} color={taskSort===s.id?'rgba(255,255,255,0.8)':'rgba(255,255,255,0.25)'}/>
                   </button>
                 ))}
+                <button onClick={()=>setTaskGroup(g=>g==='none'?'proyecto':'none')} title="Agrupar por proyecto" className="px-2.5 py-2 rounded-lg transition-all" style={{background:taskGroup==='proyecto'?SURF2:'transparent'}}>
+                  <LucideIcon name="layers" size={12} color={taskGroup==='proyecto'?BLU:'rgba(255,255,255,0.25)'}/>
+                </button>
               </div>
               <button onClick={()=>onOpenModal('tarea')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVA</button>
             </div>
@@ -909,37 +913,77 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
           </div>
         </div>
         <div className="flex-1 overflow-y-auto px-8 pb-8">
-          <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-            {filtered.length === 0 && <div className="py-16 text-center text-[13px]" style={{color:'rgba(255,255,255,0.18)'}}>Sin tareas en este filtro</div>}
-            {filtered.map((t: Task, i: number) => {
+          {(()=>{
+            const TaskRow = ({t,i,arr}: {t:Task,i:number,arr:Task[]}) => {
               const pc = t.done ? 'rgba(255,255,255,0.08)' : levelColor(t.level)
               return (
-              <div key={t.id} onClick={()=>openTask(t)} className="flex items-start gap-3 px-5 py-4 cursor-pointer group hover:bg-white/[0.015] transition-all" style={{background:activeTask?.id===t.id?'rgba(27,95,250,0.06)':'transparent',borderBottom:i===filtered.length-1?'none':`1px solid ${BORDER}`,borderLeft:`3px solid ${activeTask?.id===t.id?BLU:t.done?'transparent':pc+'60'}`}}>
-                <button onClick={e=>{e.stopPropagation();data.toggleTask(t.id)}} className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 mt-1 transition-all" style={{background:t.done?pc:'transparent',border:`2px solid ${t.done?pc:pc+'60'}`}}>
-                  {t.done && <LucideIcon name="check" size={8} color="white"/>}
-                </button>
-                <div className="flex-1 min-w-0">
-                  <div className="font-figtree text-[14px] font-semibold leading-snug mb-1.5" style={{color:t.done?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.88)',textDecoration:t.done?'line-through':'none'}}>{t.text}</div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {(t.client as any)?.name && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:(t.client as any).color+'18',color:(t.client as any).color+'cc'}}>{(t.client as any).name}</span>}
-                    {t.due_date && (() => {
-                      const todayStr = new Date().toISOString().split('T')[0]
-                      const isToday = t.due_date.slice(0,10) === todayStr
-                      const overdue = !t.done && !isToday && new Date(t.due_date+'T23:59:59') < new Date()
-                      const label = isToday ? 'HOY' : new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})
-                      return <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:isToday?'rgba(255,176,32,0.15)':overdue?'rgba(229,29,42,0.1)':'rgba(255,255,255,0.05)',color:isToday?'rgba(255,176,32,0.95)':overdue?RED:'rgba(255,255,255,0.35)'}}>{overdue?'● ':''}{label}</span>
-                    })()}
-                    {t.project_id && (() => { const proj = data.projects.find((p: Project)=>p.id===t.project_id); return proj ? <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:(proj.color||BLU)+'12',color:(proj.color||BLU)+'99'}}>{proj.name}</span> : null })()}
-                    {!t.done && t.level==='urgent' && <span className="font-syne text-[8px] font-black" style={{color:RED}}>● URGENTE</span>}
-                    {t.source==='gmail' && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.55)'}}>GMAIL</span>}
-                    {t.source==='whatsapp' && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:'rgba(37,211,102,0.06)',color:'rgba(37,211,102,0.55)'}}>WA</span>}
+                <div key={t.id} onClick={()=>openTask(t)} className="flex items-start gap-3 px-5 py-4 cursor-pointer group hover:bg-white/[0.015] transition-all" style={{background:activeTask?.id===t.id?'rgba(27,95,250,0.06)':'transparent',borderBottom:i===arr.length-1?'none':`1px solid ${BORDER}`,borderLeft:`3px solid ${activeTask?.id===t.id?BLU:t.done?'transparent':pc+'60'}`}}>
+                  <button onClick={e=>{e.stopPropagation();data.toggleTask(t.id)}} className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 mt-1 transition-all" style={{background:t.done?pc:'transparent',border:`2px solid ${t.done?pc:pc+'60'}`}}>
+                    {t.done && <LucideIcon name="check" size={8} color="white"/>}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-figtree text-[14px] font-semibold leading-snug mb-1.5" style={{color:t.done?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.88)',textDecoration:t.done?'line-through':'none'}}>{t.text}</div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {(t.client as any)?.name && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:(t.client as any).color+'18',color:(t.client as any).color+'cc'}}>{(t.client as any).name}</span>}
+                      {t.due_date && (() => {
+                        const todayStr = new Date().toISOString().split('T')[0]
+                        const isToday = t.due_date.slice(0,10) === todayStr
+                        const overdue = !t.done && !isToday && new Date(t.due_date+'T23:59:59') < new Date()
+                        const label = isToday ? 'HOY' : new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})
+                        return <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:isToday?'rgba(255,176,32,0.15)':overdue?'rgba(229,29,42,0.1)':'rgba(255,255,255,0.05)',color:isToday?'rgba(255,176,32,0.95)':overdue?RED:'rgba(255,255,255,0.35)'}}>{overdue?'● ':''}{label}</span>
+                      })()}
+                      {taskGroup === 'none' && t.project_id && (() => { const proj = data.projects.find((p: Project)=>p.id===t.project_id); return proj ? <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:(proj.color||BLU)+'12',color:(proj.color||BLU)+'99'}}>{proj.name}</span> : null })()}
+                      {!t.done && t.level==='urgent' && <span className="font-syne text-[8px] font-black" style={{color:RED}}>● URGENTE</span>}
+                      {t.source==='gmail' && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.55)'}}>GMAIL</span>}
+                      {t.source==='whatsapp' && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:'rgba(37,211,102,0.06)',color:'rgba(37,211,102,0.55)'}}>WA</span>}
+                    </div>
                   </div>
+                  {t.assignee && <div className="w-7 h-7 rounded-full flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0 mt-0.5" style={{background:t.assignee.avatar_color+'18',border:`1.5px solid ${t.assignee.avatar_color}35`,color:t.assignee.avatar_color}}>{t.assignee.initials}</div>}
                 </div>
-                {t.assignee && <div className="w-7 h-7 rounded-full flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0 mt-0.5" style={{background:t.assignee.avatar_color+'18',border:`1.5px solid ${t.assignee.avatar_color}35`,color:t.assignee.avatar_color}}>{t.assignee.initials}</div>}
-              </div>
-            )})}
+              )
+            }
 
-          </div>
+            if (taskGroup === 'proyecto' && filter !== 'hecho') {
+              const projMap: Record<string,Task[]> = {}
+              filtered.forEach((t: Task) => { const k = t.project_id||'__none__'; if(!projMap[k])projMap[k]=[]; projMap[k].push(t) })
+              const projKeys = Object.keys(projMap).sort(k=>k==='__none__'?1:-1)
+              if (filtered.length === 0) return <div className="rounded-2xl py-16 text-center text-[13px]" style={{background:SURFACE,border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.18)'}}>Sin tareas en este filtro</div>
+              return (
+                <div className="space-y-3">
+                  {projKeys.map(k => {
+                    const proj = k!=='__none__' ? data.projects.find((p: Project)=>p.id===k) : null
+                    const tasks = projMap[k]
+                    return (
+                      <div key={k} className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+                        <div className="flex items-center gap-2.5 px-5 py-3" style={{borderBottom:`1px solid ${BORDER}`,borderLeft:`3px solid ${proj?proj.color||BLU:'rgba(255,255,255,0.12)'}`}}>
+                          {proj ? (
+                            <>
+                              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:proj.color||BLU}}/>
+                              <span className="font-syne text-[9px] font-black tracking-widest flex-1" style={{color:'rgba(255,255,255,0.5)'}}>{proj.name.toUpperCase()}</span>
+                              <span className="font-syne text-[8px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{tasks.length}</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="font-syne text-[9px] font-black tracking-widest flex-1" style={{color:'rgba(255,255,255,0.25)'}}>SIN PROYECTO</span>
+                              <span className="font-syne text-[8px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{tasks.length}</span>
+                            </>
+                          )}
+                        </div>
+                        {tasks.map((t,i)=><TaskRow key={t.id} t={t} i={i} arr={tasks}/>)}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            }
+
+            return (
+              <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+                {filtered.length === 0 && <div className="py-16 text-center text-[13px]" style={{color:'rgba(255,255,255,0.18)'}}>Sin tareas en este filtro</div>}
+                {filtered.map((t: Task, i: number) => <TaskRow key={t.id} t={t} i={i} arr={filtered}/>)}
+              </div>
+            )
+          })()}
           {activeTask && filtered.length > 1 && (
             <div className="flex items-center justify-center gap-3 py-2.5">
               <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>
@@ -1607,6 +1651,41 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
           <LucideIcon name="plus" size={12} color="white"/> NUEVA TAREA
         </button>
       </div>
+
+      {/* 7-day productivity sparkline */}
+      {(()=>{
+        const last7 = Array.from({length:7},(_,i)=>{
+          const d = new Date(); d.setDate(d.getDate()-(6-i))
+          return {key:d.toISOString().slice(0,10), label:d.toLocaleDateString('es-ES',{weekday:'short'})}
+        })
+        const counts = last7.map(({key})=>data.tasks.filter((t:Task)=>t.done&&(t.updated_at||t.created_at).slice(0,10)===key&&(t.assigned_to===profile.id||t.created_by===profile.id)).length)
+        const mx = Math.max(...counts, 1)
+        const total = counts.reduce((a:number,b:number)=>a+b,0)
+        if (total === 0) return null
+        const todayIdx = 6
+        return (
+          <div className="flex items-end gap-4 mb-8">
+            <div className="flex items-end gap-1.5 flex-1">
+              {last7.map(({label},i)=>{
+                const pct = Math.max((counts[i]/mx)*100,4)
+                const isToday = i === todayIdx
+                return (
+                  <div key={i} className="flex flex-col items-center gap-1.5 flex-1" title={`${label}: ${counts[i]} completadas`}>
+                    <div className="w-full rounded-t-sm transition-all" style={{height:'40px',display:'flex',alignItems:'flex-end'}}>
+                      <div className="w-full rounded-t-sm" style={{height:`${pct}%`,background:isToday?GRN:counts[i]>0?BLU+'50':'rgba(255,255,255,0.04)',transition:'height 0.4s ease'}}/>
+                    </div>
+                    <span className="font-syne text-[7.5px] font-black" style={{color:isToday?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.2)'}}>{label.slice(0,2).toUpperCase()}</span>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="text-right flex-shrink-0">
+              <div className="font-figtree text-[22px] font-black leading-none" style={{color:GRN,letterSpacing:'-0.03em'}}>{total}</div>
+              <div className="font-syne text-[7.5px] font-black tracking-widest mt-0.5" style={{color:'rgba(255,255,255,0.2)'}}>ESTA SEMANA</div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Stats row — clickable, navigate to section */}
       <div className="grid grid-cols-5 gap-6 mb-10 pb-10" style={{borderBottom:`1px solid ${BORDER}`}}>
