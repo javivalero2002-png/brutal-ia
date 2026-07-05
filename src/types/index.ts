@@ -45,6 +45,7 @@ export interface Task {
   due_date?: string
   source: 'manual' | 'gmail' | 'whatsapp' | 'ai'
   created_at: string
+  updated_at?: string
   assignee?: Profile
   client?: Client
 }

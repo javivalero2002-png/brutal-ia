@@ -810,7 +810,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
     const byAssignee = assigneeFilter === 'Todos' || t.assignee?.name === assigneeFilter
     return byStatus && byAssignee
   }).sort((a: Task, b: Task) => {
-    if (filter === 'hecho') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    if (filter === 'hecho') return new Date(b.updated_at||b.created_at).getTime() - new Date(a.updated_at||a.created_at).getTime()
     const aOver = a.due_date && new Date(a.due_date+'T23:59:59') < new Date() ? -1 : 0
     const bOver = b.due_date && new Date(b.due_date+'T23:59:59') < new Date() ? -1 : 0
     if (aOver !== bOver) return aOver - bOver
@@ -1537,6 +1537,7 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
   const otherTasks = isOwner ? data.tasks.filter((t:Task) => !t.done && t.assigned_to && t.assigned_to !== profile.id).sort((a:Task,b:Task)=>taskUrgencyOrder(a)-taskUrgencyOrder(b)) : []
   const myOverdue = myTasks.filter((t:Task)=>t.due_date&&new Date(t.due_date+'T23:59:59')<new Date()).length
   const myUrgent = myTasks.filter((t:Task)=>t.level==='urgent').length
+  const completedToday = data.tasks.filter((t:Task)=>t.done&&(t.updated_at||t.created_at).slice(0,10)===new Date().toISOString().slice(0,10)&&(t.assigned_to===profile.id||t.created_by===profile.id)).length
   const recentInbox = data.inbox.filter((m:any) => !m.is_read).slice(0, 4)
   const activeProjects = data.projects.filter((p:Project)=>p.status==='activo'||p.status==='urgente').sort((a:Project,b:Project)=>{
     const da = a.deadline&&a.deadline!=='TBD'?new Date(a.deadline+'T23:59:59').getTime():Infinity
@@ -1572,10 +1573,11 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
       </div>
 
       {/* Stats row — clickable, navigate to section */}
-      <div className="grid grid-cols-4 gap-6 mb-10 pb-10" style={{borderBottom:`1px solid ${BORDER}`}}>
+      <div className="grid grid-cols-5 gap-6 mb-10 pb-10" style={{borderBottom:`1px solid ${BORDER}`}}>
         {[
           { n: myTasks.length, label:'Mis tareas', color:myOverdue>0?RED:'rgba(255,255,255,0.92)', sub:myOverdue>0?`${myOverdue} atrasada${myOverdue>1?'s':''}`:myUrgent>0?`${myUrgent} urgente${myUrgent>1?'s':''}` :'Al día', nav:'tareas' },
           { n: urgentCount, label:'Urgentes', color:urgentCount>0?RED:'rgba(255,255,255,0.25)', sub: urgentCount>0?'Requieren atención':'Todo bajo control', nav:'tareas' },
+          { n: completedToday, label:'Completadas hoy', color:completedToday>0?GRN:'rgba(255,255,255,0.25)', sub: completedToday>0?'Buen trabajo':'Pendiente de arrancar', nav:'tareas' },
           { n: unreadCount, label:'Sin leer', color:unreadCount>0?BLU:'rgba(255,255,255,0.25)', sub:'En inbox', nav:'inbox' },
           { n: activeProjects.length, label:'Proyectos activos', color:'rgba(255,255,255,0.92)', sub:`${data.projects.length} en total`, nav:'proyectos' },
         ].map((s,i)=>(
