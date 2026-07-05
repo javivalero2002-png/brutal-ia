@@ -1533,6 +1533,40 @@ function ReportesSection({data, onNavigate}: any) {
         </button>
       </div>
 
+      {/* 7-day team productivity sparkline */}
+      {(()=>{
+        const last7 = Array.from({length:7},(_,i)=>{
+          const d = new Date(); d.setDate(d.getDate()-(6-i))
+          return {key:d.toISOString().slice(0,10),label:d.toLocaleDateString('es-ES',{weekday:'short'})}
+        })
+        const counts = last7.map(({key})=>tasks.filter(t=>t.done&&(t.updated_at||t.created_at).slice(0,10)===key).length)
+        const mx = Math.max(...counts,1)
+        const total7 = counts.reduce((a,b)=>a+b,0)
+        if (total7 === 0) return null
+        return (
+          <div className="flex items-end gap-4 mb-5 px-1 py-4 rounded-xl" style={{background:'rgba(27,95,250,0.04)',border:'1px solid rgba(27,95,250,0.1)'}}>
+            <div className="flex items-end gap-1.5 flex-1 h-12">
+              {last7.map(({label},i)=>{
+                const pct = Math.max((counts[i]/mx)*100,4)
+                const isToday = i === 6
+                return (
+                  <div key={i} className="flex flex-col items-center gap-1 flex-1" title={`${label}: ${counts[i]} completadas`}>
+                    <div className="w-full flex items-end" style={{height:'32px'}}>
+                      <div className="w-full rounded-sm" style={{height:`${pct}%`,background:isToday?GRN:counts[i]>0?BLU+'60':'rgba(255,255,255,0.04)',transition:'height 0.4s'}}/>
+                    </div>
+                    <span className="font-syne text-[6.5px] font-black" style={{color:isToday?'rgba(255,255,255,0.45)':'rgba(255,255,255,0.18)'}}>{label.slice(0,2).toUpperCase()}</span>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex-shrink-0 text-right pr-1">
+              <div className="font-figtree text-[22px] font-black leading-none" style={{color:GRN,letterSpacing:'-0.03em'}}>{total7}</div>
+              <div className="font-syne text-[7px] font-black tracking-widest mt-0.5" style={{color:'rgba(255,255,255,0.2)'}}>EQUIPO · 7D</div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* KPIs */}
       <div className="grid gap-3 mb-6" style={{gridTemplateColumns:totalMRR>0?'repeat(6,minmax(0,1fr))':'repeat(5,minmax(0,1fr))'}}>
         {[
@@ -1756,6 +1790,8 @@ function ReportesSection({data, onNavigate}: any) {
 }
 
 function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,isOwner,onNavigate}: any) {
+  const [quickText, setQuickText] = useState('')
+  const [quickCreating, setQuickCreating] = useState(false)
   const now = new Date()
   const hour = now.getHours()
   const greeting = hour < 13 ? 'Buenos días' : hour < 20 ? 'Buenas tardes' : 'Buenas noches'
@@ -1889,6 +1925,10 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                 <span className="font-syne text-[15px] font-black text-white">Mis tareas</span>
               </div>
               <button onClick={()=>onOpenModal('tarea')} className="font-syne text-[10px] font-black tracking-wide px-3 py-1.5 rounded-xl transition-colors" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>+ NUEVA</button>
+            </div>
+            <div className="flex items-center gap-2.5 px-6 py-2.5" style={{borderBottom:`1px solid ${BORDER}`}}>
+              <LucideIcon name="plus-circle" size={12} color="rgba(255,255,255,0.15)"/>
+              <input value={quickText} onChange={e=>setQuickText(e.target.value)} onKeyDown={async e=>{if(e.key==='Enter'&&quickText.trim()&&!quickCreating){setQuickCreating(true);try{await data.createTask({text:quickText.trim(),level:'normal',due_date:new Date().toISOString().split('T')[0],source:'manual'});setQuickText('');showToast('Tarea creada')}catch{showToast('Error')}finally{setQuickCreating(false)}}}} placeholder="Captura rápida… (Enter para crear)" disabled={quickCreating} className="flex-1 bg-transparent text-[12px] outline-none disabled:opacity-40" style={{caretColor:BLU,color:'rgba(255,255,255,0.65)'}}/>
             </div>
             {myTasks.length === 0 ? (
               <div className="px-6 py-10 text-center">
@@ -3117,7 +3157,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                         const dLabel = dOver ? `−${diffDays}d` : diffDays===0 ? 'HOY' : `${diffDays}d`
                         return <span className="font-syne text-[8px] font-black px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.25)'}}>{dLabel}</span>
                       })()}
-                      {(() => { const n = data.tasks.filter((t: Task)=>t.project_id===p.id&&!t.done).length; return n>0?<span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.6)'}}>{n}t</span>:null })()}
+                      {(()=>{ const n=data.tasks.filter((t:Task)=>t.project_id===p.id&&!t.done).length; if(n>0) return <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.6)'}}>{n}t</span>; if(p.status!=='completado'&&p.status!=='plan.') return <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,176,32,0.07)',color:'rgba(255,176,32,0.5)'}}>SIN TAREAS</span>; return null })()}
                     </div>
                   </div>
                 ))}
@@ -3148,7 +3188,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 const dLabel = dOver ? `−${diffDays}d` : diffDays===0 ? 'HOY' : `${diffDays}d`
                 return <span className="font-syne text-[9px] font-black flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.28)'}}>{dLabel}</span>
               })()}
-              {(()=>{ const n=data.tasks.filter((t:Task)=>t.project_id===p.id&&!t.done).length; return n>0?<span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.55)'}}>{n}t</span>:null })()}
+              {(()=>{ const n=data.tasks.filter((t:Task)=>t.project_id===p.id&&!t.done).length; if(n>0) return <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.55)'}}>{n}t</span>; if(p.status!=='completado'&&p.status!=='plan.') return <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(255,176,32,0.07)',color:'rgba(255,176,32,0.5)'}}>SIN TAREAS</span>; return null })()}
               {isOwner && (
                 confirmDeleteProjId === p.id
                   ? <div className="flex items-center gap-1 flex-shrink-0" onClick={e=>e.stopPropagation()}>
