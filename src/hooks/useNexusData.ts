@@ -133,6 +133,11 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     return created
   }, [])
 
+  const updateClientRecord = useCallback(async (id: string, updates: Partial<Client>) => {
+    const updated = await apiFetch(`/api/clients/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
+    setClients(prev => prev.map(c => c.id === id ? updated : c))
+  }, [])
+
   const deleteClient = useCallback(async (id: string) => {
     await apiFetch(`/api/clients/${id}`, { method: 'DELETE' })
     setClients(prev => prev.filter(c => c.id !== id))
@@ -221,7 +226,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
 
   return {
     loading, syncing, syncGmail, syncResult,
-    clients, createClient: createClientRecord, deleteClient,
+    clients, createClient: createClientRecord, updateClient: updateClientRecord, deleteClient,
     projects, createProject, updateProject, deleteProject,
     tasks, createTask, updateTask, deleteTask, toggleTask,
     inbox, markRead, sendInternalMessage,

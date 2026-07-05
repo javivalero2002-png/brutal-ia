@@ -561,7 +561,7 @@ function modalFields(type: string, team: Profile[]) {
     proyecto: [
       f('Nombre del proyecto','nombre','Ej: Campaign Summer 2026'),
       f('Cliente','cliente','Ej: Nike España'),
-      f('Deadline','deadline','Ej: 31 Jul 2026'),
+      { label:'Deadline', key:'deadline', type:'date-input', placeholder:'' },
     ],
     tarea: [
       f('Descripción de la tarea','text','Ej: Preparar deck propuesta Q3 para Nike'),
@@ -584,7 +584,7 @@ function modalFields(type: string, team: Profile[]) {
       f('Cliente','cliente','Ej: Nike España'),
       { label:'Plataforma', key:'plataforma', type:'platform' },
       f('Cuenta / Perfil','cuenta','Ej: Brutal Studios, Pablo, Julio Flores'),
-      f('Fecha de publicación','fecha','Ej: 10 Jul 2026'),
+      { label:'Fecha de publicación', key:'fecha', type:'date-input', placeholder:'' },
       { label:'Estado', key:'estado', type:'status' },
     ],
   }
@@ -1795,8 +1795,14 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
   const [commentsLoading, setCommentsLoading] = useState(false)
   const [newComment, setNewComment] = useState('')
   const [postingComment, setPostingComment] = useState(false)
+  const [clientEditOpen, setClientEditOpen] = useState(false)
+  const [editRevenue, setEditRevenue] = useState('')
+  const [editIndustry, setEditIndustry] = useState('')
+  const [savingClient, setSavingClient] = useState(false)
 
   const selected = selectedId ? data.clients.find((c: Client)=>c.id===selectedId) : null
+
+  useEffect(() => { setClientEditOpen(false) }, [selectedId])
 
   const loadComments = async (id: string) => {
     setCommentsLoading(true)
@@ -1863,6 +1869,9 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
               <LucideIcon name="zap" size={11} color="#A78BFA"/>{aiLoading?'Analizando…':'IA ESTRATÉGICA'}
             </button>
             {isOwner && (
+              <button onClick={()=>{ setClientEditOpen(o=>!o); setEditRevenue(selected.revenue||''); setEditIndustry(selected.industry||'') }} className="px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all" style={{color:clientEditOpen?BLU:'rgba(255,255,255,0.4)',background:clientEditOpen?'rgba(27,95,250,0.1)':'transparent',border:`1px solid ${clientEditOpen?'rgba(27,95,250,0.3)':BORDER}`}}>EDITAR</button>
+            )}
+            {isOwner && (
               <button onClick={()=>data.deleteClient(selected.id).then(()=>{handleBack();showToast('Cliente eliminado')})} className="px-3 py-2 rounded-xl text-[11px] transition-colors" style={{color:'rgba(229,29,42,0.45)',border:'1px solid rgba(229,29,42,0.12)'}}>Eliminar</button>
             )}
           </div>
@@ -1889,6 +1898,27 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
                   </div>
                 )
               })}
+            </div>
+          </div>
+        )}
+
+        {/* Client edit form */}
+        {clientEditOpen && isOwner && (
+          <div className="mb-8 rounded-2xl p-6" style={{background:'rgba(27,95,250,0.05)',border:'1px solid rgba(27,95,250,0.15)'}}>
+            <div className="font-syne text-[8.5px] font-black tracking-widest mb-4" style={{color:'rgba(100,140,255,0.6)'}}>EDITAR CLIENTE</div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block font-syne text-[8px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>INDUSTRIA</label>
+                <input value={editIndustry} onChange={e=>setEditIndustry(e.target.value)} placeholder="Ej: Fashion · Lifestyle" className="w-full px-4 py-3 rounded-xl text-[13px] text-white placeholder-white/20 outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+              </div>
+              <div>
+                <label className="block font-syne text-[8px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>FACTURACIÓN MENSUAL</label>
+                <input value={editRevenue} onChange={e=>setEditRevenue(e.target.value)} placeholder="Ej: €12.000/mes" className="w-full px-4 py-3 rounded-xl text-[13px] text-white placeholder-white/20 outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={async()=>{ setSavingClient(true); try { await data.updateClient(selected.id,{industry:editIndustry,revenue:editRevenue}); showToast('Cliente actualizado'); setClientEditOpen(false) } catch { showToast('Error') } finally { setSavingClient(false) } }} disabled={savingClient} className="px-5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingClient?'GUARDANDO…':'GUARDAR'}</button>
+              <button onClick={()=>setClientEditOpen(false)} className="px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-colors" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>CANCELAR</button>
             </div>
           </div>
         )}
@@ -2332,6 +2362,7 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
   const [editVideoUrl, setEditVideoUrl] = useState('')
   const [editFeedback, setEditFeedback] = useState('')
   const [editAccountName, setEditAccountName] = useState('')
+  const [editPublishDate, setEditPublishDate] = useState('')
   const [accountFilter, setAccountFilter] = useState('Todas')
   const [savingNotes, setSavingNotes] = useState(false)
 
@@ -2350,13 +2381,14 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
     setEditVideoUrl(item.video_url||'')
     setEditFeedback(item.feedback||'')
     setEditAccountName(item.account_name||'')
+    setEditPublishDate(item.publish_date||'')
   }
 
   const saveNotes = async () => {
     if (!activeItem) return
     setSavingNotes(true)
     try {
-      const updates: any = { notes: editNotes, video_url: editVideoUrl, feedback: editFeedback, account_name: editAccountName }
+      const updates: any = { notes: editNotes, video_url: editVideoUrl, feedback: editFeedback, account_name: editAccountName, publish_date: editPublishDate||undefined }
       await data.updateAgenda(activeItem.id, updates)
       showToast('Guardado')
       setActiveItem((prev: any) => ({...prev, ...updates}))
@@ -2566,6 +2598,10 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
 
           {/* Scrollable fields */}
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
+            <div>
+              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.22)'}}>FECHA DE PUBLICACIÓN</div>
+              <input type="date" value={editPublishDate} onChange={e=>setEditPublishDate(e.target.value)} className="w-full px-4 py-2.5 rounded-xl text-[12px] text-white outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,colorScheme:'dark'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.35)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+            </div>
             <div>
               <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.22)'}}>CUENTA / PERFIL</div>
               <input value={editAccountName} onChange={e=>setEditAccountName(e.target.value)} placeholder="Ej: Brutal Studios, Pablo, Julio Flores…" className="w-full px-4 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.35)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
