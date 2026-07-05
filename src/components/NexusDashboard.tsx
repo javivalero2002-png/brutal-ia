@@ -1379,6 +1379,8 @@ function ReportesSection({data, onNavigate}: any) {
   const completionRate = totalTasks > 0 ? Math.round((doneTasks/totalTasks)*100) : 0
 
   const activeClients = clients.filter(c=>c.status==='Activo')
+  const parseMRR = (s: string) => { if(!s||s==='—')return 0; return parseFloat(s.replace(/[€$£\s]/g,'').replace(/\./g,'').replace(',','.').replace(/\/.*$/,''))||0 }
+  const totalMRR = activeClients.reduce((sum: number,c: Client)=>sum+parseMRR(c.revenue||''),0)
   const overdueProjects = projects.filter(p=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&new Date(p.deadline+'T23:59:59')<new Date())
   const projectsByStatus = [
     {label:'En progreso', count:projects.filter(p=>p.status==='activo').length, color:BLU},
@@ -1437,16 +1439,17 @@ function ReportesSection({data, onNavigate}: any) {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-5 gap-3 mb-6">
+      <div className="grid gap-3 mb-6" style={{gridTemplateColumns:totalMRR>0?'repeat(6,minmax(0,1fr))':'repeat(5,minmax(0,1fr))'}}>
         {[
           {v:`${completionRate}%`, l:'Tareas completadas', accent:completionRate>60?'#22c55e':BLU, nav:'tareas'},
           {v:urgentTasks+'', l:'Urgentes pendientes', accent:urgentTasks>0?RED:BLU, nav:'tareas'},
           {v:overdueProjects.length+'', l:'Proy. atrasados', accent:overdueProjects.length>0?RED:null, nav:'proyectos'},
           {v:activeClients.length+'', l:'Clientes activos', accent:null, nav:'clientes'},
           {v:agendaItems.filter((a:any)=>a.status!=='publicado').length+'', l:'En pipeline', accent:agendaItems.filter((a:any)=>a.status!=='publicado').length>0?'rgba(193,53,132,0.9)':null, nav:'contenido'},
+          ...(totalMRR>0?[{v:`€${totalMRR.toLocaleString('es-ES')}`, l:'MRR activos', accent:GRN, nav:'clientes'}]:[]),
         ].map((k,i)=>(
           <button key={i} onClick={()=>onNavigate?.(k.nav)} className="rounded-xl p-4 text-left transition-all hover:opacity-80" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)',borderTop:`2px solid ${k.accent||'rgba(255,255,255,0.1)'}`}}>
-            <div className="font-syne text-4xl font-black mb-1" style={{color:k.accent||'#F0F0F8'}}>{k.v}</div>
+            <div className="font-syne text-4xl font-black mb-1 leading-none" style={{color:k.accent||'#F0F0F8',fontSize:totalMRR>0?'clamp(20px,2.2vw,36px)':'36px'}}>{k.v}</div>
             <div className="text-xs text-white/35">{k.l}</div>
           </button>
         ))}
@@ -3657,6 +3660,11 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
             <LucideIcon name="chevron-right" size={14} color="rgba(255,255,255,0.4)"/>
           </button>
           <button onClick={()=>{setViewMonth(today.getMonth());setViewYear(today.getFullYear());setSelectedDay(today)}} className="ml-2 px-3 py-1.5 rounded-lg font-syne text-[8px] font-black tracking-wide transition-colors" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>HOY</button>
+          {(()=>{
+            const monthKey = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}`
+            const monthEventCount = Object.keys(eventsByDay).filter(k=>k.startsWith(monthKey)).reduce((s,k)=>s+eventsByDay[k].length,0)
+            return monthEventCount > 0 ? <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.25)'}}>{monthEventCount} evento{monthEventCount>1?'s':''}</span> : null
+          })()}
           {/* Legend */}
           <div className="ml-auto flex items-center gap-4 text-[10px]" style={{color:'rgba(255,255,255,0.3)'}}>
             {[{c:'#a78bfa',l:'Google Cal'},{c:BLU,l:'Contenido'},{c:'rgba(255,176,32,0.8)',l:'Tarea'},{c:GRN,l:'Proyecto'}].map(x=>(
