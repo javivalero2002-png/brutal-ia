@@ -801,6 +801,11 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && activeTask) { setActiveTask(null); return }
+      if (e.key === 'n' && !activeTask && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
+        e.preventDefault()
+        onOpenModal('tarea')
+        return
+      }
       if ((e.key === 'j' || e.key === 'k') && activeTask && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
         e.preventDefault()
         const tasks = filteredTasksRef.current
@@ -812,7 +817,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [activeTask])
+  }, [activeTask, onOpenModal])
 
   const openTask = (t: Task) => {
     setActiveTask(t)
@@ -1055,6 +1060,13 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
                 <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.06)',fontFamily:'inherit'}}>J</kbd> siguiente
                 {' · '}
                 <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.06)',fontFamily:'inherit'}}>K</kbd> anterior
+              </span>
+            </div>
+          )}
+          {!activeTask && (
+            <div className="flex items-center justify-center py-2">
+              <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.08)'}}>
+                <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.05)',fontFamily:'inherit'}}>N</kbd> nueva tarea
               </span>
             </div>
           )}
@@ -1798,6 +1810,49 @@ function ReportesSection({data, onNavigate}: any) {
                   </div>
                 )
               })}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Per-client breakdown */}
+      {(()=>{
+        const rows = clients
+          .map((c: Client) => {
+            const cProj = projects.filter((p: Project)=>p.client_id===c.id)
+            const activeCProj = cProj.filter((p: Project)=>p.status==='activo'||p.status==='urgente')
+            const pendingT = tasks.filter((t: Task)=>!t.done&&t.client_id===c.id).length
+            const avgProg = activeCProj.length ? Math.round(activeCProj.reduce((s: number,p: Project)=>s+p.progress,0)/activeCProj.length) : null
+            return { c, nProj: cProj.length, pendingT, avgProg }
+          })
+          .filter((r: any) => r.nProj > 0 || r.pendingT > 0)
+          .sort((a: any, b: any) => b.pendingT - a.pendingT)
+        if (!rows.length) return null
+        return (
+          <div className="mt-4 rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+            <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Resumen por cliente</div>
+            <div className="space-y-1">
+              {rows.map(({c,nProj,pendingT,avgProg}: any, i: number) => (
+                <div key={c.id} className="flex items-center gap-3 py-2.5" style={{borderBottom:i<rows.length-1?'1px solid rgba(255,255,255,0.04)':'none'}}>
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0" style={{background:c.color+'18',color:c.color}}>{c.initials}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-[12px] text-white/70 font-medium truncate">{c.name}</span>
+                      <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:c.status==='Activo'?'rgba(34,197,94,0.08)':'rgba(255,255,255,0.04)',color:c.status==='Activo'?GRN:'rgba(255,255,255,0.25)'}}>{c.status.toUpperCase()}</span>
+                    </div>
+                    {avgProg !== null && (
+                      <div className="h-1 rounded-full" style={{background:'rgba(255,255,255,0.05)'}}>
+                        <div className="h-full rounded-full transition-all" style={{width:`${avgProg}%`,background:`linear-gradient(90deg,${c.color}70,${c.color})`}}/>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    {avgProg !== null && <span className="font-syne text-[8px] font-black w-9 text-right" style={{color:c.color+'aa'}}>{avgProg}%</span>}
+                    <span className="font-syne text-[8px] font-black w-14 text-right" style={{color:'rgba(255,255,255,0.25)'}}>{nProj} proy.</span>
+                    <span className="font-syne text-[8px] font-black w-6 text-right" style={{color:pendingT>0?'rgba(100,140,255,0.65)':'rgba(255,255,255,0.15)'}}>{pendingT}t</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )
@@ -3475,10 +3530,16 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient}
   const [confirmDeleteContent, setConfirmDeleteContent] = useState(false)
 
   useEffect(()=>{
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && activeItem) setActiveItem(null) }
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && activeItem) { setActiveItem(null); return }
+      if (e.key === 'n' && !activeItem && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
+        e.preventDefault()
+        onOpenModal('contenido')
+      }
+    }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [activeItem])
+  }, [activeItem, onOpenModal])
 
   const platColor: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
 
