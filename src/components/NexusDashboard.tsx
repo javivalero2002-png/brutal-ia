@@ -465,7 +465,7 @@ export default function NexusDashboard({ profile }: Props) {
         <div className="flex-1 overflow-y-auto">
           {section === 'hoy' && <HoySection profile={profile} data={data} urgentCount={urgentCount} unreadCount={unreadCount} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} onNavigate={setSection} />}
           {section === 'inbox' && <InboxSection data={data} showToast={showToast} profile={profile} onNavigate={setSection} onSelectClient={setSelectedClient} />}
-          {section === 'tareas' && <TareasSection data={data} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
+          {section === 'tareas' && <TareasSection data={data} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} onNavigate={setSection} onSelectProject={setSelectedProject} onSelectClient={setSelectedClient} />}
           {section === 'equipo' && <EquipoSection data={data} profile={profile} showToast={showToast} />}
           {section === 'reportes' && <ReportesSection data={data} onNavigate={setSection} />}
           {section === 'clientes' && <ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={setModal} onSetMf={setMf} showToast={showToast} isOwner={profile.role==='owner'} />}
@@ -786,7 +786,7 @@ function ProgressRing({ pct, size=52, stroke=3, color=BLU }: { pct:number, size?
 
 // ── HOY SECTION ─────────────────────────────────────────────
 // ── TAREAS SECTION ───────────────────────────────────────────
-function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
+function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectProject,onSelectClient}: any) {
   const [filter, setFilter] = useState<'todas'|'urgente'|'high'|'normal'|'hecho'|'hoy'|'semana'|'sin_fecha'>('todas')
   const [assigneeFilter, setAssigneeFilter] = useState('Todos')
   const [taskSort, setTaskSort] = useState<'prioridad'|'fecha'>('prioridad')
@@ -962,7 +962,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                   <div className="flex-1 min-w-0">
                     <div className="font-figtree text-[14px] font-semibold leading-snug mb-1.5" style={{color:t.done?'rgba(255,255,255,0.22)':'rgba(255,255,255,0.88)',textDecoration:t.done?'line-through':'none'}}>{t.text}</div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      {(t.client as any)?.name && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:(t.client as any).color+'18',color:(t.client as any).color+'cc'}}>{(t.client as any).name}</span>}
+                      {(t.client as any)?.name && <button onClick={e=>{e.stopPropagation();onSelectClient?.((t.client as any).id);onNavigate?.('clientes')}} className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full transition-all hover:opacity-75" style={{background:(t.client as any).color+'18',color:(t.client as any).color+'cc'}}>{(t.client as any).name}</button>}
                       {t.due_date && (() => {
                         const todayStr = new Date().toISOString().split('T')[0]
                         const isToday = t.due_date.slice(0,10) === todayStr
@@ -970,7 +970,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                         const label = isToday ? 'HOY' : new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})
                         return <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:isToday?'rgba(255,176,32,0.15)':overdue?'rgba(229,29,42,0.1)':'rgba(255,255,255,0.05)',color:isToday?'rgba(255,176,32,0.95)':overdue?RED:'rgba(255,255,255,0.35)'}}>{overdue?'● ':''}{label}</span>
                       })()}
-                      {taskGroup === 'none' && t.project_id && (() => { const proj = data.projects.find((p: Project)=>p.id===t.project_id); return proj ? <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:(proj.color||BLU)+'12',color:(proj.color||BLU)+'99'}}>{proj.name}</span> : null })()}
+                      {taskGroup === 'none' && t.project_id && (() => { const proj = data.projects.find((p: Project)=>p.id===t.project_id); return proj ? <button onClick={e=>{e.stopPropagation();onSelectProject?.(proj.id);onNavigate?.('proyectos')}} className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded transition-all hover:opacity-75" style={{background:(proj.color||BLU)+'12',color:(proj.color||BLU)+'99'}}>{proj.name}</button> : null })()}
                       {!t.done && t.level==='urgent' && <span className="font-syne text-[8px] font-black" style={{color:RED}}>● URGENTE</span>}
                       {t.source==='gmail' && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.55)'}}>GMAIL</span>}
                       {t.source==='whatsapp' && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:'rgba(37,211,102,0.06)',color:'rgba(37,211,102,0.55)'}}>WA</span>}
@@ -997,7 +997,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                           {proj ? (
                             <>
                               <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:proj.color||BLU}}/>
-                              <span className="font-syne text-[9px] font-black tracking-widest flex-1" style={{color:'rgba(255,255,255,0.5)'}}>{proj.name.toUpperCase()}</span>
+                              <button onClick={()=>{onSelectProject?.(proj.id);onNavigate?.('proyectos')}} className="font-syne text-[9px] font-black tracking-widest flex-1 text-left transition-all hover:opacity-75" style={{color:'rgba(255,255,255,0.5)'}}>{proj.name.toUpperCase()}</button>
                               <span className="font-syne text-[8px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{tasks.length}</span>
                             </>
                           ) : (
@@ -1264,13 +1264,15 @@ function EquipoSection({data, profile, showToast}: any) {
             const teamPending = data.tasks.filter((t: Task)=>!t.done&&!!t.assignee).length
             const teamOverdue = data.tasks.filter((t: Task)=>!t.done&&!!t.assignee&&!!t.due_date&&new Date(t.due_date+'T23:59:59')<new Date()).length
             const teamUrgent = data.tasks.filter((t: Task)=>!t.done&&!!t.assignee&&t.level==='urgent').length
-            if (teamPending === 0) return null
+            const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate()-7); weekAgo.setHours(0,0,0,0)
+            const teamCompletedWeek = data.tasks.filter((t: Task)=>t.done&&!!t.assignee&&new Date(t.updated_at||t.created_at)>=weekAgo).length
+            if (teamPending === 0 && teamCompletedWeek === 0) return null
             return (
               <div className="flex items-center gap-3">
-                <div className="text-center">
+                {teamPending > 0 && <div className="text-center">
                   <div className="font-figtree text-[22px] font-black leading-none" style={{color:'rgba(255,255,255,0.75)',letterSpacing:'-0.03em'}}>{teamPending}</div>
                   <div className="font-syne text-[7px] font-black tracking-widest mt-0.5" style={{color:'rgba(255,255,255,0.2)'}}>PENDIENTES</div>
-                </div>
+                </div>}
                 {teamUrgent > 0 && (
                   <div className="text-center">
                     <div className="font-figtree text-[22px] font-black leading-none" style={{color:RED,letterSpacing:'-0.03em'}}>{teamUrgent}</div>
@@ -1281,6 +1283,12 @@ function EquipoSection({data, profile, showToast}: any) {
                   <div className="text-center">
                     <div className="font-figtree text-[22px] font-black leading-none" style={{color:'rgba(255,176,32,0.9)',letterSpacing:'-0.03em'}}>{teamOverdue}</div>
                     <div className="font-syne text-[7px] font-black tracking-widest mt-0.5" style={{color:'rgba(255,255,255,0.2)'}}>ATRASADAS</div>
+                  </div>
+                )}
+                {teamCompletedWeek > 0 && (
+                  <div className="text-center">
+                    <div className="font-figtree text-[22px] font-black leading-none" style={{color:GRN,letterSpacing:'-0.03em'}}>{teamCompletedWeek}</div>
+                    <div className="font-syne text-[7px] font-black tracking-widest mt-0.5" style={{color:'rgba(255,255,255,0.2)'}}>ESTA SEMANA</div>
                   </div>
                 )}
               </div>
