@@ -138,11 +138,12 @@ export default function NexusDashboard({ profile }: Props) {
       ...data.projects.map(p => ({ type:'Proyecto', title:p.name, sub:p.client?.name||'—', act:()=>{ setSelectedProject(p.id); setSection('proyectos'); setSearchOpen(false) }})),
       ...data.tasks.map(t => ({ type:'Tarea', title:t.text, sub:t.level==='urgent'?'Urgente':t.level==='high'?'Alta':'Normal', act:()=>{ setSection('hoy'); setSearchOpen(false) }})),
       ...data.memoria.map(m => ({ type:'Memoria', title:m.title, sub:m.category, act:()=>{ setSection('memoria'); setSearchOpen(false) }})),
+      ...data.agenda.map((a: any) => ({ type:'Contenido', title:a.title, sub:a.platform, act:()=>{ setSection('contenido'); setSearchOpen(false) }})),
     ].filter(r => r.title.toLowerCase().includes(q) || r.sub.toLowerCase().includes(q)).slice(0, 8)
   })()
   sr.current = searchResults
 
-  const typeColor: Record<string,string> = { Cliente:BLU, Proyecto:'rgba(255,176,32,0.9)', Tarea:RED, Memoria:'rgba(240,240,248,0.4)' }
+  const typeColor: Record<string,string> = { Cliente:BLU, Proyecto:'rgba(255,176,32,0.9)', Tarea:RED, Memoria:'rgba(240,240,248,0.4)', Contenido:'#C13584' }
 
   const ACCENT_COLORS = ['#1B5FFA','#E51D2A','#22c55e','#F97316','#A78BFA','#06B6D4','#EC4899','#84CC16','#F59E0B','#10B981']
 
@@ -156,7 +157,9 @@ export default function NexusDashboard({ profile }: Props) {
         showToast('Cliente creado: '+mf.name)
       } else if (modal === 'proyecto') {
         if (!mf.nombre?.trim()) { showToast('Escribe el nombre'); return }
-        const client = data.clients.find(c => c.name.toLowerCase() === mf.cliente?.toLowerCase())
+        const client = mf.cliente?.trim()
+          ? data.clients.find((c: Client) => c.name.toLowerCase().includes(mf.cliente.toLowerCase()) || mf.cliente.toLowerCase().includes(c.name.toLowerCase().split(' ')[0]))
+          : null
         const color = client?.color || ACCENT_COLORS[data.projects.length % ACCENT_COLORS.length]
         await data.createProject({ name:mf.nombre.trim(), client_id:client?.id, status:'activo', progress:0, deadline:mf.deadline||'TBD', color })
         showToast('Proyecto creado: '+mf.nombre)
@@ -177,8 +180,11 @@ export default function NexusDashboard({ profile }: Props) {
         showToast('Regla creada')
       } else if (modal === 'contenido') {
         if (!mf.titulo?.trim()) { showToast('Escribe el título'); return }
-        await data.createAgenda({ title:mf.titulo.trim(), platform:mf.plataforma||'Instagram', account_name:mf.cuenta?.trim()||undefined, content_type:'Post', status:(mf.estado||'borrador') as 'borrador'|'pendiente'|'listo'|'publicado', publish_date:mf.fecha })
-        showToast('Pieza añadida')
+        const contentClient = mf.cliente?.trim()
+          ? data.clients.find((c: Client) => c.name.toLowerCase().includes(mf.cliente.toLowerCase()) || mf.cliente.toLowerCase().includes(c.name.toLowerCase().split(' ')[0]))
+          : null
+        await data.createAgenda({ title:mf.titulo.trim(), platform:mf.plataforma||'Instagram', account_name:mf.cuenta?.trim()||undefined, content_type:'Post', status:(mf.estado||'borrador') as 'borrador'|'pendiente'|'listo'|'publicado', publish_date:mf.fecha, client_id:contentClient?.id })
+        showToast('Pieza añadida' + (contentClient ? ` · ${contentClient.name}` : ''))
       }
       setModal(null); setMf({})
     } catch (err: any) { showToast('Error: '+err.message) }
@@ -395,7 +401,7 @@ export default function NexusDashboard({ profile }: Props) {
       {/* MAIN */}
       <main className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto">
-          {section === 'hoy' && <HoySection profile={profile} data={data} urgentCount={urgentCount} unreadCount={unreadCount} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
+          {section === 'hoy' && <HoySection profile={profile} data={data} urgentCount={urgentCount} unreadCount={unreadCount} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} onNavigate={setSection} />}
           {section === 'inbox' && <InboxSection data={data} showToast={showToast} profile={profile} />}
           {section === 'tareas' && <TareasSection data={data} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'equipo' && <EquipoSection data={data} profile={profile} showToast={showToast} />}
@@ -417,7 +423,7 @@ export default function NexusDashboard({ profile }: Props) {
           <div onClick={e=>e.stopPropagation()} className="w-[540px] max-w-[92vw] rounded-2xl overflow-hidden" style={{ background:'#0C0C1C', border:'1px solid rgba(27,95,250,0.25)', boxShadow:'0 32px 80px rgba(0,0,0,0.75)' }}>
             <div className="flex items-center gap-3 px-5 py-4 border-b border-white/6">
               <LucideIcon name="search" size={16} color="rgba(27,95,250,0.6)" />
-              <input ref={searchRef} autoFocus value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setSearchIdx(-1)}} onKeyDown={handleSearchKey} placeholder="Busca clientes, proyectos, tareas…" className="flex-1 text-sm bg-transparent text-white placeholder-white/20 outline-none" style={{ caretColor:BLU }} />
+              <input ref={searchRef} autoFocus value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setSearchIdx(-1)}} onKeyDown={handleSearchKey} placeholder="Busca clientes, proyectos, tareas, contenido…" className="flex-1 text-sm bg-transparent text-white placeholder-white/20 outline-none" style={{ caretColor:BLU }} />
               <kbd className="font-syne text-[9px] font-bold text-white/20 px-2 py-1 rounded border border-white/10">ESC</kbd>
             </div>
             <div className="max-h-[340px] overflow-y-auto p-1.5">
@@ -429,7 +435,7 @@ export default function NexusDashboard({ profile }: Props) {
                   <span className="text-[11px] text-white/30 flex-shrink-0">{r.sub}</span>
                 </button>
               ))}
-              {searchQuery.length === 0 && <div className="px-3 py-3 text-[11px] text-white/20">Busca clientes, proyectos, tareas, memorias…</div>}
+              {searchQuery.length === 0 && <div className="px-3 py-3 text-[11px] text-white/20">Busca clientes, proyectos, tareas, memorias, contenido…</div>}
             </div>
             <div className="px-5 py-2.5 border-t border-white/5 text-[10px] text-white/20">↑↓ navegar · Enter seleccionar · Esc cerrar</div>
           </div>
@@ -506,6 +512,8 @@ export default function NexusDashboard({ profile }: Props) {
                     </div>
                   ) : f.type === 'date-input' ? (
                     <input type="date" value={mf[f.key]||''} onChange={e=>setMf(m=>({...m,[f.key]:e.target.value}))} className="w-full px-5 py-3.5 rounded-2xl text-[14px] text-white outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,colorScheme:'dark'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.45)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+                  ) : f.type === 'textarea' ? (
+                    <textarea value={mf[f.key]||''} onChange={e=>setMf(m=>({...m,[f.key]:e.target.value}))} placeholder={f.placeholder} rows={4} className="w-full px-5 py-3.5 rounded-2xl text-[14px] text-white placeholder-white/20 outline-none resize-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,lineHeight:'1.6'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.45)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
                   ) : (
                     <input value={mf[f.key]||''} onChange={e=>setMf(m=>({...m,[f.key]:e.target.value}))} placeholder={f.placeholder} className="w-full px-5 py-3.5 rounded-2xl text-[14px] text-white placeholder-white/20 outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.45)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
                   )}
@@ -572,7 +580,7 @@ function modalFields(type: string, team: Profile[]) {
     memoria: [
       f('Título','titulo','Ej: Nike — Guía de tono de voz 2026'),
       f('Categoría','categoria','Clientes / Procesos / Decisiones / Aprendizajes'),
-      f('Contenido','contenido','Escribe el contenido de esta entrada…'),
+      { label:'Contenido', key:'contenido', type:'textarea', placeholder:'Escribe el contenido de esta entrada…' },
     ],
     regla: [
       f('Nombre de la regla','nombre','Ej: Alerta propuestas sin respuesta'),
@@ -752,6 +760,8 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                     {(t.client as any)?.name && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:(t.client as any).color+'18',color:(t.client as any).color+'cc'}}>{(t.client as any).name}</span>}
                     {t.due_date && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.35)'}}>{new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
                     {!t.done && t.level==='urgent' && <span className="font-syne text-[8px] font-black" style={{color:RED}}>● URGENTE</span>}
+                    {t.source==='gmail' && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.55)'}}>GMAIL</span>}
+                    {t.source==='whatsapp' && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:'rgba(37,211,102,0.06)',color:'rgba(37,211,102,0.55)'}}>WA</span>}
                   </div>
                 </div>
                 {t.assignee && <div className="w-7 h-7 rounded-full flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0 mt-0.5" style={{background:t.assignee.avatar_color+'18',border:`1.5px solid ${t.assignee.avatar_color}35`,color:t.assignee.avatar_color}}>{t.assignee.initials}</div>}
@@ -1241,7 +1251,7 @@ function ReportesSection({data}: any) {
   )
 }
 
-function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,isOwner}: any) {
+function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,isOwner,onNavigate}: any) {
   const now = new Date()
   const hour = now.getHours()
   const greeting = hour < 13 ? 'Buenos días' : hour < 20 ? 'Buenas tardes' : 'Buenas noches'
@@ -1305,7 +1315,7 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                 <div className="text-[13px] mb-3" style={{color:'rgba(255,255,255,0.18)'}}>Sin tareas asignadas</div>
                 <button onClick={()=>onOpenModal('tarea')} className="font-syne text-[10px] font-black px-4 py-2 rounded-xl" style={{background:'rgba(27,95,250,0.08)',color:BLU}}>CREAR PRIMERA TAREA</button>
               </div>
-            ) : myTasks.slice(0,7).map((t:Task)=>{
+            ) : (<>{myTasks.slice(0,7).map((t:Task)=>{
               const pc = t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.85)':BLU
               return (
               <div key={t.id} onClick={()=>data.toggleTask(t.id)} className="flex items-start gap-4 px-6 py-4 cursor-pointer transition-all group hover:bg-white/[0.015]" style={{borderBottom:`1px solid ${BORDER}`,borderLeft:`3px solid ${pc}`}}>
@@ -1321,6 +1331,12 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                 {t.assignee && <div className="w-7 h-7 rounded-full flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0 mt-0.5" style={{background:t.assignee.avatar_color+'20',border:`1.5px solid ${t.assignee.avatar_color}35`,color:t.assignee.avatar_color}}>{t.assignee.initials}</div>}
               </div>
             )})}
+            {myTasks.length > 7 && (
+              <button onClick={()=>onNavigate('tareas')} className="w-full py-3 text-center font-syne text-[8.5px] font-black tracking-widest transition-colors" style={{color:'rgba(255,255,255,0.2)',borderTop:`1px solid ${BORDER}`}} onMouseEnter={e=>(e.currentTarget.style.color=BLU)} onMouseLeave={e=>(e.currentTarget.style.color='rgba(255,255,255,0.2)')}>
+                +{myTasks.length-7} MÁS · VER TODAS
+              </button>
+            )}
+            </>)}
 
           </div>
 

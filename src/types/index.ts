@@ -99,6 +99,7 @@ export interface ContentItem {
   notes?: string
   video_url?: string
   feedback?: string
+  client_id?: string
   client?: Client
 }
 
