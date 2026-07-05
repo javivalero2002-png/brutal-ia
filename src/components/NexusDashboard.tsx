@@ -3349,7 +3349,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [editing])
-  const cats = ['Todos','Clientes','Procesos','Decisiones','Aprendizajes']
+  const cats = ['Todos','Clientes','Procesos','Decisiones','Aprendizajes','General']
   const catColor: Record<string,string> = { Clientes:BLU, Procesos:'rgba(255,176,32,0.9)', Decisiones:RED, Aprendizajes:GRN, General:'rgba(167,139,250,0.8)' }
   const byFilter = memFilter==='Todos' ? data.memoria : data.memoria.filter((m: any)=>m.category===memFilter)
   const filtered = memSearch.trim()
@@ -3435,6 +3435,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
 // ── AUTOMATIZACIONES SECTION ─────────────────────────────────
 function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
   const activeCount = data.reglas.filter((r: Regla)=>r.active).length
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string|null>(null)
   return (
     <div className="p-8 max-w-[900px] mx-auto">
       <div className="flex items-end justify-between mb-8">
@@ -3452,7 +3453,7 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
       </div>
       <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
         {data.reglas.map((r: Regla, i: number)=>(
-          <div key={r.id} className="flex items-center gap-4 px-5 py-4 transition-all" style={{borderBottom:i<data.reglas.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${r.active?BLU+'60':'transparent'}`,opacity:r.active?1:0.45}}>
+          <div key={r.id} className="group flex items-center gap-4 px-5 py-4 transition-all" style={{borderBottom:i<data.reglas.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${r.active?BLU+'60':'transparent'}`,opacity:r.active?1:0.45}}>
             <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:r.active?'rgba(27,95,250,0.08)':'rgba(255,255,255,0.03)',border:`1px solid ${r.active?'rgba(27,95,250,0.18)':BORDER}`}}>
               <LucideIcon name="zap" size={14} color={r.active?BLU:'rgba(255,255,255,0.2)'}/>
             </div>
@@ -3478,7 +3479,14 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
               </button>
             )}
             {!isOwner && <span className="font-syne text-[7.5px] font-black px-2.5 py-1 rounded-full flex-shrink-0" style={{background:r.active?'rgba(27,95,250,0.1)':'rgba(255,255,255,0.04)',color:r.active?BLU:'rgba(240,240,248,0.2)',border:`1px solid ${r.active?'rgba(27,95,250,0.2)':'transparent'}`}}>{r.active?'ACTIVO':'PAUSADO'}</span>}
-            {isOwner && <button onClick={()=>data.deleteRegla(r.id).then(()=>showToast('Regla eliminada'))} className="opacity-0 hover:opacity-60 transition-opacity flex-shrink-0" onMouseEnter={e=>(e.currentTarget.style.opacity='0.6')} onMouseLeave={e=>(e.currentTarget.style.opacity='0')}><LucideIcon name="trash" size={13} color={RED}/></button>}
+            {isOwner && (
+              confirmDeleteId === r.id
+                ? <div className="flex items-center gap-1 flex-shrink-0">
+                    <button onClick={()=>{ data.deleteRegla(r.id).then(()=>showToast('Regla eliminada')); setConfirmDeleteId(null) }} className="px-2.5 py-1.5 rounded-lg font-syne text-[8px] font-black transition-all" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
+                    <button onClick={()=>setConfirmDeleteId(null)} className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5 flex-shrink-0" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.3)"/></button>
+                  </div>
+                : <button onClick={()=>setConfirmDeleteId(r.id)} className="opacity-0 group-hover:opacity-60 transition-opacity flex-shrink-0"><LucideIcon name="trash" size={13} color={RED}/></button>
+            )}
           </div>
         ))}
         {data.reglas.length===0&&<div className="py-20 text-center text-[13px]" style={{color:'rgba(255,255,255,0.18)'}}>Sin reglas configuradas</div>}
@@ -3584,8 +3592,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
     }).catch(()=>{})
   }
 
-  const send = async () => {
-    const txt = chatInput.trim()
+  const sendText = async (txt: string) => {
     if (!txt || chatLoading) return
     setChatInput('')
     if (inputRef.current) { inputRef.current.style.height = 'auto' }
@@ -3594,6 +3601,8 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
     catch { showToast('Error enviando mensaje') }
     finally { setChatLoading(false) }
   }
+
+  const send = () => sendText(chatInput.trim())
 
   const PROMPTS = [
     {text:'¿Qué proyectos urgentes tengo?', cat:'URGENTE'},
@@ -3651,7 +3660,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
             <div className="font-syne text-[8.5px] font-bold tracking-widest mb-7" style={{color:'rgba(255,255,255,0.18)'}}>TENGO ACCESO A TODOS TUS DATOS</div>
             <div className="grid grid-cols-2 gap-2 w-full max-w-[340px]">
               {PROMPTS.map(p=>(
-                <button key={p.text} onClick={()=>{setChatInput(p.text);inputRef.current?.focus()}} className="text-left p-4 rounded-2xl transition-all" style={{background:SURF2,border:`1px solid ${BORDER}`}}
+                <button key={p.text} onClick={()=>sendText(p.text)} className="text-left p-4 rounded-2xl transition-all" style={{background:SURF2,border:`1px solid ${BORDER}`}}
                   onMouseEnter={e=>(e.currentTarget.style.borderColor='rgba(27,95,250,0.3)')}
                   onMouseLeave={e=>(e.currentTarget.style.borderColor=BORDER)}>
                   <div className="font-syne text-[7px] font-black tracking-widest mb-1.5" style={{color:'rgba(27,95,250,0.65)'}}>{p.cat}</div>
