@@ -1887,7 +1887,10 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
                     <ProgressRing pct={p.progress} size={38} stroke={2.5} color={p.color||BLU}/>
                     <div className="flex-1 min-w-0">
                       <div className="font-figtree text-[14px] font-semibold truncate" style={{color:'rgba(240,240,248,0.85)'}}>{p.name}</div>
-                      <div className="text-[10px] mt-0.5" style={{color:'rgba(255,255,255,0.25)'}}>{p.status} · hasta {p.deadline}</div>
+                      <div className="text-[10px] mt-0.5" style={{color:'rgba(255,255,255,0.25)'}}>
+                        {(({'activo':'Activo','urgente':'Urgente','plan.':'Plan.','revisión':'Revisión'} as Record<string,string>)[p.status]||p.status)}
+                        {p.deadline && ` · ${new Date(p.deadline+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}`}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       {projTasks.length > 0 && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.3)'}}>{projTasks.length} tareas</span>}
@@ -1901,7 +1904,7 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
                         <div key={t.id} className="flex items-center gap-3 py-2" style={{borderBottom:ti<Math.min(projTasks.length,6)-1?`1px solid rgba(255,255,255,0.03)`:'none'}}>
                           <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.7)':BLU}}/>
                           <span className="text-[12px] flex-1 truncate" style={{color:'rgba(255,255,255,0.5)'}}>{t.text}</span>
-                          <span className="font-syne text-[7px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{t.level}</span>
+                          <span className="font-syne text-[7px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{t.level==='urgent'?'URG':t.level==='high'?'ALTA':'NORMAL'}</span>
                         </div>
                       ))}
                       {projTasks.length===0 && <div className="py-2 text-[11px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin tareas activas</div>}
@@ -1936,9 +1939,11 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
                 <div className="px-5 py-4 font-syne text-[9px] font-black tracking-widest" style={{borderBottom:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.25)'}}>CONTENIDO</div>
                 {clientContent.slice(0,4).map((a: any,i: number)=>(
                   <div key={a.id} className="flex items-center gap-3 px-5 py-3" style={{borderBottom:i<Math.min(clientContent.length,4)-1?`1px solid ${BORDER}`:'none'}}>
-                    <span className="text-[10px]" style={{color:'rgba(255,255,255,0.3)'}}>{a.platform}</span>
+                    <PlatformLogo platform={a.platform} size={13}/>
                     <span className="text-[12px] flex-1 truncate" style={{color:'rgba(255,255,255,0.55)'}}>{a.title}</span>
-                    <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-lg" style={{background:a.status==='publicado'?'rgba(27,95,250,0.1)':a.status==='listo'?'rgba(34,197,94,0.1)':'rgba(255,255,255,0.04)',color:a.status==='publicado'?BLU:a.status==='listo'?GRN:'rgba(255,255,255,0.3)'}}>{a.status}</span>
+                    <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-lg" style={{background:a.status==='publicado'?'rgba(27,95,250,0.1)':a.status==='listo'?'rgba(34,197,94,0.1)':'rgba(255,255,255,0.04)',color:a.status==='publicado'?BLU:a.status==='listo'?GRN:'rgba(255,255,255,0.3)'}}>
+                      {(({'borrador':'EN BRUTO','pendiente':'EN PROD.','listo':'LISTO','publicado':'PUBLICADO'} as Record<string,string>)[a.status])||a.status?.toUpperCase()}
+                    </span>
                   </div>
                 ))}
               </div>
