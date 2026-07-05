@@ -1825,6 +1825,7 @@ function InboxSection({data,showToast,profile}: any) {
                           <span className="font-syne text-[9px] font-black truncate flex-1" style={{color:isUnread?'rgba(255,255,255,0.88)':'rgba(255,255,255,0.32)'}}>{m.from_name||'Desconocido'}</span>
                           {isInternal && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.75)'}}>DM</span>}
                           {isUnread && m.ai_urgency==='urgent' && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:`${RED}16`,color:RED,border:`1px solid ${RED}30`}}>URG</span>}
+                          {m.attachments?.length>0 && <LucideIcon name="paperclip" size={9} color="rgba(255,255,255,0.2)"/>}
                           <span className="font-syne text-[7.5px] flex-shrink-0" style={{color:'rgba(255,255,255,0.2)'}}>{relTime(m.received_at)}</span>
                         </div>
                         {/* Row 2: subject */}
@@ -2401,6 +2402,14 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
                     ))}
                   </div>
 
+                  {/* Last contact */}
+                  {(() => {
+                    const lm = data.inbox.filter((m: any)=>m.ai_client&&(m.ai_client.toLowerCase().includes(c.name.toLowerCase().split(' ')[0])||c.name.toLowerCase().includes(m.ai_client.toLowerCase().split(' ')[0]))).sort((a: any,b: any)=>new Date(b.received_at).getTime()-new Date(a.received_at).getTime())[0]
+                    if (!lm) return null
+                    const dd = Math.floor((Date.now()-new Date(lm.received_at).getTime())/86400000)
+                    return <div className="font-syne text-[7.5px] font-black tracking-wide mb-2" style={{color:'rgba(255,255,255,0.15)'}}>ÚLTIMO CONTACTO · {dd===0?'HOY':dd===1?'AYER':`HACE ${dd}D`}</div>
+                  })()}
+
                   {/* Urgent indicator */}
                   {nUrgent > 0 && (
                     <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{background:'rgba(229,29,42,0.07)',border:'1px solid rgba(229,29,42,0.12)'}}>
@@ -2598,6 +2607,14 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               />
             </div>
             <div className="flex gap-2">
+              {(() => {
+                const allPT = data.tasks.filter((t: Task) => t.project_id === selectedProject.id)
+                const donePT = allPT.filter((t: Task) => t.done)
+                const autoPct = allPT.length > 0 ? Math.round((donePT.length/allPT.length)*100) : null
+                return autoPct !== null ? (
+                  <button onClick={()=>setEditProgress(autoPct)} className="px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{color:'rgba(255,255,255,0.4)',border:`1px solid ${BORDER}`}} title={`${donePT.length}/${allPT.length} tareas completadas`}>AUTO {autoPct}%</button>
+                ) : null
+              })()}
               {editProgress !== null && editProgress !== selectedProject.progress && (
                 <button onClick={saveProgress} disabled={savingProgress} className="px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingProgress?'…':'GUARDAR'}</button>
               )}
