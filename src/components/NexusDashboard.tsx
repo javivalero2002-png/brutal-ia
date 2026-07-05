@@ -2850,19 +2850,38 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
 
 // ── MEMORIA SECTION ──────────────────────────────────────────
 function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any) {
+  const [memSearch, setMemSearch] = useState('')
   const cats = ['Todos','Clientes','Procesos','Decisiones','Aprendizajes']
-  const filtered = memFilter==='Todos' ? data.memoria : data.memoria.filter((m: any)=>m.category===memFilter)
+  const byFilter = memFilter==='Todos' ? data.memoria : data.memoria.filter((m: any)=>m.category===memFilter)
+  const filtered = memSearch.trim()
+    ? byFilter.filter((m: any)=>(m.title+' '+m.content).toLowerCase().includes(memSearch.toLowerCase()))
+    : byFilter
   return (
     <div className="p-8 max-w-[900px] mx-auto">
-      <div className="flex items-end justify-between mb-8">
+      <div className="flex items-end justify-between mb-6">
         <div>
           <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>CEREBRO</div>
           <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Memoria</h1>
         </div>
-        <button onClick={()=>onOpenModal('memoria')} className="px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ ENTRADA</button>
+        <button onClick={()=>onOpenModal('memoria')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ ENTRADA</button>
       </div>
+      {/* Search */}
+      <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl mb-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+        <LucideIcon name="search" size={13} color="rgba(255,255,255,0.2)"/>
+        <input value={memSearch} onChange={e=>setMemSearch(e.target.value)} placeholder="Busca en la memoria…" className="flex-1 bg-transparent text-[13px] outline-none" style={{caretColor:BLU,color:'rgba(255,255,255,0.8)'}}/>
+        {memSearch && <button onClick={()=>setMemSearch('')} className="flex-shrink-0"><LucideIcon name="x" size={12} color="rgba(255,255,255,0.2)"/></button>}
+      </div>
+      {/* Category filter */}
       <div className="flex gap-1 mb-6 p-1 rounded-2xl w-fit" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-        {cats.map(c=><button key={c} onClick={()=>setMemFilter(c)} className="px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:memFilter===c?SURF2:'transparent',color:memFilter===c?'#F0F0F8':'rgba(240,240,248,0.3)'}}>{c}</button>)}
+        {cats.map(c=>{
+          const cnt = c==='Todos' ? data.memoria.length : data.memoria.filter((m:any)=>m.category===c).length
+          return (
+            <button key={c} onClick={()=>setMemFilter(c)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:memFilter===c?SURF2:'transparent',color:memFilter===c?'#F0F0F8':'rgba(240,240,248,0.3)'}}>
+              {c}
+              {cnt > 0 && <span className="text-[7px] font-black px-1 rounded-sm" style={{background:memFilter===c?'rgba(255,255,255,0.1)':'transparent',color:memFilter===c?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.2)'}}>{cnt}</span>}
+            </button>
+          )
+        })}
       </div>
       <div className="space-y-2">
         {filtered.map((m: any)=>(
@@ -2872,15 +2891,22 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="font-syne text-[14px] font-black text-white">{m.title}</span>
-                <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-lg" style={{background:SURF2,color:'rgba(255,255,255,0.25)'}}>{m.category}</span>
+                <span className="font-figtree text-[14px] font-semibold text-white">{m.title}</span>
+                <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-lg" style={{background:SURF2,color:'rgba(255,255,255,0.25)'}}>{m.category}</span>
               </div>
-              <div className="text-[12px] line-clamp-2" style={{color:'rgba(255,255,255,0.4)'}}>{m.content}</div>
+              <div className="text-[12px] line-clamp-2 leading-relaxed" style={{color:'rgba(255,255,255,0.42)'}}>{m.content}</div>
             </div>
             <button onClick={()=>data.deleteMemoria(m.id).then(()=>showToast('Eliminado'))} className="opacity-0 group-hover:opacity-30 hover:!opacity-60 transition-opacity flex-shrink-0"><LucideIcon name="trash" size={14} color={RED}/></button>
           </div>
         ))}
-        {filtered.length===0&&<div className="py-20 text-center text-[13px]" style={{color:'rgba(255,255,255,0.18)'}}>Sin entradas en esta categoría</div>}
+        {filtered.length===0 && (
+          <div className="py-20 text-center">
+            <div className="font-syne text-[11px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.12)'}}>
+              {memSearch ? 'SIN RESULTADOS' : 'SIN ENTRADAS'}
+            </div>
+            {!memSearch && <button onClick={()=>onOpenModal('memoria')} className="font-syne text-[9px] font-black px-4 py-2 rounded-xl" style={{background:'rgba(27,95,250,0.08)',color:BLU}}>CREAR PRIMERA ENTRADA</button>}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -2888,28 +2914,43 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
 
 // ── AUTOMATIZACIONES SECTION ─────────────────────────────────
 function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
+  const activeCount = data.reglas.filter((r: Regla)=>r.active).length
   return (
-    <div className="p-6 max-w-[900px] mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-8 max-w-[900px] mx-auto">
+      <div className="flex items-end justify-between mb-8">
         <div>
-          <h1 className="font-figtree text-2xl font-black text-white" style={{letterSpacing:'-0.03em'}}>Automatizaciones</h1>
-          <p className="text-sm text-white/30 mt-1">{data.reglas.filter((r: Regla)=>r.active).length} de {data.reglas.length} activas</p>
+          <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>SISTEMA</div>
+          <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Automatizaciones</h1>
         </div>
-        {isOwner && <button onClick={()=>onOpenModal('regla')} className="px-4 py-2 rounded-xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:BLU}}>+ REGLA</button>}
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <div className="font-figtree text-[28px] font-black leading-none" style={{color:activeCount>0?BLU:'rgba(255,255,255,0.25)',letterSpacing:'-0.04em'}}>{activeCount}</div>
+            <div className="font-syne text-[8px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>DE {data.reglas.length} ACTIVAS</div>
+          </div>
+          {isOwner && <button onClick={()=>onOpenModal('regla')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ REGLA</button>}
+        </div>
       </div>
-      <div className="space-y-2">
-        {data.reglas.map((r: Regla)=>(
-          <div key={r.id} className="flex items-center gap-4 p-4 rounded-xl" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)',opacity:r.active?1:0.5}}>
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{background:'rgba(27,95,250,0.08)'}}><LucideIcon name="zap" size={14} color={BLU}/></div>
-            <div className="flex-1">
-              <div className="font-semibold text-sm text-white/85">{r.name}</div>
-              {(r.condition_text||r.action_text) && <div className="text-xs text-white/35 mt-0.5">{r.condition_text} → {r.action_text}</div>}
+      <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+        {data.reglas.map((r: Regla, i: number)=>(
+          <div key={r.id} className="flex items-center gap-4 px-5 py-4 transition-all" style={{borderBottom:i<data.reglas.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${r.active?BLU+'60':'transparent'}`,opacity:r.active?1:0.45}}>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:r.active?'rgba(27,95,250,0.08)':'rgba(255,255,255,0.03)',border:`1px solid ${r.active?'rgba(27,95,250,0.18)':BORDER}`}}>
+              <LucideIcon name="zap" size={14} color={r.active?BLU:'rgba(255,255,255,0.2)'}/>
             </div>
-            <span className="font-syne text-[8px] font-black px-2 py-1 rounded-full" style={{background:r.active?'rgba(27,95,250,0.1)':'rgba(255,255,255,0.04)',color:r.active?BLU:'rgba(240,240,248,0.2)'}}>{r.active?'ACTIVO':'PAUSADO'}</span>
-            {isOwner && <button onClick={()=>data.deleteRegla(r.id).then(()=>showToast('Regla eliminada'))} className="opacity-20 hover:opacity-60 transition-opacity"><LucideIcon name="trash" size={13} color={RED}/></button>}
+            <div className="flex-1 min-w-0">
+              <div className="font-figtree text-[14px] font-semibold mb-0.5" style={{color:r.active?'rgba(240,240,248,0.9)':'rgba(240,240,248,0.4)'}}>{r.name}</div>
+              {(r.condition_text||r.action_text) && (
+                <div className="flex items-center gap-1.5 text-[11px]" style={{color:'rgba(255,255,255,0.28)'}}>
+                  {r.condition_text && <span>{r.condition_text}</span>}
+                  {r.condition_text && r.action_text && <span style={{color:'rgba(255,255,255,0.15)'}}>›</span>}
+                  {r.action_text && <span>{r.action_text}</span>}
+                </div>
+              )}
+            </div>
+            <span className="font-syne text-[7.5px] font-black px-2.5 py-1 rounded-full flex-shrink-0" style={{background:r.active?'rgba(27,95,250,0.1)':'rgba(255,255,255,0.04)',color:r.active?BLU:'rgba(240,240,248,0.2)',border:`1px solid ${r.active?'rgba(27,95,250,0.2)':'transparent'}`}}>{r.active?'ACTIVO':'PAUSADO'}</span>
+            {isOwner && <button onClick={()=>data.deleteRegla(r.id).then(()=>showToast('Regla eliminada'))} className="opacity-0 hover:opacity-60 transition-opacity flex-shrink-0" onMouseEnter={e=>(e.currentTarget.style.opacity='0.6')} onMouseLeave={e=>(e.currentTarget.style.opacity='0')}><LucideIcon name="trash" size={13} color={RED}/></button>}
           </div>
         ))}
-        {data.reglas.length===0&&<div className="py-12 text-center text-white/20 text-sm">Sin reglas</div>}
+        {data.reglas.length===0&&<div className="py-20 text-center text-[13px]" style={{color:'rgba(255,255,255,0.18)'}}>Sin reglas configuradas</div>}
       </div>
     </div>
   )
