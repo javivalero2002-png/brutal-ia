@@ -30,8 +30,8 @@ ${tasks?.slice(0,5).map((t: any) => `  - ${t.text} [${t.level}]`).join('\n') || 
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const msg = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 600,
+    model: 'claude-sonnet-4-6',
+    max_tokens: 800,
     messages: [{
       role: 'user',
       content: `Eres el estratega creativo de Brutal Studios, una agencia creativa boutique. Analiza este cliente y da exactamente 3 recomendaciones concretas y accionables para los próximos 30 días.

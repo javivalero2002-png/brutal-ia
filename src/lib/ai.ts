@@ -129,18 +129,30 @@ export async function chat(
   history: Array<{role: 'user' | 'ai'; content: string}>,
   context: {
     clients: string[]
-    projects: string[]
-    urgentTasks: string[]
+    projects: Array<{name: string; status: string}>
+    tasks: Array<{text: string; level: string; assignee?: string}>
+    unreadInbox: number
+    teamSize: number
     userName: string
   }
 ): Promise<string> {
+  const urgentTasks = context.tasks.filter(t => t.level === 'urgent')
+  const highTasks = context.tasks.filter(t => t.level === 'high')
+  const activeProjects = context.projects.filter(p => p.status === 'activo' || p.status === 'urgente')
   const systemPrompt = `Eres Brutal.IA, la inteligencia artificial de Brutal Studios, una agencia creativa española.
-Ayudas al equipo con: gestión de proyectos, clientes, tareas y contenido.
-Usuario actual: ${context.userName}
-Clientes: ${context.clients.join(', ')}
-Proyectos activos: ${context.projects.join(', ')}
-Tareas urgentes: ${context.urgentTasks.join(', ')}
-Responde siempre en español, de forma concisa y profesional. Máx 3 frases a no ser que pidan algo largo.`
+Ayudas al equipo con gestión de proyectos, clientes, tareas y contenido.
+
+CONTEXTO ACTUAL:
+- Usuario: ${context.userName}
+- Equipo: ${context.teamSize} personas
+- Clientes: ${context.clients.join(', ') || 'ninguno'}
+- Proyectos activos: ${activeProjects.map(p => p.name).join(', ') || 'ninguno'} (${context.projects.length} en total)
+- Tareas urgentes: ${urgentTasks.map(t => t.text).join(', ') || 'ninguna'}
+- Tareas de alta prioridad: ${highTasks.map(t => t.text).join(', ') || 'ninguna'}
+- Tareas totales pendientes: ${context.tasks.length}
+- Mensajes sin leer en inbox: ${context.unreadInbox}
+
+Responde siempre en español, de forma concisa y profesional. Sé directo y útil.`
 
   const messages: Anthropic.MessageParam[] = [
     ...history.slice(-10).map(h => ({
@@ -151,8 +163,8 @@ Responde siempre en español, de forma concisa y profesional. Máx 3 frases a no
   ]
 
   const msg = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 600,
+    model: 'claude-sonnet-4-6',
+    max_tokens: 800,
     system: systemPrompt,
     messages,
   })

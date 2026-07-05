@@ -12,11 +12,13 @@ export async function POST(request: NextRequest) {
 
   const admin = await createAdminClient()
 
-  const [{ data: profile }, { data: clients }, { data: projects }, { data: tasks }] = await Promise.all([
+  const [{ data: profile }, { data: clients }, { data: projects }, { data: tasks }, { data: team }, { data: inbox }] = await Promise.all([
     admin.from('profiles').select('name').eq('id', user.id).single(),
     admin.from('clients').select('name'),
-    admin.from('projects').select('name,status').eq('status', 'activo'),
-    admin.from('tasks').select('text').eq('done', false).eq('level', 'urgent'),
+    admin.from('projects').select('name,status'),
+    admin.from('tasks').select('text,level,assignee:profiles!assigned_to(name)').eq('done', false),
+    admin.from('profiles').select('id'),
+    admin.from('inbox_messages').select('id').eq('user_id', user.id).eq('is_read', false),
   ])
 
   // Save user message
@@ -36,8 +38,10 @@ export async function POST(request: NextRequest) {
     {
       userName: profile?.name || 'Usuario',
       clients: (clients || []).map(c => c.name),
-      projects: (projects || []).map(p => p.name),
-      urgentTasks: (tasks || []).map(t => t.text),
+      projects: (projects || []).map(p => ({ name: p.name, status: p.status })),
+      tasks: (tasks || []).map(t => ({ text: t.text, level: t.level, assignee: (t.assignee as any)?.name })),
+      unreadInbox: inbox?.length || 0,
+      teamSize: team?.length || 1,
     }
   )
 
