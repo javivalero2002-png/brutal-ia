@@ -1852,6 +1852,14 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
         const total = counts.reduce((a:number,b:number)=>a+b,0)
         if (total === 0) return null
         const todayIdx = 6
+        let streak = 0
+        for (let si = 0; si < 30; si++) {
+          const sd = new Date(); sd.setDate(sd.getDate()-si)
+          const sk = sd.toISOString().slice(0,10)
+          const sc = data.tasks.filter((t:Task)=>t.done&&(t.updated_at||t.created_at).slice(0,10)===sk&&(t.assigned_to===profile.id||t.created_by===profile.id)).length
+          if (sc === 0) break
+          streak++
+        }
         return (
           <div className="flex items-end gap-4 mb-8">
             <div className="flex items-end gap-1.5 flex-1">
@@ -1868,9 +1876,17 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                 )
               })}
             </div>
-            <div className="text-right flex-shrink-0">
-              <div className="font-figtree text-[22px] font-black leading-none" style={{color:GRN,letterSpacing:'-0.03em'}}>{total}</div>
-              <div className="font-syne text-[7.5px] font-black tracking-widest mt-0.5" style={{color:'rgba(255,255,255,0.2)'}}>ESTA SEMANA</div>
+            <div className="flex items-end gap-4 flex-shrink-0">
+              {streak >= 2 && (
+                <div className="text-right">
+                  <div className="font-figtree text-[22px] font-black leading-none" style={{color:'rgba(255,176,32,0.9)',letterSpacing:'-0.03em'}}>{streak}d</div>
+                  <div className="font-syne text-[7px] font-black tracking-widest mt-0.5" style={{color:'rgba(255,255,255,0.2)'}}>RACHA</div>
+                </div>
+              )}
+              <div className="text-right">
+                <div className="font-figtree text-[22px] font-black leading-none" style={{color:GRN,letterSpacing:'-0.03em'}}>{total}</div>
+                <div className="font-syne text-[7.5px] font-black tracking-widest mt-0.5" style={{color:'rgba(255,255,255,0.2)'}}>ESTA SEMANA</div>
+              </div>
             </div>
           </div>
         )
@@ -2180,6 +2196,12 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient}: any) {
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && selected) { setSelected(null); return }
+      if (e.key === 'e' && selected && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
+        e.preventDefault()
+        if (selected.is_read) { data.markUnread(selected.id); setSelected((s: any)=>s?{...s,is_read:false,is_unread:true}:s) }
+        else { data.markRead(selected.id); setSelected((s: any)=>s?{...s,is_read:true,is_unread:false}:s) }
+        return
+      }
       if ((e.key === 'j' || e.key === 'k') && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
         e.preventDefault()
         const msgs = filteredRef.current
@@ -2560,6 +2582,15 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient}: any) {
                 <p className="text-[12px] leading-relaxed whitespace-pre-wrap" style={{color:'rgba(255,255,255,0.38)'}}>{selected.body_preview}</p>
               </div>
             )}
+            <div className="flex items-center justify-center gap-3 py-1">
+              <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>
+                <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.06)',fontFamily:'inherit'}}>J</kbd> siguiente
+                {' · '}
+                <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.06)',fontFamily:'inherit'}}>K</kbd> anterior
+                {' · '}
+                <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.06)',fontFamily:'inherit'}}>E</kbd> leído/no leído
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -4372,7 +4403,30 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
             )}
           </div>
         ))}
-        {data.reglas.length===0&&<div className="py-20 text-center text-[13px]" style={{color:'rgba(255,255,255,0.18)'}}>Sin reglas configuradas</div>}
+        {data.reglas.length===0&&(
+          <div className="py-10 px-6">
+            <div className="text-center text-[12px] mb-6" style={{color:'rgba(255,255,255,0.2)'}}>Sin reglas · empieza con una plantilla</div>
+            <div className="space-y-2">
+              {[
+                {name:'Seguimiento de propuesta',condicion:'Email de cliente sin respuesta en 48h',accion:'Crear tarea urgente de seguimiento al cliente'},
+                {name:'Alerta deadline próximo',condicion:'Proyecto con deadline en menos de 7 días',accion:'Notificar al equipo y crear tarea de revisión final'},
+                {name:'Cliente inactivo',condicion:'Sin contacto con cliente en más de 30 días',accion:'Programar llamada de check-in con el cliente'},
+              ].map((tpl,i)=>(
+                <div key={i} className="flex items-center gap-4 px-5 py-4 rounded-2xl transition-all" style={{background:'rgba(27,95,250,0.03)',border:'1px solid rgba(27,95,250,0.1)'}}>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-figtree text-[13px] font-semibold text-white mb-1">{tpl.name}</div>
+                    <div className="flex items-center gap-1.5 text-[11px]" style={{color:'rgba(255,255,255,0.28)'}}>
+                      <span>{tpl.condicion}</span>
+                      <span style={{color:'rgba(255,255,255,0.12)'}}>›</span>
+                      <span>{tpl.accion}</span>
+                    </div>
+                  </div>
+                  {isOwner && <button onClick={async()=>{try{await data.createRegla({name:tpl.name,condition_text:tpl.condicion,action_text:tpl.accion,active:true});showToast('Regla creada')}catch{showToast('Error')}}} className="flex-shrink-0 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(27,95,250,0.12)',color:BLU,border:'1px solid rgba(27,95,250,0.2)'}}>+ USAR</button>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
