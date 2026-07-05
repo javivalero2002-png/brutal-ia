@@ -158,11 +158,12 @@ export default function NexusDashboard({ profile }: Props) {
       ...data.memoria.map(m => ({ type:'Memoria', title:m.title, sub:m.category, act:()=>{ setSection('memoria'); setSearchOpen(false) }})),
       ...data.agenda.map((a: any) => ({ type:'Contenido', title:a.title, sub:a.platform, act:()=>{ setSection('contenido'); setSearchOpen(false) }})),
       ...data.inbox.map((m: any) => ({ type:'Inbox', title:m.subject||m.from_name||'Sin asunto', sub:m.from_name||'', act:()=>{ setSection('inbox'); setSearchOpen(false) }})),
-    ].filter(r => r.title.toLowerCase().includes(q) || r.sub.toLowerCase().includes(q)).slice(0, 8)
+      ...data.team.map((p: any) => ({ type:'Equipo', title:p.name, sub:p.role||'Miembro', act:()=>{ setSection('equipo'); setSearchOpen(false) }})),
+    ].filter(r => r.title.toLowerCase().includes(q) || r.sub.toLowerCase().includes(q)).slice(0, 9)
   })()
   sr.current = searchResults
 
-  const typeColor: Record<string,string> = { Cliente:BLU, Proyecto:'rgba(255,176,32,0.9)', Tarea:RED, Memoria:'rgba(240,240,248,0.4)', Contenido:'#C13584', Inbox:'rgba(100,180,255,0.7)' }
+  const typeColor: Record<string,string> = { Cliente:BLU, Proyecto:'rgba(255,176,32,0.9)', Tarea:RED, Memoria:'rgba(240,240,248,0.4)', Contenido:'#C13584', Inbox:'rgba(100,180,255,0.7)', Equipo:GRN }
 
   const ACCENT_COLORS = ['#1B5FFA','#E51D2A','#22c55e','#F97316','#A78BFA','#06B6D4','#EC4899','#84CC16','#F59E0B','#10B981']
 
@@ -384,7 +385,7 @@ export default function NexusDashboard({ profile }: Props) {
           {navLabel('GESTIÓN')}
           {navItem('tareas','Tareas','check-square',data.tasks.filter((t:Task)=>!t.done&&t.level==='urgent').length||undefined)}
           {navItem('clientes','Clientes','users')}
-          {navItem('proyectos','Proyectos','folder-open')}
+          {navItem('proyectos','Proyectos','folder-open', data.projects.filter((p: Project)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&new Date(p.deadline+'T23:59:59')<new Date()).length||undefined)}
           {navItem('contenido','Contenido','film')}
           {navItem('automatizaciones','Automatizaciones','zap')}
 
@@ -839,7 +840,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
 
       {/* Right: Task detail drawer */}
       {activeTask && (
-        <div className="flex-1 overflow-y-auto min-w-0" style={{background:'#050510'}}>
+        <div className="flex-1 overflow-y-auto min-w-0" style={{background:'#050510'}} onKeyDown={(e)=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'&&!saving){saveTask()}}}>
           {/* Header */}
           <div className="flex items-center justify-between px-7 py-5 sticky top-0 z-10" style={{background:'rgba(5,5,16,0.95)',backdropFilter:'blur(12px)',borderBottom:`1px solid ${BORDER}`}}>
             <button onClick={()=>setActiveTask(null)} className="flex items-center gap-2 text-[13px] transition-colors hover:text-white/70" style={{color:'rgba(255,255,255,0.35)'}}>
@@ -2655,6 +2656,11 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
             <div>
               <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>PRODUCCIÓN</div>
               <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.04em'}}>Pipeline</h1>
+              {data.agenda.length > 0 && (
+                <div className="flex items-center gap-3 mt-1.5">
+                  {cols.map((col: any) => { const cnt = filteredAgenda.filter((a: any)=>a.status===col.key).length; return cnt > 0 ? <span key={col.key} className="font-syne text-[8.5px] font-black" style={{color:col.color+'80'}}>{cnt} {col.label.toLowerCase()}</span> : null })}
+                </div>
+              )}
             </div>
             <button onClick={()=>onOpenModal('contenido')} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white transition-opacity hover:opacity-85" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
               + NUEVA PIEZA
