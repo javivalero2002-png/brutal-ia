@@ -2557,11 +2557,14 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
         </div>
       </div>
       <div className="flex items-center gap-1 mb-6 p-1 rounded-2xl w-fit" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-        {statusTabs.map(s=>(
-          <button key={s.id} onClick={()=>setProjStatusFilter(s.id)} className="px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:projStatusFilter===s.id?SURF2:'transparent',color:projStatusFilter===s.id?'rgba(255,255,255,0.9)':'rgba(240,240,248,0.28)'}}>
+        {statusTabs.map(s=>{
+          const cnt = s.id==='Todos' ? data.projects.length : data.projects.filter((p: Project)=>p.status===s.id).length
+          return (
+          <button key={s.id} onClick={()=>setProjStatusFilter(s.id)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:projStatusFilter===s.id?SURF2:'transparent',color:projStatusFilter===s.id?'rgba(255,255,255,0.9)':'rgba(240,240,248,0.28)'}}>
             {s.label.toUpperCase()}
+            {cnt > 0 && <span className="text-[7.5px] font-black opacity-60">{cnt}</span>}
           </button>
-        ))}
+        )})}
       </div>
       {projView === 'board' ? (
         <div className="grid gap-4" style={{gridTemplateColumns:`repeat(${kanbanCols.length},minmax(0,1fr))`}}>
@@ -2623,6 +2626,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 const dSoon = !dOver && new Date(p.deadline+'T23:59:59')<new Date(Date.now()+7*24*3600*1000)
                 return <span className="font-syne text-[9px] font-black flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.28)'}}>{dOver&&'⚠ '}{fmtDate(p.deadline)}</span>
               })()}
+              {(()=>{ const n=data.tasks.filter((t:Task)=>t.project_id===p.id&&!t.done).length; return n>0?<span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.55)'}}>{n}t</span>:null })()}
               {isOwner && (
                 confirmDeleteProjId === p.id
                   ? <div className="flex items-center gap-1 flex-shrink-0" onClick={e=>e.stopPropagation()}>
@@ -3832,12 +3836,15 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
                       : <MarkdownMsg text={m.content}/>
                     }
                   </div>
-                  {m.role==='ai' && (
-                    <button onClick={()=>copyMsg(m.id, m.content)} className="opacity-0 group-hover/msg:opacity-100 transition-opacity mt-1.5 flex items-center gap-1 px-2 py-1 rounded-lg" style={{color:copiedId===m.id?GRN:'rgba(255,255,255,0.25)',background:'transparent'}}>
-                      <LucideIcon name={copiedId===m.id?'check':'copy'} size={10} color={copiedId===m.id?GRN:'rgba(255,255,255,0.25)'}/>
-                      <span className="font-syne text-[7px] font-black tracking-wide">{copiedId===m.id?'COPIADO':'COPIAR'}</span>
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2 mt-1">
+                    {m.created_at && <span className="opacity-0 group-hover/msg:opacity-100 transition-opacity font-syne text-[7px]" style={{color:'rgba(255,255,255,0.18)'}}>{new Date(m.created_at).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}</span>}
+                    {m.role==='ai' && (
+                      <button onClick={()=>copyMsg(m.id, m.content)} className="opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-1 px-2 py-1 rounded-lg" style={{color:copiedId===m.id?GRN:'rgba(255,255,255,0.25)',background:'transparent'}}>
+                        <LucideIcon name={copiedId===m.id?'check':'copy'} size={10} color={copiedId===m.id?GRN:'rgba(255,255,255,0.25)'}/>
+                        <span className="font-syne text-[7px] font-black tracking-wide">{copiedId===m.id?'COPIADO':'COPIAR'}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
