@@ -100,7 +100,7 @@ export default function NexusDashboard({ profile }: Props) {
   const gPendingRef = useRef(false)
   const gTimerRef = useRef<ReturnType<typeof setTimeout>|null>(null)
   useEffect(() => {
-    const NAV: Record<string, Section> = { h:'hoy', t:'tareas', i:'inbox', c:'clientes', p:'proyectos', k:'contenido', a:'calendario', m:'memoria', e:'equipo', r:'reportes', s:'ajustes' }
+    const NAV: Record<string, Section> = { h:'hoy', t:'tareas', i:'inbox', c:'clientes', p:'proyectos', k:'contenido', a:'calendario', m:'memoria', e:'equipo', r:'reportes', s:'ajustes', v:'automatizaciones', n:'chat' }
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(true); setSearchQuery(''); setSearchIdx(-1); return }
       if (e.key === 'Escape') { setSearchOpen(false); setModal(null); return }
@@ -232,8 +232,11 @@ export default function NexusDashboard({ profile }: Props) {
 
   const dragRef = useRef<string|null>(null)
 
+  const NAV_SC: Partial<Record<Section,string>> = { hoy:'H', tareas:'T', inbox:'I', clientes:'C', proyectos:'P', contenido:'K', calendario:'A', memoria:'M', equipo:'E', reportes:'R', ajustes:'S', automatizaciones:'V', chat:'N' }
+
   const navItem = (id: Section, label: string, icon: string, badge?: number) => {
     const act = section === id
+    const sc = NAV_SC[id]
     return (
       <button key={id} onClick={()=>setSection(id)}
         className="flex items-center gap-2.5 w-full py-2.5 rounded-lg text-left transition-all duration-150 group"
@@ -252,6 +255,9 @@ export default function NexusDashboard({ profile }: Props) {
         <span className="flex-1 truncate">{label}</span>
         {badge !== undefined && badge > 0 && (
           <span className="font-syne text-[8px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center" style={{background: act ? BLU+'30' : 'rgba(229,29,42,0.15)', color: act ? BLU : RED}}>{badge}</span>
+        )}
+        {sc && !(badge && badge > 0) && (
+          <span className="opacity-0 group-hover:opacity-100 transition-opacity font-syne text-[7px] font-black flex-shrink-0" style={{color:'rgba(255,255,255,0.15)'}}>G·{sc}</span>
         )}
       </button>
     )
@@ -460,7 +466,19 @@ export default function NexusDashboard({ profile }: Props) {
                   <span className="text-[11px] text-white/30 flex-shrink-0">{r.sub}</span>
                 </button>
               ))}
-              {searchQuery.length === 0 && <div className="px-3 py-3 text-[11px] text-white/20">Busca clientes, proyectos, tareas, memorias, contenido…</div>}
+              {searchQuery.length === 0 && (
+                <div className="px-4 py-4">
+                  <div className="font-syne text-[8px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.1)'}}>ATAJOS DE SECCIÓN · G + …</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {([['H','HOY'],['T','TAREAS'],['I','INBOX'],['C','CLIENTES'],['P','PROYECTOS'],['K','CONTENIDO'],['A','CALENDARIO'],['M','MEMORIA'],['E','EQUIPO'],['R','REPORTES'],['V','AUTOM.'],['N','CHAT'],['S','AJUSTES']] as [string,string][]).map(([k,l])=>(
+                      <div key={k} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl" style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)'}}>
+                        <kbd className="font-syne text-[9px] font-black" style={{color:BLU}}>G·{k}</kbd>
+                        <span className="font-syne text-[8px] font-black tracking-wide" style={{color:'rgba(255,255,255,0.18)'}}>{l}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="px-5 py-2.5 border-t border-white/5 text-[10px] text-white/20">↑↓ navegar · Enter seleccionar · Esc cerrar</div>
           </div>
@@ -470,7 +488,7 @@ export default function NexusDashboard({ profile }: Props) {
       {/* MODAL */}
       {modal && (
         <div onClick={()=>setModal(null)} className="fixed inset-0 z-[100] flex items-center justify-center" style={{background:'rgba(2,2,10,0.8)',backdropFilter:'blur(8px)'}}>
-          <div onClick={e=>e.stopPropagation()} className="relative w-[480px] max-w-[94vw] rounded-3xl overflow-hidden" style={{background:'linear-gradient(180deg,#0D0D1E 0%,#080810 100%)',border:`1px solid rgba(27,95,250,0.25)`,boxShadow:'0 40px 100px rgba(0,0,0,0.8),0 0 0 1px rgba(27,95,250,0.05)'}}>
+          <div onClick={e=>e.stopPropagation()} onKeyDown={(e)=>{if(e.key==='Enter'&&(e.target as HTMLElement).tagName!=='TEXTAREA'&&!modalSaving){e.preventDefault();saveModal()}}} className="relative w-[480px] max-w-[94vw] rounded-3xl overflow-hidden" style={{background:'linear-gradient(180deg,#0D0D1E 0%,#080810 100%)',border:`1px solid rgba(27,95,250,0.25)`,boxShadow:'0 40px 100px rgba(0,0,0,0.8),0 0 0 1px rgba(27,95,250,0.05)'}}>
             {/* Top accent */}
             <div className="h-[2px] rounded-t-3xl" style={{background:`linear-gradient(90deg,transparent,${BLU},transparent)`}}/>
             {/* Header */}
