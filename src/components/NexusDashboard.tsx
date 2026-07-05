@@ -2163,7 +2163,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               </div>
               <div className="p-3 space-y-2">
                 {col.items.map((p: Project)=>(
-                  <div key={p.id} draggable onDragStart={()=>dragRef.current=p.id} className="p-4 rounded-xl cursor-grab active:cursor-grabbing transition-all" style={{background:SURF2,border:`1px solid ${BORDER}`}}>
+                  <div key={p.id} draggable onDragStart={()=>dragRef.current=p.id} className="p-4 rounded-xl cursor-grab active:cursor-grabbing transition-all" style={{background:selectedId===p.id?`rgba(27,95,250,0.08)`:SURF2,border:`1px solid ${selectedId===p.id?'rgba(27,95,250,0.3)':BORDER}`,boxShadow:selectedId===p.id?`0 0 0 1px rgba(27,95,250,0.15)`:'none'}}>
                     <div className="flex items-start gap-3 mb-3">
                       <div className="relative flex-shrink-0">
                         <ProgressRing pct={p.progress} size={38} stroke={2.5} color={p.color||BLU}/>
@@ -2188,9 +2188,9 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
       ) : (
         <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
           {filteredProjects.map((p: Project, i: number)=>(
-            <div key={p.id} className="flex items-center gap-4 px-6 py-4 transition-colors" style={{borderBottom:i<filteredProjects.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${statusColor(p.status)}40`}}
-              onMouseEnter={e=>(e.currentTarget.style.background='rgba(255,255,255,0.015)')}
-              onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
+            <div key={p.id} className="flex items-center gap-4 px-6 py-4 transition-colors" style={{borderBottom:i<filteredProjects.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${selectedId===p.id?statusColor(p.status):statusColor(p.status)+'40'}`,background:selectedId===p.id?'rgba(27,95,250,0.06)':'transparent'}}
+              onMouseEnter={e=>{ if(selectedId!==p.id)(e.currentTarget.style.background='rgba(255,255,255,0.015)') }}
+              onMouseLeave={e=>{ if(selectedId!==p.id)(e.currentTarget.style.background='transparent') }}>
               <div className="relative flex-shrink-0">
                 <ProgressRing pct={p.progress} size={34} stroke={2.5} color={p.color||BLU}/>
                 <div className="absolute inset-0 flex items-center justify-center font-syne text-[7.5px] font-black" style={{color:'rgba(255,255,255,0.5)'}}>{p.progress}</div>
