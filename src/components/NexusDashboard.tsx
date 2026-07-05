@@ -763,6 +763,7 @@ function ProgressRing({ pct, size=52, stroke=3, color=BLU }: { pct:number, size?
 function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
   const [filter, setFilter] = useState<'todas'|'urgente'|'high'|'normal'|'hecho'|'semana'|'sin_fecha'>('todas')
   const [assigneeFilter, setAssigneeFilter] = useState('Todos')
+  const [taskSort, setTaskSort] = useState<'prioridad'|'fecha'>('prioridad')
   const [activeTask, setActiveTask] = useState<Task|null>(null)
   const [editing, setEditing] = useState<Partial<Task>>({})
   const [saving, setSaving] = useState(false)
@@ -811,6 +812,11 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
     return byStatus && byAssignee
   }).sort((a: Task, b: Task) => {
     if (filter === 'hecho') return new Date(b.updated_at||b.created_at).getTime() - new Date(a.updated_at||a.created_at).getTime()
+    if (taskSort === 'fecha') {
+      const aT = a.due_date ? new Date(a.due_date+'T23:59:59').getTime() : Infinity
+      const bT = b.due_date ? new Date(b.due_date+'T23:59:59').getTime() : Infinity
+      return aT - bT
+    }
     const aOver = a.due_date && new Date(a.due_date+'T23:59:59') < new Date() ? -1 : 0
     const bOver = b.due_date && new Date(b.due_date+'T23:59:59') < new Date() ? -1 : 0
     if (aOver !== bOver) return aOver - bOver
@@ -850,7 +856,16 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
               <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>GESTIÓN</div>
               <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Tareas</h1>
             </div>
-            <button onClick={()=>onOpenModal('tarea')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVA</button>
+            <div className="flex items-center gap-2">
+              <div className="flex p-1 rounded-xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+                {([{id:'prioridad',icon:'arrow-up-narrow-wide'},{id:'fecha',icon:'calendar-clock'}] as const).map(s=>(
+                  <button key={s.id} onClick={()=>setTaskSort(s.id)} title={s.id==='prioridad'?'Ordenar por prioridad':'Ordenar por fecha límite'} className="px-2.5 py-2 rounded-lg transition-all" style={{background:taskSort===s.id?SURF2:'transparent'}}>
+                    <LucideIcon name={s.icon} size={12} color={taskSort===s.id?'rgba(255,255,255,0.8)':'rgba(255,255,255,0.25)'}/>
+                  </button>
+                ))}
+              </div>
+              <button onClick={()=>onOpenModal('tarea')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVA</button>
+            </div>
           </div>
           {/* Completion micro-bar */}
           {data.tasks.length > 0 && (
@@ -2792,6 +2807,30 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
           {projSearch && <button onClick={()=>setProjSearch('')}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.2)"/></button>}
         </div>
       </div>
+      {/* Quick project stats */}
+      {data.projects.length > 0 && (()=>{
+        const activeP = data.projects.filter((p: Project)=>p.status==='activo'||p.status==='urgente')
+        const overdueP = data.projects.filter((p: Project)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&new Date(p.deadline+'T23:59:59')<new Date())
+        const avgProg = activeP.length ? Math.round(activeP.reduce((s: number,p: Project)=>s+p.progress,0)/activeP.length) : null
+        return (
+          <div className="flex items-center gap-4 mb-6 px-1">
+            {avgProg !== null && (
+              <div className="flex items-center gap-2">
+                <div className="h-1.5 w-24 rounded-full overflow-hidden" style={{background:'rgba(255,255,255,0.06)'}}>
+                  <div className="h-full rounded-full" style={{width:`${avgProg}%`,background:`linear-gradient(90deg,${BLU}80,${BLU})`}}/>
+                </div>
+                <span className="font-syne text-[8.5px] font-black" style={{color:'rgba(255,255,255,0.3)'}}>{avgProg}% AVG ACTIVOS</span>
+              </div>
+            )}
+            {overdueP.length > 0 && (
+              <span className="flex items-center gap-1.5 font-syne text-[8.5px] font-black" style={{color:RED+'90'}}>
+                <span>⚠</span>{overdueP.length} ATRASADO{overdueP.length>1?'S':''}
+              </span>
+            )}
+            <span className="font-syne text-[8.5px] font-black" style={{color:'rgba(255,255,255,0.15)'}}>{data.projects.filter((p:Project)=>p.status==='completado').length} COMPLETADO{data.projects.filter((p:Project)=>p.status==='completado').length!==1?'S':''}</span>
+          </div>
+        )
+      })()}
       {projView === 'board' ? (
         <div className="grid gap-4" style={{gridTemplateColumns:`repeat(${kanbanCols.length},minmax(0,1fr))`}}>
           {kanbanCols.map((col: any)=>(
