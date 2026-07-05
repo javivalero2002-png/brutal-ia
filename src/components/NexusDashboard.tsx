@@ -1169,6 +1169,7 @@ function ReportesSection({data}: any) {
   const projects: Project[] = data.projects
   const clients: Client[] = data.clients
   const inbox: any[] = data.inbox
+  const agendaItems: any[] = data.agenda || []
 
   const totalTasks = tasks.length
   const doneTasks = tasks.filter(t=>t.done).length
@@ -1224,12 +1225,13 @@ function ReportesSection({data}: any) {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-5 gap-3 mb-6">
         {[
           {v:`${completionRate}%`, l:'Tareas completadas', accent:completionRate>60?'#22c55e':BLU},
           {v:urgentTasks+'', l:'Urgentes pendientes', accent:urgentTasks>0?RED:BLU},
           {v:overdueProjects.length+'', l:'Proy. atrasados', accent:overdueProjects.length>0?RED:null},
           {v:activeClients.length+'', l:'Clientes activos', accent:null},
+          {v:agendaItems.filter((a:any)=>a.status!=='publicado').length+'', l:'En pipeline', accent:agendaItems.filter((a:any)=>a.status!=='publicado').length>0?'rgba(193,53,132,0.9)':null},
         ].map((k,i)=>(
           <div key={i} className="rounded-xl p-4" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)',borderTop:`2px solid ${k.accent||'rgba(255,255,255,0.1)'}`}}>
             <div className="font-syne text-4xl font-black mb-1" style={{color:k.accent||'#F0F0F8'}}>{k.v}</div>
@@ -1335,6 +1337,27 @@ function ReportesSection({data}: any) {
           </div>
         </div>
       </div>
+
+      {/* Content pipeline */}
+      {agendaItems.length > 0 && (
+        <div className="mt-4 rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+          <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Pipeline de contenido</div>
+          <div className="grid grid-cols-4 gap-6">
+            {([{k:'borrador',l:'En bruto',c:'rgba(255,255,255,0.42)'},{k:'pendiente',l:'En prod.',c:'rgba(255,176,32,0.9)'},{k:'listo',l:'Listo',c:GRN},{k:'publicado',l:'Publicado',c:BLU}] as const).map((s)=>{
+              const cnt = agendaItems.filter((a:any)=>a.status===s.k).length
+              return (
+                <div key={s.k} className="text-center">
+                  <div className="font-figtree text-4xl font-black mb-1" style={{color:cnt>0?s.c:'rgba(255,255,255,0.12)',letterSpacing:'-0.04em'}}>{cnt}</div>
+                  <div className="font-syne text-[8.5px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.22)'}}>{s.l.toUpperCase()}</div>
+                  <div className="h-1.5 rounded-full" style={{background:'rgba(255,255,255,0.04)'}}>
+                    <div className="h-full rounded-full" style={{width:`${agendaItems.length>0?(cnt/agendaItems.length)*100:0}%`,background:s.c}}/>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -3310,6 +3333,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
     return () => window.removeEventListener('keydown', handler)
   }, [editing])
   const cats = ['Todos','Clientes','Procesos','Decisiones','Aprendizajes']
+  const catColor: Record<string,string> = { Clientes:BLU, Procesos:'rgba(255,176,32,0.9)', Decisiones:RED, Aprendizajes:GRN, General:'rgba(167,139,250,0.8)' }
   const byFilter = memFilter==='Todos' ? data.memoria : data.memoria.filter((m: any)=>m.category===memFilter)
   const filtered = memSearch.trim()
     ? byFilter.filter((m: any)=>(m.title+' '+m.content).toLowerCase().includes(memSearch.toLowerCase()))
@@ -3334,7 +3358,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
         {cats.map(c=>{
           const cnt = c==='Todos' ? data.memoria.length : data.memoria.filter((m:any)=>m.category===c).length
           return (
-            <button key={c} onClick={()=>setMemFilter(c)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:memFilter===c?SURF2:'transparent',color:memFilter===c?'#F0F0F8':'rgba(240,240,248,0.3)'}}>
+            <button key={c} onClick={()=>setMemFilter(c)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:memFilter===c?(c==='Todos'?SURF2:(catColor[c]||'rgba(255,255,255,0.3)')+'14'):'transparent',color:memFilter===c?(c==='Todos'?'#F0F0F8':(catColor[c]||'rgba(240,240,248,0.7)')):'rgba(240,240,248,0.3)'}}>
               {c}
               {cnt > 0 && <span className="text-[7px] font-black px-1 rounded-sm" style={{background:memFilter===c?'rgba(255,255,255,0.1)':'transparent',color:memFilter===c?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.2)'}}>{cnt}</span>}
             </button>
@@ -3354,7 +3378,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                   <span className="font-figtree text-[14px] font-semibold text-white">{m.title}</span>
-                  <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-lg" style={{background:SURF2,color:'rgba(255,255,255,0.25)'}}>{m.category}</span>
+                  <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-lg" style={{background:(catColor[m.category]||'rgba(255,255,255,0.3)')+'18',color:(catColor[m.category]||'rgba(255,255,255,0.3)')+'99'}}>{m.category}</span>
                   {m.created_at && <span className="font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.18)'}}>{new Date(m.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})}</span>}
                 </div>
                 <div className={`text-[12px] leading-relaxed ${isExp?'':'line-clamp-2'}`} style={{color:'rgba(255,255,255,0.45)'}}>{m.content}</div>
