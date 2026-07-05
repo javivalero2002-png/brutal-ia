@@ -165,7 +165,7 @@ export default function NexusDashboard({ profile }: Props) {
         const level: 'urgent'|'high'|'normal' = mf.priority==='urgente'?'urgent':mf.priority==='high'?'high':'normal'
         // mf.asignado stores the member NAME; find by name
         const assignee = data.team.find((m: Profile) => m.name === mf.asignado)
-        await data.createTask({ text:mf.text.trim(), level, assigned_to:assignee?.id, source:'manual' })
+        await data.createTask({ text:mf.text.trim(), level, assigned_to:assignee?.id, source:'manual', due_date:mf.due_date?.trim()||undefined })
         showToast('Tarea creada')
       } else if (modal === 'memoria') {
         if (!mf.titulo?.trim()) { showToast('Escribe el título'); return }
@@ -565,6 +565,7 @@ function modalFields(type: string, team: Profile[]) {
       f('Descripción de la tarea','text','Ej: Preparar deck propuesta Q3 para Nike'),
       { label:'Prioridad', key:'priority', type:'priority' },
       { label:'Asignar a', key:'asignado', type:'assignee' },
+      f('Fecha límite','due_date','Ej: 15 Jul 2026 (opcional)'),
     ],
     memoria: [
       f('Título','titulo','Ej: Nike — Guía de tono de voz 2026'),
@@ -667,7 +668,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
 
   const openTask = (t: Task) => {
     setActiveTask(t)
-    setEditing({ text: t.text, level: t.level, assigned_to: t.assigned_to, done: t.done })
+    setEditing({ text: t.text, level: t.level, assigned_to: t.assigned_to, done: t.done, due_date: t.due_date })
   }
 
   const saveTask = async () => {
@@ -816,6 +817,12 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Due date */}
+            <div>
+              <label className="block font-syne text-[9px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.25)'}}>FECHA LÍMITE</label>
+              <input value={editing.due_date||''} onChange={e=>setEditing(x=>({...x,due_date:e.target.value||undefined}))} placeholder="Ej: 15 Jul 2026" className="w-full px-5 py-3 rounded-2xl text-[13px] text-white placeholder-white/20 outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
             </div>
 
             {/* Meta info */}
@@ -2730,7 +2737,12 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
                       <div className="p-2 min-h-[160px] space-y-1">
                         {evs.map((e,ei)=>(
                           <div key={ei} className="px-2 py-1.5 rounded-lg" style={{background:e.color+'15',border:`1px solid ${e.color}25`}}>
-                            <div className="font-syne text-[7px] font-black tracking-wide mb-0.5" style={{color:e.color+'cc'}}>{e.type==='gcal'?'GCAL':e.type==='content'?'CONTENIDO':'TAREA'}</div>
+                            <div className="flex items-center gap-1 mb-0.5">
+                              {e.type==='content'
+                                ? <><PlatformLogo platform={e.raw?.platform} size={9}/><span className="font-syne text-[7px] font-black tracking-wide" style={{color:e.color+'cc'}}>{e.raw?.platform}</span></>
+                                : <span className="font-syne text-[7px] font-black tracking-wide" style={{color:e.color+'cc'}}>{e.type==='gcal'?'GCAL':'TAREA'}</span>
+                              }
+                            </div>
                             <div className="text-[10px] font-medium line-clamp-2 leading-tight" style={{color:'rgba(255,255,255,0.7)'}}>{e.label}</div>
                             {e.type==='gcal'&&e.raw?.start&&e.raw.start.includes('T') && <div className="text-[9px] mt-0.5" style={{color:'rgba(255,255,255,0.3)'}}>{formatTime(e.raw.start)}</div>}
                           </div>
