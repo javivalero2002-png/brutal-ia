@@ -1544,6 +1544,17 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
         ))}
       </div>
 
+      {/* Overdue alert */}
+      {myOverdue > 0 && (
+        <div className="mb-6 flex items-center gap-3 px-5 py-3.5 rounded-2xl" style={{background:'rgba(229,29,42,0.05)',border:'1px solid rgba(229,29,42,0.18)'}}>
+          <div className="w-2 h-2 rounded-full flex-shrink-0 animate-pulse" style={{background:RED}}/>
+          <span className="font-syne text-[9px] font-black tracking-wide flex-1" style={{color:'rgba(229,29,42,0.85)'}}>
+            {myOverdue} tarea{myOverdue!==1?'s':''} vencida{myOverdue!==1?'s':''} — requiere{myOverdue!==1?'n':''} atención inmediata
+          </span>
+          <button onClick={()=>onNavigate?.('tareas')} className="font-syne text-[8px] font-black px-3 py-1.5 rounded-xl transition-all hover:opacity-80" style={{background:'rgba(229,29,42,0.12)',color:RED}}>VER TAREAS →</button>
+        </div>
+      )}
+
       {/* Main grid */}
       <div className="grid gap-6" style={{gridTemplateColumns:'1fr 340px'}}>
 
@@ -1994,6 +2005,11 @@ function InboxSection({data,showToast,profile}: any) {
                 <button onClick={()=>{ data.markUnread(selected.id); setSelected((s: any)=>({...s,is_read:false})) }} className="font-syne text-[7.5px] font-black px-3 py-1.5 rounded-xl transition-all hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>
                   NO LEÍDO
                 </button>
+              )}
+              {selected.from_email && selected.source==='gmail' && (
+                <a href={`mailto:${selected.from_email}?subject=${encodeURIComponent('Re: '+(selected.subject||''))}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all hover:opacity-80" style={{color:'rgba(255,255,255,0.45)',border:`1px solid ${BORDER}`}}>
+                  <LucideIcon name="corner-up-left" size={10} color="rgba(255,255,255,0.45)"/>RESPONDER
+                </a>
               )}
               {selected.ai_action&&selected.ai_action!=='Ninguna acción requerida' && (
                 <button onClick={()=>createTaskFromEmail(selected)} disabled={creatingTask} className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest text-white disabled:opacity-40 transition-opacity" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
@@ -2695,7 +2711,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               <div className="flex items-center gap-2.5 px-5 py-4" style={{borderBottom:`1px solid ${BORDER}`}}>
                 <div className="w-2 h-2 rounded-full" style={{background:col.color}}/>
                 <span className="font-syne text-[9px] font-black tracking-widest uppercase flex-1" style={{color:'rgba(255,255,255,0.4)'}}>{col.title}</span>
-                <span className="font-syne text-[13px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{col.items.length}</span>
+                <span className="font-syne text-[13px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{projSearch.trim()?col.items.filter((p: Project)=>p.name.toLowerCase().includes(projSearch.toLowerCase())||(p.client as any)?.name?.toLowerCase().includes(projSearch.toLowerCase())).length:col.items.length}</span>
               </div>
               <div className="p-3 space-y-2">
                 {col.items.filter((p: Project)=>!projSearch.trim()||p.name.toLowerCase().includes(projSearch.toLowerCase())||(p.client as any)?.name?.toLowerCase().includes(projSearch.toLowerCase())).map((p: Project)=>(
