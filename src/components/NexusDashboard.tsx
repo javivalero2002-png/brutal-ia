@@ -852,6 +852,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                       const label = isToday ? 'HOY' : new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})
                       return <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:isToday?'rgba(255,176,32,0.15)':overdue?'rgba(229,29,42,0.1)':'rgba(255,255,255,0.05)',color:isToday?'rgba(255,176,32,0.95)':overdue?RED:'rgba(255,255,255,0.35)'}}>{overdue?'● ':''}{label}</span>
                     })()}
+                    {t.project_id && (() => { const proj = data.projects.find((p: Project)=>p.id===t.project_id); return proj ? <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:(proj.color||BLU)+'12',color:(proj.color||BLU)+'99'}}>{proj.name}</span> : null })()}
                     {!t.done && t.level==='urgent' && <span className="font-syne text-[8px] font-black" style={{color:RED}}>● URGENTE</span>}
                     {t.source==='gmail' && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.55)'}}>GMAIL</span>}
                     {t.source==='whatsapp' && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:'rgba(37,211,102,0.06)',color:'rgba(37,211,102,0.55)'}}>WA</span>}
@@ -1430,19 +1431,19 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
         </button>
       </div>
 
-      {/* Stats row — inline, no cards */}
+      {/* Stats row — clickable, navigate to section */}
       <div className="grid grid-cols-4 gap-6 mb-10 pb-10" style={{borderBottom:`1px solid ${BORDER}`}}>
         {[
-          { n: myTasks.length, label:'Mis tareas', color:myOverdue>0?RED:'rgba(255,255,255,0.92)', sub:myOverdue>0?`${myOverdue} atrasada${myOverdue>1?'s':''}`:myUrgent>0?`${myUrgent} urgente${myUrgent>1?'s':''}` :'Al día' },
-          { n: urgentCount, label:'Urgentes', color:urgentCount>0?RED:'rgba(255,255,255,0.25)', sub: urgentCount>0?'Requieren atención':'Todo bajo control' },
-          { n: unreadCount, label:'Sin leer', color:unreadCount>0?BLU:'rgba(255,255,255,0.25)', sub:'En inbox' },
-          { n: activeProjects.length, label:'Proyectos activos', color:'rgba(255,255,255,0.92)', sub:`${data.projects.length} en total` },
+          { n: myTasks.length, label:'Mis tareas', color:myOverdue>0?RED:'rgba(255,255,255,0.92)', sub:myOverdue>0?`${myOverdue} atrasada${myOverdue>1?'s':''}`:myUrgent>0?`${myUrgent} urgente${myUrgent>1?'s':''}` :'Al día', nav:'tareas' },
+          { n: urgentCount, label:'Urgentes', color:urgentCount>0?RED:'rgba(255,255,255,0.25)', sub: urgentCount>0?'Requieren atención':'Todo bajo control', nav:'tareas' },
+          { n: unreadCount, label:'Sin leer', color:unreadCount>0?BLU:'rgba(255,255,255,0.25)', sub:'En inbox', nav:'inbox' },
+          { n: activeProjects.length, label:'Proyectos activos', color:'rgba(255,255,255,0.92)', sub:`${data.projects.length} en total`, nav:'proyectos' },
         ].map((s,i)=>(
-          <div key={i}>
+          <button key={i} onClick={()=>onNavigate?.(s.nav)} className="text-left group transition-opacity hover:opacity-80">
             <div className="font-figtree font-black leading-none mb-2" style={{fontSize:'48px',color:s.color,letterSpacing:'-0.04em'}}>{s.n}</div>
             <div className="text-[14px] font-medium mb-0.5" style={{color:'rgba(255,255,255,0.5)'}}>{s.label}</div>
             <div className="font-syne text-[9px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.18)'}}>{s.sub.toUpperCase()}</div>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -2728,6 +2729,7 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
   const [editPublishDate, setEditPublishDate] = useState('')
   const [editPublishTime, setEditPublishTime] = useState('')
   const [accountFilter, setAccountFilter] = useState('Todas')
+  const [clientFilter, setClientFilter] = useState('Todos')
   const [savingNotes, setSavingNotes] = useState(false)
   const [confirmDeleteContent, setConfirmDeleteContent] = useState(false)
 
@@ -2770,7 +2772,9 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
   }
 
   const allAccounts: string[] = ['Todas', ...Array.from(new Set<string>(data.agenda.filter((a: any)=>a.account_name).map((a: any)=>a.account_name as string)))]
-  const filteredAgenda = accountFilter === 'Todas' ? data.agenda : data.agenda.filter((a: any)=>a.account_name===accountFilter)
+  const allContentClients: string[] = ['Todos', ...Array.from(new Set<string>(data.agenda.filter((a: any)=>a.client?.name||a.client_id).map((a: any)=>a.client?.name||(data.clients.find((c: any)=>c.id===a.client_id)?.name)||'').filter(Boolean)))]
+  const filteredByClient = clientFilter === 'Todos' ? data.agenda : data.agenda.filter((a: any) => (a.client?.name||data.clients.find((c: any)=>c.id===a.client_id)?.name) === clientFilter)
+  const filteredAgenda = accountFilter === 'Todas' ? filteredByClient : filteredByClient.filter((a: any)=>a.account_name===accountFilter)
 
   const changeStatus = async (item: any, newStatus: string) => {
     try {
@@ -2804,6 +2808,24 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
               + NUEVA PIEZA
             </button>
           </div>
+          {/* Client filter */}
+          {allContentClients.length > 1 && (
+            <div className="flex gap-1.5 flex-wrap mb-2">
+              {allContentClients.map((cl: string)=>{
+                const isAll = cl === 'Todos'
+                const isActive = clientFilter === cl
+                const client = data.clients.find((c: any)=>c.name===cl)
+                const clColor = client?.color || BLU
+                return (
+                  <button key={cl} onClick={()=>setClientFilter(cl)} className="font-syne text-[8.5px] font-black px-3 py-1.5 rounded-xl transition-all" style={{
+                    background: isActive ? (isAll ? 'rgba(27,95,250,0.15)' : clColor+'18') : 'rgba(255,255,255,0.04)',
+                    color: isActive ? (isAll ? BLU : clColor) : 'rgba(255,255,255,0.3)',
+                    border: isActive ? `1px solid ${isAll ? 'rgba(27,95,250,0.3)' : clColor+'35'}` : '1px solid transparent',
+                  }}>{cl}</button>
+                )
+              })}
+            </div>
+          )}
           {/* Account filter with platform icons */}
           {allAccounts.length > 1 && (
             <div className="flex gap-1.5 flex-wrap">
