@@ -761,7 +761,7 @@ function ProgressRing({ pct, size=52, stroke=3, color=BLU }: { pct:number, size?
 // ── HOY SECTION ─────────────────────────────────────────────
 // ── TAREAS SECTION ───────────────────────────────────────────
 function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
-  const [filter, setFilter] = useState<'todas'|'urgente'|'high'|'normal'|'hecho'|'semana'|'sin_fecha'>('todas')
+  const [filter, setFilter] = useState<'todas'|'urgente'|'high'|'normal'|'hecho'|'hoy'|'semana'|'sin_fecha'>('todas')
   const [assigneeFilter, setAssigneeFilter] = useState('Todos')
   const [taskSort, setTaskSort] = useState<'prioridad'|'fecha'>('prioridad')
   const [taskGroup, setTaskGroup] = useState<'none'|'proyecto'>('none')
@@ -808,7 +808,8 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
   const levelPriority = (l: string) => l==='urgent'?0:l==='high'?1:2
   const weekEnd = new Date(Date.now() + 7*24*60*60*1000)
   const filtered = data.tasks.filter((t: Task) => {
-    const byStatus = filter === 'todas' ? !t.done : filter === 'hecho' ? t.done : filter === 'semana' ? (!t.done && !!t.due_date && new Date(t.due_date+'T23:59:59') <= weekEnd) : filter === 'sin_fecha' ? (!t.done && !t.due_date) : (!t.done && t.level === filter)
+    const todayKey = new Date().toISOString().split('T')[0]
+    const byStatus = filter === 'todas' ? !t.done : filter === 'hecho' ? t.done : filter === 'hoy' ? (!t.done && !!t.due_date && new Date(t.due_date+'T23:59:59') <= new Date(todayKey+'T23:59:59')) : filter === 'semana' ? (!t.done && !!t.due_date && new Date(t.due_date+'T23:59:59') <= weekEnd) : filter === 'sin_fecha' ? (!t.done && !t.due_date) : (!t.done && t.level === filter)
     const byAssignee = assigneeFilter === 'Todos' || t.assignee?.name === assigneeFilter
     return byStatus && byAssignee
   }).sort((a: Task, b: Task) => {
@@ -825,20 +826,23 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
   })
   filteredTasksRef.current = filtered
 
+  const todayFilterKey = new Date().toISOString().split('T')[0]
   const tabCounts: Record<string,number> = {
     todas: data.tasks.filter((t: Task)=>!t.done).length,
     urgente: data.tasks.filter((t: Task)=>!t.done&&t.level==='urgent').length,
     high: data.tasks.filter((t: Task)=>!t.done&&t.level==='high').length,
     normal: data.tasks.filter((t: Task)=>!t.done&&t.level==='normal').length,
     hecho: data.tasks.filter((t: Task)=>t.done).length,
+    hoy: data.tasks.filter((t: Task)=>!t.done&&!!t.due_date&&new Date(t.due_date+'T23:59:59')<=new Date(todayFilterKey+'T23:59:59')).length,
     semana: data.tasks.filter((t: Task)=>!t.done&&!!t.due_date&&new Date(t.due_date+'T23:59:59')<=weekEnd).length,
     sin_fecha: data.tasks.filter((t: Task)=>!t.done&&!t.due_date).length,
   }
-  const tabs: {id: 'todas'|'urgente'|'high'|'normal'|'hecho'|'semana'|'sin_fecha', label: string, color?: string}[] = [
+  const tabs: {id: 'todas'|'urgente'|'high'|'normal'|'hecho'|'hoy'|'semana'|'sin_fecha', label: string, color?: string}[] = [
     {id:'todas', label:'Todas'},
     {id:'urgente', label:'Urgente', color:RED},
     {id:'high', label:'Alta', color:'rgba(255,176,32,0.8)'},
     {id:'normal', label:'Normal', color:BLU},
+    {id:'hoy', label:'Hoy', color:'rgba(229,29,42,0.85)'},
     {id:'semana', label:'Esta sem.', color:'rgba(167,139,250,0.85)'},
     {id:'sin_fecha', label:'Sin fecha', color:'rgba(255,255,255,0.3)'},
     {id:'hecho', label:'Hechas'},
@@ -3202,7 +3206,14 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
           <div className="flex items-center justify-between mb-4">
             <div>
               <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>PRODUCCIÓN</div>
-              <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.04em'}}>Pipeline</h1>
+              <div className="flex items-baseline gap-3">
+                <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.04em'}}>Pipeline</h1>
+                {(()=>{
+                  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0)
+                  const publishedThisMonth = data.agenda.filter((a: any)=>a.status==='publicado'&&a.publish_date&&new Date(a.publish_date+'T00:00:00')>=monthStart).length
+                  return publishedThisMonth > 0 ? <span className="font-syne text-[8.5px] font-black" style={{color:'rgba(27,95,250,0.7)'}}>{publishedThisMonth} publicado{publishedThisMonth>1?'s':''} este mes</span> : null
+                })()}
+              </div>
               {data.agenda.length > 0 && (
                 <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                   {cols.map((col: any) => { const cnt = filteredAgenda.filter((a: any)=>a.status===col.key).length; return cnt > 0 ? <span key={col.key} className="font-syne text-[8.5px] font-black" style={{color:col.color+'80'}}>{cnt} {col.label.toLowerCase()}</span> : null })}
