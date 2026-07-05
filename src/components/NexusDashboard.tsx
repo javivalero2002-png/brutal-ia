@@ -464,7 +464,7 @@ export default function NexusDashboard({ profile }: Props) {
       <main className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto">
           {section === 'hoy' && <HoySection profile={profile} data={data} urgentCount={urgentCount} unreadCount={unreadCount} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} onNavigate={setSection} />}
-          {section === 'inbox' && <InboxSection data={data} showToast={showToast} profile={profile} />}
+          {section === 'inbox' && <InboxSection data={data} showToast={showToast} profile={profile} onNavigate={setSection} onSelectClient={setSelectedClient} />}
           {section === 'tareas' && <TareasSection data={data} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'equipo' && <EquipoSection data={data} profile={profile} showToast={showToast} />}
           {section === 'reportes' && <ReportesSection data={data} onNavigate={setSection} />}
@@ -853,6 +853,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
   filteredTasksRef.current = filtered
 
   const todayFilterKey = new Date().toISOString().split('T')[0]
+  const completedTodayCount = data.tasks.filter((t: Task)=>t.done&&(t.updated_at||t.created_at).slice(0,10)===todayFilterKey).length
   const tabCounts: Record<string,number> = {
     todas: data.tasks.filter((t: Task)=>!t.done).length,
     urgente: data.tasks.filter((t: Task)=>!t.done&&t.level==='urgent').length,
@@ -905,7 +906,10 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
           {data.tasks.length > 0 && (
             <div className="mb-5">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.18)'}}>COMPLETADAS</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.18)'}}>COMPLETADAS</span>
+                  {completedTodayCount > 0 && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full" style={{background:`${GRN}14`,color:`${GRN}99`}}>+{completedTodayCount} HOY</span>}
+                </div>
                 <span className="font-syne text-[8px] font-black" style={{color:tabCounts.hecho>0?GRN:'rgba(255,255,255,0.2)'}}>{tabCounts.hecho} / {data.tasks.length}</span>
               </div>
               <div className="h-1.5 rounded-full" style={{background:'rgba(255,255,255,0.04)'}}>
@@ -1292,6 +1296,7 @@ function EquipoSection({data, profile, showToast}: any) {
             const urgent = pending.filter((t: Task) => t.level === 'urgent')
             const high = pending.filter((t: Task) => t.level === 'high')
             const mOverdue = pending.filter((t: Task) => t.due_date && new Date(t.due_date+'T23:59:59') < new Date())
+            const mDueToday = pending.filter((t: Task) => t.due_date && t.due_date.slice(0,10) === new Date().toISOString().slice(0,10))
             const workload = urgent.length*3 + high.length*2 + (pending.length-urgent.length-high.length)
             const sel = selected?.id === member.id
             return (
@@ -1309,7 +1314,7 @@ function EquipoSection({data, profile, showToast}: any) {
                       {isMe(member) && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>TÚ</span>}
                       {urgent.length > 0 && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(229,29,42,0.1)',color:RED}}>{urgent.length} URG</span>}
                     </div>
-                    <div className="text-[11px] mt-0.5 truncate" style={{color:'rgba(255,255,255,0.3)'}}>{member.role==='owner'?'Propietario':'Equipo'} · {pending.length} tareas{mOverdue.length>0?<span style={{color:RED+'aa'}}> · {mOverdue.length} atrasada{mOverdue.length>1?'s':''}</span>:null}</div>
+                    <div className="text-[11px] mt-0.5 truncate" style={{color:'rgba(255,255,255,0.3)'}}>{member.role==='owner'?'Propietario':'Equipo'} · {pending.length} tareas{mOverdue.length>0?<span style={{color:RED+'aa'}}> · {mOverdue.length} atrasada{mOverdue.length>1?'s':''}</span>:null}{mDueToday.length>0&&mOverdue.length===0?<span style={{color:'rgba(255,176,32,0.75)'}}> · {mDueToday.length} hoy</span>:null}</div>
                   </div>
                   <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                     {!isMe(member) && <LucideIcon name="message-square" size={13} color={sel?member.avatar_color:'rgba(255,255,255,0.15)'}/>}
@@ -2166,7 +2171,7 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
 }
 
 // ── INBOX SECTION ────────────────────────────────────────────
-function InboxSection({data,showToast,profile}: any) {
+function InboxSection({data,showToast,profile,onNavigate,onSelectClient}: any) {
   const [filter, setFilter] = useState('Todos')
   const [selected, setSelected] = useState<any>(null)
   const [creatingTask, setCreatingTask] = useState(false)
@@ -2490,7 +2495,7 @@ function InboxSection({data,showToast,profile}: any) {
                   </div>
                   <span className="font-syne text-[8px] font-black px-2 py-1 rounded-full" style={{background:matchedClient.status==='Activo'?`${GRN}12`:'rgba(255,255,255,0.05)',color:matchedClient.status==='Activo'?GRN:'rgba(255,255,255,0.3)'}}>{matchedClient.status}</span>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 mb-3">
                   {[
                     {n:data.projects.filter((p: any)=>p.client_id===matchedClient.id).length, l:'proyectos'},
                     {n:data.tasks.filter((t: any)=>!t.done&&t.client_id===matchedClient.id).length, l:'tareas activas'},
@@ -2501,6 +2506,12 @@ function InboxSection({data,showToast,profile}: any) {
                     </div>
                   ))}
                 </div>
+                {onNavigate && onSelectClient && (
+                  <button onClick={()=>{onSelectClient(matchedClient.id);onNavigate('clientes')}} className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-syne text-[8.5px] font-black tracking-widest transition-all hover:opacity-80" style={{background:`${matchedClient.color}10`,border:`1px solid ${matchedClient.color}28`,color:`${matchedClient.color}bb`}}>
+                    VER CLIENTE
+                    <LucideIcon name="arrow-right" size={10} color={`${matchedClient.color}bb`}/>
+                  </button>
+                )}
               </div>
             )}
 
