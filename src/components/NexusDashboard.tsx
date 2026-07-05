@@ -1894,7 +1894,7 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
   if (selected) {
     const clientProjects = data.projects.filter((p: Project)=>p.client_id===selected.id)
     const clientTasks = data.tasks.filter((t: Task)=>t.client_id===selected.id)
-    const activeTasks = clientTasks.filter((t: Task)=>!t.done)
+    const activeTasks = clientTasks.filter((t: Task)=>!t.done).sort((a: Task,b: Task)=>{ const lp=(l: string)=>l==='urgent'?0:l==='high'?1:2; return lp(a.level)-lp(b.level) })
     const doneTasks = clientTasks.filter((t: Task)=>t.done)
     const urgentTasks = activeTasks.filter((t: Task)=>t.level==='urgent')
     const activeProjects = clientProjects.filter((p: Project)=>p.status==='activo'||p.status==='urgente')
@@ -2010,9 +2010,13 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
                     <ProgressRing pct={p.progress} size={38} stroke={2.5} color={p.color||BLU}/>
                     <div className="flex-1 min-w-0">
                       <div className="font-figtree text-[14px] font-semibold truncate" style={{color:'rgba(240,240,248,0.85)'}}>{p.name}</div>
-                      <div className="text-[10px] mt-0.5" style={{color:'rgba(255,255,255,0.25)'}}>
-                        {(({'activo':'Activo','urgente':'Urgente','plan.':'Plan.','revisión':'Revisión'} as Record<string,string>)[p.status]||p.status)}
-                        {p.deadline && ` · ${new Date(p.deadline+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}`}
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span className="text-[10px]" style={{color:'rgba(255,255,255,0.25)'}}>{(({'activo':'Activo','urgente':'Urgente','plan.':'Plan.','revisión':'Revisión','completado':'Completado'} as Record<string,string>)[p.status]||p.status)}</span>
+                        {p.deadline && p.deadline!=='TBD' && (()=>{
+                          const dOver = new Date(p.deadline+'T23:59:59')<new Date()
+                          const dSoon = !dOver && new Date(p.deadline+'T23:59:59')<new Date(Date.now()+7*24*3600*1000)
+                          return <span className="font-syne text-[8px] font-black px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}15`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?'rgba(255,176,32,0.8)':'rgba(255,255,255,0.25)'}}>{dOver&&'⚠ '}{new Date(p.deadline+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>
+                        })()}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
