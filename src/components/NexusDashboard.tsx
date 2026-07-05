@@ -1649,7 +1649,7 @@ function ReportesSection({data, onNavigate}: any) {
       {agendaItems.length > 0 && (
         <div className="mt-4 rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
           <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Pipeline de contenido</div>
-          <div className="grid grid-cols-4 gap-6">
+          <div className="grid grid-cols-4 gap-6 mb-5">
             {([{k:'borrador',l:'En bruto',c:'rgba(255,255,255,0.42)'},{k:'pendiente',l:'En prod.',c:'rgba(255,176,32,0.9)'},{k:'listo',l:'Listo',c:GRN},{k:'publicado',l:'Publicado',c:BLU}] as const).map((s)=>{
               const cnt = agendaItems.filter((a:any)=>a.status===s.k).length
               return (
@@ -1663,6 +1663,30 @@ function ReportesSection({data, onNavigate}: any) {
               )
             })}
           </div>
+          {(()=>{
+            const platColors: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
+            const platCounts: Record<string,number> = {}
+            agendaItems.filter((a:any)=>a.status!=='publicado').forEach((a:any)=>{ if(a.platform) platCounts[a.platform]=(platCounts[a.platform]||0)+1 })
+            const entries = Object.entries(platCounts).sort((a,b)=>b[1]-a[1])
+            if (entries.length === 0) return null
+            const maxN = entries[0][1]
+            return (
+              <div className="pt-4" style={{borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+                <div className="font-syne text-[8.5px] font-bold tracking-widest text-white/20 uppercase mb-3">Por plataforma (en pipeline)</div>
+                <div className="space-y-2">
+                  {entries.map(([plat,n])=>(
+                    <div key={plat} className="flex items-center gap-3">
+                      <span className="font-syne text-[8px] font-black w-20 text-right flex-shrink-0" style={{color:(platColors[plat]||BLU)+'bb'}}>{plat}</span>
+                      <div className="flex-1 h-1.5 rounded-full" style={{background:'rgba(255,255,255,0.04)'}}>
+                        <div className="h-full rounded-full" style={{width:`${(n/maxN)*100}%`,background:platColors[plat]||BLU}}/>
+                      </div>
+                      <span className="font-syne text-[8px] font-black w-5 flex-shrink-0" style={{color:'rgba(255,255,255,0.3)'}}>{n}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
         </div>
       )}
 
@@ -1801,9 +1825,9 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
         ))}
       </div>
 
-      {/* Overdue alert */}
+      {/* Overdue alerts */}
       {myOverdue > 0 && (
-        <div className="mb-6 flex items-center gap-3 px-5 py-3.5 rounded-2xl" style={{background:'rgba(229,29,42,0.05)',border:'1px solid rgba(229,29,42,0.18)'}}>
+        <div className="mb-3 flex items-center gap-3 px-5 py-3.5 rounded-2xl" style={{background:'rgba(229,29,42,0.05)',border:'1px solid rgba(229,29,42,0.18)'}}>
           <div className="w-2 h-2 rounded-full flex-shrink-0 animate-pulse" style={{background:RED}}/>
           <span className="font-syne text-[9px] font-black tracking-wide flex-1" style={{color:'rgba(229,29,42,0.85)'}}>
             {myOverdue} tarea{myOverdue!==1?'s':''} vencida{myOverdue!==1?'s':''} — requiere{myOverdue!==1?'n':''} atención inmediata
@@ -1811,6 +1835,19 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
           <button onClick={()=>onNavigate?.('tareas')} className="font-syne text-[8px] font-black px-3 py-1.5 rounded-xl transition-all hover:opacity-80" style={{background:'rgba(229,29,42,0.12)',color:RED}}>VER TAREAS →</button>
         </div>
       )}
+      {(()=>{
+        const overdueProj = data.projects.filter((p: Project)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&new Date(p.deadline+'T23:59:59')<new Date())
+        if (overdueProj.length===0) return null
+        return (
+          <div className="mb-6 flex items-center gap-3 px-5 py-3.5 rounded-2xl" style={{background:'rgba(255,176,32,0.04)',border:'1px solid rgba(255,176,32,0.18)'}}>
+            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:'rgba(255,176,32,0.9)'}}/>
+            <span className="font-syne text-[9px] font-black tracking-wide flex-1" style={{color:'rgba(255,176,32,0.85)'}}>
+              {overdueProj.length} proyecto{overdueProj.length!==1?'s':''} atrasado{overdueProj.length!==1?'s':''} — deadline{overdueProj.length!==1?'s':''} vencido{overdueProj.length!==1?'s':''}
+            </span>
+            <button onClick={()=>onNavigate?.('proyectos')} className="font-syne text-[8px] font-black px-3 py-1.5 rounded-xl transition-all hover:opacity-80" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.9)'}}>VER PROYECTOS →</button>
+          </div>
+        )
+      })()}
 
       {/* Main grid */}
       <div className="grid gap-6" style={{gridTemplateColumns:'1fr 340px'}}>
@@ -2253,6 +2290,7 @@ function InboxSection({data,showToast,profile}: any) {
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="font-syne text-[9px] font-black truncate flex-1" style={{color:isUnread?'rgba(255,255,255,0.88)':'rgba(255,255,255,0.32)'}}>{m.from_name||'Desconocido'}</span>
                           {isInternal && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.75)'}}>DM</span>}
+                          {m.source==='whatsapp' && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(37,211,102,0.08)',color:'rgba(37,211,102,0.7)'}}>WA</span>}
                           {isUnread && m.ai_urgency==='urgent' && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:`${RED}16`,color:RED,border:`1px solid ${RED}30`}}>URG</span>}
                           {m.attachments?.length>0 && <LucideIcon name="paperclip" size={9} color="rgba(255,255,255,0.2)"/>}
                           <span className="font-syne text-[7.5px] flex-shrink-0" style={{color:'rgba(255,255,255,0.2)'}}>{relTime(m.received_at)}</span>
