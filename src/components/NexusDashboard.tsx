@@ -1190,7 +1190,9 @@ function EquipoSection({data, profile, showToast}: any) {
             const done = memberTasks.filter((t: Task) => t.done)
             const completePct = memberTasks.length > 0 ? Math.round((done.length/memberTasks.length)*100) : 0
             const urgent = pending.filter((t: Task) => t.level === 'urgent')
+            const high = pending.filter((t: Task) => t.level === 'high')
             const mOverdue = pending.filter((t: Task) => t.due_date && new Date(t.due_date+'T23:59:59') < new Date())
+            const workload = urgent.length*3 + high.length*2 + (pending.length-urgent.length-high.length)
             const sel = selected?.id === member.id
             return (
               <button key={member.id} onClick={()=>openThread(member)}
@@ -1209,7 +1211,15 @@ function EquipoSection({data, profile, showToast}: any) {
                     </div>
                     <div className="text-[11px] mt-0.5 truncate" style={{color:'rgba(255,255,255,0.3)'}}>{member.role==='owner'?'Propietario':'Equipo'} · {pending.length} tareas{mOverdue.length>0?<span style={{color:RED+'aa'}}> · {mOverdue.length} atrasada{mOverdue.length>1?'s':''}</span>:null}</div>
                   </div>
-                  {!isMe(member) && <LucideIcon name="message-square" size={13} color={sel?member.avatar_color:'rgba(255,255,255,0.15)'}/>}
+                  <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                    {!isMe(member) && <LucideIcon name="message-square" size={13} color={sel?member.avatar_color:'rgba(255,255,255,0.15)'}/>}
+                    {workload > 0 && (
+                      <div className="flex items-center gap-1" title={`Carga: ${workload} (urgentes×3 + altas×2 + normales×1)`}>
+                        <div className="font-figtree text-[11px] font-black leading-none" style={{color:workload>8?RED:workload>4?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.3)'}}>{workload}</div>
+                        <div className="font-syne text-[6.5px] font-black tracking-wide" style={{color:'rgba(255,255,255,0.15)'}}>CARGA</div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </button>
             )
@@ -4004,6 +4014,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
 // ── AUTOMATIZACIONES SECTION ─────────────────────────────────
 function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
   const activeCount = data.reglas.filter((r: Regla)=>r.active).length
+  const totalFired = data.reglas.reduce((s: number, r: Regla)=>s+(r.trigger_count||0),0)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string|null>(null)
   return (
     <div className="p-8 max-w-[900px] mx-auto">
@@ -4012,7 +4023,13 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
           <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>SISTEMA</div>
           <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Automatizaciones</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-6">
+          {totalFired > 0 && (
+            <div className="text-right">
+              <div className="font-figtree text-[28px] font-black leading-none" style={{color:'rgba(167,139,250,0.8)',letterSpacing:'-0.04em'}}>{totalFired}</div>
+              <div className="font-syne text-[8px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>EJECUCIONES</div>
+            </div>
+          )}
           <div className="text-right">
             <div className="font-figtree text-[28px] font-black leading-none" style={{color:activeCount>0?BLU:'rgba(255,255,255,0.25)',letterSpacing:'-0.04em'}}>{activeCount}</div>
             <div className="font-syne text-[8px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>DE {data.reglas.length} ACTIVAS</div>
