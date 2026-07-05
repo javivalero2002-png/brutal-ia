@@ -439,7 +439,7 @@ export default function NexusDashboard({ profile }: Props) {
           {section === 'equipo' && <EquipoSection data={data} profile={profile} showToast={showToast} />}
           {section === 'reportes' && <ReportesSection data={data} onNavigate={setSection} />}
           {section === 'clientes' && <ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={setModal} onSetMf={setMf} showToast={showToast} isOwner={profile.role==='owner'} />}
-          {section === 'proyectos' && <ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
+          {section === 'proyectos' && <ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={setModal} onSetMf={setMf} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'contenido' && <ContenidoSection data={data} onOpenModal={setModal} showToast={showToast} />}
           {section === 'calendario' && <CalendarioSection data={data} profile={profile} showToast={showToast} onOpenModal={setModal} onSetMf={setMf} />}
           {section === 'memoria' && <MemoriaSection data={data} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={setModal} showToast={showToast} />}
@@ -1629,6 +1629,7 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
             {[
               {label:'Nueva tarea', sub:'Asignar y priorizar', icon:'check-square', c:BLU, act:()=>onOpenModal('tarea')},
               {label:'Nueva pieza', sub:'Contenido · social', icon:'film', c:'#C13584', act:()=>onOpenModal('contenido')},
+              {label:'Nueva memoria', sub:'Conocimiento · base', icon:'brain', c:'rgba(167,139,250,0.9)', act:()=>onOpenModal('memoria')},
               ...(isOwner?[
                 {label:'Nuevo cliente', sub:'CRM · gestión', icon:'users', c:GRN, act:()=>onOpenModal('cliente')},
                 {label:'Nuevo proyecto', sub:'Pipeline · kanban', icon:'folder-open', c:'rgba(255,176,32,0.9)', act:()=>onOpenModal('proyecto')},
@@ -2463,13 +2464,14 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
 }
 
 // ── PROYECTOS SECTION ────────────────────────────────────────
-function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView,projStatusFilter,setProjStatusFilter,dragRef,selectedId,onSelect,onOpenModal,showToast,isOwner}: any) {
+function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView,projStatusFilter,setProjStatusFilter,dragRef,selectedId,onSelect,onOpenModal,onSetMf,showToast,isOwner}: any) {
   const [editProgress, setEditProgress] = useState<number|null>(null)
   const [savingProgress, setSavingProgress] = useState(false)
   const [confirmDeleteProjId, setConfirmDeleteProjId] = useState<string|null>(null)
+  const [confirmDeleteDetail, setConfirmDeleteDetail] = useState(false)
   const selectedProject: Project|null = selectedId ? data.projects.find((p: Project)=>p.id===selectedId)||null : null
 
-  useEffect(() => { setEditProgress(null) }, [selectedId])
+  useEffect(() => { setEditProgress(null); setConfirmDeleteDetail(false) }, [selectedId])
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && selectedId) onSelect(null) }
@@ -2624,9 +2626,24 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 </div>
               </div>
             </div>
-            <button onClick={()=>onSelect(null)} className="w-8 h-8 rounded-xl flex items-center justify-center" style={{background:'rgba(255,255,255,0.05)'}}>
-              <LucideIcon name="x" size={13} color="rgba(255,255,255,0.35)"/>
-            </button>
+            <div className="flex items-center gap-2">
+              <button onClick={()=>{ onSetMf?.({cliente:selectedProject.client?.name||''}); onOpenModal('tarea') }} className="flex items-center gap-2 px-3 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all" style={{background:'rgba(27,95,250,0.08)',color:BLU,border:`1px solid rgba(27,95,250,0.18)`}}>
+                <LucideIcon name="plus" size={11} color={BLU}/>TAREA
+              </button>
+              {isOwner && (
+                confirmDeleteDetail
+                  ? <div className="flex items-center gap-1">
+                      <button onClick={()=>data.deleteProject(selectedProject.id).then(()=>{onSelect(null);showToast('Proyecto eliminado')})} className="px-2.5 py-2 rounded-xl font-syne text-[8px] font-black transition-all" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
+                      <button onClick={()=>setConfirmDeleteDetail(false)} className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={12} color="rgba(255,255,255,0.3)"/></button>
+                    </div>
+                  : <button onClick={()=>setConfirmDeleteDetail(true)} className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors hover:bg-white/5" style={{background:'rgba(229,29,42,0.06)',color:'rgba(229,29,42,0.45)',border:`1px solid rgba(229,29,42,0.12)`}}>
+                      <LucideIcon name="trash" size={12} color="rgba(229,29,42,0.45)"/>
+                    </button>
+              )}
+              <button onClick={()=>onSelect(null)} className="w-8 h-8 rounded-xl flex items-center justify-center" style={{background:'rgba(255,255,255,0.05)'}}>
+                <LucideIcon name="x" size={13} color="rgba(255,255,255,0.35)"/>
+              </button>
+            </div>
           </div>
           {/* Status pills */}
           <div className="mb-5">
@@ -2660,11 +2677,6 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               })()}
               {editProgress !== null && editProgress !== selectedProject.progress && (
                 <button onClick={saveProgress} disabled={savingProgress} className="px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingProgress?'…':'GUARDAR'}</button>
-              )}
-              {isOwner && (
-                <button onClick={()=>data.deleteProject(selectedProject.id).then(()=>{onSelect(null);showToast('Proyecto eliminado')})} className="px-3 py-2 rounded-xl font-syne text-[9px] font-black transition-all" style={{color:'rgba(229,29,42,0.45)',border:`1px solid rgba(229,29,42,0.12)`}}>
-                  <LucideIcon name="trash" size={12} color="rgba(229,29,42,0.45)"/>
-                </button>
               )}
             </div>
           </div>
@@ -3668,6 +3680,8 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
     {text:'¿Cuántas tareas pendientes hay?', cat:'TAREAS'},
     {text:'Resume el estado del equipo', cat:'EQUIPO'},
     {text:'¿Qué contenido hay que publicar esta semana?', cat:'CONTENIDO'},
+    {text:'¿Qué clientes no tienen proyectos activos?', cat:'CLIENTES'},
+    {text:'Dame prioridades para hoy', cat:'HOY'},
   ]
 
   const isEmpty = data.chatMessages.length === 0
