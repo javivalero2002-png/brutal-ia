@@ -761,7 +761,7 @@ function ProgressRing({ pct, size=52, stroke=3, color=BLU }: { pct:number, size?
 // ── HOY SECTION ─────────────────────────────────────────────
 // ── TAREAS SECTION ───────────────────────────────────────────
 function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
-  const [filter, setFilter] = useState<'todas'|'urgente'|'high'|'normal'|'hecho'|'semana'>('todas')
+  const [filter, setFilter] = useState<'todas'|'urgente'|'high'|'normal'|'hecho'|'semana'|'sin_fecha'>('todas')
   const [assigneeFilter, setAssigneeFilter] = useState('Todos')
   const [activeTask, setActiveTask] = useState<Task|null>(null)
   const [editing, setEditing] = useState<Partial<Task>>({})
@@ -795,7 +795,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
   const levelPriority = (l: string) => l==='urgent'?0:l==='high'?1:2
   const weekEnd = new Date(Date.now() + 7*24*60*60*1000)
   const filtered = data.tasks.filter((t: Task) => {
-    const byStatus = filter === 'todas' ? !t.done : filter === 'hecho' ? t.done : filter === 'semana' ? (!t.done && !!t.due_date && new Date(t.due_date+'T23:59:59') <= weekEnd) : (!t.done && t.level === filter)
+    const byStatus = filter === 'todas' ? !t.done : filter === 'hecho' ? t.done : filter === 'semana' ? (!t.done && !!t.due_date && new Date(t.due_date+'T23:59:59') <= weekEnd) : filter === 'sin_fecha' ? (!t.done && !t.due_date) : (!t.done && t.level === filter)
     const byAssignee = assigneeFilter === 'Todos' || t.assignee?.name === assigneeFilter
     return byStatus && byAssignee
   }).sort((a: Task, b: Task) => {
@@ -813,13 +813,15 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
     normal: data.tasks.filter((t: Task)=>!t.done&&t.level==='normal').length,
     hecho: data.tasks.filter((t: Task)=>t.done).length,
     semana: data.tasks.filter((t: Task)=>!t.done&&!!t.due_date&&new Date(t.due_date+'T23:59:59')<=weekEnd).length,
+    sin_fecha: data.tasks.filter((t: Task)=>!t.done&&!t.due_date).length,
   }
-  const tabs: {id: 'todas'|'urgente'|'high'|'normal'|'hecho'|'semana', label: string, color?: string}[] = [
+  const tabs: {id: 'todas'|'urgente'|'high'|'normal'|'hecho'|'semana'|'sin_fecha', label: string, color?: string}[] = [
     {id:'todas', label:'Todas'},
     {id:'urgente', label:'Urgente', color:RED},
     {id:'high', label:'Alta', color:'rgba(255,176,32,0.8)'},
     {id:'normal', label:'Normal', color:BLU},
     {id:'semana', label:'Esta sem.', color:'rgba(167,139,250,0.85)'},
+    {id:'sin_fecha', label:'Sin fecha', color:'rgba(255,255,255,0.3)'},
     {id:'hecho', label:'Hechas'},
   ]
 
@@ -838,6 +840,18 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
             </div>
             <button onClick={()=>onOpenModal('tarea')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVA</button>
           </div>
+          {/* Completion micro-bar */}
+          {data.tasks.length > 0 && (
+            <div className="mb-5">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.18)'}}>COMPLETADAS</span>
+                <span className="font-syne text-[8px] font-black" style={{color:tabCounts.hecho>0?GRN:'rgba(255,255,255,0.2)'}}>{tabCounts.hecho} / {data.tasks.length}</span>
+              </div>
+              <div className="h-1.5 rounded-full" style={{background:'rgba(255,255,255,0.04)'}}>
+                <div className="h-full rounded-full transition-all duration-700" style={{width:`${data.tasks.length>0?(tabCounts.hecho/data.tasks.length)*100:0}%`,background:`linear-gradient(90deg,${GRN}80,${GRN})`}}/>
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-3 mb-5 flex-wrap">
             <div className="flex gap-1 p-1 rounded-2xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
               {tabs.map(t=>(
@@ -3712,7 +3726,12 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
                     </button>
                   })}
                 </div>
-                <textarea value={editContent} onChange={e=>setEditContent(e.target.value)} rows={4} className="w-full px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none resize-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,lineHeight:'1.65'}}/>
+                <div>
+                  <textarea value={editContent} onChange={e=>setEditContent(e.target.value)} rows={4} className="w-full px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none resize-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,lineHeight:'1.65'}}/>
+                  <div className="flex justify-end mt-1">
+                    <span className="font-syne text-[8px] font-black" style={{color:'rgba(255,255,255,0.15)'}}>{editContent.length} car · {editContent.split(/\s+/).filter(Boolean).length} pal.</span>
+                  </div>
+                </div>
                 <div className="flex gap-2">
                   <button onClick={async()=>{setSavingEdit(true);try{await data.updateMemoria(m.id,{title:editTitle.trim(),content:editContent.trim(),category:editCategory});showToast('Actualizado');setEditing(null)}catch{showToast('Error')}finally{setSavingEdit(false)}}} disabled={savingEdit||!editTitle.trim()} className="px-4 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingEdit?'GUARDANDO…':'GUARDAR'}</button>
                   <button onClick={()=>setEditing(null)} className="px-4 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.3)',background:SURF2}}>CANCELAR</button>
@@ -4188,6 +4207,34 @@ function AjustesSection({profile,data,showToast}: any) {
               <span className="text-[13px]" style={{color:'rgba(255,255,255,0.7)'}}>WhatsApp Bot</span>
             </div>
             <span className="text-[11px]" style={{color:'rgba(255,255,255,0.2)'}}>Ver documentación</span>
+          </div>
+        </div>
+
+        {/* Atajos de teclado */}
+        <div className="p-6" style={cardStyle}>
+          <div className="font-syne text-[9px] font-black tracking-[0.2em] mb-5" style={{color:'rgba(255,255,255,0.2)'}}>ATAJOS DE TECLADO</div>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              {key:'⌘+K', label:'Búsqueda global'},
+              {key:'G·H', label:'Hoy'},
+              {key:'G·T', label:'Tareas'},
+              {key:'G·I', label:'Inbox'},
+              {key:'G·C', label:'Clientes'},
+              {key:'G·P', label:'Proyectos'},
+              {key:'G·K', label:'Contenido'},
+              {key:'G·A', label:'Calendario'},
+              {key:'G·M', label:'Memoria'},
+              {key:'G·E', label:'Equipo'},
+              {key:'G·R', label:'Reportes'},
+              {key:'G·N', label:'Chat IA'},
+              {key:'Esc', label:'Cerrar modal / panel'},
+              {key:'Enter', label:'Enviar en Chat'},
+            ].map((s,i)=>(
+              <div key={i} className="flex items-center gap-3">
+                <kbd className="font-syne text-[9px] font-black px-2.5 py-1.5 rounded-lg flex-shrink-0" style={{background:SURF2,color:BLU,border:`1px solid rgba(27,95,250,0.2)`,minWidth:'52px',textAlign:'center'}}>{s.key}</kbd>
+                <span className="text-[12px]" style={{color:'rgba(255,255,255,0.45)'}}>{s.label}</span>
+              </div>
+            ))}
           </div>
         </div>
 
