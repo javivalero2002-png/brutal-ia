@@ -2416,7 +2416,9 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                                   <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full truncate max-w-[100px]" style={{background:(item.client.color||BLU)+'15',color:(item.client.color||BLU)+'cc'}}>{item.client.name}</span>
                                 )}
                                 {item.publish_date && (
-                                  <span className="font-syne text-[8px] ml-auto flex-shrink-0" style={{color:'rgba(255,255,255,0.22)'}}>{item.publish_date}</span>
+                                  <span className="font-syne text-[8px] ml-auto flex-shrink-0" style={{color:'rgba(255,255,255,0.22)'}}>
+                                    {new Date(item.publish_date+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}
+                                  </span>
                                 )}
                               </div>
                             </div>
