@@ -1517,6 +1517,7 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                   <div className="font-figtree text-[14px] font-semibold leading-snug mb-1.5" style={{color:'rgba(255,255,255,0.88)'}}>{t.text}</div>
                   <div className="flex items-center gap-2 flex-wrap">
                     {t.client && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:(t.client as any).color+'18',color:(t.client as any).color+'cc'}}>{(t.client as any).name}</span>}
+                    {t.project_id && (()=>{ const proj=data.projects.find((p:Project)=>p.id===t.project_id); return proj?<span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:(proj.color||BLU)+'12',color:(proj.color||BLU)+'90'}}>{proj.name}</span>:null })()}
                     {t.due_date && (() => {
                       const todayStr = new Date().toISOString().split('T')[0]
                       const isToday = t.due_date.slice(0,10) === todayStr
@@ -1560,6 +1561,7 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                       <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:pc}}/>
                       <span className="flex-1 text-[12.5px] truncate" style={{color:'rgba(255,255,255,0.6)'}}>{t.text}</span>
                       {t.client && <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:(t.client as any).color+'14',color:(t.client as any).color+'bb'}}>{(t.client as any).name}</span>}
+                      {t.project_id && (()=>{ const proj=data.projects.find((p:Project)=>p.id===t.project_id); return proj?<span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded flex-shrink-0" style={{background:(proj.color||BLU)+'12',color:(proj.color||BLU)+'90'}}>{proj.name}</span>:null })()}
                       {t.level!=='normal' && <span className="font-syne text-[7.5px] font-black flex-shrink-0" style={{color:pc}}>{t.level==='urgent'?'URG':'ALTA'}</span>}
                     </div>
                   )
@@ -1756,6 +1758,7 @@ function InboxSection({data,showToast,profile}: any) {
     if (filter==='Clientes') return m.ai_client&&m.ai_client!=='Desconocido'
     if (filter==='Interno') return m.source==='internal'
     if (filter==='Gmail') return m.source==='gmail'
+    if (filter==='WhatsApp') return m.source==='whatsapp'
     return true
   })
 
@@ -1804,7 +1807,8 @@ function InboxSection({data,showToast,profile}: any) {
     {id:'Urgente', label:'Urgente', n: urgent, accent: RED},
     {id:'Clientes', label:'Clientes', n: fromClients, accent: GRN},
     {id:'Interno', label:'Interno', n: internal, accent: 'rgba(255,176,32,0.8)'},
-    {id:'Gmail', label:'Gmail', n: allMsgs.filter((m:any)=>m.source==='gmail').length, accent:'rgba(255,255,255,0.25)'},
+    ...(allMsgs.some((m:any)=>m.source==='gmail') ? [{id:'Gmail', label:'Gmail', n: allMsgs.filter((m:any)=>m.source==='gmail').length, accent:'rgba(255,255,255,0.25)'}] : []),
+    ...(allMsgs.some((m:any)=>m.source==='whatsapp') ? [{id:'WhatsApp', label:'WhatsApp', n: allMsgs.filter((m:any)=>m.source==='whatsapp').length, accent:'rgba(37,211,102,0.8)'}] : []),
   ]
 
   return (
