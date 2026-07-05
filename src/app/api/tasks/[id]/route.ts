@@ -13,7 +13,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     .from('tasks')
     .update({ ...body, updated_at: new Date().toISOString() })
     .eq('id', id)
-    .select('*, assignee:profiles!assigned_to(id,name,initials,avatar_color)')
+    .select('*, assignee:profiles!assigned_to(id,name,initials,avatar_color), client:clients(id,name,initials,color)')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

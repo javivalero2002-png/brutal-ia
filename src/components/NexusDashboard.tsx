@@ -1934,6 +1934,12 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
 
   useEffect(() => { setClientEditOpen(false) }, [selectedId])
 
+  useEffect(()=>{
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && clientEditOpen) setClientEditOpen(false) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [clientEditOpen])
+
   const loadComments = async (id: string) => {
     setCommentsLoading(true)
     try {
@@ -2104,13 +2110,17 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
                   </div>
                   {isOpen && projTasks.length > 0 && (
                     <div className="px-6 pb-3" style={{borderTop:`1px solid ${BORDER}`}}>
-                      {projTasks.slice(0,6).map((t: Task,ti: number)=>(
+                      {projTasks.slice(0,6).map((t: Task,ti: number)=>{
+                        const cTodayStr = new Date().toISOString().split('T')[0]
+                        const cIsToday = t.due_date && t.due_date.slice(0,10)===cTodayStr
+                        const cOver = t.due_date && !cIsToday && new Date(t.due_date+'T23:59:59')<new Date()
+                        return (
                         <div key={t.id} className="flex items-center gap-3 py-2" style={{borderBottom:ti<Math.min(projTasks.length,6)-1?`1px solid rgba(255,255,255,0.03)`:'none'}}>
                           <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.7)':BLU}}/>
                           <span className="text-[12px] flex-1 truncate" style={{color:'rgba(255,255,255,0.5)'}}>{t.text}</span>
-                          <span className="font-syne text-[7px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{t.level==='urgent'?'URG':t.level==='high'?'ALTA':'NORMAL'}</span>
+                          {t.due_date && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:cIsToday?'rgba(255,176,32,0.15)':cOver?`${RED}15`:'rgba(255,255,255,0.04)',color:cIsToday?'rgba(255,176,32,0.9)':cOver?RED:'rgba(255,255,255,0.2)'}}>{cIsToday?'HOY':new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
                         </div>
-                      ))}
+                      )})}
                       {projTasks.length===0 && <div className="py-2 text-[11px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin tareas activas</div>}
                     </div>
                   )}
@@ -3445,8 +3455,16 @@ function MarkdownMsg({ text }: { text: string }) {
 function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoading,showToast}: any) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const [copiedId, setCopiedId] = useState<string|null>(null)
 
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}) },[data.chatMessages])
+
+  const copyMsg = (id: string, text: string) => {
+    navigator.clipboard.writeText(text).then(()=>{
+      setCopiedId(id)
+      setTimeout(()=>setCopiedId(null), 1800)
+    }).catch(()=>{})
+  }
 
   const send = async () => {
     const txt = chatInput.trim()
@@ -3527,23 +3545,31 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
         ) : (
           <div className="px-5 py-5 space-y-4">
             {data.chatMessages.map((m: any)=>(
-              <div key={m.id} className={`flex gap-2.5 ${m.role==='user'?'justify-end':'items-start'}`} style={{flexDirection:m.role==='user'?'row-reverse':'row'}}>
+              <div key={m.id} className={`flex gap-2.5 group/msg ${m.role==='user'?'justify-end':'items-start'}`} style={{flexDirection:m.role==='user'?'row-reverse':'row'}}>
                 {m.role==='ai' && (
                   <div className="w-7 h-7 rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden mt-0.5 p-1" style={{background:'rgba(27,95,250,0.12)',border:'1px solid rgba(27,95,250,0.2)'}}>
                     <img src="https://brutal.thehook-produccion.es/wp-content/themes/brutal-studios/assets/img/brutal-logo-white.svg" className="w-full opacity-80" alt=""/>
                   </div>
                 )}
-                <div className="max-w-[76%] px-4 py-3" style={{
-                  background:m.role==='user'?`linear-gradient(135deg,${BLU},#1440CC)`:'rgba(12,12,22,0.95)',
-                  border:m.role==='ai'?`1px solid ${BORDER}`:'none',
-                  borderRadius:'16px',
-                  borderTopLeftRadius:m.role==='ai'?'5px':'16px',
-                  borderTopRightRadius:m.role==='user'?'5px':'16px',
-                }}>
-                  {m.role==='user'
-                    ? <span className="text-[13px] leading-relaxed text-white whitespace-pre-wrap">{m.content}</span>
-                    : <MarkdownMsg text={m.content}/>
-                  }
+                <div className="max-w-[76%] relative" style={{display:'flex',flexDirection:'column',alignItems:m.role==='user'?'flex-end':'flex-start'}}>
+                  <div className="px-4 py-3" style={{
+                    background:m.role==='user'?`linear-gradient(135deg,${BLU},#1440CC)`:'rgba(12,12,22,0.95)',
+                    border:m.role==='ai'?`1px solid ${BORDER}`:'none',
+                    borderRadius:'16px',
+                    borderTopLeftRadius:m.role==='ai'?'5px':'16px',
+                    borderTopRightRadius:m.role==='user'?'5px':'16px',
+                  }}>
+                    {m.role==='user'
+                      ? <span className="text-[13px] leading-relaxed text-white whitespace-pre-wrap">{m.content}</span>
+                      : <MarkdownMsg text={m.content}/>
+                    }
+                  </div>
+                  {m.role==='ai' && (
+                    <button onClick={()=>copyMsg(m.id, m.content)} className="opacity-0 group-hover/msg:opacity-100 transition-opacity mt-1.5 flex items-center gap-1 px-2 py-1 rounded-lg" style={{color:copiedId===m.id?GRN:'rgba(255,255,255,0.25)',background:'transparent'}}>
+                      <LucideIcon name={copiedId===m.id?'check':'copy'} size={10} color={copiedId===m.id?GRN:'rgba(255,255,255,0.25)'}/>
+                      <span className="font-syne text-[7px] font-black tracking-wide">{copiedId===m.id?'COPIADO':'COPIAR'}</span>
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
