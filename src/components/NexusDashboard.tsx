@@ -3887,6 +3887,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
   const [savingEdit, setSavingEdit] = useState(false)
   const [confirmDeleteMemId, setConfirmDeleteMemId] = useState<string|null>(null)
   const [copiedId, setCopiedId] = useState<string|null>(null)
+  const [memSort, setMemSort] = useState<'reciente'|'az'>('reciente')
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(()=>{
     try { return new Set(JSON.parse(localStorage.getItem('pinned_memoria')||'[]')) } catch { return new Set() }
   })
@@ -3915,7 +3916,12 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
   const byFilter = memFilter==='Todos' ? data.memoria : data.memoria.filter((m: any)=>m.category===memFilter)
   const filtered = (memSearch.trim()
     ? byFilter.filter((m: any)=>(m.title+' '+m.content).toLowerCase().includes(memSearch.toLowerCase()))
-    : byFilter).sort((a: any, b: any) => (pinnedIds.has(b.id)?1:0) - (pinnedIds.has(a.id)?1:0))
+    : byFilter).sort((a: any, b: any) => {
+      const pinDiff = (pinnedIds.has(b.id)?1:0) - (pinnedIds.has(a.id)?1:0)
+      if (pinDiff !== 0) return pinDiff
+      if (memSort === 'az') return (a.title||'').localeCompare(b.title||'', 'es', {sensitivity:'base'})
+      return new Date(b.created_at||0).getTime() - new Date(a.created_at||0).getTime()
+    })
   return (
     <div className="p-8 max-w-[900px] mx-auto">
       <div className="flex items-end justify-between mb-6">
@@ -3931,6 +3937,13 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
           })()}
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex p-1 rounded-xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+            {([{id:'reciente',label:'↓',title:'Más recientes primero'},{id:'az',label:'A·Z',title:'Orden alfabético'}] as const).map(s=>(
+              <button key={s.id} onClick={()=>setMemSort(s.id)} title={s.title} className="px-3 py-2 rounded-lg font-syne text-[9px] font-black tracking-wide transition-all" style={{background:memSort===s.id?SURF2:'transparent',color:memSort===s.id?'rgba(255,255,255,0.8)':'rgba(255,255,255,0.25)'}}>
+                {s.label}
+              </button>
+            ))}
+          </div>
           <button onClick={()=>{
             const md = data.memoria.map((m: any)=>`# ${m.title}\n**Categoría:** ${m.category}\n**Fecha:** ${m.created_at?.slice(0,10)||''}\n\n${m.content}`).join('\n\n---\n\n')
             const blob = new Blob([md], {type:'text/markdown'})
