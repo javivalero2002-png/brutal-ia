@@ -697,10 +697,17 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
     finally { setSaving(false) }
   }
 
+  const levelPriority = (l: string) => l==='urgent'?0:l==='high'?1:2
   const filtered = data.tasks.filter((t: Task) => {
     const byStatus = filter === 'todas' ? !t.done : filter === 'hecho' ? t.done : (!t.done && t.level === filter)
     const byAssignee = assigneeFilter === 'Todos' || t.assignee?.name === assigneeFilter
     return byStatus && byAssignee
+  }).sort((a: Task, b: Task) => {
+    if (filter === 'hecho') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    const aOver = a.due_date && new Date(a.due_date+'T23:59:59') < new Date() ? -1 : 0
+    const bOver = b.due_date && new Date(b.due_date+'T23:59:59') < new Date() ? -1 : 0
+    if (aOver !== bOver) return aOver - bOver
+    return levelPriority(a.level) - levelPriority(b.level)
   })
 
   const tabs: {id: 'todas'|'urgente'|'high'|'normal'|'hecho', label: string, color?: string}[] = [
@@ -2304,8 +2311,11 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="font-syne text-[8px] font-black px-2 py-1 rounded-lg" style={{background:statusColor(p.status)+'14',color:statusColor(p.status)}}>{statusLabel(p.status)}</span>
-                      {p.deadline && <span className="font-syne text-[8px] font-black" style={{color:p.deadline==='HOY'?RED:'rgba(255,255,255,0.22)'}}>{fmtDate(p.deadline)}</span>}
-                    </div>
+                      {p.deadline && p.deadline!=='TBD' && (()=>{
+                        const dOver = new Date(p.deadline+'T23:59:59')<new Date()
+                        const dSoon = !dOver && new Date(p.deadline+'T23:59:59')<new Date(Date.now()+7*24*3600*1000)
+                        return <span className="font-syne text-[8px] font-black px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.25)'}}>{dOver&&'⚠ '}{fmtDate(p.deadline)}</span>
+                      })()}</div>
                   </div>
                 ))}
                 {col.items.length===0&&<div className="py-8 text-center text-[11px]" style={{color:'rgba(255,255,255,0.12)'}}>Arrastra aquí</div>}
@@ -2328,7 +2338,11 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 <div className="text-[11px] mt-0.5" style={{color:'rgba(255,255,255,0.3)'}}>{p.client?.name||'—'}</div>
               </div>
               <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full flex-shrink-0" style={{background:statusColor(p.status)+'14',color:statusColor(p.status)}}>{statusLabel(p.status)}</span>
-              {p.deadline && <span className="font-syne text-[9px] font-black flex-shrink-0" style={{color:'rgba(255,255,255,0.28)'}}>{fmtDate(p.deadline)}</span>}
+              {p.deadline && p.deadline!=='TBD' && (()=>{
+                const dOver = new Date(p.deadline+'T23:59:59')<new Date()
+                const dSoon = !dOver && new Date(p.deadline+'T23:59:59')<new Date(Date.now()+7*24*3600*1000)
+                return <span className="font-syne text-[9px] font-black flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.28)'}}>{dOver&&'⚠ '}{fmtDate(p.deadline)}</span>
+              })()}
               {isOwner && <button onClick={()=>data.deleteProject(p.id).then(()=>showToast('Proyecto eliminado'))} className="opacity-0 hover:opacity-60 transition-opacity flex-shrink-0" onMouseEnter={e=>(e.currentTarget.style.opacity='0.6')} onMouseLeave={e=>(e.currentTarget.style.opacity='0')}><LucideIcon name="trash" size={13} color={RED}/></button>}
             </div>
           ))}
@@ -2347,7 +2361,14 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               </div>
               <div>
                 <div className="font-figtree text-[18px] font-black text-white leading-none mb-1" style={{letterSpacing:'-0.02em'}}>{selectedProject.name}</div>
-                <div className="text-[12px]" style={{color:'rgba(255,255,255,0.3)'}}>{selectedProject.client?.name||'Sin cliente'} · Creado {selectedProject.deadline&&selectedProject.deadline!=='TBD'?`hasta ${fmtDate(selectedProject.deadline)}`:''}</div>
+                <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                  <span className="text-[12px]" style={{color:'rgba(255,255,255,0.3)'}}>{selectedProject.client?.name||'Sin cliente'}</span>
+                  {selectedProject.deadline&&selectedProject.deadline!=='TBD'&&(()=>{
+                    const dOver = new Date(selectedProject.deadline+'T23:59:59')<new Date()
+                    const dSoon = !dOver && new Date(selectedProject.deadline+'T23:59:59')<new Date(Date.now()+7*24*3600*1000)
+                    return <span className="font-syne text-[8px] font-black px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'rgba(255,255,255,0.04)',color:dOver?RED:dSoon?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.3)'}}>{dOver&&'⚠ '}Deadline {fmtDate(selectedProject.deadline)}</span>
+                  })()}
+                </div>
               </div>
             </div>
             <button onClick={()=>onSelect(null)} className="w-8 h-8 rounded-xl flex items-center justify-center" style={{background:'rgba(255,255,255,0.05)'}}>
@@ -2579,11 +2600,11 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                               <div className="font-figtree text-[13px] font-semibold leading-snug line-clamp-2 mb-3" style={{color:'rgba(255,255,255,0.9)'}}>{item.title}</div>
                               <div className="flex items-center gap-2">
                                 {(() => { const ic = item.client || (item.client_id ? data.clients.find((c: any)=>c.id===item.client_id) : null); return ic ? <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full truncate max-w-[100px]" style={{background:(ic.color||BLU)+'15',color:(ic.color||BLU)+'cc'}}>{ic.name}</span> : null })()}
-                                {item.publish_date && (
-                                  <span className="font-syne text-[8px] ml-auto flex-shrink-0" style={{color:'rgba(255,255,255,0.22)'}}>
-                                    {new Date(item.publish_date+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}
-                                  </span>
-                                )}
+                                {item.publish_date && item.status!=='publicado' && (()=>{
+                                  const dOver = new Date(item.publish_date+'T23:59:59')<new Date()
+                                  const dSoon = !dOver && new Date(item.publish_date+'T23:59:59')<new Date(Date.now()+3*24*3600*1000)
+                                  return <span className="font-syne text-[8px] ml-auto flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}15`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?'rgba(255,176,32,0.8)':'rgba(255,255,255,0.22)'}}>{new Date(item.publish_date+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>
+                                })()}
                               </div>
                             </div>
                           </div>
