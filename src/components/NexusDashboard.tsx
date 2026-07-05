@@ -1128,12 +1128,14 @@ function ReportesSection({data}: any) {
   const completionRate = totalTasks > 0 ? Math.round((doneTasks/totalTasks)*100) : 0
 
   const activeClients = clients.filter(c=>c.status==='Activo')
+  const overdueProjects = projects.filter(p=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&new Date(p.deadline+'T23:59:59')<new Date())
   const projectsByStatus = [
     {label:'En progreso', count:projects.filter(p=>p.status==='activo').length, color:BLU},
     {label:'Urgente', count:projects.filter(p=>p.status==='urgente').length, color:RED},
     {label:'Revisión', count:projects.filter(p=>p.status==='revisión').length, color:'rgba(255,176,32,0.8)'},
     {label:'Planificación', count:projects.filter(p=>p.status==='plan.').length, color:'rgba(255,255,255,0.3)'},
     {label:'Completado', count:projects.filter(p=>p.status==='completado').length, color:'rgba(34,197,94,0.5)'},
+    {label:'Atrasados', count:overdueProjects.length, color:overdueProjects.length>0?RED:'rgba(255,255,255,0.15)'},
   ]
 
   const tasksByMember = data.team.map((m: Profile) => ({
@@ -1177,7 +1179,7 @@ function ReportesSection({data}: any) {
         {[
           {v:`${completionRate}%`, l:'Tareas completadas', accent:completionRate>60?'#22c55e':BLU},
           {v:urgentTasks+'', l:'Urgentes pendientes', accent:urgentTasks>0?RED:BLU},
-          {v:projects.length+'', l:'Proyectos totales', accent:null},
+          {v:overdueProjects.length+'', l:'Proy. atrasados', accent:overdueProjects.length>0?RED:null},
           {v:activeClients.length+'', l:'Clientes activos', accent:null},
         ].map((k,i)=>(
           <div key={i} className="rounded-xl p-4" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)',borderTop:`2px solid ${k.accent||'rgba(255,255,255,0.1)'}`}}>
@@ -1401,13 +1403,20 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                 <div className="font-syne text-[8.5px] font-black tracking-widest mr-3" style={{color:'rgba(255,255,255,0.2)'}}>EQUIPO</div>
                 <span className="font-syne text-[15px] font-black text-white">Tareas del equipo</span>
               </div>
-              {otherTasks.slice(0,4).map((t:Task)=>(
-                <div key={t.id} onClick={()=>data.toggleTask(t.id)} className="flex items-center gap-4 px-6 py-4 cursor-pointer transition-all" style={{borderBottom:`1px solid ${BORDER}`}}>
+              {otherTasks.slice(0,4).map((t:Task)=>{
+                const ttodayStr = new Date().toISOString().split('T')[0]
+                const tIsToday = t.due_date && t.due_date.slice(0,10) === ttodayStr
+                const tOver = t.due_date && !tIsToday && new Date(t.due_date+'T23:59:59') < new Date()
+                return (
+                <div key={t.id} onClick={()=>data.toggleTask(t.id)} className="flex items-center gap-3 px-6 py-4 cursor-pointer transition-all" style={{borderBottom:`1px solid ${BORDER}`}}>
                   {t.assignee && <div className="w-7 h-7 rounded-full flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0" style={{background:t.assignee.avatar_color+'18',border:`1.5px solid ${t.assignee.avatar_color}30`,color:t.assignee.avatar_color}}>{t.assignee.initials}</div>}
-                  <span className="flex-1 text-[13px]" style={{color:'rgba(240,240,248,0.65)'}}>{t.text}</span>
+                  <span className="flex-1 text-[13px] truncate" style={{color:'rgba(240,240,248,0.65)'}}>{t.text}</span>
+                  {(t as any).client && <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:(t as any).client.color+'14',color:(t as any).client.color+'bb'}}>{(t as any).client.name}</span>}
+                  {t.due_date && <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full flex-shrink-0" style={{background:tIsToday?'rgba(255,176,32,0.15)':tOver?`${RED}14`:'rgba(255,255,255,0.04)',color:tIsToday?'rgba(255,176,32,0.9)':tOver?RED:'rgba(255,255,255,0.22)'}}>{tIsToday?'HOY':new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
                   <span className="font-syne text-[8px] font-black px-2 py-1 rounded-lg flex-shrink-0" style={{background:t.level==='urgent'?'rgba(229,29,42,0.12)':t.level==='high'?'rgba(255,176,32,0.1)':SURF2,color:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.22)'}}>{t.level==='urgent'?'URGENTE':t.level==='high'?'ALTA':'NORMAL'}</span>
                 </div>
-              ))}
+              )})}
+
             </div>
           )}
         </div>
@@ -1553,6 +1562,12 @@ function InboxSection({data,showToast,profile}: any) {
   const [filter, setFilter] = useState('Todos')
   const [selected, setSelected] = useState<any>(null)
   const [creatingTask, setCreatingTask] = useState(false)
+
+  useEffect(()=>{
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && selected) setSelected(null) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [selected])
 
   const allMsgs: any[] = data.inbox
   const unread = allMsgs.filter(m=>!m.is_read).length
@@ -3327,21 +3342,7 @@ function MarkdownMsg({ text }: { text: string }) {
   const lines = text.split('\n')
   const result: React.ReactNode[] = []
   let listItems: string[] = []
-
-  const flushList = (key: string) => {
-    if (listItems.length === 0) return
-    result.push(
-      <ul key={key} className="my-1.5 space-y-0.5 list-none pl-3">
-        {listItems.map((item, i) => (
-          <li key={i} className="flex gap-2 items-start text-[12.5px] leading-relaxed" style={{color:'rgba(240,240,248,0.78)'}}>
-            <span className="mt-1.5 w-1 h-1 rounded-full flex-shrink-0" style={{background:'rgba(27,95,250,0.7)'}}/>
-            <span>{formatInline(item)}</span>
-          </li>
-        ))}
-      </ul>
-    )
-    listItems = []
-  }
+  let numberedItems: string[] = []
 
   const formatInline = (s: string): React.ReactNode[] => {
     const parts: React.ReactNode[] = []
@@ -3359,13 +3360,49 @@ function MarkdownMsg({ text }: { text: string }) {
     return parts
   }
 
+  const flushList = (key: string) => {
+    if (listItems.length === 0) return
+    result.push(
+      <ul key={key} className="my-1.5 space-y-0.5 list-none pl-3">
+        {listItems.map((item, i) => (
+          <li key={i} className="flex gap-2 items-start text-[12.5px] leading-relaxed" style={{color:'rgba(240,240,248,0.78)'}}>
+            <span className="mt-1.5 w-1 h-1 rounded-full flex-shrink-0" style={{background:'rgba(27,95,250,0.7)'}}/>
+            <span>{formatInline(item)}</span>
+          </li>
+        ))}
+      </ul>
+    )
+    listItems = []
+  }
+
+  const flushNumbered = (key: string) => {
+    if (numberedItems.length === 0) return
+    result.push(
+      <ol key={key} className="my-1.5 space-y-0.5 list-none pl-3">
+        {numberedItems.map((item, i) => (
+          <li key={i} className="flex gap-2 items-start text-[12.5px] leading-relaxed" style={{color:'rgba(240,240,248,0.78)'}}>
+            <span className="mt-0.5 font-syne text-[9px] font-black flex-shrink-0 w-4 text-right" style={{color:'rgba(27,95,250,0.7)'}}>{i+1}.</span>
+            <span>{formatInline(item)}</span>
+          </li>
+        ))}
+      </ol>
+    )
+    numberedItems = []
+  }
+
   lines.forEach((line, i) => {
     const trimmed = line.trimStart()
     const isBullet = trimmed.startsWith('- ') || trimmed.startsWith('• ') || trimmed.startsWith('* ')
+    const numberedMatch = trimmed.match(/^\d+\.\s(.+)/)
     if (isBullet) {
+      flushNumbered(`num-${i}`)
       listItems.push(trimmed.slice(2))
+    } else if (numberedMatch) {
+      flushList(`list-${i}`)
+      numberedItems.push(numberedMatch[1])
     } else {
       flushList(`list-${i}`)
+      flushNumbered(`num-${i}`)
       if (trimmed === '') {
         if (i < lines.length - 1) result.push(<div key={`br-${i}`} className="h-2"/>)
       } else if (trimmed.startsWith('### ')) {
@@ -3378,6 +3415,7 @@ function MarkdownMsg({ text }: { text: string }) {
     }
   })
   flushList('list-end')
+  flushNumbered('num-end')
   return <div className="space-y-0.5">{result}</div>
 }
 
