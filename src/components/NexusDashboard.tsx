@@ -954,6 +954,14 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                     </div>
                   : <button onClick={()=>setConfirmDeleteTask(true)} className="px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-colors" style={{color:'rgba(229,29,42,0.5)',border:`1px solid rgba(229,29,42,0.15)`}}>ELIMINAR</button>
               )}
+              <button onClick={async()=>{
+                const copy = await data.createTask({text:`${activeTask.text} (copia)`,level:activeTask.level,assigned_to:activeTask.assigned_to,due_date:activeTask.due_date,project_id:activeTask.project_id,client_id:activeTask.client_id,source:'manual'})
+                showToast('Tarea duplicada')
+                setActiveTask(copy)
+                setEditing({text:copy.text,level:copy.level,assigned_to:copy.assigned_to,done:copy.done,due_date:copy.due_date,project_id:copy.project_id})
+              }} className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-all hover:opacity-80" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`}} title="Duplicar tarea">
+                <LucideIcon name="copy" size={13} color="rgba(255,255,255,0.35)"/>
+              </button>
               <button onClick={saveTask} disabled={saving} className="px-5 py-2.5 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white disabled:opacity-40 transition-all" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
                 {saving?'GUARDANDO…':'GUARDAR'}
               </button>
@@ -4136,6 +4144,30 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
           </div>
         )}
       </div>
+
+      {/* Context-aware quick prompts (when chat has messages) */}
+      {!isEmpty && !chatLoading && (()=>{
+        const urgentTasks = data.tasks?.filter((t:any)=>!t.done&&t.level==='urgent').length||0
+        const unread = data.inbox?.filter((m:any)=>!m.is_read).length||0
+        const overdueProjs = data.projects?.filter((p:any)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&new Date(p.deadline+'T23:59:59')<new Date()).length||0
+        const suggestions: {text:string; hint:string}[] = []
+        if (urgentTasks > 0) suggestions.push({text:`¿Cómo resolver mis ${urgentTasks} tarea${urgentTasks>1?'s':''} urgente${urgentTasks>1?'s':''}?`, hint:'URGENTE'})
+        if (unread > 0) suggestions.push({text:`Resume los ${unread} mensajes sin leer`, hint:'INBOX'})
+        if (overdueProjs > 0) suggestions.push({text:`¿Qué hago con los ${overdueProjs} proyecto${overdueProjs>1?'s':''} atrasado${overdueProjs>1?'s':''}?`, hint:'PROYECTOS'})
+        suggestions.push({text:'¿Qué debería priorizar ahora mismo?', hint:'FOCUS'})
+        suggestions.push({text:'Dame un resumen del estado general', hint:'RESUMEN'})
+        const shown = suggestions.slice(0, 3)
+        return shown.length > 0 ? (
+          <div className="px-5 pb-2 flex gap-2 overflow-x-auto" style={{scrollbarWidth:'none'}}>
+            {shown.map((s,i)=>(
+              <button key={i} onClick={()=>sendText(s.text)} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[7.5px] font-black tracking-wide transition-all hover:opacity-80" style={{background:SURF2,border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.4)'}}>
+                <span style={{color:BLU}}>{s.hint}</span>
+                <span className="truncate max-w-[200px]">{s.text}</span>
+              </button>
+            ))}
+          </div>
+        ) : null
+      })()}
 
       {/* Input */}
       <div className="flex-shrink-0 px-5 py-4" style={{borderTop:`1px solid ${BORDER}`}}>
