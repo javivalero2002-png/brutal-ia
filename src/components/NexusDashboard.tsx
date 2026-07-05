@@ -2568,6 +2568,7 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
   const [clientEditOpen, setClientEditOpen] = useState(false)
   const [editRevenue, setEditRevenue] = useState('')
   const [editIndustry, setEditIndustry] = useState('')
+  const [editNotes, setEditNotes] = useState('')
   const [savingClient, setSavingClient] = useState(false)
   const [confirmDeleteClient, setConfirmDeleteClient] = useState(false)
 
@@ -2638,7 +2639,15 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
             <div>
               <div className="font-syne text-[9px] font-black tracking-widest mb-1" style={{color:'rgba(255,255,255,0.2)'}}>{selected.industry.toUpperCase()}</div>
               <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>{selected.name}</h1>
-              <span className="font-syne text-[8px] font-black px-3 py-1 rounded-full mt-2 inline-block" style={{background:selected.status==='Activo'?'rgba(34,197,94,0.1)':'rgba(255,255,255,0.05)',color:selected.status==='Activo'?GRN:'rgba(255,255,255,0.3)'}}>{selected.status.toUpperCase()}</span>
+              {isOwner ? (
+                <div className="flex items-center gap-1.5 mt-2">
+                  {([{s:'Activo',c:GRN},{s:'Pausado',c:'rgba(255,176,32,0.85)'},{s:'Archivado',c:'rgba(255,255,255,0.35)'}] as {s:'Activo'|'Pausado'|'Archivado';c:string}[]).map(opt=>(
+                    <button key={opt.s} onClick={async()=>{await data.updateClient(selected.id,{status:opt.s});showToast(`Estado: ${opt.s}`)}} className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:selected.status===opt.s?opt.c+'18':'rgba(255,255,255,0.03)',border:`1px solid ${selected.status===opt.s?opt.c+'50':'rgba(255,255,255,0.08)'}`,color:selected.status===opt.s?opt.c:'rgba(255,255,255,0.3)'}}>{opt.s.toUpperCase()}</button>
+                  ))}
+                </div>
+              ) : (
+                <span className="font-syne text-[8px] font-black px-3 py-1 rounded-full mt-2 inline-block" style={{background:selected.status==='Activo'?'rgba(34,197,94,0.1)':'rgba(255,255,255,0.05)',color:selected.status==='Activo'?GRN:'rgba(255,255,255,0.3)'}}>{selected.status.toUpperCase()}</span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -2652,7 +2661,7 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
               <LucideIcon name="zap" size={11} color="#A78BFA"/>{aiLoading?'Analizando…':'IA ESTRATÉGICA'}
             </button>
             {isOwner && (
-              <button onClick={()=>{ setClientEditOpen(o=>!o); setEditRevenue(selected.revenue||''); setEditIndustry(selected.industry||'') }} className="px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all" style={{color:clientEditOpen?BLU:'rgba(255,255,255,0.4)',background:clientEditOpen?'rgba(27,95,250,0.1)':'transparent',border:`1px solid ${clientEditOpen?'rgba(27,95,250,0.3)':BORDER}`}}>EDITAR</button>
+              <button onClick={()=>{ setClientEditOpen(o=>!o); setEditRevenue(selected.revenue||''); setEditIndustry(selected.industry||''); setEditNotes(selected.notes||'') }} className="px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all" style={{color:clientEditOpen?BLU:'rgba(255,255,255,0.4)',background:clientEditOpen?'rgba(27,95,250,0.1)':'transparent',border:`1px solid ${clientEditOpen?'rgba(27,95,250,0.3)':BORDER}`}}>EDITAR</button>
             )}
             {isOwner && (
               confirmDeleteClient
@@ -2704,8 +2713,12 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
                 <input value={editRevenue} onChange={e=>setEditRevenue(e.target.value)} placeholder="Ej: €12.000/mes" className="w-full px-4 py-3 rounded-xl text-[13px] text-white placeholder-white/20 outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
               </div>
             </div>
+            <div className="mb-4">
+              <label className="block font-syne text-[8px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>NOTAS INTERNAS</label>
+              <textarea value={editNotes} onChange={e=>setEditNotes(e.target.value)} placeholder="Contexto del cliente, preferencias, acuerdos…" rows={3} className="w-full px-4 py-3 rounded-xl text-[13px] text-white placeholder-white/20 outline-none transition-all resize-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+            </div>
             <div className="flex gap-2">
-              <button onClick={async()=>{ setSavingClient(true); try { await data.updateClient(selected.id,{industry:editIndustry,revenue:editRevenue}); showToast('Cliente actualizado'); setClientEditOpen(false) } catch { showToast('Error') } finally { setSavingClient(false) } }} disabled={savingClient} className="px-5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingClient?'GUARDANDO…':'GUARDAR'}</button>
+              <button onClick={async()=>{ setSavingClient(true); try { await data.updateClient(selected.id,{industry:editIndustry,revenue:editRevenue,notes:editNotes}); showToast('Cliente actualizado'); setClientEditOpen(false) } catch { showToast('Error') } finally { setSavingClient(false) } }} disabled={savingClient} className="px-5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingClient?'GUARDANDO…':'GUARDAR'}</button>
               <button onClick={()=>setClientEditOpen(false)} className="px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-colors" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>CANCELAR</button>
             </div>
           </div>
@@ -2727,6 +2740,12 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
           ))}
         </div>
 
+        {selected.notes && (
+          <div className="mb-6 px-5 py-4 rounded-2xl" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${BORDER}`}}>
+            <div className="font-syne text-[8px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>NOTAS INTERNAS</div>
+            <p className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{color:'rgba(255,255,255,0.5)'}}>{selected.notes}</p>
+          </div>
+        )}
         <div className="grid gap-5 mb-6" style={{gridTemplateColumns:'1fr 320px'}}>
           {/* Projects list — expandable */}
           <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
@@ -4662,6 +4681,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
 function AjustesSection({profile,data,showToast}: any) {
   const [editName, setEditName] = useState(profile?.name||'')
   const [editInitials, setEditInitials] = useState(profile?.initials||'')
+  const [editAvatarColor, setEditAvatarColor] = useState(profile?.avatar_color||BLU)
   const [savingProfile, setSavingProfile] = useState(false)
   // New member form
   const [newEmail, setNewEmail] = useState('')
@@ -4681,7 +4701,7 @@ function AjustesSection({profile,data,showToast}: any) {
       const res = await fetch('/api/admin/team', {
         method:'PATCH',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ email: profile.email, name: editName.trim(), initials: editInitials.trim().toUpperCase().slice(0,2)||editName.trim().split(' ').map((n:string)=>n[0]).join('').toUpperCase().slice(0,2) })
+        body: JSON.stringify({ email: profile.email, name: editName.trim(), initials: editInitials.trim().toUpperCase().slice(0,2)||editName.trim().split(' ').map((n:string)=>n[0]).join('').toUpperCase().slice(0,2), avatar_color: editAvatarColor })
       })
       if (res.ok) { showToast('Perfil actualizado — recarga para ver los cambios'); }
       else { showToast('Error actualizando perfil') }
@@ -4752,7 +4772,17 @@ function AjustesSection({profile,data,showToast}: any) {
               <input value={editInitials} onChange={e=>setEditInitials(e.target.value.toUpperCase().slice(0,2))} maxLength={2} className="w-full px-4 py-2.5 rounded-xl text-[13px] text-white outline-none text-center tracking-widest" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
             </div>
           </div>
-          <button onClick={saveOwnProfile} disabled={savingProfile} className="mt-4 px-5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingProfile?'GUARDANDO…':'GUARDAR NOMBRE'}</button>
+          <div className="mt-4 pt-4 flex items-start gap-4" style={{borderTop:`1px solid ${BORDER}`}}>
+            <div className="flex-1">
+              <div className="font-syne text-[8.5px] font-black tracking-widest mb-2.5" style={{color:'rgba(255,255,255,0.25)'}}>COLOR DE AVATAR</div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {['#1B5FFA','#E51D2A','#22c55e','#F97316','#A78BFA','#06B6D4','#EC4899','#84CC16','#F59E0B','#10B981'].map(c=>(
+                  <button key={c} onClick={()=>setEditAvatarColor(c)} title={c} className="w-7 h-7 rounded-full transition-all" style={{background:c,outline:editAvatarColor===c?`2px solid white`:'none',outlineOffset:'2px',opacity:editAvatarColor===c?1:0.5}}/>
+                ))}
+              </div>
+            </div>
+          </div>
+          <button onClick={saveOwnProfile} disabled={savingProfile} className="mt-4 px-5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingProfile?'GUARDANDO…':'GUARDAR PERFIL'}</button>
         </div>
 
         {/* Integraciones */}
