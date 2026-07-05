@@ -576,12 +576,17 @@ export default function NexusDashboard({ profile }: Props) {
       )}
 
       {/* TOAST */}
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 z-[90] flex items-center gap-3 px-5 py-3 rounded-xl animate-riseT" style={{ transform:'translateX(-50%)', background:'#14142A', border:'1px solid rgba(27,95,250,0.3)', boxShadow:'0 16px 44px rgba(0,0,0,0.55)' }}>
-          <div className="w-1.5 h-1.5 rounded-full animate-pls" style={{ background:BLU }} />
-          <span className="text-sm text-white/85">{toast}</span>
-        </div>
-      )}
+      {toast && (() => {
+        const isErr = /^error/i.test(toast)||toast.toLowerCase().includes(' error')
+        const isOk = /^✓|creado|guardado|actualizado|eliminado|leído|enviado|añadid|salvo|pieza/i.test(toast)&&!isErr
+        const tc = isErr ? RED : isOk ? GRN : BLU
+        return (
+          <div className="fixed bottom-6 left-1/2 z-[90] flex items-center gap-3 px-5 py-3 rounded-xl animate-riseT" style={{ transform:'translateX(-50%)', background:'#14142A', border:`1px solid ${tc}35`, boxShadow:`0 16px 44px rgba(0,0,0,0.55),0 0 0 1px ${tc}10` }}>
+            <div className="w-1.5 h-1.5 rounded-full animate-pls" style={{ background:tc }} />
+            <span className="text-sm" style={{color:'rgba(255,255,255,0.88)'}}>{toast}</span>
+          </div>
+        )
+      })()}
 
       {/* Search shortcut button */}
       <button onClick={()=>setSearchOpen(true)} className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[10px] font-bold tracking-widest text-white/30 opacity-60 hover:opacity-100 transition-opacity" style={{ background:'rgba(27,95,250,0.08)', border:'1px solid rgba(27,95,250,0.15)' }}>
@@ -999,6 +1004,7 @@ function EquipoSection({data, profile, showToast}: any) {
             const done = memberTasks.filter((t: Task) => t.done)
             const completePct = memberTasks.length > 0 ? Math.round((done.length/memberTasks.length)*100) : 0
             const urgent = pending.filter((t: Task) => t.level === 'urgent')
+            const mOverdue = pending.filter((t: Task) => t.due_date && new Date(t.due_date+'T23:59:59') < new Date())
             const sel = selected?.id === member.id
             return (
               <button key={member.id} onClick={()=>openThread(member)}
@@ -1015,7 +1021,7 @@ function EquipoSection({data, profile, showToast}: any) {
                       {isMe(member) && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>TÚ</span>}
                       {urgent.length > 0 && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(229,29,42,0.1)',color:RED}}>{urgent.length} URG</span>}
                     </div>
-                    <div className="text-[11px] mt-0.5 truncate" style={{color:'rgba(255,255,255,0.3)'}}>{member.role==='owner'?'Propietario':'Equipo'} · {pending.length} tareas</div>
+                    <div className="text-[11px] mt-0.5 truncate" style={{color:'rgba(255,255,255,0.3)'}}>{member.role==='owner'?'Propietario':'Equipo'} · {pending.length} tareas{mOverdue.length>0?<span style={{color:RED+'aa'}}> · {mOverdue.length} atrasada{mOverdue.length>1?'s':''}</span>:null}</div>
                   </div>
                   {!isMe(member) && <LucideIcon name="message-square" size={13} color={sel?member.avatar_color:'rgba(255,255,255,0.15)'}/>}
                 </div>
@@ -1438,6 +1444,35 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
             </>)}
 
           </div>
+
+          {/* Tomorrow tasks */}
+          {(() => {
+            const tomorrowStr = new Date(Date.now()+86400000).toISOString().split('T')[0]
+            const tomorrowTasks = myTasks.filter((t:Task)=>t.due_date&&t.due_date.slice(0,10)===tomorrowStr)
+            if (tomorrowTasks.length === 0) return null
+            return (
+              <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+                <div className="flex items-center justify-between px-6 py-3.5" style={{borderBottom:`1px solid ${BORDER}`}}>
+                  <div>
+                    <div className="font-syne text-[8.5px] font-black tracking-widest mb-0.5" style={{color:'rgba(255,255,255,0.2)'}}>MAÑANA</div>
+                    <span className="font-syne text-[15px] font-black text-white">Próximas</span>
+                  </div>
+                  <span className="font-syne text-[9px] font-black w-6 h-6 rounded-full flex items-center justify-center" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.7)'}}>{tomorrowTasks.length}</span>
+                </div>
+                {tomorrowTasks.slice(0,3).map((t:Task)=>{
+                  const pc = t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.85)':BLU
+                  return (
+                    <div key={t.id} className="flex items-center gap-3 px-6 py-3" style={{borderBottom:`1px solid ${BORDER}`}}>
+                      <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:pc}}/>
+                      <span className="flex-1 text-[12.5px] truncate" style={{color:'rgba(255,255,255,0.6)'}}>{t.text}</span>
+                      {t.client && <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:(t.client as any).color+'14',color:(t.client as any).color+'bb'}}>{(t.client as any).name}</span>}
+                      {t.level!=='normal' && <span className="font-syne text-[7.5px] font-black flex-shrink-0" style={{color:pc}}>{t.level==='urgent'?'URG':'ALTA'}</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
 
           {/* Team tasks (owners) */}
           {isOwner && otherTasks.length > 0 && (
