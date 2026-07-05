@@ -710,6 +710,12 @@ function LucideIcon({ name, size=16, color='currentColor' }: {name:string;size?:
     'sparkles':'M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z',
     pencil:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z',
     'building-2':'M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18M2 22h20M14 12h2M14 6h2M8 12h2M8 6h2M6 22h12',
+    brain:'M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-1.04-4.54A3 3 0 0 1 2 12a3 3 0 0 1 3-3A2.5 2.5 0 0 1 9.5 2zM14.5 2A2.5 2.5 0 0 1 19 9a3 3 0 0 1 3 3 3 3 0 0 1-3.5 2.96A2.5 2.5 0 0 1 12 19.5v-15A2.5 2.5 0 0 1 14.5 2z',
+    lightbulb:'M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5M9 18h6M10 22h4',
+    paperclip:'M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48',
+    flag:'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7',
+    layers:'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
+    target:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zm0-6a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0-2a2 2 0 1 0 0-4 2 2 0 0 0 0 4',
   }
   const d = icons[name]
   return (
@@ -780,6 +786,13 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
     return levelPriority(a.level) - levelPriority(b.level)
   })
 
+  const tabCounts: Record<string,number> = {
+    todas: data.tasks.filter((t: Task)=>!t.done).length,
+    urgente: data.tasks.filter((t: Task)=>!t.done&&t.level==='urgent').length,
+    high: data.tasks.filter((t: Task)=>!t.done&&t.level==='high').length,
+    normal: data.tasks.filter((t: Task)=>!t.done&&t.level==='normal').length,
+    hecho: data.tasks.filter((t: Task)=>t.done).length,
+  }
   const tabs: {id: 'todas'|'urgente'|'high'|'normal'|'hecho', label: string, color?: string}[] = [
     {id:'todas', label:'Todas'},
     {id:'urgente', label:'Urgente', color:RED},
@@ -806,8 +819,9 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
           <div className="flex items-center gap-3 mb-5 flex-wrap">
             <div className="flex gap-1 p-1 rounded-2xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
               {tabs.map(t=>(
-                <button key={t.id} onClick={()=>setFilter(t.id)} className="px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:filter===t.id?t.color||SURF2:'transparent',color:filter===t.id?'white':t.color||'rgba(255,255,255,0.28)'}}>
+                <button key={t.id} onClick={()=>setFilter(t.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:filter===t.id?t.color||SURF2:'transparent',color:filter===t.id?'white':t.color||'rgba(255,255,255,0.28)'}}>
                   {t.label.toUpperCase()}
+                  {tabCounts[t.id] > 0 && <span className="text-[7.5px] font-black opacity-70">{tabCounts[t.id]}</span>}
                 </button>
               ))}
             </div>
@@ -1242,7 +1256,10 @@ function ReportesSection({data, onNavigate}: any) {
   return (
     <div className="p-6 max-w-[1100px] mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="font-figtree text-2xl font-black text-white" style={{letterSpacing:'-0.03em'}}>Reportes</h1>
+        <div>
+          <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>RENDIMIENTO</div>
+          <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Reportes</h1>
+        </div>
         <button onClick={()=>{
           const printWin = window.open('','_blank','width=900,height=700')
           if(!printWin) return
@@ -1786,7 +1803,7 @@ function InboxSection({data,showToast,profile}: any) {
             </div>
             <div className="flex items-center gap-2">
               {data.inbox.filter((m: any)=>!m.is_read).length > 0 && (
-                <button onClick={()=>{ const unread = data.inbox.filter((m: any)=>!m.is_read); Promise.all(unread.map((m: any)=>data.markRead(m.id))); showToast('Todo marcado como leído') }} className="font-syne text-[8px] font-black px-2.5 py-2 rounded-xl transition-all" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}} onMouseEnter={e=>(e.currentTarget.style.color='rgba(255,255,255,0.6)')} onMouseLeave={e=>(e.currentTarget.style.color='rgba(255,255,255,0.3)')}>TODO LEÍDO</button>
+                <button onClick={()=>{ const unread = data.inbox.filter((m: any)=>!m.is_read); Promise.all(unread.map((m: any)=>data.markRead(m.id))); showToast(`${unread.length} mensajes marcados como leídos`) }} className="font-syne text-[8px] font-black px-2.5 py-2 rounded-xl transition-all" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}} onMouseEnter={e=>(e.currentTarget.style.color='rgba(255,255,255,0.6)')} onMouseLeave={e=>(e.currentTarget.style.color='rgba(255,255,255,0.3)')}>TODO LEÍDO · {data.inbox.filter((m: any)=>!m.is_read).length}</button>
               )}
               <button onClick={()=>data.syncGmail()} disabled={data.syncing} className="flex items-center gap-2 px-3.5 py-2 rounded-xl font-syne text-[8.5px] font-black disabled:opacity-40 transition-all" style={{background:SURF2,color:data.syncing?BLU:data.syncResult?.ok?GRN:'rgba(240,240,248,0.35)',border:`1px solid ${BORDER}`}}>
                 <LucideIcon name="refresh-cw" size={11} color={data.syncing?BLU:'rgba(255,255,255,0.25)'}/>{data.syncing?'Sync…':'Sync'}
@@ -3491,9 +3508,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
           return (
           <div key={m.id} className="rounded-2xl transition-all group" style={{background:SURFACE,border:`1px solid ${isExp?'rgba(27,95,250,0.2)':BORDER}`}}>
             <div className="flex items-start gap-4 p-5 cursor-pointer" onClick={()=>setExpanded(isExp?null:m.id)}>
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{background:'rgba(27,95,250,0.08)',border:`1px solid rgba(27,95,250,0.12)`}}>
-                <LucideIcon name="database" size={15} color="rgba(27,95,250,0.55)"/>
-              </div>
+              {(()=>{ const cc=catColor[m.category]||'rgba(167,139,250,0.8)'; const ci:Record<string,string>={Clientes:'users-2',Procesos:'layers',Decisiones:'flag',Aprendizajes:'lightbulb',General:'brain'}; const ic=ci[m.category]||'brain'; return (<div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{background:cc+'14',border:`1px solid ${cc}25`}}><LucideIcon name={ic} size={15} color={cc+'bb'}/></div>) })()}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                   <span className="font-figtree text-[14px] font-semibold text-white">{m.title}</span>
