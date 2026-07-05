@@ -742,6 +742,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
   const [editing, setEditing] = useState<Partial<Task>>({})
   const [saving, setSaving] = useState(false)
   const [confirmDeleteTask, setConfirmDeleteTask] = useState(false)
+  const [confirmLimpiar, setConfirmLimpiar] = useState(false)
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && activeTask) setActiveTask(null) }
@@ -820,7 +821,12 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
               </div>
             )}
             {filter === 'hecho' && filtered.length > 0 && isOwner && (
-              <button onClick={async()=>{ await Promise.all(filtered.map((t: Task)=>data.deleteTask(t.id))); showToast('Tareas eliminadas') }} className="font-syne text-[8px] font-black px-3 py-1.5 rounded-xl transition-all" style={{color:'rgba(229,29,42,0.5)',border:`1px solid rgba(229,29,42,0.15)`}}>LIMPIAR</button>
+              confirmLimpiar
+                ? <div className="flex items-center gap-1">
+                    <button onClick={async()=>{await Promise.all(filtered.map((t: Task)=>data.deleteTask(t.id)));showToast('Tareas eliminadas');setConfirmLimpiar(false)}} className="font-syne text-[8px] font-black px-3 py-1.5 rounded-xl transition-all" style={{background:'rgba(229,29,42,0.12)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR {filtered.length}?</button>
+                    <button onClick={()=>setConfirmLimpiar(false)} className="w-6 h-6 rounded-lg flex items-center justify-center" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={10} color="rgba(255,255,255,0.3)"/></button>
+                  </div>
+                : <button onClick={()=>setConfirmLimpiar(true)} className="font-syne text-[8px] font-black px-3 py-1.5 rounded-xl transition-all" style={{color:'rgba(229,29,42,0.5)',border:`1px solid rgba(229,29,42,0.15)`}}>LIMPIAR</button>
             )}
             <span className="ml-auto font-syne text-[10px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{filtered.length}</span>
           </div>
@@ -3653,6 +3659,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [copiedId, setCopiedId] = useState<string|null>(null)
+  const [confirmClear, setConfirmClear] = useState(false)
 
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}) },[data.chatMessages])
 
@@ -3701,7 +3708,12 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
             </div>
           </div>
           {!isEmpty && (
-            <button onClick={()=>data.clearChat?.()} className="font-syne text-[8px] font-black tracking-widest px-3 py-1.5 rounded-xl transition-all hover:bg-white/5" style={{color:'rgba(255,255,255,0.2)',border:`1px solid ${BORDER}`}}>LIMPIAR</button>
+            confirmClear
+              ? <div className="flex items-center gap-1">
+                  <button onClick={()=>{data.clearChat?.();setConfirmClear(false)}} className="font-syne text-[8px] font-black px-3 py-1.5 rounded-xl transition-all" style={{background:'rgba(229,29,42,0.12)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
+                  <button onClick={()=>setConfirmClear(false)} className="w-6 h-6 rounded-lg flex items-center justify-center" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={10} color="rgba(255,255,255,0.3)"/></button>
+                </div>
+              : <button onClick={()=>setConfirmClear(true)} className="font-syne text-[8px] font-black tracking-widest px-3 py-1.5 rounded-xl transition-all hover:bg-white/5" style={{color:'rgba(255,255,255,0.2)',border:`1px solid ${BORDER}`}}>LIMPIAR</button>
           )}
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
