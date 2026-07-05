@@ -790,7 +790,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
   const [filter, setFilter] = useState<'todas'|'urgente'|'high'|'normal'|'hecho'|'hoy'|'semana'|'sin_fecha'>('todas')
   const [assigneeFilter, setAssigneeFilter] = useState('Todos')
   const [taskSort, setTaskSort] = useState<'prioridad'|'fecha'>('prioridad')
-  const [taskGroup, setTaskGroup] = useState<'none'|'proyecto'>('none')
+  const [taskGroup, setTaskGroup] = useState<'none'|'proyecto'|'prioridad'>('none')
   const [activeTask, setActiveTask] = useState<Task|null>(null)
   const [editing, setEditing] = useState<Partial<Task>>({})
   const [saving, setSaving] = useState(false)
@@ -894,8 +894,8 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                     <LucideIcon name={s.icon} size={12} color={taskSort===s.id?'rgba(255,255,255,0.8)':'rgba(255,255,255,0.25)'}/>
                   </button>
                 ))}
-                <button onClick={()=>setTaskGroup(g=>g==='none'?'proyecto':'none')} title="Agrupar por proyecto" className="px-2.5 py-2 rounded-lg transition-all" style={{background:taskGroup==='proyecto'?SURF2:'transparent'}}>
-                  <LucideIcon name="layers" size={12} color={taskGroup==='proyecto'?BLU:'rgba(255,255,255,0.25)'}/>
+                <button onClick={()=>setTaskGroup(g=>g==='none'?'proyecto':g==='proyecto'?'prioridad':'none')} title={taskGroup==='none'?'Agrupar por proyecto':taskGroup==='proyecto'?'Agrupar por prioridad':'Sin agrupar'} className="px-2.5 py-2 rounded-lg transition-all" style={{background:taskGroup!=='none'?SURF2:'transparent'}}>
+                  <LucideIcon name={taskGroup==='prioridad'?'flag':'layers'} size={12} color={taskGroup!=='none'?BLU:'rgba(255,255,255,0.25)'}/>
                 </button>
               </div>
               <button onClick={()=>onOpenModal('tarea')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVA</button>
@@ -1004,6 +1004,33 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                           )}
                         </div>
                         {tasks.map((t,i)=><TaskRow key={t.id} t={t} i={i} arr={tasks}/>)}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            }
+
+            if (taskGroup === 'prioridad' && filter !== 'hecho') {
+              const prioGroups = [
+                {key:'urgent' as const,label:'URGENTE',color:RED},
+                {key:'high' as const,label:'ALTA',color:'rgba(255,176,32,0.85)'},
+                {key:'normal' as const,label:'NORMAL',color:BLU},
+              ]
+              if (filtered.length === 0) return <div className="rounded-2xl py-16 text-center text-[13px]" style={{background:SURFACE,border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.18)'}}>Sin tareas en este filtro</div>
+              return (
+                <div className="space-y-3">
+                  {prioGroups.map(g => {
+                    const gTasks = filtered.filter((t: Task)=>t.level===g.key)
+                    if (!gTasks.length) return null
+                    return (
+                      <div key={g.key} className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+                        <div className="flex items-center gap-2.5 px-5 py-3" style={{borderBottom:`1px solid ${BORDER}`,borderLeft:`3px solid ${g.color}`}}>
+                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:g.color}}/>
+                          <span className="font-syne text-[9px] font-black tracking-widest flex-1" style={{color:'rgba(255,255,255,0.45)'}}>{g.label}</span>
+                          <span className="font-syne text-[8px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{gTasks.length}</span>
+                        </div>
+                        {gTasks.map((t: Task,i: number)=><TaskRow key={t.id} t={t} i={i} arr={gTasks}/>)}
                       </div>
                     )
                   })}
@@ -3246,6 +3273,28 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               </div>
             )
           })()}
+          {/* Assignee avatars */}
+          {(()=>{
+            const seen = new Set<string>()
+            const assignees: Profile[] = []
+            data.tasks.filter((t: Task)=>t.project_id===selectedProject.id&&!t.done&&t.assignee).forEach((t: Task)=>{
+              if (t.assignee && !seen.has(t.assignee.id)) { seen.add(t.assignee.id); assignees.push(t.assignee) }
+            })
+            if (!assignees.length) return null
+            return (
+              <div className="mt-4 pt-4 flex items-center gap-3" style={{borderTop:`1px solid ${BORDER}`}}>
+                <span className="font-syne text-[8px] font-black tracking-widest flex-shrink-0" style={{color:'rgba(255,255,255,0.2)'}}>EQUIPO</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {assignees.map((a: Profile)=>(
+                    <div key={a.id} title={a.name} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl" style={{background:a.avatar_color+'12',border:`1px solid ${a.avatar_color}25`}}>
+                      <div className="w-5 h-5 rounded-full flex items-center justify-center font-syne text-[7px] font-black flex-shrink-0" style={{background:a.avatar_color+'28',color:a.avatar_color}}>{a.initials}</div>
+                      <span className="font-syne text-[8.5px] font-black" style={{color:a.avatar_color+'cc'}}>{a.name.split(' ')[0]}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
         </div>
       )}
     </div>
@@ -4130,6 +4179,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
                   {m.created_at && <span className="font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.18)'}}>{new Date(m.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})}</span>}
                   {m.created_at && Date.now()-new Date(m.created_at).getTime() < 7*24*60*60*1000 && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(34,197,94,0.12)',color:'rgba(34,197,94,0.65)'}}>NUEVO</span>}
                   {pinnedIds.has(m.id) && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.7)'}}>FIJADA</span>}
+                  {m.client?.name && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full flex-shrink-0" style={{background:(m.client.color||BLU)+'14',color:(m.client.color||BLU)+'bb'}}>{m.client.name}</span>}
                 </div>
                 <div className={`text-[12px] leading-relaxed ${isExp?'':'line-clamp-2'}`} style={{color:'rgba(255,255,255,0.45)'}}>{m.content}</div>
                 {!isExp && isLong && <div className="font-syne text-[8px] font-black mt-1.5 transition-colors" style={{color:'rgba(27,95,250,0.5)'}}>VER MÁS</div>}
