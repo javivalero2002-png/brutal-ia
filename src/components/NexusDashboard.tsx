@@ -3505,7 +3505,10 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
     <div className="p-8 max-w-[900px] mx-auto">
       <div className="flex items-end justify-between mb-6">
         <div>
-          <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>CEREBRO</div>
+          <div className="flex items-center gap-2 mb-2">
+            <div className="font-syne text-[9px] font-black tracking-[0.25em]" style={{color:'rgba(255,255,255,0.18)'}}>CEREBRO</div>
+            {data.memoria.length > 0 && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.2)'}}>{data.memoria.length}</span>}
+          </div>
           <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Memoria</h1>
         </div>
         <button onClick={()=>onOpenModal('memoria')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ ENTRADA</button>
@@ -3839,8 +3842,24 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
           </div>
         ) : (
           <div className="px-5 py-5 space-y-4">
-            {data.chatMessages.map((m: any)=>(
-              <div key={m.id} className={`flex gap-2.5 group/msg ${m.role==='user'?'justify-end':'items-start'}`} style={{flexDirection:m.role==='user'?'row-reverse':'row'}}>
+            {data.chatMessages.map((m: any, mi: number)=>{
+              const prev = data.chatMessages[mi-1]
+              const mDay = m.created_at ? new Date(m.created_at).toDateString() : null
+              const prevDay = prev?.created_at ? new Date(prev.created_at).toDateString() : null
+              const showDateSep = mDay && mDay !== prevDay
+              const todayD = new Date().toDateString()
+              const yesterD = new Date(Date.now()-86400000).toDateString()
+              const dayLabel = !mDay ? null : mDay===todayD ? 'HOY' : mDay===yesterD ? 'AYER' : new Date(m.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short'})
+              return (
+              <div key={m.id}>
+                {showDateSep && dayLabel && (
+                  <div className="flex items-center gap-3 py-2 mb-2">
+                    <div className="flex-1 h-px" style={{background:BORDER}}/>
+                    <span className="font-syne text-[7.5px] font-black tracking-widest px-2" style={{color:'rgba(255,255,255,0.18)'}}>{dayLabel}</span>
+                    <div className="flex-1 h-px" style={{background:BORDER}}/>
+                  </div>
+                )}
+              <div className={`flex gap-2.5 group/msg ${m.role==='user'?'justify-end':'items-start'}`} style={{flexDirection:m.role==='user'?'row-reverse':'row'}}>
                 {m.role==='ai' && (
                   <div className="w-7 h-7 rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden mt-0.5 p-1" style={{background:'rgba(27,95,250,0.12)',border:'1px solid rgba(27,95,250,0.2)'}}>
                     <img src="https://brutal.thehook-produccion.es/wp-content/themes/brutal-studios/assets/img/brutal-logo-white.svg" className="w-full opacity-80" alt=""/>
@@ -3870,7 +3889,8 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
                   </div>
                 </div>
               </div>
-            ))}
+              </div>
+            )})}
             {chatLoading && (
               <div className="flex items-center gap-2.5">
                 <div className="w-7 h-7 rounded-xl flex items-center justify-center overflow-hidden p-1" style={{background:'rgba(27,95,250,0.12)',border:'1px solid rgba(27,95,250,0.2)'}}>
