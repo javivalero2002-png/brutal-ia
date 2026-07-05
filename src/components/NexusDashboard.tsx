@@ -1457,7 +1457,11 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
   const myOverdue = myTasks.filter((t:Task)=>t.due_date&&new Date(t.due_date+'T23:59:59')<new Date()).length
   const myUrgent = myTasks.filter((t:Task)=>t.level==='urgent').length
   const recentInbox = data.inbox.filter((m:any) => !m.is_read).slice(0, 4)
-  const activeProjects = data.projects.filter((p:Project)=>p.status==='activo'||p.status==='urgente')
+  const activeProjects = data.projects.filter((p:Project)=>p.status==='activo'||p.status==='urgente').sort((a:Project,b:Project)=>{
+    const da = a.deadline&&a.deadline!=='TBD'?new Date(a.deadline+'T23:59:59').getTime():Infinity
+    const db = b.deadline&&b.deadline!=='TBD'?new Date(b.deadline+'T23:59:59').getTime():Infinity
+    return da - db
+  })
   const todayStr = new Date().toISOString().split('T')[0]
   const todayContent = (data.agenda||[]).filter((a:any)=>{
     if (!a.publish_date) return false
@@ -2869,8 +2873,23 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
               <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>PRODUCCIÓN</div>
               <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.04em'}}>Pipeline</h1>
               {data.agenda.length > 0 && (
-                <div className="flex items-center gap-3 mt-1.5">
+                <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                   {cols.map((col: any) => { const cnt = filteredAgenda.filter((a: any)=>a.status===col.key).length; return cnt > 0 ? <span key={col.key} className="font-syne text-[8.5px] font-black" style={{color:col.color+'80'}}>{cnt} {col.label.toLowerCase()}</span> : null })}
+                  {data.agenda.length > 0 && (() => {
+                    const platCounts: Record<string,number> = {}
+                    filteredAgenda.forEach((a: any)=>{ if(a.platform) platCounts[a.platform]=(platCounts[a.platform]||0)+1 })
+                    const platColors: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
+                    return Object.entries(platCounts).length > 0 ? (
+                      <>
+                        <span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.12)'}}>·</span>
+                        {Object.entries(platCounts).map(([p,n])=>(
+                          <span key={p} className="flex items-center gap-1 font-syne text-[7.5px] font-black" style={{color:(platColors[p]||BLU)+'85'}}>
+                            <PlatformLogo platform={p} size={9}/>{n as number}
+                          </span>
+                        ))}
+                      </>
+                    ) : null
+                  })()}
                 </div>
               )}
             </div>
