@@ -135,8 +135,8 @@ export default function NexusDashboard({ profile }: Props) {
     if (q.length < 2) return []
     return [
       ...data.clients.map(c => ({ type:'Cliente', title:c.name, sub:c.industry, act:()=>{ setSelectedClient(c.id); setSection('clientes'); setSearchOpen(false) }})),
-      ...data.projects.map(p => ({ type:'Proyecto', title:p.name, sub:p.client?.name||'—', act:()=>{ setSelectedProject(p.id); setSection('proyectos'); setSearchOpen(false) }})),
-      ...data.tasks.map(t => ({ type:'Tarea', title:t.text, sub:t.level==='urgent'?'Urgente':t.level==='high'?'Alta':'Normal', act:()=>{ setSection('hoy'); setSearchOpen(false) }})),
+      ...data.projects.map(p => ({ type:'Proyecto', title:p.name, sub:p.client?.name||'—', act:()=>{ setSelectedProject(p.id); setProjView('list'); setSection('proyectos'); setSearchOpen(false) }})),
+      ...data.tasks.map(t => ({ type:'Tarea', title:t.text, sub:t.level==='urgent'?'Urgente':t.level==='high'?'Alta':'Normal', act:()=>{ setSection('tareas'); setSearchOpen(false) }})),
       ...data.memoria.map(m => ({ type:'Memoria', title:m.title, sub:m.category, act:()=>{ setSection('memoria'); setSearchOpen(false) }})),
       ...data.agenda.map((a: any) => ({ type:'Contenido', title:a.title, sub:a.platform, act:()=>{ setSection('contenido'); setSearchOpen(false) }})),
       ...data.inbox.map((m: any) => ({ type:'Inbox', title:m.subject||m.from_name||'Sin asunto', sub:m.from_name||'', act:()=>{ setSection('inbox'); setSearchOpen(false) }})),
@@ -2297,7 +2297,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
       {projView === 'board' ? (
         <div className="grid gap-4" style={{gridTemplateColumns:`repeat(${kanbanCols.length},minmax(0,1fr))`}}>
           {kanbanCols.map((col: any)=>(
-            <div key={col.status} className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}
+            <div key={col.status} className="rounded-2xl overflow-hidden" style={{background:col.status==='completado'?'rgba(255,255,255,0.01)':SURFACE,border:`1px solid ${col.status==='completado'?'rgba(255,255,255,0.04)':BORDER}`,opacity:col.status==='completado'?0.7:1}}
               onDragOver={(e)=>e.preventDefault()}
               onDrop={()=>{ if(dragRef.current) { data.updateProject(dragRef.current,{status:col.status}).then(()=>showToast(`Movido a ${col.title}`)); dragRef.current=null }}}>
               <div className="flex items-center gap-2.5 px-5 py-4" style={{borderBottom:`1px solid ${BORDER}`}}>
@@ -2610,9 +2610,12 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                               <div className="flex items-center gap-2">
                                 {(() => { const ic = item.client || (item.client_id ? data.clients.find((c: any)=>c.id===item.client_id) : null); return ic ? <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full truncate max-w-[100px]" style={{background:(ic.color||BLU)+'15',color:(ic.color||BLU)+'cc'}}>{ic.name}</span> : null })()}
                                 {item.publish_date && item.status!=='publicado' && (()=>{
-                                  const dOver = new Date(item.publish_date+'T23:59:59')<new Date()
-                                  const dSoon = !dOver && new Date(item.publish_date+'T23:59:59')<new Date(Date.now()+3*24*3600*1000)
-                                  return <span className="font-syne text-[8px] ml-auto flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}15`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?'rgba(255,176,32,0.8)':'rgba(255,255,255,0.22)'}}>{new Date(item.publish_date+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>
+                                  const todayStr2 = new Date().toISOString().split('T')[0]
+                                  const isToday2 = item.publish_date.slice(0,10)===todayStr2
+                                  const dOver = !isToday2 && new Date(item.publish_date+'T23:59:59')<new Date()
+                                  const dSoon = !dOver && !isToday2 && new Date(item.publish_date+'T23:59:59')<new Date(Date.now()+3*24*3600*1000)
+                                  const label = isToday2 ? 'HOY' : new Date(item.publish_date+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})
+                                  return <span className="font-syne text-[8px] ml-auto flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:isToday2?`rgba(255,176,32,0.18)`:dOver?`${RED}15`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:isToday2?'rgba(255,176,32,0.95)':dOver?RED:dSoon?'rgba(255,176,32,0.8)':'rgba(255,255,255,0.22)'}}>{label}</span>
                                 })()}
                               </div>
                             </div>
