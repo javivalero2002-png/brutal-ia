@@ -437,7 +437,7 @@ export default function NexusDashboard({ profile }: Props) {
           {section === 'inbox' && <InboxSection data={data} showToast={showToast} profile={profile} />}
           {section === 'tareas' && <TareasSection data={data} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'equipo' && <EquipoSection data={data} profile={profile} showToast={showToast} />}
-          {section === 'reportes' && <ReportesSection data={data} />}
+          {section === 'reportes' && <ReportesSection data={data} onNavigate={setSection} />}
           {section === 'clientes' && <ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={setModal} onSetMf={setMf} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'proyectos' && <ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'contenido' && <ContenidoSection data={data} onOpenModal={setModal} showToast={showToast} />}
@@ -951,6 +951,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                 <span className="text-[12px]" style={{color:'rgba(255,255,255,0.35)'}}>{new Date(activeTask.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})}</span>
               </div>
             </div>
+            <div className="font-syne text-[7.5px] font-bold tracking-widest text-center pt-2" style={{color:'rgba(255,255,255,0.1)'}}>⌘+ENTER PARA GUARDAR</div>
           </div>
         </div>
       )}
@@ -1185,7 +1186,7 @@ function EquipoSection({data, profile, showToast}: any) {
 }
 
 // ── REPORTES SECTION ─────────────────────────────────────────
-function ReportesSection({data}: any) {
+function ReportesSection({data, onNavigate}: any) {
   const tasks: Task[] = data.tasks
   const projects: Project[] = data.projects
   const clients: Client[] = data.clients
@@ -1248,16 +1249,16 @@ function ReportesSection({data}: any) {
       {/* KPIs */}
       <div className="grid grid-cols-5 gap-3 mb-6">
         {[
-          {v:`${completionRate}%`, l:'Tareas completadas', accent:completionRate>60?'#22c55e':BLU},
-          {v:urgentTasks+'', l:'Urgentes pendientes', accent:urgentTasks>0?RED:BLU},
-          {v:overdueProjects.length+'', l:'Proy. atrasados', accent:overdueProjects.length>0?RED:null},
-          {v:activeClients.length+'', l:'Clientes activos', accent:null},
-          {v:agendaItems.filter((a:any)=>a.status!=='publicado').length+'', l:'En pipeline', accent:agendaItems.filter((a:any)=>a.status!=='publicado').length>0?'rgba(193,53,132,0.9)':null},
+          {v:`${completionRate}%`, l:'Tareas completadas', accent:completionRate>60?'#22c55e':BLU, nav:'tareas'},
+          {v:urgentTasks+'', l:'Urgentes pendientes', accent:urgentTasks>0?RED:BLU, nav:'tareas'},
+          {v:overdueProjects.length+'', l:'Proy. atrasados', accent:overdueProjects.length>0?RED:null, nav:'proyectos'},
+          {v:activeClients.length+'', l:'Clientes activos', accent:null, nav:'clientes'},
+          {v:agendaItems.filter((a:any)=>a.status!=='publicado').length+'', l:'En pipeline', accent:agendaItems.filter((a:any)=>a.status!=='publicado').length>0?'rgba(193,53,132,0.9)':null, nav:'contenido'},
         ].map((k,i)=>(
-          <div key={i} className="rounded-xl p-4" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)',borderTop:`2px solid ${k.accent||'rgba(255,255,255,0.1)'}`}}>
+          <button key={i} onClick={()=>onNavigate?.(k.nav)} className="rounded-xl p-4 text-left transition-all hover:opacity-80" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)',borderTop:`2px solid ${k.accent||'rgba(255,255,255,0.1)'}`}}>
             <div className="font-syne text-4xl font-black mb-1" style={{color:k.accent||'#F0F0F8'}}>{k.v}</div>
             <div className="text-xs text-white/35">{k.l}</div>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -3394,6 +3395,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
+  const [confirmDeleteMemId, setConfirmDeleteMemId] = useState<string|null>(null)
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && editing) setEditing(null) }
@@ -3455,7 +3457,13 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
               <div className="flex items-center gap-2 flex-shrink-0">
                 {isLong && <LucideIcon name={isExp?'chevron-up':'chevron-down'} size={13} color="rgba(255,255,255,0.2)"/>}
                 <button onClick={e=>{e.stopPropagation();if(editing===m.id){setEditing(null)}else{setEditing(m.id);setEditTitle(m.title);setEditContent(m.content||'');setExpanded(m.id)}}} className="opacity-0 group-hover:opacity-30 hover:!opacity-60 transition-opacity"><LucideIcon name="pencil" size={13} color={BLU}/></button>
-                <button onClick={e=>{e.stopPropagation();data.deleteMemoria(m.id).then(()=>showToast('Eliminado'))}} className="opacity-0 group-hover:opacity-30 hover:!opacity-60 transition-opacity"><LucideIcon name="trash" size={14} color={RED}/></button>
+                {confirmDeleteMemId === m.id
+                  ? <div className="flex items-center gap-1" onClick={e=>e.stopPropagation()}>
+                      <button onClick={e=>{e.stopPropagation();data.deleteMemoria(m.id).then(()=>showToast('Eliminado'));setConfirmDeleteMemId(null)}} className="px-2 py-1 rounded-lg font-syne text-[7.5px] font-black transition-all" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
+                      <button onClick={e=>{e.stopPropagation();setConfirmDeleteMemId(null)}} className="w-6 h-6 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={10} color="rgba(255,255,255,0.3)"/></button>
+                    </div>
+                  : <button onClick={e=>{e.stopPropagation();setConfirmDeleteMemId(m.id)}} className="opacity-0 group-hover:opacity-30 hover:!opacity-60 transition-opacity"><LucideIcon name="trash" size={14} color={RED}/></button>
+                }
               </div>
             </div>
             {isExp && editing===m.id && (
