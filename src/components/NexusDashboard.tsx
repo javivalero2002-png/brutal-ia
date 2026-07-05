@@ -438,7 +438,7 @@ export default function NexusDashboard({ profile }: Props) {
           {section === 'tareas' && <TareasSection data={data} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'equipo' && <EquipoSection data={data} profile={profile} showToast={showToast} />}
           {section === 'reportes' && <ReportesSection data={data} />}
-          {section === 'clientes' && <ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
+          {section === 'clientes' && <ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={setModal} onSetMf={setMf} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'proyectos' && <ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'contenido' && <ContenidoSection data={data} onOpenModal={setModal} showToast={showToast} />}
           {section === 'calendario' && <CalendarioSection data={data} profile={profile} showToast={showToast} onOpenModal={setModal} onSetMf={setMf} />}
@@ -554,6 +554,20 @@ export default function NexusDashboard({ profile }: Props) {
                         )
                       })}
                     </div>
+                  ) : f.type === 'category' ? (
+                    <div className="flex flex-wrap gap-2">
+                      {(['Clientes','Procesos','Decisiones','Aprendizajes','General'] as const).map(cat=>{
+                        const catC: Record<string,string> = {Clientes:BLU,Procesos:'rgba(255,176,32,0.9)',Decisiones:'rgba(229,29,42,0.9)',Aprendizajes:'rgba(34,197,94,0.9)',General:'rgba(167,139,250,0.8)'}
+                        const isActive = (mf[f.key]||'General')===cat
+                        const cc = catC[cat]
+                        return (
+                          <button key={cat} onClick={()=>setMf(m=>({...m,[f.key]:cat}))} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl font-syne text-[10px] font-black tracking-wide transition-all" style={{background:isActive?cc+'18':SURF2,border:`1.5px solid ${isActive?cc+'55':BORDER}`,color:isActive?cc:'rgba(255,255,255,0.35)'}}>
+                            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:isActive?cc:'rgba(255,255,255,0.15)'}}/>
+                            {cat}
+                          </button>
+                        )
+                      })}
+                    </div>
                   ) : f.type === 'date-input' ? (
                     <input type="date" value={mf[f.key]||''} onChange={e=>setMf(m=>({...m,[f.key]:e.target.value}))} className="w-full px-5 py-3.5 rounded-2xl text-[14px] text-white outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,colorScheme:'dark'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.45)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
                   ) : f.type === 'textarea' ? (
@@ -629,7 +643,7 @@ function modalFields(type: string, team: Profile[]) {
     ],
     memoria: [
       f('Título','titulo','Ej: Nike — Guía de tono de voz 2026'),
-      f('Categoría','categoria','Clientes / Procesos / Decisiones / Aprendizajes'),
+      { label:'Categoría', key:'categoria', type:'category', placeholder:'' },
       { label:'Contenido', key:'contenido', type:'textarea', placeholder:'Escribe el contenido de esta entrada…' },
     ],
     regla: [
@@ -2021,7 +2035,7 @@ function InboxSection({data,showToast,profile}: any) {
 }
 
 // ── CLIENTES SECTION ─────────────────────────────────────────
-function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner}: any) {
+function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast,isOwner}: any) {
   const [aiAdvice, setAiAdvice] = useState<any[]|null>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [expandedProject, setExpandedProject] = useState<string|null>(null)
@@ -2106,6 +2120,12 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <button onClick={()=>{ onSetMf?.({cliente:selected.name}); onOpenModal('tarea') }} className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:'rgba(27,95,250,0.08)',color:BLU,border:`1px solid rgba(27,95,250,0.18)`}}>
+              <LucideIcon name="check-square" size={11} color={BLU}/>+ TAREA
+            </button>
+            {isOwner && <button onClick={()=>{ onSetMf?.({cliente:selected.name}); onOpenModal('proyecto') }} className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.4)',border:`1px solid ${BORDER}`}}>
+              <LucideIcon name="folder-open" size={11} color="rgba(255,255,255,0.4)"/>+ PROYECTO
+            </button>}
             <button onClick={()=>{ setAiAdvice(null); loadAiAdvice(selected.id) }} disabled={aiLoading} className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-50 transition-all" style={{background:`linear-gradient(135deg,rgba(139,92,246,0.3),rgba(27,95,250,0.2))`,border:`1px solid rgba(139,92,246,0.35)`}}>
               <LucideIcon name="zap" size={11} color="#A78BFA"/>{aiLoading?'Analizando…':'IA ESTRATÉGICA'}
             </button>
