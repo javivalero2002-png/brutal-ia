@@ -1133,7 +1133,11 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                 <span className="text-[12px]" style={{color:'rgba(255,255,255,0.35)'}}>{new Date(activeTask.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})}</span>
               </div>
             </div>
-            <div className="font-syne text-[7.5px] font-bold tracking-widest text-center pt-2" style={{color:'rgba(255,255,255,0.1)'}}>⌘+ENTER PARA GUARDAR</div>
+            <div className="flex items-center justify-center gap-4 pt-2">
+              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>⌘+ENTER GUARDAR</span>
+              <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
+              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>J ↓  K ↑ NAVEGAR</span>
+            </div>
           </div>
         </div>
       )}
@@ -2792,9 +2796,9 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
             {clientSearch && <button onClick={()=>setClientSearch('')}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.2)"/></button>}
           </div>
           <div className="flex gap-1 p-1 rounded-2xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-            {(['Todos','Activo','Inactivo'] as const).map(s=>(
-              <button key={s} onClick={()=>setClientStatusFilter(s)} className="px-3.5 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all" style={{background:clientStatusFilter===s?SURF2:'transparent',color:clientStatusFilter===s?s==='Activo'?GRN:s==='Inactivo'?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.9)':'rgba(255,255,255,0.28)'}}>
-                {s.toUpperCase()}
+            {([{v:'Todos',c:'rgba(255,255,255,0.9)'},{v:'Activo',c:GRN},{v:'Pausado',c:'rgba(255,176,32,0.85)'},{v:'Archivado',c:'rgba(255,255,255,0.35)'}] as const).map(s=>(
+              <button key={s.v} onClick={()=>setClientStatusFilter(s.v)} className="px-3.5 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all" style={{background:clientStatusFilter===s.v?SURF2:'transparent',color:clientStatusFilter===s.v?s.c:'rgba(255,255,255,0.28)'}}>
+                {s.v.toUpperCase()}
               </button>
             ))}
           </div>
@@ -2853,12 +2857,19 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
                     ))}
                   </div>
 
-                  {/* Last contact */}
+                  {/* Last contact + unread badge */}
                   {(() => {
-                    const lm = data.inbox.filter((m: any)=>m.ai_client&&(m.ai_client.toLowerCase().includes(c.name.toLowerCase().split(' ')[0])||c.name.toLowerCase().includes(m.ai_client.toLowerCase().split(' ')[0]))).sort((a: any,b: any)=>new Date(b.received_at).getTime()-new Date(a.received_at).getTime())[0]
+                    const clientMsgs = data.inbox.filter((m: any)=>m.ai_client&&(m.ai_client.toLowerCase().includes(c.name.toLowerCase().split(' ')[0])||c.name.toLowerCase().includes(m.ai_client.toLowerCase().split(' ')[0])))
+                    const lm = clientMsgs.sort((a: any,b: any)=>new Date(b.received_at).getTime()-new Date(a.received_at).getTime())[0]
+                    const unreadN = clientMsgs.filter((m: any)=>!m.is_read).length
                     if (!lm) return null
                     const dd = Math.floor((Date.now()-new Date(lm.received_at).getTime())/86400000)
-                    return <div className="font-syne text-[7.5px] font-black tracking-wide mb-2" style={{color:'rgba(255,255,255,0.15)'}}>ÚLTIMO CONTACTO · {dd===0?'HOY':dd===1?'AYER':`HACE ${dd}D`}</div>
+                    return (
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="font-syne text-[7.5px] font-black tracking-wide" style={{color:'rgba(255,255,255,0.15)'}}>ÚLTIMO CONTACTO · {dd===0?'HOY':dd===1?'AYER':`HACE ${dd}D`}</div>
+                        {unreadN > 0 && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:`${BLU}18`,color:`${BLU}cc`,border:`1px solid ${BLU}25`}}>{unreadN} SIN LEER</span>}
+                      </div>
+                    )
                   })()}
 
                   {/* Urgent indicator */}
