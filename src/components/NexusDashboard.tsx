@@ -953,6 +953,12 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                   <span className="text-[13px]" style={{color:'rgba(255,255,255,0.55)'}}>{activeTask.client.name}</span>
                 </div>
               )}
+              {activeTask.project_id && (() => { const proj = data.projects.find((p: Project)=>p.id===activeTask.project_id); return proj ? (
+                <div className="flex items-center justify-between">
+                  <span className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>PROYECTO</span>
+                  <span className="text-[12px]" style={{color:(proj.color||BLU)+'cc'}}>{proj.name}</span>
+                </div>
+              ) : null })()}
               <div className="flex items-center justify-between">
                 <span className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>CREADA</span>
                 <span className="text-[12px]" style={{color:'rgba(255,255,255,0.35)'}}>{new Date(activeTask.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})}</span>
@@ -2570,7 +2576,9 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                         const dOver = new Date(p.deadline+'T23:59:59')<new Date()
                         const dSoon = !dOver && new Date(p.deadline+'T23:59:59')<new Date(Date.now()+7*24*3600*1000)
                         return <span className="font-syne text-[8px] font-black px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.25)'}}>{dOver&&'⚠ '}{fmtDate(p.deadline)}</span>
-                      })()}</div>
+                      })()}
+                      {(() => { const n = data.tasks.filter((t: Task)=>t.project_id===p.id&&!t.done).length; return n>0?<span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.6)'}}>{n}t</span>:null })()}
+                    </div>
                   </div>
                 ))}
                 {col.items.length===0&&<div className="py-8 text-center text-[11px]" style={{color:'rgba(255,255,255,0.12)'}}>Arrastra aquí</div>}
@@ -3434,6 +3442,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
   const [editing, setEditing] = useState<string|null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
+  const [editCategory, setEditCategory] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
   const [confirmDeleteMemId, setConfirmDeleteMemId] = useState<string|null>(null)
 
@@ -3496,7 +3505,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {isLong && <LucideIcon name={isExp?'chevron-up':'chevron-down'} size={13} color="rgba(255,255,255,0.2)"/>}
-                <button onClick={e=>{e.stopPropagation();if(editing===m.id){setEditing(null)}else{setEditing(m.id);setEditTitle(m.title);setEditContent(m.content||'');setExpanded(m.id)}}} className="opacity-0 group-hover:opacity-30 hover:!opacity-60 transition-opacity"><LucideIcon name="pencil" size={13} color={BLU}/></button>
+                <button onClick={e=>{e.stopPropagation();if(editing===m.id){setEditing(null)}else{setEditing(m.id);setEditTitle(m.title);setEditContent(m.content||'');setEditCategory(m.category||'General');setExpanded(m.id)}}} className="opacity-0 group-hover:opacity-30 hover:!opacity-60 transition-opacity"><LucideIcon name="pencil" size={13} color={BLU}/></button>
                 {confirmDeleteMemId === m.id
                   ? <div className="flex items-center gap-1" onClick={e=>e.stopPropagation()}>
                       <button onClick={e=>{e.stopPropagation();data.deleteMemoria(m.id).then(()=>showToast('Eliminado'));setConfirmDeleteMemId(null)}} className="px-2 py-1 rounded-lg font-syne text-[7.5px] font-black transition-all" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
@@ -3509,9 +3518,19 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
             {isExp && editing===m.id && (
               <div className="px-5 pb-5 pt-0 space-y-3" onClick={e=>e.stopPropagation()}>
                 <input value={editTitle} onChange={e=>setEditTitle(e.target.value)} className="w-full px-3 py-2 rounded-xl text-[13px] text-white placeholder-white/20 outline-none" style={{background:SURF2,border:`1.5px solid rgba(27,95,250,0.25)`,caretColor:BLU}}/>
+                <div className="flex flex-wrap gap-1.5">
+                  {(['Clientes','Procesos','Decisiones','Aprendizajes','General'] as const).map(cat=>{
+                    const cc = catColor[cat]||'rgba(255,255,255,0.3)'
+                    const isAct = editCategory===cat
+                    return <button key={cat} onClick={()=>setEditCategory(cat)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all" style={{background:isAct?cc+'18':SURF2,border:`1.5px solid ${isAct?cc+'55':BORDER}`,color:isAct?cc:'rgba(255,255,255,0.3)'}}>
+                      <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:isAct?cc:'rgba(255,255,255,0.15)'}}/>
+                      {cat}
+                    </button>
+                  })}
+                </div>
                 <textarea value={editContent} onChange={e=>setEditContent(e.target.value)} rows={4} className="w-full px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none resize-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,lineHeight:'1.65'}}/>
                 <div className="flex gap-2">
-                  <button onClick={async()=>{setSavingEdit(true);try{await data.updateMemoria(m.id,{title:editTitle.trim(),content:editContent.trim()});showToast('Actualizado');setEditing(null)}catch{showToast('Error')}finally{setSavingEdit(false)}}} disabled={savingEdit||!editTitle.trim()} className="px-4 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingEdit?'GUARDANDO…':'GUARDAR'}</button>
+                  <button onClick={async()=>{setSavingEdit(true);try{await data.updateMemoria(m.id,{title:editTitle.trim(),content:editContent.trim(),category:editCategory});showToast('Actualizado');setEditing(null)}catch{showToast('Error')}finally{setSavingEdit(false)}}} disabled={savingEdit||!editTitle.trim()} className="px-4 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingEdit?'GUARDANDO…':'GUARDAR'}</button>
                   <button onClick={()=>setEditing(null)} className="px-4 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.3)',background:SURF2}}>CANCELAR</button>
                 </div>
               </div>
