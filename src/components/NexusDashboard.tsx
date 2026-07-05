@@ -485,6 +485,20 @@ export default function NexusDashboard({ profile }: Props) {
                         </button>
                       ))}
                     </div>
+                  ) : f.type === 'platform' ? (
+                    <div className="flex gap-1.5 flex-wrap">
+                      {(['Instagram','TikTok','YouTube','LinkedIn','Twitter','Pinterest'] as const).map(p=>{
+                        const platC: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
+                        const pc = platC[p]
+                        const isActive = (mf[f.key]||'Instagram') === p
+                        return (
+                          <button key={p} onClick={()=>setMf(m=>({...m,[f.key]:p}))} className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:isActive?pc+'18':SURF2,border:`1.5px solid ${isActive?pc+'50':BORDER}`,color:isActive?pc:'rgba(255,255,255,0.3)'}}>
+                            <PlatformLogo platform={p} size={14}/>
+                            {p}
+                          </button>
+                        )
+                      })}
+                    </div>
                   ) : (
                     <input value={mf[f.key]||''} onChange={e=>setMf(m=>({...m,[f.key]:e.target.value}))} placeholder={f.placeholder} className="w-full px-5 py-3.5 rounded-2xl text-[14px] text-white placeholder-white/20 outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.45)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
                   )}
@@ -560,7 +574,7 @@ function modalFields(type: string, team: Profile[]) {
     contenido: [
       f('Título de la pieza','titulo','Ej: Stories lanzamiento verano Nike'),
       f('Cliente','cliente','Ej: Nike España'),
-      f('Plataforma','plataforma','Instagram / TikTok / LinkedIn / YouTube'),
+      { label:'Plataforma', key:'plataforma', type:'platform' },
       f('Cuenta / Perfil','cuenta','Ej: Brutal Studios, Pablo, Julio Flores'),
       f('Fecha de publicación','fecha','Ej: 10 Jul 2026'),
       { label:'Estado', key:'estado', type:'status' },
