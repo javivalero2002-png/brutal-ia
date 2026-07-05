@@ -181,7 +181,8 @@ export default function NexusDashboard({ profile }: Props) {
           ? data.clients.find((c: Client) => c.name.toLowerCase().includes(mf.cliente.toLowerCase()) || mf.cliente.toLowerCase().includes(c.name.toLowerCase().split(' ')[0]))
           : null
         const color = client?.color || ACCENT_COLORS[data.projects.length % ACCENT_COLORS.length]
-        await data.createProject({ name:mf.nombre.trim(), client_id:client?.id, status:'activo', progress:0, deadline:mf.deadline||'TBD', color })
+        const projStatus = (mf.estado || 'activo') as 'plan.'|'activo'|'urgente'|'revisión'|'completado'
+        await data.createProject({ name:mf.nombre.trim(), client_id:client?.id, status:projStatus, progress:0, deadline:mf.deadline||'TBD', color })
         showToast('Proyecto creado: '+mf.nombre)
       } else if (modal === 'tarea') {
         if (!mf.text?.trim()) { showToast('Escribe la tarea'); return }
@@ -190,8 +191,11 @@ export default function NexusDashboard({ profile }: Props) {
         const taskClient = mf.cliente?.trim()
           ? data.clients.find((c: Client) => c.name.toLowerCase().includes(mf.cliente.toLowerCase()) || mf.cliente.toLowerCase().includes(c.name.toLowerCase().split(' ')[0]))
           : null
-        await data.createTask({ text:mf.text.trim(), level, assigned_to:assignee?.id, source:'manual', due_date:mf.due_date?.trim()||undefined, client_id:taskClient?.id })
-        showToast('Tarea creada' + (taskClient ? ` · ${taskClient.name}` : ''))
+        const taskProject = mf.proyecto?.trim()
+          ? data.projects.find((p: Project) => p.name.toLowerCase().includes(mf.proyecto.toLowerCase()) || mf.proyecto.toLowerCase().includes(p.name.toLowerCase().split(' ')[0]))
+          : null
+        await data.createTask({ text:mf.text.trim(), level, assigned_to:assignee?.id, source:'manual', due_date:mf.due_date?.trim()||undefined, client_id:taskClient?.id, project_id:taskProject?.id })
+        showToast('Tarea creada' + (taskProject ? ` · ${taskProject.name}` : taskClient ? ` · ${taskClient.name}` : ''))
       } else if (modal === 'memoria') {
         if (!mf.titulo?.trim()) { showToast('Escribe el título'); return }
         await data.createMemoria({ title:mf.titulo.trim(), category:mf.categoria||'General', content:mf.contenido||'' })
@@ -568,6 +572,19 @@ export default function NexusDashboard({ profile }: Props) {
                         )
                       })}
                     </div>
+                  ) : f.type === 'proj-status' ? (
+                    <div className="flex gap-2">
+                      {[
+                        {v:'plan.',l:'Plan.',c:'rgba(167,139,250,0.85)'},
+                        {v:'activo',l:'Activo',c:BLU},
+                        {v:'urgente',l:'Urgente',c:RED},
+                        {v:'revisión',l:'Revisión',c:'rgba(255,176,32,0.9)'},
+                      ].map(s=>(
+                        <button key={s.v} onClick={()=>setMf(m=>({...m,[f.key]:s.v}))} className="flex-1 py-3 rounded-2xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:(mf[f.key]||'activo')===s.v?s.c+'18':SURF2,border:`1.5px solid ${(mf[f.key]||'activo')===s.v?s.c+'60':BORDER}`,color:(mf[f.key]||'activo')===s.v?s.c:'rgba(255,255,255,0.3)'}}>
+                          {s.l.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
                   ) : f.type === 'date-input' ? (
                     <input type="date" value={mf[f.key]||''} onChange={e=>setMf(m=>({...m,[f.key]:e.target.value}))} className="w-full px-5 py-3.5 rounded-2xl text-[14px] text-white outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,colorScheme:'dark'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.45)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
                   ) : f.type === 'textarea' ? (
@@ -632,6 +649,7 @@ function modalFields(type: string, team: Profile[]) {
     proyecto: [
       f('Nombre del proyecto','nombre','Ej: Campaign Summer 2026'),
       f('Cliente','cliente','Ej: Nike España'),
+      { label:'Estado inicial', key:'estado', type:'proj-status', placeholder:'' },
       { label:'Deadline', key:'deadline', type:'date-input', placeholder:'' },
     ],
     tarea: [
@@ -639,6 +657,7 @@ function modalFields(type: string, team: Profile[]) {
       { label:'Prioridad', key:'priority', type:'priority' },
       { label:'Asignar a', key:'asignado', type:'assignee' },
       f('Cliente (opcional)','cliente','Ej: Nike España'),
+      f('Proyecto (opcional)','proyecto','Ej: Campaign Summer 2026'),
       { label:'Fecha límite', key:'due_date', type:'date-input', placeholder:'' },
     ],
     memoria: [
