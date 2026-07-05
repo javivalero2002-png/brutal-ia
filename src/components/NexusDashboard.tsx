@@ -1452,6 +1452,27 @@ function ReportesSection({data, onNavigate}: any) {
               </div>
             ))}
           </div>
+          <div className="pt-4 pb-4 border-t border-white/6">
+            <div className="text-xs text-white/25 mb-3">Por fuente</div>
+            <div className="flex gap-2 flex-wrap">
+              {[
+                {label:'Gmail', n:inbox.filter(m=>m.source==='gmail').length, color:'rgba(27,95,250,0.8)'},
+                {label:'WhatsApp', n:inbox.filter(m=>m.source==='whatsapp').length, color:'rgba(37,211,102,0.8)'},
+                {label:'Interno', n:inbox.filter(m=>m.source==='internal').length, color:'rgba(255,176,32,0.8)'},
+              ].filter(s=>s.n>0).map((s,i)=>(
+                <div key={i} className="flex-1 text-center px-3 py-2 rounded-xl" style={{background:s.color+'0A',border:`1px solid ${s.color}22`}}>
+                  <div className="font-figtree text-[18px] font-black" style={{color:s.color}}>{s.n}</div>
+                  <div className="font-syne text-[7.5px] font-black tracking-wide" style={{color:'rgba(255,255,255,0.25)'}}>{s.label.toUpperCase()}</div>
+                </div>
+              ))}
+              {inbox.filter(m=>!['gmail','whatsapp','internal'].includes(m.source)).length > 0 && (
+                <div className="flex-1 text-center px-3 py-2 rounded-xl" style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)'}}>
+                  <div className="font-figtree text-[18px] font-black" style={{color:'rgba(255,255,255,0.4)'}}>{inbox.filter(m=>!['gmail','whatsapp','internal'].includes(m.source)).length}</div>
+                  <div className="font-syne text-[7.5px] font-black tracking-wide" style={{color:'rgba(255,255,255,0.2)'}}>OTROS</div>
+                </div>
+              )}
+            </div>
+          </div>
           <div className="pt-4 border-t border-white/6">
             <div className="text-xs text-white/25 mb-2">Clientes con más proyectos</div>
             {[...clients].sort((a,b)=>projects.filter((p:Project)=>p.client_id===b.id).length-projects.filter((p:Project)=>p.client_id===a.id).length).slice(0,3).map((c: Client,i: number)=>{
@@ -3740,7 +3761,22 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
           </div>
           <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Memoria</h1>
         </div>
-        <button onClick={()=>onOpenModal('memoria')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ ENTRADA</button>
+        <div className="flex items-center gap-2">
+          <button onClick={()=>{
+            const md = data.memoria.map((m: any)=>`# ${m.title}\n**Categoría:** ${m.category}\n**Fecha:** ${m.created_at?.slice(0,10)||''}\n\n${m.content}`).join('\n\n---\n\n')
+            const blob = new Blob([md], {type:'text/markdown'})
+            const a = document.createElement('a')
+            a.href = URL.createObjectURL(blob)
+            a.download = `memoria-${new Date().toISOString().slice(0,10)}.md`
+            a.click()
+            URL.revokeObjectURL(a.href)
+            showToast(`${data.memoria.length} entradas exportadas`)
+          }} className="flex items-center gap-2 px-4 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.35)'}} title="Exportar como Markdown">
+            <LucideIcon name="download" size={13} color="rgba(255,255,255,0.35)"/>
+            <span>MD</span>
+          </button>
+          <button onClick={()=>onOpenModal('memoria')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ ENTRADA</button>
+        </div>
       </div>
       {/* Search */}
       <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl mb-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
