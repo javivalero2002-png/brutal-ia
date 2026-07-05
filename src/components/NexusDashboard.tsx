@@ -1084,7 +1084,8 @@ function ReportesSection({data}: any) {
           const now = new Date().toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})
           const donePct = totalTasks>0?Math.round((doneTasks/totalTasks)*100):0
           const membersHtml = tasksByMember.map((m: any)=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #eee"><div style="width:32px;height:32px;border-radius:50%;background:${m.color}22;color:${m.color};display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;flex-shrink:0">${m.initials}</div><div style="flex:1"><strong>${m.name}</strong></div><div style="color:#666;font-size:13px">${m.pending} pendientes · ${m.done} completadas</div><div style="width:120px;height:6px;background:#f0f0f0;border-radius:3px;overflow:hidden"><div style="width:${maxBar>0?((m.done/(m.done+m.pending||1))*100).toFixed(0):0}%;height:100%;background:${m.color}"></div></div></div>`).join('')
-          const projHtml = projects.map((p: Project)=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #eee"><div style="flex:1"><strong>${p.name}</strong> <span style="color:#999;font-size:12px">${p.client?.name||'—'}</span></div><span style="padding:2px 8px;background:#f5f5f5;border-radius:20px;font-size:11px;font-weight:700">${p.status}</span><div style="width:80px;height:6px;background:#f0f0f0;border-radius:3px;overflow:hidden"><div style="width:${p.progress}%;height:100%;background:${p.color||'#1B5FFA'}"></div></div><span style="font-size:12px;color:#666;width:30px;text-align:right">${p.progress}%</span></div>`).join('')
+          const statusEs = (s: string) => ({'activo':'Activo','urgente':'Urgente','plan.':'Planificación','revisión':'Revisión'} as Record<string,string>)[s]||s
+          const projHtml = projects.map((p: Project)=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #eee"><div style="flex:1"><strong>${p.name}</strong> <span style="color:#999;font-size:12px">${p.client?.name||'—'}</span></div><span style="padding:2px 8px;background:#f5f5f5;border-radius:20px;font-size:11px;font-weight:700">${statusEs(p.status)}</span><div style="width:80px;height:6px;background:#f0f0f0;border-radius:3px;overflow:hidden"><div style="width:${p.progress}%;height:100%;background:${p.color||'#1B5FFA'}"></div></div><span style="font-size:12px;color:#666;width:30px;text-align:right">${p.progress}%</span></div>`).join('')
           printWin.document.write(`<!DOCTYPE html><html><head><title>Reporte Brutal Studios — ${now}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111;padding:40px;max-width:800px;margin:0 auto}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111;padding-bottom:20px;margin-bottom:30px}.logo-area h1{font-size:28px;font-weight:900;letter-spacing:-1px}.logo-area p{color:#666;font-size:13px;margin-top:4px}.date-area{text-align:right;color:#666;font-size:13px}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:30px}.kpi{padding:16px;border:1px solid #e0e0e0;border-radius:8px;text-align:center}.kpi .num{font-size:36px;font-weight:900;color:#1B5FFA}.kpi .lbl{font-size:12px;color:#666;margin-top:4px}.section{margin-bottom:28px}.section h2{font-size:16px;font-weight:900;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;color:#333;padding-bottom:6px;border-bottom:1px solid #e0e0e0}.footer{margin-top:40px;padding-top:16px;border-top:1px solid #e0e0e0;color:#999;font-size:11px;display:flex;justify-content:space-between}@media print{body{padding:20px}}</style></head><body><div class="header"><div class="logo-area"><h1>Brutal Studios</h1><p>Informe de gestión</p></div><div class="date-area"><strong>${now}</strong><br>brutal.ia · sistema interno</div></div><div class="kpis"><div class="kpi"><div class="num">${donePct}%</div><div class="lbl">Tareas completadas</div></div><div class="kpi"><div class="num" style="color:${urgentTasks>0?'#E51D2A':'#1B5FFA'}">${urgentTasks}</div><div class="lbl">Urgentes pendientes</div></div><div class="kpi"><div class="num">${projects.length}</div><div class="lbl">Proyectos activos</div></div><div class="kpi"><div class="num">${clients.length}</div><div class="lbl">Clientes</div></div></div><div class="section"><h2>Carga de trabajo del equipo</h2>${membersHtml}</div><div class="section"><h2>Estado de proyectos</h2>${projHtml}</div><div class="footer"><span>Brutal Studios · brutal.ia</span><span>Generado: ${now}</span></div></body></html>`)
           printWin.document.close()
           setTimeout(()=>printWin.print(),500)
@@ -1355,7 +1356,10 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                 return (
                   <div key={a.id} className="px-5 py-3.5" style={{borderBottom:`1px solid ${BORDER}`,borderLeft:`3px solid ${pc}55`}}>
                     <div className="text-[12px] font-semibold line-clamp-1 mb-0.5" style={{color:'rgba(255,255,255,0.82)'}}>{a.title}</div>
-                    <span className="font-syne text-[7.5px] font-black" style={{color:`${pc}99`}}>{a.platform?.toUpperCase()}</span>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <PlatformLogo platform={a.platform} size={10}/>
+                      <span className="font-syne text-[7.5px] font-black" style={{color:`${pc}99`}}>{a.platform}</span>
+                    </div>
                   </div>
                 )
               })}
@@ -2821,7 +2825,10 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
                               )}
                               {type==='content' && (
                                 <div className="flex items-center gap-2 mt-1">
-                                  <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:e.color+'20',color:e.color+'cc'}}>{e.raw?.platform}</span>
+                                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full" style={{background:e.color+'20'}}>
+                                    <PlatformLogo platform={e.raw?.platform} size={10}/>
+                                    <span className="font-syne text-[8px] font-black" style={{color:e.color+'cc'}}>{e.raw?.platform}</span>
+                                  </div>
                                   {e.raw?.client?.name && <span className="text-[10px]" style={{color:'rgba(255,255,255,0.3)'}}>{e.raw.client.name}</span>}
                                 </div>
                               )}
