@@ -225,6 +225,7 @@ export default function NexusDashboard({ profile }: Props) {
   const unreadCount = data.inbox.filter(m => !m.is_read).length
   const urgentCount = data.tasks.filter(t => !t.done && t.level === 'urgent').length
   const isOwner = profile.role === 'owner'
+  const todayCalCount = (data.calendarEvents||[]).filter((e: any) => e.start?.slice(0,10) === new Date().toISOString().slice(0,10)).length
 
   const filteredProjects = projStatusFilter === 'Todos' ? data.projects : data.projects.filter(p => p.status === projStatusFilter)
   const kanbanCols = [
@@ -383,7 +384,7 @@ export default function NexusDashboard({ profile }: Props) {
           {navLabel('TRABAJO')}
           {navItem('hoy','Hoy','sun',urgentCount)}
           {navItem('inbox','Inbox','inbox',unreadCount)}
-          {navItem('calendario','Calendario','calendar')}
+          {navItem('calendario','Calendario','calendar',todayCalCount||undefined)}
           {navItem('equipo','Equipo','users-2')}
 
           {navLabel('GESTIÓN')}
@@ -3924,6 +3925,10 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
             {data.memoria.length > 0 && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.2)'}}>{data.memoria.length}</span>}
           </div>
           <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Memoria</h1>
+          {data.memoria.length > 0 && (()=>{
+            const wordCount = data.memoria.reduce((s: number, m: any)=>s+(m.content||'').split(/\s+/).filter(Boolean).length,0)
+            return <div className="font-syne text-[8px] font-black tracking-widest mt-1" style={{color:'rgba(255,255,255,0.15)'}}>{wordCount.toLocaleString('es-ES')} PALABRAS</div>
+          })()}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={()=>{
