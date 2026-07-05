@@ -12,25 +12,19 @@ export async function POST(request: NextRequest) {
 
   const admin = await createAdminClient()
 
-  const [{ data: profile }, { data: clients }, { data: projects }, { data: tasks }, { data: team }, { data: inbox }] = await Promise.all([
+  const [{ data: profile }, { data: clients }, { data: projects }, { data: tasks }, { data: team }, { data: inbox }, { data: history }] = await Promise.all([
     admin.from('profiles').select('name').eq('id', user.id).single(),
     admin.from('clients').select('name'),
     admin.from('projects').select('name,status'),
     admin.from('tasks').select('text,level,assignee:profiles!assigned_to(name)').eq('done', false),
     admin.from('profiles').select('id'),
     admin.from('inbox_messages').select('id').eq('user_id', user.id).eq('is_read', false),
+    // Fetch history BEFORE saving current message so it doesn't appear twice in the messages array
+    admin.from('chat_messages').select('role, content').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20),
   ])
 
-  // Save user message
+  // Save user message after fetching history
   await admin.from('chat_messages').insert({ user_id: user.id, role: 'user', content: message })
-
-  // Get recent history
-  const { data: history } = await admin
-    .from('chat_messages')
-    .select('role, content')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(20)
 
   const reply = await chat(
     message,

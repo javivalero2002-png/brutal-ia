@@ -174,6 +174,8 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     return reply
   }, [])
 
+  const clearChat = useCallback(() => setChatMessages([]), [])
+
   // ── MEMORIA ────────────────────────────────────────────────
   const createMemoria = useCallback(async (entry: Partial<MemoriaEntry>) => {
     const created = await apiFetch('/api/memoria', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) })
@@ -221,7 +223,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     memoria, createMemoria, deleteMemoria,
     agenda, createAgenda, updateAgenda, deleteAgenda,
     reglas, createRegla, deleteRegla,
-    chatMessages, sendChatMessage,
+    chatMessages, sendChatMessage, clearChat,
     team, calendarEvents, reload: load,
   }
 }

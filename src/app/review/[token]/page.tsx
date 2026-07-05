@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, use } from 'react'
+import { PlatformLogo } from '@/components/PlatformLogo'
 
 function videoEmbed(url: string): string | null {
   if (!url) return null
@@ -77,8 +78,8 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
             {/* Title block */}
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-4" style={{ background: pc + '15', border: `1px solid ${pc}30` }}>
-                <div className="w-1.5 h-1.5 rounded-full" style={{ background: pc }} />
-                <span className="text-xs font-bold tracking-wider" style={{ color: pc }}>{item.platform?.toUpperCase()}</span>
+                <PlatformLogo platform={item.platform} size={14} />
+                <span className="text-xs font-bold tracking-wider" style={{ color: pc }}>{item.platform}</span>
               </div>
               <h1 className="text-white text-2xl font-black leading-snug" style={{ letterSpacing: '-0.02em' }}>{item.title}</h1>
               {item.publish_date && (
