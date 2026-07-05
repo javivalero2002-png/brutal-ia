@@ -322,7 +322,10 @@ export default function NexusDashboard({ profile }: Props) {
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="text-[10.5px] truncate" style={{color:'rgba(255,255,255,0.75)'}}>{t.text}</div>
-                                <div className="font-syne text-[8px] font-black mt-0.5" style={{color:`${RED}80`}}>URGENTE</div>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <div className="font-syne text-[8px] font-black" style={{color:`${RED}80`}}>URGENTE</div>
+                                  {t.due_date && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(229,29,42,0.1)',color:RED}}>{new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
+                                </div>
                               </div>
                             </div>
                           </button>
@@ -409,7 +412,7 @@ export default function NexusDashboard({ profile }: Props) {
           {section === 'clientes' && <ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'proyectos' && <ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'contenido' && <ContenidoSection data={data} onOpenModal={setModal} showToast={showToast} />}
-          {section === 'calendario' && <CalendarioSection data={data} profile={profile} showToast={showToast} onOpenModal={setModal} />}
+          {section === 'calendario' && <CalendarioSection data={data} profile={profile} showToast={showToast} onOpenModal={setModal} onSetMf={setMf} />}
           {section === 'memoria' && <MemoriaSection data={data} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={setModal} showToast={showToast} />}
           {section === 'automatizaciones' && <AutomatizacionesSection data={data} onOpenModal={setModal} showToast={showToast} isOwner={profile.role==='owner'} />}
           {section === 'chat' && <ChatSection profile={profile} data={data} chatInput={chatInput} setChatInput={setChatInput} chatLoading={chatLoading} setChatLoading={setChatLoading} showToast={showToast} />}
@@ -2337,6 +2340,15 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               <LucideIcon name="x" size={13} color="rgba(255,255,255,0.35)"/>
             </button>
           </div>
+          {/* Status pills */}
+          <div className="mb-5">
+            <div className="font-syne text-[8px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>ESTADO</div>
+            <div className="flex gap-1.5 flex-wrap">
+              {[{s:'plan.',l:'Planif.',c:'rgba(255,255,255,0.4)'},{s:'activo',l:'Activo',c:GRN},{s:'urgente',l:'Urgente',c:RED},{s:'revisión',l:'Revisión',c:'rgba(167,139,250,0.9)'}].map(opt=>(
+                <button key={opt.s} onClick={async()=>{ await data.updateProject(selectedProject.id,{status:opt.s}); showToast(`Estado: ${opt.l}`) }} className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:selectedProject.status===opt.s?opt.c+'18':SURF2,border:`1px solid ${selectedProject.status===opt.s?opt.c+'50':BORDER}`,color:selectedProject.status===opt.s?opt.c:'rgba(255,255,255,0.3)'}}>{opt.l.toUpperCase()}</button>
+              ))}
+            </div>
+          </div>
           <div className="grid grid-cols-[1fr_auto] gap-6 items-end">
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -2552,9 +2564,7 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                             <div className="px-3.5 pt-3 pb-3.5">
                               <div className="font-figtree text-[13px] font-semibold leading-snug line-clamp-2 mb-3" style={{color:'rgba(255,255,255,0.9)'}}>{item.title}</div>
                               <div className="flex items-center gap-2">
-                                {item.client?.name && (
-                                  <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full truncate max-w-[100px]" style={{background:(item.client.color||BLU)+'15',color:(item.client.color||BLU)+'cc'}}>{item.client.name}</span>
-                                )}
+                                {(() => { const ic = item.client || (item.client_id ? data.clients.find((c: any)=>c.id===item.client_id) : null); return ic ? <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full truncate max-w-[100px]" style={{background:(ic.color||BLU)+'15',color:(ic.color||BLU)+'cc'}}>{ic.name}</span> : null })()}
                                 {item.publish_date && (
                                   <span className="font-syne text-[8px] ml-auto flex-shrink-0" style={{color:'rgba(255,255,255,0.22)'}}>
                                     {new Date(item.publish_date+'T00:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}
@@ -2680,7 +2690,7 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
 }
 
 // ── CALENDARIO SECTION ───────────────────────────────────────
-function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
+function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any) {
   const today = new Date()
   const [viewMonth, setViewMonth] = useState(today.getMonth())
   const [viewYear, setViewYear] = useState(today.getFullYear())
@@ -2915,7 +2925,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
                 {selectedDay.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'}).replace(/^\w/,c=>c.toUpperCase())}
               </div>
               {selKey === todayKey && <div className="font-syne text-[8px] font-black mt-1" style={{color:BLU}}>● HOY</div>}
-              <button onClick={()=>onOpenModal('contenido')} className="mt-3 w-full flex items-center gap-2 px-3 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(27,95,250,0.08)',border:`1px solid rgba(27,95,250,0.15)`,color:BLU}}>
+              <button onClick={()=>{ onSetMf?.({fecha:selKey}); onOpenModal('contenido') }} className="mt-3 w-full flex items-center gap-2 px-3 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(27,95,250,0.08)',border:`1px solid rgba(27,95,250,0.15)`,color:BLU}}>
                 <LucideIcon name="plus" size={11} color={BLU}/>
                 Añadir pieza para este día
               </button>
