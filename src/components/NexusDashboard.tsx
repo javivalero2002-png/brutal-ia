@@ -2025,10 +2025,11 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
   const [editRevenue, setEditRevenue] = useState('')
   const [editIndustry, setEditIndustry] = useState('')
   const [savingClient, setSavingClient] = useState(false)
+  const [confirmDeleteClient, setConfirmDeleteClient] = useState(false)
 
   const selected = selectedId ? data.clients.find((c: Client)=>c.id===selectedId) : null
 
-  useEffect(() => { setClientEditOpen(false) }, [selectedId])
+  useEffect(() => { setClientEditOpen(false); setConfirmDeleteClient(false) }, [selectedId])
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && clientEditOpen) setClientEditOpen(false) }
@@ -2104,7 +2105,12 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
               <button onClick={()=>{ setClientEditOpen(o=>!o); setEditRevenue(selected.revenue||''); setEditIndustry(selected.industry||'') }} className="px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all" style={{color:clientEditOpen?BLU:'rgba(255,255,255,0.4)',background:clientEditOpen?'rgba(27,95,250,0.1)':'transparent',border:`1px solid ${clientEditOpen?'rgba(27,95,250,0.3)':BORDER}`}}>EDITAR</button>
             )}
             {isOwner && (
-              <button onClick={()=>data.deleteClient(selected.id).then(()=>{handleBack();showToast('Cliente eliminado')})} className="px-3 py-2 rounded-xl text-[11px] transition-colors" style={{color:'rgba(229,29,42,0.45)',border:'1px solid rgba(229,29,42,0.12)'}}>Eliminar</button>
+              confirmDeleteClient
+                ? <div className="flex items-center gap-1">
+                    <button onClick={()=>data.deleteClient(selected.id).then(()=>{handleBack();showToast('Cliente eliminado')})} className="px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
+                    <button onClick={()=>setConfirmDeleteClient(false)} className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={12} color="rgba(255,255,255,0.3)"/></button>
+                  </div>
+                : <button onClick={()=>setConfirmDeleteClient(true)} className="px-3 py-2 rounded-xl text-[11px] transition-all hover:bg-red-900/10" style={{color:'rgba(229,29,42,0.45)',border:'1px solid rgba(229,29,42,0.12)'}}>Eliminar</button>
             )}
           </div>
         </div>
@@ -2431,6 +2437,7 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
 function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView,projStatusFilter,setProjStatusFilter,dragRef,selectedId,onSelect,onOpenModal,showToast,isOwner}: any) {
   const [editProgress, setEditProgress] = useState<number|null>(null)
   const [savingProgress, setSavingProgress] = useState(false)
+  const [confirmDeleteProjId, setConfirmDeleteProjId] = useState<string|null>(null)
   const selectedProject: Project|null = selectedId ? data.projects.find((p: Project)=>p.id===selectedId)||null : null
 
   useEffect(() => { setEditProgress(null) }, [selectedId])
@@ -2536,7 +2543,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
       ) : (
         <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
           {filteredProjects.map((p: Project, i: number)=>(
-            <div key={p.id} onClick={()=>onSelect(selectedId===p.id?null:p.id)} className="flex items-center gap-4 px-6 py-4 transition-colors cursor-pointer" style={{borderBottom:i<filteredProjects.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${selectedId===p.id?statusColor(p.status):statusColor(p.status)+'40'}`,background:selectedId===p.id?'rgba(27,95,250,0.06)':'transparent'}}
+            <div key={p.id} onClick={()=>onSelect(selectedId===p.id?null:p.id)} className="group flex items-center gap-4 px-6 py-4 transition-colors cursor-pointer" style={{borderBottom:i<filteredProjects.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${selectedId===p.id?statusColor(p.status):statusColor(p.status)+'40'}`,background:selectedId===p.id?'rgba(27,95,250,0.06)':'transparent'}}
               onMouseEnter={e=>{ if(selectedId!==p.id)(e.currentTarget.style.background='rgba(255,255,255,0.015)') }}
               onMouseLeave={e=>{ if(selectedId!==p.id)(e.currentTarget.style.background='transparent') }}>
               <div className="relative flex-shrink-0">
@@ -2553,7 +2560,14 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 const dSoon = !dOver && new Date(p.deadline+'T23:59:59')<new Date(Date.now()+7*24*3600*1000)
                 return <span className="font-syne text-[9px] font-black flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.28)'}}>{dOver&&'⚠ '}{fmtDate(p.deadline)}</span>
               })()}
-              {isOwner && <button onClick={()=>data.deleteProject(p.id).then(()=>showToast('Proyecto eliminado'))} className="opacity-0 hover:opacity-60 transition-opacity flex-shrink-0" onMouseEnter={e=>(e.currentTarget.style.opacity='0.6')} onMouseLeave={e=>(e.currentTarget.style.opacity='0')}><LucideIcon name="trash" size={13} color={RED}/></button>}
+              {isOwner && (
+                confirmDeleteProjId === p.id
+                  ? <div className="flex items-center gap-1 flex-shrink-0" onClick={e=>e.stopPropagation()}>
+                      <button onClick={()=>{ data.deleteProject(p.id).then(()=>showToast('Proyecto eliminado')); setConfirmDeleteProjId(null) }} className="px-2 py-1 rounded-lg font-syne text-[7.5px] font-black" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
+                      <button onClick={()=>setConfirmDeleteProjId(null)} className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={10} color="rgba(255,255,255,0.3)"/></button>
+                    </div>
+                  : <button onClick={e=>{e.stopPropagation();setConfirmDeleteProjId(p.id)}} className="opacity-0 group-hover:opacity-60 transition-opacity flex-shrink-0"><LucideIcon name="trash" size={13} color={RED}/></button>
+              )}
             </div>
           ))}
           {filteredProjects.length===0&&<div className="py-16 text-center text-[13px]" style={{color:'rgba(255,255,255,0.18)'}}>Sin proyectos en este filtro</div>}
@@ -2913,7 +2927,7 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
           </div>
 
           {/* Scrollable fields */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          <div className="flex-1 overflow-y-auto p-6 space-y-5" onKeyDown={(e)=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'&&!savingNotes){e.preventDefault();saveNotes()}}}>
             <div>
               <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.22)'}}>FECHA DE PUBLICACIÓN</div>
               <div className="flex gap-2">
@@ -2964,6 +2978,7 @@ function ContenidoSection({data,onOpenModal,showToast}: any) {
                 <LucideIcon name="trash" size={12} color="rgba(229,29,42,0.45)"/>
               </button>
             </div>
+            <div className="font-syne text-[7.5px] font-bold tracking-widest text-center" style={{color:'rgba(255,255,255,0.1)'}}>⌘+ENTER PARA GUARDAR</div>
           </div>
         </div>
       )}
