@@ -1361,15 +1361,27 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
           )}
 
           {/* Quick actions */}
-          <div className="rounded-2xl p-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-            <div className="font-syne text-[8.5px] font-black tracking-widest mb-4" style={{color:'rgba(255,255,255,0.2)'}}>ACCIONES</div>
+          <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+            <div className="px-5 py-4 font-syne text-[8.5px] font-black tracking-widest" style={{borderBottom:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.2)'}}>ACCIONES</div>
             {[
-              {label:'Nueva tarea',icon:'check',act:()=>onOpenModal('tarea')},
-              {label:'Nueva pieza',icon:'calendar',act:()=>onOpenModal('contenido')},
-              ...(isOwner?[{label:'Nuevo cliente',icon:'users',act:()=>onOpenModal('cliente')},{label:'Nuevo proyecto',icon:'folder-open',act:()=>onOpenModal('proyecto')}]:[]),
-            ].map(a=>(
-              <button key={a.label} onClick={a.act} className="flex items-center gap-3 w-full px-3 py-3 rounded-xl text-left transition-all mb-1 hover:bg-white/3" style={{color:'rgba(240,240,248,0.55)'}}>
-                <LucideIcon name={a.icon} size={14} color="rgba(27,95,250,0.5)"/><span className="text-[13px]">{a.label}</span>
+              {label:'Nueva tarea', sub:'Asignar y priorizar', icon:'check-square', c:BLU, act:()=>onOpenModal('tarea')},
+              {label:'Nueva pieza', sub:'Contenido · social', icon:'film', c:'#C13584', act:()=>onOpenModal('contenido')},
+              ...(isOwner?[
+                {label:'Nuevo cliente', sub:'CRM · gestión', icon:'users', c:GRN, act:()=>onOpenModal('cliente')},
+                {label:'Nuevo proyecto', sub:'Pipeline · kanban', icon:'folder-open', c:'rgba(255,176,32,0.9)', act:()=>onOpenModal('proyecto')},
+              ]:[]),
+            ].map((a,i,arr)=>(
+              <button key={a.label} onClick={a.act} className="flex items-center gap-3.5 w-full px-5 py-4 text-left transition-all group" style={{borderBottom:i<arr.length-1?`1px solid ${BORDER}`:'none'}}
+                onMouseEnter={e=>(e.currentTarget.style.background='rgba(255,255,255,0.025)')}
+                onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:a.c+'14',border:`1px solid ${a.c}25`}}>
+                  <LucideIcon name={a.icon} size={14} color={a.c+'cc'}/>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-medium leading-snug" style={{color:'rgba(255,255,255,0.82)'}}>{a.label}</div>
+                  <div className="font-syne text-[8px] font-black tracking-wide" style={{color:'rgba(255,255,255,0.2)'}}>{a.sub.toUpperCase()}</div>
+                </div>
+                <LucideIcon name="chevron-right" size={12} color="rgba(255,255,255,0.12)"/>
               </button>
             ))}
           </div>
