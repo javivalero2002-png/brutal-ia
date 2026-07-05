@@ -7,7 +7,8 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const gmailMessageId = searchParams.get('msgId')
   const attachmentId = searchParams.get('attId')
-  const filename = searchParams.get('filename') || 'download'
+  const rawFilename = searchParams.get('filename') || 'download'
+  const filename = rawFilename.replace(/[^\w.\-]/g, '_').slice(0, 200)
 
   if (!gmailMessageId || !attachmentId) {
     return NextResponse.json({ error: 'Missing params' }, { status: 400 })

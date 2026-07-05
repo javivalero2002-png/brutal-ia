@@ -730,6 +730,9 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                 ))}
               </div>
             )}
+            {filter === 'hecho' && filtered.length > 0 && isOwner && (
+              <button onClick={async()=>{ await Promise.all(filtered.map((t: Task)=>data.deleteTask(t.id))); showToast('Tareas eliminadas') }} className="font-syne text-[8px] font-black px-3 py-1.5 rounded-xl transition-all" style={{color:'rgba(229,29,42,0.5)',border:`1px solid rgba(229,29,42,0.15)`}}>LIMPIAR</button>
+            )}
             <span className="ml-auto font-syne text-[10px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{filtered.length}</span>
           </div>
         </div>
@@ -2142,6 +2145,8 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   const [editProgress, setEditProgress] = useState<number|null>(null)
   const [savingProgress, setSavingProgress] = useState(false)
   const selectedProject: Project|null = selectedId ? data.projects.find((p: Project)=>p.id===selectedId)||null : null
+
+  useEffect(() => { setEditProgress(null) }, [selectedId])
 
   const saveProgress = async () => {
     if (!selectedProject || editProgress === null) return
