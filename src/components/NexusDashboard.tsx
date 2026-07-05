@@ -683,6 +683,12 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
   const [editing, setEditing] = useState<Partial<Task>>({})
   const [saving, setSaving] = useState(false)
 
+  useEffect(()=>{
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && activeTask) setActiveTask(null) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [activeTask])
+
   const openTask = (t: Task) => {
     setActiveTask(t)
     setEditing({ text: t.text, level: t.level, assigned_to: t.assigned_to, done: t.done, due_date: t.due_date })
@@ -773,8 +779,11 @@ function TareasSection({data,onOpenModal,showToast,isOwner}: any) {
                   <div className="flex items-center gap-2 flex-wrap">
                     {(t.client as any)?.name && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:(t.client as any).color+'18',color:(t.client as any).color+'cc'}}>{(t.client as any).name}</span>}
                     {t.due_date && (() => {
-                      const overdue = !t.done && new Date(t.due_date+'T23:59:59') < new Date()
-                      return <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:overdue?'rgba(229,29,42,0.1)':'rgba(255,255,255,0.05)',color:overdue?RED:'rgba(255,255,255,0.35)'}}>{overdue?'● ':''}{new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>
+                      const todayStr = new Date().toISOString().split('T')[0]
+                      const isToday = t.due_date.slice(0,10) === todayStr
+                      const overdue = !t.done && !isToday && new Date(t.due_date+'T23:59:59') < new Date()
+                      const label = isToday ? 'HOY' : new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})
+                      return <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:isToday?'rgba(255,176,32,0.15)':overdue?'rgba(229,29,42,0.1)':'rgba(255,255,255,0.05)',color:isToday?'rgba(255,176,32,0.95)':overdue?RED:'rgba(255,255,255,0.35)'}}>{overdue?'● ':''}{label}</span>
                     })()}
                     {!t.done && t.level==='urgent' && <span className="font-syne text-[8px] font-black" style={{color:RED}}>● URGENTE</span>}
                     {t.source==='gmail' && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.55)'}}>GMAIL</span>}
@@ -1278,6 +1287,8 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
   const taskUrgencyOrder = (t: Task) => { const lp = t.level==='urgent'?0:t.level==='high'?1:2; const over = t.due_date && new Date(t.due_date+'T23:59:59')<new Date() ? -10 : 0; return lp + over }
   const myTasks = data.tasks.filter((t:Task) => !t.done && (t.assigned_to === profile.id || (!t.assigned_to && t.created_by === profile.id))).sort((a:Task,b:Task)=>taskUrgencyOrder(a)-taskUrgencyOrder(b))
   const otherTasks = isOwner ? data.tasks.filter((t:Task) => !t.done && t.assigned_to && t.assigned_to !== profile.id).sort((a:Task,b:Task)=>taskUrgencyOrder(a)-taskUrgencyOrder(b)) : []
+  const myOverdue = myTasks.filter((t:Task)=>t.due_date&&new Date(t.due_date+'T23:59:59')<new Date()).length
+  const myUrgent = myTasks.filter((t:Task)=>t.level==='urgent').length
   const recentInbox = data.inbox.filter((m:any) => !m.is_read).slice(0, 4)
   const activeProjects = data.projects.filter((p:Project)=>p.status==='activo'||p.status==='urgente')
   const todayStr = new Date().toISOString().split('T')[0]
@@ -1303,7 +1314,7 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
       {/* Stats row — inline, no cards */}
       <div className="grid grid-cols-4 gap-6 mb-10 pb-10" style={{borderBottom:`1px solid ${BORDER}`}}>
         {[
-          { n: myTasks.length, label:'Mis tareas', color:'rgba(255,255,255,0.92)', sub:myTasks.filter((t:Task)=>t.level==='urgent').length > 0 ? `${myTasks.filter((t:Task)=>t.level==='urgent').length} urgentes` : 'Al día' },
+          { n: myTasks.length, label:'Mis tareas', color:myOverdue>0?RED:'rgba(255,255,255,0.92)', sub:myOverdue>0?`${myOverdue} atrasada${myOverdue>1?'s':''}`:myUrgent>0?`${myUrgent} urgente${myUrgent>1?'s':''}` :'Al día' },
           { n: urgentCount, label:'Urgentes', color:urgentCount>0?RED:'rgba(255,255,255,0.25)', sub: urgentCount>0?'Requieren atención':'Todo bajo control' },
           { n: unreadCount, label:'Sin leer', color:unreadCount>0?BLU:'rgba(255,255,255,0.25)', sub:'En inbox' },
           { n: activeProjects.length, label:'Proyectos activos', color:'rgba(255,255,255,0.92)', sub:`${data.projects.length} en total` },
@@ -1345,8 +1356,11 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                   <div className="flex items-center gap-2 flex-wrap">
                     {t.client && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:(t.client as any).color+'18',color:(t.client as any).color+'cc'}}>{(t.client as any).name}</span>}
                     {t.due_date && (() => {
-                      const overdue = new Date(t.due_date+'T23:59:59') < new Date()
-                      return <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:overdue?'rgba(229,29,42,0.1)':'rgba(255,255,255,0.05)',color:overdue?RED:'rgba(255,255,255,0.35)'}}>{overdue?'● ':''}{new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>
+                      const todayStr = new Date().toISOString().split('T')[0]
+                      const isToday = t.due_date.slice(0,10) === todayStr
+                      const overdue = !isToday && new Date(t.due_date+'T23:59:59') < new Date()
+                      const label = isToday ? 'HOY' : new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})
+                      return <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:isToday?'rgba(255,176,32,0.15)':overdue?'rgba(229,29,42,0.1)':'rgba(255,255,255,0.05)',color:isToday?'rgba(255,176,32,0.95)':overdue?RED:'rgba(255,255,255,0.35)'}}>{overdue?'● ':''}{label}</span>
                     })()}
                     {t.level==='urgent' && <span className="font-syne text-[8px] font-black" style={{color:RED}}>● URGENTE</span>}
                   </div>
@@ -2059,6 +2073,12 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner
                 <div key={t.id} className="flex items-center gap-3 px-5 py-3" style={{borderBottom:i<Math.min(activeTasks.length,5)-1?`1px solid ${BORDER}`:'none',borderLeft:`2px solid ${t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.6)':BLU}40`}}>
                   <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.7)':BLU}}/>
                   <span className="font-figtree text-[12px] font-medium flex-1 truncate" style={{color:'rgba(255,255,255,0.6)'}}>{t.text}</span>
+                  {t.due_date && (()=>{
+                    const todayStr = new Date().toISOString().split('T')[0]
+                    const isToday = t.due_date.slice(0,10)===todayStr
+                    const over = !isToday && new Date(t.due_date+'T23:59:59')<new Date()
+                    return <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:isToday?'rgba(255,176,32,0.15)':over?`${RED}15`:'rgba(255,255,255,0.04)',color:isToday?'rgba(255,176,32,0.9)':over?RED:'rgba(255,255,255,0.25)'}}>{isToday?'HOY':new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>
+                  })()}
                 </div>
               ))}
               {activeTasks.length>5 && <div className="px-5 py-2 text-center text-[10px]" style={{color:'rgba(255,255,255,0.2)'}}>+{activeTasks.length-5} más</div>}
