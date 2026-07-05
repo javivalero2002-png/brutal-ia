@@ -1499,18 +1499,21 @@ function ReportesSection({data, onNavigate}: any) {
     {label:'Atrasados', count:overdueProjects.length, color:overdueProjects.length>0?RED:'rgba(255,255,255,0.15)'},
   ]
 
+  const weekAgoReport = new Date(); weekAgoReport.setDate(weekAgoReport.getDate()-7); weekAgoReport.setHours(0,0,0,0)
   const tasksByMember = data.team.map((m: Profile) => {
     const memberPending = tasks.filter(t=>!t.done&&t.assignee?.name===m.name)
     const memberDone = tasks.filter(t=>t.done&&t.assignee?.name===m.name)
     const urgentCount = memberPending.filter(t=>t.level==='urgent').length
     const highCount = memberPending.filter(t=>t.level==='high').length
     const normalCount = memberPending.length - urgentCount - highCount
+    const doneThisWeek = memberDone.filter(t=>new Date(t.updated_at||t.created_at)>=weekAgoReport).length
     return {
       name: m.name,
       initials: m.initials,
       color: m.avatar_color,
       pending: memberPending.length,
       done: memberDone.length,
+      doneThisWeek,
       workload: urgentCount*3 + highCount*2 + normalCount,
     }
   })
@@ -1650,6 +1653,7 @@ function ReportesSection({data, onNavigate}: any) {
                   <div className="w-6 h-6 rounded-full flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0" style={{background:m.color+'22',color:m.color}}>{m.initials}</div>
                   <span className="text-sm text-white/60 flex-1">{m.name}</span>
                   <span className="text-xs text-white/40">{m.pending} pend. · {m.done} hechas</span>
+                  {m.doneThisWeek > 0 && <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(34,197,94,0.08)',color:'rgba(34,197,94,0.65)'}} title="Completadas en los últimos 7 días">+{m.doneThisWeek} sem.</span>}
                   {m.workload > 0 && (
                     <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full flex-shrink-0" style={{background:m.workload>8?'rgba(229,29,42,0.12)':m.workload>4?'rgba(255,176,32,0.1)':'rgba(255,255,255,0.04)',color:m.workload>8?RED:m.workload>4?'rgba(255,176,32,0.8)':'rgba(255,255,255,0.3)'}} title="Índice de carga (urgentes×3 + altas×2 + normales×1)">{m.workload}pts</span>
                   )}
@@ -4188,6 +4192,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
   const [confirmDeleteMemId, setConfirmDeleteMemId] = useState<string|null>(null)
   const [copiedId, setCopiedId] = useState<string|null>(null)
   const [memSort, setMemSort] = useState<'reciente'|'az'>('reciente')
+  const [memClientFilter, setMemClientFilter] = useState<string>('Todos')
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(()=>{
     try { return new Set(JSON.parse(localStorage.getItem('pinned_memoria')||'[]')) } catch { return new Set() }
   })
@@ -4213,10 +4218,12 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
   }, [editing, onOpenModal])
   const cats = ['Todos','Clientes','Procesos','Decisiones','Aprendizajes','General']
   const catColor: Record<string,string> = { Clientes:BLU, Procesos:'rgba(255,176,32,0.9)', Decisiones:RED, Aprendizajes:GRN, General:'rgba(167,139,250,0.8)' }
+  const memoryClients = data.clients.filter((c: Client)=>data.memoria.some((m: any)=>m.client?.id===c.id))
   const byFilter = memFilter==='Todos' ? data.memoria : data.memoria.filter((m: any)=>m.category===memFilter)
+  const byClientFilter = memClientFilter==='Todos' ? byFilter : byFilter.filter((m: any)=>m.client?.id===memClientFilter)
   const filtered = (memSearch.trim()
-    ? byFilter.filter((m: any)=>(m.title+' '+m.content).toLowerCase().includes(memSearch.toLowerCase()))
-    : byFilter).sort((a: any, b: any) => {
+    ? byClientFilter.filter((m: any)=>(m.title+' '+m.content).toLowerCase().includes(memSearch.toLowerCase()))
+    : byClientFilter).sort((a: any, b: any) => {
       const pinDiff = (pinnedIds.has(b.id)?1:0) - (pinnedIds.has(a.id)?1:0)
       if (pinDiff !== 0) return pinDiff
       if (memSort === 'az') return (a.title||'').localeCompare(b.title||'', 'es', {sensitivity:'base'})
@@ -4267,7 +4274,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
         {memSearch && <button onClick={()=>setMemSearch('')} className="flex-shrink-0"><LucideIcon name="x" size={12} color="rgba(255,255,255,0.2)"/></button>}
       </div>
       {/* Category filter */}
-      <div className="flex gap-1 mb-6 p-1 rounded-2xl w-fit" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+      <div className="flex gap-1 mb-3 p-1 rounded-2xl w-fit" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
         {cats.map(c=>{
           const cnt = c==='Todos' ? data.memoria.length : data.memoria.filter((m:any)=>m.category===c).length
           return (
@@ -4278,6 +4285,22 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
           )
         })}
       </div>
+      {/* Client filter chips */}
+      {memoryClients.length > 0 && (
+        <div className="flex items-center gap-1 mb-5 flex-wrap">
+          <button onClick={()=>setMemClientFilter('Todos')} className="flex items-center gap-1 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:memClientFilter==='Todos'?SURF2:'transparent',border:`1px solid ${memClientFilter==='Todos'?'rgba(255,255,255,0.12)':BORDER}`,color:memClientFilter==='Todos'?'rgba(255,255,255,0.7)':'rgba(255,255,255,0.25)'}}>Todos</button>
+          {memoryClients.map((c: Client)=>{
+            const cnt = byFilter.filter((m: any)=>m.client?.id===c.id).length
+            return (
+              <button key={c.id} onClick={()=>setMemClientFilter(memClientFilter===c.id?'Todos':c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:memClientFilter===c.id?c.color+'14':'transparent',border:`1px solid ${memClientFilter===c.id?c.color+'40':BORDER}`,color:memClientFilter===c.id?c.color+'cc':'rgba(255,255,255,0.25)'}}>
+                <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:memClientFilter===c.id?c.color:c.color+'60'}}/>
+                {c.name}
+                <span className="text-[6.5px]" style={{opacity:0.6}}>{cnt}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
       <div className="space-y-2">
         {filtered.map((m: any)=>{
           const isExp = expanded===m.id
