@@ -135,7 +135,7 @@ export default function NexusDashboard({ profile }: Props) {
     return [
       ...data.clients.map(c => ({ type:'Cliente', title:c.name, sub:c.industry, act:()=>{ setSelectedClient(c.id); setSection('clientes'); setSearchOpen(false) }})),
       ...data.projects.map(p => ({ type:'Proyecto', title:p.name, sub:p.client?.name||'—', act:()=>{ setSelectedProject(p.id); setSection('proyectos'); setSearchOpen(false) }})),
-      ...data.tasks.map(t => ({ type:'Tarea', title:t.text, sub:t.level, act:()=>{ setSection('hoy'); setSearchOpen(false) }})),
+      ...data.tasks.map(t => ({ type:'Tarea', title:t.text, sub:t.level==='urgent'?'Urgente':t.level==='high'?'Alta':'Normal', act:()=>{ setSection('hoy'); setSearchOpen(false) }})),
       ...data.memoria.map(m => ({ type:'Memoria', title:m.title, sub:m.category, act:()=>{ setSection('memoria'); setSearchOpen(false) }})),
     ].filter(r => r.title.toLowerCase().includes(q) || r.sub.toLowerCase().includes(q)).slice(0, 8)
   })()
@@ -236,9 +236,9 @@ export default function NexusDashboard({ profile }: Props) {
         <div className="text-center">
           <div className="font-syne text-[10px] font-black tracking-[0.3em] mb-6" style={{color:'rgba(27,95,250,0.5)'}}>BRUTAL.IA</div>
           <div className="flex gap-2 justify-center">
-            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-dot1"/>
-            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-dot2"/>
-            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-dot3"/>
+            <div className="w-1.5 h-1.5 rounded-full animate-dot1" style={{background:BLU}}/>
+            <div className="w-1.5 h-1.5 rounded-full animate-dot2" style={{background:BLU}}/>
+            <div className="w-1.5 h-1.5 rounded-full animate-dot3" style={{background:BLU}}/>
           </div>
         </div>
       </div>
@@ -3087,9 +3087,9 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
                   <img src="https://brutal.thehook-produccion.es/wp-content/themes/brutal-studios/assets/img/brutal-logo-white.svg" className="w-full opacity-80" alt=""/>
                 </div>
                 <div className="flex gap-1 px-4 py-3.5 rounded-2xl" style={{background:'rgba(12,12,22,0.95)',border:`1px solid ${BORDER}`}}>
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-dot1"/>
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-dot2"/>
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-dot3"/>
+                  <div className="w-1.5 h-1.5 rounded-full animate-dot1" style={{background:BLU}}/>
+                  <div className="w-1.5 h-1.5 rounded-full animate-dot2" style={{background:BLU}}/>
+                  <div className="w-1.5 h-1.5 rounded-full animate-dot3" style={{background:BLU}}/>
                 </div>
               </div>
             )}
