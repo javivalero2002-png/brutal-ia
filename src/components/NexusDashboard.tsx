@@ -807,10 +807,10 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
         onOpenModal('tarea')
         return
       }
-      if ((e.key === 'j' || e.key === 'k') && activeTask && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
+      if ((e.key === 'j' || e.key === 'k') && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
         e.preventDefault()
         const tasks = filteredTasksRef.current
-        const idx = tasks.findIndex(t=>t.id===activeTask.id)
+        const idx = activeTask ? tasks.findIndex(t=>t.id===activeTask.id) : -1
         const next = e.key==='j' ? Math.min(idx+1, tasks.length-1) : Math.max(idx-1, 0)
         const t = tasks[next]
         if (t) { setActiveTask(t); setEditing({ text:t.text, level:t.level, assigned_to:t.assigned_to, done:t.done, due_date:t.due_date, project_id:t.project_id }); setConfirmDeleteTask(false) }
@@ -2385,6 +2385,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient}: any) {
   const [selected, setSelected] = useState<any>(null)
   const [creatingTask, setCreatingTask] = useState(false)
   const filteredRef = useRef<any[]>([])
+  const allInboxRef = useRef<any[]>([])
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
@@ -2409,12 +2410,21 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient}: any) {
           return m || sel
         })
       }
+      if (e.key === 'a' && !selected && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
+        e.preventDefault()
+        const unreadMsgs = allInboxRef.current.filter((m: any) => !m.is_read)
+        if (unreadMsgs.length > 0) {
+          Promise.all(unreadMsgs.map((m: any) => data.markRead(m.id)))
+          showToast(`${unreadMsgs.length} mensajes marcados como leídos`)
+        }
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [selected])
 
   const allMsgs: any[] = data.inbox
+  allInboxRef.current = allMsgs
   const unread = allMsgs.filter(m=>!m.is_read).length
   const urgent = allMsgs.filter(m=>m.ai_urgency==='urgent'&&!m.is_read).length
   const internal = allMsgs.filter(m=>m.source==='internal'&&!m.is_read).length
@@ -2494,7 +2504,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient}: any) {
               <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>SEÑALES</div>
               <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.04em'}}>Inbox</h1>
               <div className="flex items-center gap-2 mt-1.5">
-                {(['J/K NAVEGAR','E LEÍDO','T TAREA','ESC CERRAR'] as const).map((hint,i,arr)=>(
+                {(['J/K NAVEGAR','E LEÍDO','T TAREA','A TODO LEÍDO','ESC CERRAR'] as const).map((hint,i,arr)=>(
                   <span key={hint} className="flex items-center gap-2">
                     <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>{hint}</span>
                     {i<arr.length-1&&<span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>}
@@ -3317,6 +3327,8 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   const selectedProject: Project|null = selectedId ? data.projects.find((p: Project)=>p.id===selectedId)||null : null
   const projViewRef = useRef<'board'|'list'>('board')
   projViewRef.current = projView
+  const selectedProjectRef = useRef<Project|null>(null)
+  selectedProjectRef.current = selectedProject
 
   useEffect(() => { setEditProgress(null); setConfirmDeleteDetail(false); setQuickProjTask('') }, [selectedId])
 
@@ -3326,6 +3338,15 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
       if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
       if (e.key === 'n' && !selectedId) { e.preventDefault(); onOpenModal('proyecto') }
       if (e.key === 'v' && !selectedId) { e.preventDefault(); setProjView(projViewRef.current === 'board' ? 'list' : 'board') }
+      if (e.key === 's' && selectedId) {
+        e.preventDefault()
+        const proj = selectedProjectRef.current
+        if (!proj) return
+        const statuses = ['plan.','activo','urgente','revisión','completado'] as const
+        const curr = statuses.indexOf(proj.status as typeof statuses[number])
+        const next = statuses[(curr+1)%statuses.length]
+        data.updateProject(proj.id, {status:next}).then(()=>showToast(`Estado: ${next}`)).catch(()=>{})
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -3578,7 +3599,10 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
           </div>
           {/* Status pills */}
           <div className="mb-5">
-            <div className="font-syne text-[8px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>ESTADO</div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.25)'}}>ESTADO</div>
+              <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.08)'}}>S CICLAR</span>
+            </div>
             <div className="flex gap-1.5 flex-wrap">
               {[{s:'plan.',l:'Planif.',c:'rgba(255,255,255,0.4)'},{s:'activo',l:'Activo',c:GRN},{s:'urgente',l:'Urgente',c:RED},{s:'revisión',l:'Revisión',c:'rgba(167,139,250,0.9)'},{s:'completado',l:'Completado',c:'rgba(34,197,94,0.6)'}].map(opt=>(
                 <button key={opt.s} onClick={async()=>{ await data.updateProject(selectedProject.id,{status:opt.s}); showToast(`Estado: ${opt.l}`) }} className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:selectedProject.status===opt.s?opt.c+'18':SURF2,border:`1px solid ${selectedProject.status===opt.s?opt.c+'50':BORDER}`,color:selectedProject.status===opt.s?opt.c:'rgba(255,255,255,0.3)'}}>{opt.l.toUpperCase()}</button>
