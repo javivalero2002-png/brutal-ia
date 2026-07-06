@@ -1241,16 +1241,29 @@ function EquipoSection({data, profile, showToast}: any) {
   const [loadingThread, setLoadingThread] = useState(false)
   const [msgBody, setMsgBody] = useState('')
   const [sending, setSending] = useState(false)
+  const allActiveRef = useRef<Profile[]>([])
 
   useEffect(()=>{
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && selected) setSelected(null) }
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selected) { setSelected(null); return }
+      if ((e.key === 'j' || e.key === 'k') && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
+        e.preventDefault()
+        const members = allActiveRef.current.filter((m: Profile)=>m.id!==profile?.id)
+        const idx = selected ? members.findIndex((m: Profile)=>m.id===selected.id) : -1
+        const next = e.key==='j' ? Math.min(idx+1, members.length-1) : Math.max(idx-1, 0)
+        const member = members[next]
+        if (member) openThread(member)
+      }
+    }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected])
 
   const allActive: Profile[] = data.team.some((m: Profile) => m.id === profile?.id)
     ? data.team
     : (profile ? [profile, ...data.team] : data.team)
+  allActiveRef.current = allActive
 
   const PENDING = [
     { name: 'Javi', role: 'Propietario', initials: 'JV', avatar_color: BLU, email: 'javivalero2002@gmail.com' },
@@ -2433,6 +2446,14 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient}: any) {
             <div>
               <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>SEÑALES</div>
               <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.04em'}}>Inbox</h1>
+              <div className="flex items-center gap-2 mt-1.5">
+                {(['J/K NAVEGAR','E LEÍDO','T TAREA','ESC CERRAR'] as const).map((hint,i,arr)=>(
+                  <span key={hint} className="flex items-center gap-2">
+                    <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>{hint}</span>
+                    {i<arr.length-1&&<span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>}
+                  </span>
+                ))}
+              </div>
             </div>
             <div className="flex items-center gap-2">
               {data.inbox.filter((m: any)=>!m.is_read).length > 0 && (
@@ -3979,7 +4000,13 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient}
                   </button>
               }
             </div>
-            <div className="font-syne text-[7.5px] font-bold tracking-widest text-center" style={{color:'rgba(255,255,255,0.1)'}}>⌘+ENTER PARA GUARDAR</div>
+            <div className="flex items-center justify-center gap-2">
+              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>⌘+ENTER GUARDAR</span>
+              <span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
+              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>S ESTADO</span>
+              <span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
+              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>ESC CERRAR</span>
+            </div>
           </div>
         </div>
       )}
