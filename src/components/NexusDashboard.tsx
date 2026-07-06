@@ -797,6 +797,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
   const [confirmDeleteTask, setConfirmDeleteTask] = useState(false)
   const [confirmLimpiar, setConfirmLimpiar] = useState(false)
   const filteredTasksRef = useRef<Task[]>([])
+  const dueDateRef = useRef<HTMLInputElement>(null)
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
@@ -817,6 +818,10 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
       if (e.key === 'c' && activeTask && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
         e.preventDefault()
         setEditing(x => ({...x, done: !x.done}))
+      }
+      if (e.key === 'd' && activeTask && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
+        e.preventDefault()
+        dueDateRef.current?.focus()
       }
     }
     window.addEventListener('keydown', handler)
@@ -1170,7 +1175,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
             {/* Due date */}
             <div>
               <label className="block font-syne text-[9px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.25)'}}>FECHA LÍMITE</label>
-              <input type="date" value={editing.due_date||''} onChange={e=>setEditing(x=>({...x,due_date:e.target.value||undefined}))} className="w-full px-5 py-3 rounded-2xl text-[13px] text-white outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,colorScheme:'dark'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+              <input ref={dueDateRef} type="date" value={editing.due_date||''} onChange={e=>setEditing(x=>({...x,due_date:e.target.value||undefined}))} className="w-full px-5 py-3 rounded-2xl text-[13px] text-white outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,colorScheme:'dark'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
             </div>
 
             {/* Meta info */}
@@ -1212,7 +1217,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
               <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
               <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>J/K NAVEGAR</span>
               <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
-              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>C ESTADO</span>
+              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>C ESTADO · D FECHA</span>
             </div>
           </div>
         </div>
@@ -3048,6 +3053,7 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
 
   const [clientSearch, setClientSearch] = useState('')
   const [clientStatusFilter, setClientStatusFilter] = useState('Todos')
+  const [clientSort, setClientSort] = useState<'default'|'revenue'|'tareas'|'proyectos'>('default')
 
   // Parse revenue string → number (handles "€12.000/mes", "12000", "12.000€", etc.)
   const parseRevenue = (s: string): number => {
@@ -3062,6 +3068,13 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
     const matchSearch = !clientSearch.trim() || c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.industry?.toLowerCase().includes(clientSearch.toLowerCase())
     return matchStatus && matchSearch
   })
+  const sortedClients: Client[] = clientSort === 'revenue'
+    ? [...visibleClients].sort((a:Client,b:Client)=>parseRevenue(b.revenue||'')-parseRevenue(a.revenue||''))
+    : clientSort === 'tareas'
+    ? [...visibleClients].sort((a:Client,b:Client)=>data.tasks.filter((t:Task)=>t.client_id===b.id&&!t.done).length-data.tasks.filter((t:Task)=>t.client_id===a.id&&!t.done).length)
+    : clientSort === 'proyectos'
+    ? [...visibleClients].sort((a:Client,b:Client)=>data.projects.filter((p:Project)=>p.client_id===b.id&&(p.status==='activo'||p.status==='urgente')).length-data.projects.filter((p:Project)=>p.client_id===a.id&&(p.status==='activo'||p.status==='urgente')).length)
+    : visibleClients
 
   return (
     <div className="p-8 max-w-[1200px] mx-auto">
@@ -3115,6 +3128,12 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
             ))}
           </div>
           {(clientSearch||clientStatusFilter!=='Todos') && <span className="font-syne text-[9px] font-black" style={{color:'rgba(255,255,255,0.25)'}}>{visibleClients.length}</span>}
+          <div className="flex items-center gap-0.5 p-1 rounded-xl ml-auto" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+            <span className="font-syne text-[7.5px] font-black tracking-wide px-2" style={{color:'rgba(255,255,255,0.15)'}}>ORDEN</span>
+            {([['default','—'],['revenue','Revenue'],['tareas','Tareas'],['proyectos','Proyectos']] as [string,string][]).map(([v,l])=>(
+              <button key={v} onClick={()=>setClientSort(v as 'default'|'revenue'|'tareas'|'proyectos')} className="px-2.5 py-1.5 rounded-lg font-syne text-[8px] font-black tracking-wide transition-all" style={{background:clientSort===v?SURF2:'transparent',color:clientSort===v?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.25)'}}>{l}</button>
+            ))}
+          </div>
         </div>
       )}
       {data.clients.length === 0 ? (
@@ -3128,7 +3147,7 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
         </div>
       ) : (
         <div className="grid grid-cols-3 gap-5">
-          {visibleClients.map((c: Client)=>{
+          {sortedClients.map((c: Client)=>{
             const nProj = data.projects.filter((p:Project)=>p.client_id===c.id).length
             const nTaskPending = data.tasks.filter((t:Task)=>t.client_id===c.id&&!t.done).length
             const nUrgent = data.tasks.filter((t:Task)=>t.client_id===c.id&&!t.done&&t.level==='urgent').length
@@ -4530,6 +4549,8 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
   const activeCount = data.reglas.filter((r: Regla)=>r.active).length
   const totalFired = data.reglas.reduce((s: number, r: Regla)=>s+(r.trigger_count||0),0)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string|null>(null)
+  const [reglaSearch, setReglaSearch] = useState('')
+  const visibleReglas = data.reglas.filter((r: Regla)=>!reglaSearch.trim()||r.name.toLowerCase().includes(reglaSearch.toLowerCase())||(r.condition_text||'').toLowerCase().includes(reglaSearch.toLowerCase())||(r.action_text||'').toLowerCase().includes(reglaSearch.toLowerCase()))
   return (
     <div className="p-8 max-w-[900px] mx-auto">
       <div className="flex items-end justify-between mb-8">
@@ -4551,9 +4572,16 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
           {isOwner && <button onClick={()=>onOpenModal('regla')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ REGLA</button>}
         </div>
       </div>
+      {data.reglas.length > 4 && (
+        <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl mb-5" style={{background:SURFACE,border:`1px solid ${BORDER}`,maxWidth:'320px'}}>
+          <LucideIcon name="search" size={12} color="rgba(255,255,255,0.2)"/>
+          <input value={reglaSearch} onChange={e=>setReglaSearch(e.target.value)} placeholder="Busca regla…" className="flex-1 bg-transparent text-[12px] outline-none" style={{caretColor:BLU,color:'rgba(255,255,255,0.75)'}}/>
+          {reglaSearch && <button onClick={()=>setReglaSearch('')}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.2)"/></button>}
+        </div>
+      )}
       <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-        {data.reglas.map((r: Regla, i: number)=>(
-          <div key={r.id} className="group flex items-center gap-4 px-5 py-4 transition-all" style={{borderBottom:i<data.reglas.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${r.active?BLU+'60':'transparent'}`,opacity:r.active?1:0.45}}>
+        {visibleReglas.map((r: Regla, i: number)=>(
+          <div key={r.id} className="group flex items-center gap-4 px-5 py-4 transition-all" style={{borderBottom:i<visibleReglas.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${r.active?BLU+'60':'transparent'}`,opacity:r.active?1:0.45}}>
             <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:r.active?'rgba(27,95,250,0.08)':'rgba(255,255,255,0.03)',border:`1px solid ${r.active?'rgba(27,95,250,0.18)':BORDER}`}}>
               <LucideIcon name="zap" size={14} color={r.active?BLU:'rgba(255,255,255,0.2)'}/>
             </div>
@@ -4589,6 +4617,7 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
             )}
           </div>
         ))}
+        {reglaSearch && visibleReglas.length===0&&<div className="py-10 text-center text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin resultados para "{reglaSearch}"</div>}
         {data.reglas.length===0&&(
           <div className="py-10 px-6">
             <div className="text-center text-[12px] mb-6" style={{color:'rgba(255,255,255,0.2)'}}>Sin reglas · empieza con una plantilla</div>
