@@ -3337,6 +3337,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   projViewRef.current = projView
   const selectedProjectRef = useRef<Project|null>(null)
   selectedProjectRef.current = selectedProject
+  const progressInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { setEditProgress(null); setConfirmDeleteDetail(false); setQuickProjTask('') }, [selectedId])
 
@@ -3355,6 +3356,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
         const next = statuses[(curr+1)%statuses.length]
         data.updateProject(proj.id, {status:next}).then(()=>showToast(`Estado: ${next}`)).catch(()=>{})
       }
+      if (e.key === 'p' && selectedId) { e.preventDefault(); progressInputRef.current?.focus() }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -3623,7 +3625,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 <div className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.25)'}}>PROGRESO</div>
                 <span className="font-syne text-[10px] font-black" style={{color:selectedProject.color||BLU}}>{editProgress??selectedProject.progress}%</span>
               </div>
-              <input type="range" min={0} max={100} step={5} value={editProgress??selectedProject.progress}
+              <input ref={progressInputRef} type="range" min={0} max={100} step={5} value={editProgress??selectedProject.progress}
                 onChange={e=>setEditProgress(Number(e.target.value))}
                 className="w-full h-1.5 rounded-full outline-none cursor-pointer appearance-none"
                 style={{accentColor:selectedProject.color||BLU,background:`linear-gradient(to right,${selectedProject.color||BLU} ${editProgress??selectedProject.progress}%,rgba(255,255,255,0.1) ${editProgress??selectedProject.progress}%)`}}
@@ -4980,14 +4982,19 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [copiedId, setCopiedId] = useState<string|null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
+  const sendTextRef = useRef<(txt: string)=>void>(()=>{})
+  const chatLoadingRef = useRef(false)
+  const promptsRef = useRef<{text:string,cat:string}[]>([])
 
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}) },[data.chatMessages])
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'n' && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
-        e.preventDefault()
-        inputRef.current?.focus()
+      if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
+      if (e.key === 'n') { e.preventDefault(); inputRef.current?.focus(); return }
+      if (!chatLoadingRef.current) {
+        const n = parseInt(e.key)
+        if (n >= 1 && n <= promptsRef.current.length) { e.preventDefault(); sendTextRef.current(promptsRef.current[n-1].text) }
       }
     }
     window.addEventListener('keydown', handler)
@@ -5031,6 +5038,9 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
     {text:'Dame prioridades para hoy', cat:'HOY'},
   ]
 
+  sendTextRef.current = sendText
+  chatLoadingRef.current = chatLoading
+  promptsRef.current = PROMPTS
   const isEmpty = data.chatMessages.length === 0
 
   return (
@@ -5048,6 +5058,8 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
                 <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.15)'}}>ASISTENTE CON CONTEXTO COMPLETO</span>
                 <span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
                 <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>N ESCRIBIR</span>
+                <span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
+                <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>1-6 PROMPTS</span>
               </div>
             </div>
           </div>
@@ -5089,10 +5101,11 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
             <div className="font-figtree text-[15px] font-black text-white mb-1" style={{letterSpacing:'-0.02em'}}>¿En qué puedo ayudarte?</div>
             <div className="font-syne text-[8.5px] font-bold tracking-widest mb-7" style={{color:'rgba(255,255,255,0.18)'}}>TENGO ACCESO A TODOS TUS DATOS</div>
             <div className="grid grid-cols-2 gap-2 w-full max-w-[340px]">
-              {PROMPTS.map(p=>(
-                <button key={p.text} onClick={()=>sendText(p.text)} className="text-left p-4 rounded-2xl transition-all" style={{background:SURF2,border:`1px solid ${BORDER}`}}
+              {PROMPTS.map((p,pi)=>(
+                <button key={p.text} onClick={()=>sendText(p.text)} className="text-left p-4 rounded-2xl transition-all relative" style={{background:SURF2,border:`1px solid ${BORDER}`}}
                   onMouseEnter={e=>(e.currentTarget.style.borderColor='rgba(27,95,250,0.3)')}
                   onMouseLeave={e=>(e.currentTarget.style.borderColor=BORDER)}>
+                  <span className="absolute top-2 right-2.5 font-syne text-[7px] font-black" style={{color:'rgba(255,255,255,0.08)'}}>{pi+1}</span>
                   <div className="font-syne text-[7px] font-black tracking-widest mb-1.5" style={{color:'rgba(27,95,250,0.65)'}}>{p.cat}</div>
                   <div className="text-[11.5px] leading-snug" style={{color:'rgba(255,255,255,0.48)'}}>{p.text}</div>
                 </button>
