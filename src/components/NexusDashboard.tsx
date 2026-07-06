@@ -823,6 +823,14 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
         e.preventDefault()
         dueDateRef.current?.focus()
       }
+      if (e.key === 'l' && activeTask && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
+        e.preventDefault()
+        setEditing(x => {
+          const levels = ['normal','high','urgent'] as const
+          const curr = levels.indexOf(x.level as 'normal'|'high'|'urgent')
+          return {...x, level: levels[(curr+1)%levels.length]}
+        })
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -1217,7 +1225,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
               <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
               <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>J/K NAVEGAR</span>
               <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
-              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>C ESTADO · D FECHA</span>
+              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>C ESTADO · D FECHA · L NIVEL</span>
             </div>
           </div>
         </div>
@@ -3235,10 +3243,13 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   useEffect(() => { setEditProgress(null); setConfirmDeleteDetail(false); setQuickProjTask('') }, [selectedId])
 
   useEffect(()=>{
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && selectedId) onSelect(null) }
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedId) { onSelect(null); return }
+      if (e.key === 'n' && !selectedId && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) { e.preventDefault(); onOpenModal('proyecto') }
+    }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [selectedId, onSelect])
+  }, [selectedId, onSelect, onOpenModal])
 
   const saveProgress = async () => {
     if (!selectedProject || editProgress === null) return
@@ -3592,9 +3603,18 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient}
         e.preventDefault()
         onOpenModal('contenido')
       }
+      if (e.key === 's' && activeItem && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
+        e.preventDefault()
+        const statuses = ['borrador','pendiente','listo','publicado']
+        const curr = statuses.indexOf(activeItem.status)
+        const next = statuses[(curr+1)%statuses.length]
+        data.updateAgenda(activeItem.id, {status:next}).catch(()=>{})
+        setActiveItem((prev: any) => ({...prev, status: next}))
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeItem, onOpenModal])
 
   const platColor: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
