@@ -1262,11 +1262,14 @@ function EquipoSection({data, profile, showToast}: any) {
   const [msgBody, setMsgBody] = useState('')
   const [sending, setSending] = useState(false)
   const allActiveRef = useRef<Profile[]>([])
+  const msgInputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && selected) { setSelected(null); return }
-      if ((e.key === 'j' || e.key === 'k') && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
+      if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
+      if (e.key === 'm' && selected) { e.preventDefault(); msgInputRef.current?.focus(); return }
+      if (e.key === 'j' || e.key === 'k') {
         e.preventDefault()
         const members = allActiveRef.current.filter((m: Profile)=>m.id!==profile?.id)
         const idx = selected ? members.findIndex((m: Profile)=>m.id===selected.id) : -1
@@ -1325,7 +1328,15 @@ function EquipoSection({data, profile, showToast}: any) {
       <div className="flex flex-col overflow-hidden" style={{width:'360px',flexShrink:0,borderRight:`1px solid ${BORDER}`}}>
         <div className="px-6 pt-6 pb-4 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
           <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1" style={{color:'rgba(255,255,255,0.18)'}}>BRUTAL STUDIOS</div>
-          <h1 className="font-figtree text-[22px] font-black text-white leading-none mb-3" style={{letterSpacing:'-0.03em'}}>Equipo</h1>
+          <h1 className="font-figtree text-[22px] font-black text-white leading-none mb-1" style={{letterSpacing:'-0.03em'}}>Equipo</h1>
+          <div className="flex items-center gap-2 mb-3">
+            {(['J/K NAVEGAR','M MENSAJE','ESC CERRAR'] as const).map((hint,i,arr)=>(
+              <span key={hint} className="flex items-center gap-2">
+                <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>{hint}</span>
+                {i<arr.length-1&&<span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>}
+              </span>
+            ))}
+          </div>
           {(()=>{
             const teamPending = data.tasks.filter((t: Task)=>!t.done&&!!t.assignee).length
             const teamOverdue = data.tasks.filter((t: Task)=>!t.done&&!!t.assignee&&!!t.due_date&&new Date(t.due_date+'T23:59:59')<new Date()).length
@@ -1506,6 +1517,7 @@ function EquipoSection({data, profile, showToast}: any) {
           <div className="flex-shrink-0 p-4" style={{borderTop:`1px solid ${BORDER}`}}>
             <div className="flex gap-2 items-end">
               <textarea
+                ref={msgInputRef}
                 value={msgBody}
                 onChange={e=>setMsgBody(e.target.value)}
                 onKeyDown={e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){sendMessage()}}}
@@ -2811,10 +2823,15 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
   useEffect(() => { setClientEditOpen(false); setConfirmDeleteClient(false) }, [selectedId])
 
   useEffect(()=>{
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && clientEditOpen) setClientEditOpen(false) }
+    const handler = (e: KeyboardEvent) => {
+      if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
+      if (e.key === 'Escape') { if (clientEditOpen) { setClientEditOpen(false); return } if (selected) { onSelect(null); return } }
+      if (e.key === 'n' && !selected && isOwner) { e.preventDefault(); onOpenModal('cliente') }
+    }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [clientEditOpen])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientEditOpen, selected, isOwner])
 
   const loadComments = async (id: string) => {
     setCommentsLoading(true)
@@ -4991,7 +5008,11 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
             </div>
             <div>
               <div className="font-figtree text-[16px] font-black text-white leading-none" style={{letterSpacing:'-0.025em'}}>BRUTAL<span style={{color:BLU}}>.IA</span></div>
-              <div className="font-syne text-[7.5px] font-bold tracking-widest mt-0.5" style={{color:'rgba(255,255,255,0.2)'}}>ASISTENTE CON CONTEXTO COMPLETO</div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.15)'}}>ASISTENTE CON CONTEXTO COMPLETO</span>
+                <span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
+                <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>N ESCRIBIR</span>
+              </div>
             </div>
           </div>
           {!isEmpty && (
