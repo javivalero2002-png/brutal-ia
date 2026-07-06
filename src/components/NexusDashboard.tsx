@@ -2335,6 +2335,9 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient}: any) {
         else { data.markRead(selected.id); setSelected((s: any)=>s?{...s,is_read:true,is_unread:false}:s) }
         return
       }
+      if (e.key === 't' && selected && selected.ai_action && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
+        e.preventDefault(); createTaskFromEmail(selected); return
+      }
       if ((e.key === 'j' || e.key === 'k') && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
         e.preventDefault()
         const msgs = filteredRef.current
@@ -4022,6 +4025,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
       if (e.key === 'ArrowLeft') { e.preventDefault(); prevMonth() }
       else if (e.key === 'ArrowRight') { e.preventDefault(); nextMonth() }
       else if (e.key === 't') { e.preventDefault(); setViewMonth(today.getMonth()); setViewYear(today.getFullYear()); setSelectedDay(today) }
+      else if (e.key === 'n') { e.preventDefault(); onOpenModal('tarea') }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -4105,6 +4109,13 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
           <div>
             <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>AGENDA</div>
             <h1 className="font-figtree text-[24px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Calendario</h1>
+            <div className="flex items-center gap-2 mt-1.5">
+              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>← → NAVEGAR</span>
+              <span className="font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
+              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>T HOY</span>
+              <span className="font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
+              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>N TAREA</span>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             {/* Calendar sync */}
@@ -4398,13 +4409,18 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && editing) { setEditing(null); return }
-      if (e.key === 'n' && !editing && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
-        e.preventDefault(); onOpenModal('memoria')
+      if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
+      if (e.key === 'n' && !editing) { e.preventDefault(); onOpenModal('memoria') }
+      if (e.key === 'p' && expanded && !editing) {
+        e.preventDefault()
+        const isPinned = pinnedIds.has(expanded)
+        togglePin(expanded)
+        showToast(isPinned ? 'Entrada desanclada' : 'Entrada anclada')
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [editing, onOpenModal])
+  }, [editing, onOpenModal, expanded, pinnedIds])
   const cats = ['Todos','Clientes','Procesos','Decisiones','Aprendizajes','General']
   const catColor: Record<string,string> = { Clientes:BLU, Procesos:'rgba(255,176,32,0.9)', Decisiones:RED, Aprendizajes:GRN, General:'rgba(167,139,250,0.8)' }
   const memoryClients = data.clients.filter((c: Client)=>data.memoria.some((m: any)=>m.client?.id===c.id))
