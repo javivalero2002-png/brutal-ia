@@ -87,8 +87,11 @@ export default function NexusDashboard({ profile }: Props) {
   const [projView, setProjView] = useState<'board'|'list'>('board')
   const [projStatusFilter, setProjStatusFilter] = useState('Todos')
   const [memFilter, setMemFilter] = useState('Todos')
+  const [showShortcuts, setShowShortcuts] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const sr = useRef<any[]>([])
+  const showShortcutsRef = useRef(false)
+  const sectionRef = useRef<Section>('hoy')
   const supabase = createClient()
 
   const showToast = useCallback((msg: string) => {
@@ -103,9 +106,10 @@ export default function NexusDashboard({ profile }: Props) {
     const NAV: Record<string, Section> = { h:'hoy', t:'tareas', i:'inbox', c:'clientes', p:'proyectos', k:'contenido', a:'calendario', m:'memoria', e:'equipo', r:'reportes', s:'ajustes', v:'automatizaciones', n:'chat' }
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(true); setSearchQuery(''); setSearchIdx(-1); return }
-      if (e.key === 'Escape') { setSearchOpen(false); setModal(null); return }
+      if (e.key === 'Escape') { if (showShortcutsRef.current) { setShowShortcuts(false); return } setSearchOpen(false); setModal(null); return }
       const tag = (e.target as HTMLElement)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); setShowShortcuts(s => !s); return }
       if (e.key.toLowerCase() === 'g' && !e.metaKey && !e.ctrlKey) {
         gPendingRef.current = true
         if (gTimerRef.current) clearTimeout(gTimerRef.current)
@@ -238,6 +242,8 @@ export default function NexusDashboard({ profile }: Props) {
   ]
 
   const dragRef = useRef<string|null>(null)
+  showShortcutsRef.current = showShortcuts
+  sectionRef.current = section
 
   const NAV_SC: Partial<Record<Section,string>> = { hoy:'H', tareas:'T', inbox:'I', clientes:'C', proyectos:'P', contenido:'K', calendario:'A', memoria:'M', equipo:'E', reportes:'R', ajustes:'S', automatizaciones:'V', chat:'N' }
 
@@ -645,11 +651,88 @@ export default function NexusDashboard({ profile }: Props) {
         )
       })()}
 
+      {/* SHORTCUTS OVERLAY */}
+      {showShortcuts && (() => {
+        const SECTION_HINTS: Partial<Record<Section,{key:string;label:string}[]>> = {
+          hoy: [{key:'N',label:'Nueva tarea'}],
+          tareas: [{key:'J / K',label:'Navegar lista'},{key:'N',label:'Nueva tarea'},{key:'C',label:'Completar tarea'},{key:'L',label:'Ciclar nivel'},{key:'D',label:'Establecer fecha'},{key:'S',label:'Guardar cambios'},{key:'1–8',label:'Filtrar por estado'}],
+          inbox: [{key:'J / K',label:'Navegar mensajes'},{key:'E',label:'Marcar leído'},{key:'T',label:'Crear tarea desde msg'},{key:'A',label:'Todo leído'},{key:'ESC',label:'Cerrar detalle'}],
+          clientes: [{key:'N',label:'Nuevo cliente'},{key:'ESC',label:'Cerrar detalle'}],
+          proyectos: [{key:'N',label:'Nuevo proyecto'},{key:'V',label:'Cambiar vista'},{key:'S',label:'Ciclar estado'},{key:'P',label:'Editar progreso'}],
+          contenido: [{key:'J / K',label:'Navegar pipeline'},{key:'S',label:'Ciclar estado'},{key:'F',label:'Buscar pieza'},{key:'N',label:'Nueva pieza'}],
+          memoria: [{key:'N',label:'Nueva entrada'},{key:'E',label:'Editar'},{key:'P',label:'Anclar/desanclar'},{key:'F',label:'Buscar'}],
+          equipo: [{key:'J / K',label:'Navegar equipo'},{key:'M',label:'Escribir mensaje'},{key:'ESC',label:'Cerrar perfil'}],
+          chat: [{key:'N',label:'Enfocar input'},{key:'1–6',label:'Enviar prompt rápido'}],
+          automatizaciones: [{key:'J / K',label:'Navegar reglas'},{key:'E',label:'Activar/pausar'},{key:'N',label:'Nueva regla'}],
+        }
+        const sectionHints = SECTION_HINTS[section] || []
+        const sectionLabels: Record<Section,string> = {hoy:'Hoy',tareas:'Tareas',inbox:'Inbox',clientes:'Clientes',proyectos:'Proyectos',contenido:'Contenido',calendario:'Calendario',memoria:'Memoria',equipo:'Equipo',chat:'Chat IA',automatizaciones:'Automatizaciones',reportes:'Reportes',ajustes:'Ajustes'}
+        return (
+          <div onClick={()=>setShowShortcuts(false)} className="fixed inset-0 z-[120] flex items-center justify-center" style={{background:'rgba(2,2,8,0.75)',backdropFilter:'blur(6px)'}}>
+            <div onClick={e=>e.stopPropagation()} className="w-[560px] max-w-[94vw] rounded-3xl overflow-hidden" style={{background:'linear-gradient(180deg,#0D0D1E 0%,#080810 100%)',border:`1px solid rgba(27,95,250,0.2)`,boxShadow:'0 40px 100px rgba(0,0,0,0.85),0 0 0 1px rgba(27,95,250,0.04)'}}>
+              <div className="h-[2px]" style={{background:`linear-gradient(90deg,transparent,${BLU},transparent)`}}/>
+              <div className="flex items-center justify-between px-7 py-5" style={{borderBottom:`1px solid ${BORDER}`}}>
+                <div>
+                  <div className="font-syne text-[8.5px] font-black tracking-widest mb-1.5" style={{color:'rgba(100,140,255,0.5)'}}>ATAJOS DE TECLADO</div>
+                  <h2 className="font-figtree text-[22px] font-black text-white leading-none">{sectionLabels[section]}</h2>
+                </div>
+                <div className="flex items-center gap-2.5">
+                  <kbd className="font-syne text-[9px] font-black px-2.5 py-1.5 rounded-lg" style={{background:SURF2,color:BLU,border:'1px solid rgba(27,95,250,0.2)'}}>?</kbd>
+                  <button onClick={()=>setShowShortcuts(false)} className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors hover:bg-white/5" style={{background:SURF2}}>
+                    <LucideIcon name="x" size={14} color="rgba(240,240,248,0.4)"/>
+                  </button>
+                </div>
+              </div>
+              <div className="px-7 py-6 grid grid-cols-2 gap-x-8">
+                <div>
+                  <div className="font-syne text-[7.5px] font-black tracking-widest mb-4" style={{color:'rgba(255,255,255,0.14)'}}>NAVEGACIÓN GLOBAL</div>
+                  <div className="space-y-2.5">
+                    {([['⌘K','Búsqueda global'],['G·H','Hoy'],['G·T','Tareas'],['G·I','Inbox'],['G·C','Clientes'],['G·P','Proyectos'],['G·K','Contenido'],['G·A','Calendario'],['G·M','Memoria'],['G·E','Equipo'],['G·R','Reportes'],['G·V','Automatizaciones'],['G·N','Chat IA'],['G·S','Ajustes'],['?','Mostrar esta ayuda'],['ESC','Cerrar paneles']] as [string,string][]).map(([k,l])=>(
+                      <div key={k} className="flex items-center gap-3">
+                        <kbd className="font-syne text-[8px] font-black px-2 py-1 rounded-lg flex-shrink-0 text-center" style={{background:SURF2,color:BLU,border:'1px solid rgba(27,95,250,0.15)',minWidth:'46px'}}>{k}</kbd>
+                        <span className="text-[11.5px]" style={{color:'rgba(255,255,255,0.38)'}}>{l}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="font-syne text-[7.5px] font-black tracking-widest mb-4" style={{color:'rgba(255,255,255,0.14)'}}>EN {sectionLabels[section].toUpperCase()}</div>
+                  {sectionHints.length > 0 ? (
+                    <div className="space-y-2.5">
+                      {sectionHints.map(h=>(
+                        <div key={h.key} className="flex items-center gap-3">
+                          <kbd className="font-syne text-[8px] font-black px-2 py-1 rounded-lg flex-shrink-0 text-center" style={{background:SURF2,color:'rgba(240,240,248,0.55)',border:`1px solid rgba(255,255,255,0.09)`,minWidth:'46px'}}>{h.key}</kbd>
+                          <span className="text-[11.5px]" style={{color:'rgba(255,255,255,0.38)'}}>{h.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-[12px]" style={{color:'rgba(255,255,255,0.14)'}}>Sin atajos específicos</div>
+                  )}
+                </div>
+              </div>
+              <div className="px-7 py-3.5 flex items-center gap-2" style={{borderTop:`1px solid ${BORDER}`}}>
+                <span className="text-[10px]" style={{color:'rgba(255,255,255,0.14)'}}>Presiona</span>
+                <kbd className="font-syne font-black text-[8.5px] px-1.5 py-0.5 rounded" style={{background:SURF2,color:'rgba(255,255,255,0.28)',border:`1px solid ${BORDER}`}}>?</kbd>
+                <span className="text-[10px]" style={{color:'rgba(255,255,255,0.14)'}}>o</span>
+                <kbd className="font-syne font-black text-[8.5px] px-1.5 py-0.5 rounded" style={{background:SURF2,color:'rgba(255,255,255,0.28)',border:`1px solid ${BORDER}`}}>ESC</kbd>
+                <span className="text-[10px]" style={{color:'rgba(255,255,255,0.14)'}}>para cerrar</span>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Search shortcut button */}
-      <button onClick={()=>setSearchOpen(true)} className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[10px] font-bold tracking-widest text-white/30 opacity-60 hover:opacity-100 transition-opacity" style={{ background:'rgba(27,95,250,0.08)', border:'1px solid rgba(27,95,250,0.15)' }}>
-        <LucideIcon name="search" size={12} color="rgba(27,95,250,0.5)" />
-        <span>⌘K</span>
-      </button>
+      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2">
+        <button onClick={()=>setShowShortcuts(s=>!s)} className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-syne text-[10px] font-bold tracking-widest opacity-50 hover:opacity-100 transition-opacity" style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', color:'rgba(255,255,255,0.25)' }}>
+          <span>?</span>
+        </button>
+        <button onClick={()=>setSearchOpen(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[10px] font-bold tracking-widest opacity-60 hover:opacity-100 transition-opacity" style={{ background:'rgba(27,95,250,0.08)', border:'1px solid rgba(27,95,250,0.15)', color:'rgba(255,255,255,0.3)' }}>
+          <LucideIcon name="search" size={12} color="rgba(27,95,250,0.5)" />
+          <span>⌘K</span>
+        </button>
+      </div>
     </div>
   )
 }
@@ -1948,19 +2031,16 @@ function ReportesSection({data, onNavigate}: any) {
 }
 
 function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,isOwner,onNavigate}: any) {
-  const [quickText, setQuickText] = useState('')
-  const [quickCreating, setQuickCreating] = useState(false)
-  const quickInputRef = useRef<HTMLInputElement>(null)
-
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'n' && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
         e.preventDefault()
-        quickInputRef.current?.focus()
+        onOpenModal('tarea')
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const now = new Date()
   const hour = now.getHours()
@@ -2001,7 +2081,7 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
           <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>{dateStr.toUpperCase()}</div>
           <h1 className="font-figtree text-[32px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>{greeting}, <span style={{color:'rgba(240,240,248,0.55)'}}>{profile.name.split(' ')[0]}</span></h1>
           <div className="flex items-center gap-2 mt-1.5">
-            <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>N CAPTURA RÁPIDA</span>
+            <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>N NUEVA TAREA</span>
           </div>
         </div>
         <button onClick={()=>onOpenModal('tarea')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white transition-all hover:opacity-90" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
@@ -2114,10 +2194,6 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
                 <span className="font-syne text-[15px] font-black text-white">Mis tareas</span>
               </div>
               <button onClick={()=>onOpenModal('tarea')} className="font-syne text-[10px] font-black tracking-wide px-3 py-1.5 rounded-xl transition-colors" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>+ NUEVA</button>
-            </div>
-            <div className="flex items-center gap-2.5 px-6 py-2.5" style={{borderBottom:`1px solid ${BORDER}`}}>
-              <LucideIcon name="plus-circle" size={12} color="rgba(255,255,255,0.15)"/>
-              <input ref={quickInputRef} value={quickText} onChange={e=>setQuickText(e.target.value)} onKeyDown={async e=>{if(e.key==='Enter'&&quickText.trim()&&!quickCreating){setQuickCreating(true);try{await data.createTask({text:quickText.trim(),level:'normal',due_date:new Date().toISOString().split('T')[0],source:'manual'});setQuickText('');showToast('Tarea creada')}catch{showToast('Error')}finally{setQuickCreating(false)}}}} placeholder="Captura rápida… (Enter para crear)" disabled={quickCreating} className="flex-1 bg-transparent text-[12px] outline-none disabled:opacity-40" style={{caretColor:BLU,color:'rgba(255,255,255,0.65)'}}/>
             </div>
             {myTasks.length === 0 ? (
               <div className="px-6 py-10 text-center">
@@ -2329,10 +2405,10 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
             {[
               {label:'Nueva tarea', sub:'Asignar y priorizar', icon:'check-square', c:BLU, act:()=>onOpenModal('tarea')},
               {label:'Nueva pieza', sub:'Contenido · social', icon:'film', c:'#C13584', act:()=>onOpenModal('contenido')},
-              {label:'Nueva memoria', sub:'Conocimiento · base', icon:'brain', c:'rgba(167,139,250,0.9)', act:()=>onOpenModal('memoria')},
+              {label:'Nueva memoria', sub:'Conocimiento · base', icon:'brain', c:'#A78BFA', act:()=>onOpenModal('memoria')},
               ...(isOwner?[
                 {label:'Nuevo cliente', sub:'CRM · gestión', icon:'users', c:GRN, act:()=>onOpenModal('cliente')},
-                {label:'Nuevo proyecto', sub:'Pipeline · kanban', icon:'folder-open', c:'rgba(255,176,32,0.9)', act:()=>onOpenModal('proyecto')},
+                {label:'Nuevo proyecto', sub:'Pipeline · kanban', icon:'folder-open', c:'#F59E0B', act:()=>onOpenModal('proyecto')},
               ]:[]),
             ].map((a,i,arr)=>(
               <button key={a.label} onClick={a.act} className="flex items-center gap-3.5 w-full px-5 py-4 text-left transition-all group" style={{borderBottom:i<arr.length-1?`1px solid ${BORDER}`:'none'}}
@@ -2392,6 +2468,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient}: any) {
   const [filter, setFilter] = useState('Todos')
   const [selected, setSelected] = useState<any>(null)
   const [creatingTask, setCreatingTask] = useState(false)
+  const [activeSender, setActiveSender] = useState<string|null>(null)
   const filteredRef = useRef<any[]>([])
   const allInboxRef = useRef<any[]>([])
 
@@ -2529,102 +2606,157 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient}: any) {
               </button>
             </div>
           </div>
-          {/* Stats row */}
+          {/* Source selector */}
           <div className="flex gap-2">
             {[
-              {n:unread, l:'Sin leer', c:BLU, f:'Sin leer'},
-              {n:urgent, l:'Urgentes', c:RED, f:'Urgente'},
-              {n:fromClients, l:'Clientes', c:GRN, f:'Clientes'},
-              {n:internal, l:'Internos', c:'rgba(255,176,32,0.8)', f:'Interno'},
-            ].map((s,i)=>(
-              <button key={i} onClick={()=>setFilter(s.f)} className="flex-1 rounded-2xl py-3 px-2 text-center transition-all" style={{background:filter===s.f?s.c+'15':SURF2,border:filter===s.f?`1px solid ${s.c}30`:`1px solid ${BORDER}`}} onMouseEnter={e=>{ if(filter!==s.f)(e.currentTarget.style.background='rgba(255,255,255,0.04)') }} onMouseLeave={e=>{ if(filter!==s.f)(e.currentTarget.style.background=SURF2) }}>
-                <div className="font-figtree text-[20px] font-black leading-none mb-1" style={{color:s.n>0?s.c:'rgba(255,255,255,0.15)'}}>{s.n}</div>
-                <div className="font-syne text-[7.5px] font-black tracking-wide" style={{color:'rgba(255,255,255,0.25)'}}>{s.l.toUpperCase()}</div>
-              </button>
-            ))}
+              {id:'Todos', label:'Todos', count: allMsgs.length, icon: null, color:'rgba(255,255,255,0.4)'},
+              {id:'Gmail', label:'Gmail', count: allMsgs.filter((m:any)=>m.source==='gmail').length, icon:'gmail', color:'#EA4335'},
+              {id:'WhatsApp', label:'WhatsApp', count: allMsgs.filter((m:any)=>m.source==='whatsapp').length, icon:'whatsapp', color:'#25D366'},
+              {id:'Interno', label:'Equipo', count: allMsgs.filter((m:any)=>m.source==='internal').length, icon:'team', color:'rgba(255,176,32,0.8)'},
+            ].filter(s=>s.count>0||s.id==='Todos').map(s=>{
+              const isActive = filter === s.id
+              return (
+                <button key={s.id} onClick={()=>{ setFilter(s.id); setActiveSender(null); setSelected(null) }} className="flex-1 rounded-2xl py-3 px-2 text-center transition-all" style={{background:isActive?s.color+'18':SURF2,border:isActive?`1px solid ${s.color}35`:`1px solid ${BORDER}`}}>
+                  <div className="flex items-center justify-center gap-1.5 mb-1.5">
+                    {s.icon==='gmail' && <svg viewBox="0 0 24 24" width={14} height={14}><path fill="#EA4335" d="M22.5 12.5c0-.83-.07-1.64-.2-2.42H12v4.59h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.25z"/><path fill="#4285F4" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>}
+                    {s.icon==='whatsapp' && <svg viewBox="0 0 24 24" width={14} height={14} fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>}
+                    {s.icon==='team' && <LucideIcon name="users-2" size={14} color="rgba(255,176,32,0.8)"/>}
+                    {s.icon===null && <LucideIcon name="inbox" size={14} color={isActive?'rgba(255,255,255,0.7)':'rgba(255,255,255,0.25)'}/>}
+                    {s.count > 0 && <span className="font-figtree text-[13px] font-black leading-none" style={{color:isActive?s.color:'rgba(255,255,255,0.2)'}}>{s.count}</span>}
+                  </div>
+                  <div className="font-syne text-[7px] font-black tracking-wide" style={{color:isActive?'rgba(255,255,255,0.7)':'rgba(255,255,255,0.22)'}}>{s.label.toUpperCase()}</div>
+                </button>
+              )
+            })}
           </div>
         </div>
 
-        {/* Filter tabs */}
-        <div className="flex gap-1 px-4 py-2 flex-shrink-0 overflow-x-auto" style={{borderBottom:`1px solid ${BORDER}`}}>
-          {tabs.map(t=>(
-            <button key={t.id} onClick={()=>setFilter(t.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide flex-shrink-0 whitespace-nowrap transition-all" style={{background:filter===t.id?'rgba(27,95,250,0.12)':'transparent',color:filter===t.id?'rgba(255,255,255,0.9)':'rgba(255,255,255,0.3)',border:filter===t.id?`1px solid rgba(27,95,250,0.2)`:'1px solid transparent'}}>
-              {t.n > 0 && filter!==t.id && <span className="font-figtree text-[9px] font-black" style={{color:t.accent}}>{t.n}</span>}
-              {t.label}
-            </button>
-          ))}
-        </div>
-
         {/* Message list */}
-        <div className="flex-1 overflow-y-auto">
-          {groups.length === 0 && (
-            <div className="py-20 text-center px-6">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{background:SURF2,border:`1px solid ${BORDER}`}}>
-                <LucideIcon name="inbox" size={22} color="rgba(255,255,255,0.15)"/>
-              </div>
-              <div className="font-syne text-[10px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.15)'}}>{allMsgs.length===0?'SIN CUENTA CONECTADA':'BANDEJA VACÍA'}</div>
-              <div className="text-[12px] leading-relaxed" style={{color:'rgba(255,255,255,0.2)'}}>{allMsgs.length===0?'Conecta Gmail en Ajustes para empezar':'No hay mensajes con este filtro'}</div>
-            </div>
-          )}
-          {selected && filtered.length > 1 && (
-            <div className="flex items-center justify-center gap-3 py-2 sticky top-0 z-20" style={{background:'rgba(5,5,16,0.9)',backdropFilter:'blur(8px)',borderBottom:`1px solid ${BORDER}`}}>
-              <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.12)'}}>
-                <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.06)',fontFamily:'inherit'}}>J</kbd> siguiente
-                {' · '}
-                <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.06)',fontFamily:'inherit'}}>K</kbd> anterior
-              </span>
-            </div>
-          )}
-          {groups.map(group=>(
-            <div key={group.label}>
-              <div className="px-5 py-2 flex items-center gap-3 sticky top-0 z-10" style={{background:'rgba(5,5,16,0.94)',backdropFilter:'blur(10px)'}}>
-                <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.18)'}}>{group.label}</span>
-                <div className="flex-1 h-px" style={{background:BORDER}}/>
-                <span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.12)'}}>{group.items.length}</span>
-              </div>
-              {group.items.map((m: any)=>{
-                const isInternal = m.source==='internal'
-                const isSelected = selected?.id===m.id
-                const isUnread = !m.is_read
-                const avatarBg = isInternal ? 'rgba(255,176,32,0.85)' : strColor(m.from_name||'?')
-                const leftBar = isUnread ? (m.ai_urgency==='urgent' ? RED : isInternal ? 'rgba(255,176,32,0.7)' : BLU) : 'transparent'
-                return (
-                  <div key={m.id} onClick={()=>handleSelect(m)} className="relative cursor-pointer transition-colors group"
-                    style={{borderLeft:`2.5px solid ${leftBar}`,background:isSelected?'rgba(27,95,250,0.07)':isUnread?'rgba(255,255,255,0.014)':'transparent',borderBottom:`1px solid ${BORDER}`}}
-                    onMouseEnter={e=>{ if(!isSelected)(e.currentTarget.style.background='rgba(255,255,255,0.02)') }}
-                    onMouseLeave={e=>{ if(!isSelected)(e.currentTarget.style.background=isUnread?'rgba(255,255,255,0.014)':'transparent') }}>
-                    <div className="flex items-start gap-3 px-4 py-3.5">
-                      {/* Avatar */}
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-syne text-[9px] font-black mt-0.5" style={{background:avatarBg+'20',color:avatarBg}}>
-                        {isInternal
-                          ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={avatarBg} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                          : (m.from_name||'?').slice(0,2).toUpperCase()
-                        }
+        {(()=>{
+          const isSourceView = filter==='Gmail'||filter==='WhatsApp'||filter==='Interno'
+          const displayMsgs = activeSender ? filtered.filter((m:any)=>m.from_name===activeSender||m.from_email===activeSender) : filtered
+          filteredRef.current = displayMsgs
+
+          if (isSourceView && !activeSender) {
+            // SENDER GROUPS VIEW
+            const senderMap: Record<string,{msgs:any[];unread:number;urgent:number;latest:any}> = {}
+            filtered.forEach((m:any)=>{
+              const key = m.from_name||m.from_email||m.from_phone||'Desconocido'
+              if (!senderMap[key]) senderMap[key] = {msgs:[],unread:0,urgent:0,latest:m}
+              senderMap[key].msgs.push(m)
+              if (!m.is_read) senderMap[key].unread++
+              if (!m.is_read && m.ai_urgency==='urgent') senderMap[key].urgent++
+              if (new Date(m.received_at)>new Date(senderMap[key].latest.received_at)) senderMap[key].latest = m
+            })
+            const senders = Object.entries(senderMap).sort((a,b)=>new Date(b[1].latest.received_at).getTime()-new Date(a[1].latest.received_at).getTime())
+            const srcColor = filter==='Gmail'?'#EA4335':filter==='WhatsApp'?'#25D366':'rgba(255,176,32,0.8)'
+            return (
+              <div className="flex-1 overflow-y-auto">
+                {senders.length===0 ? (
+                  <div className="py-20 text-center px-6">
+                    <div className="font-syne text-[10px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.15)'}}>SIN MENSAJES</div>
+                    <div className="text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>No hay mensajes en esta fuente</div>
+                  </div>
+                ) : senders.map(([senderName, sg])=>{
+                  const avatarColor = strColor(senderName)
+                  return (
+                    <button key={senderName} onClick={()=>{ setActiveSender(senderName); setSelected(null) }} className="w-full text-left flex items-center gap-3.5 px-4 py-4 transition-all group" style={{borderBottom:`1px solid ${BORDER}`}} onMouseEnter={e=>(e.currentTarget.style.background='rgba(255,255,255,0.025)')} onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 font-syne text-[11px] font-black" style={{background:avatarColor+'20',color:avatarColor,border:`1.5px solid ${avatarColor}30`}}>
+                        {senderName.slice(0,2).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        {/* Row 1 */}
                         <div className="flex items-center gap-2 mb-0.5">
-                          <span className="font-syne text-[9px] font-black truncate flex-1" style={{color:isUnread?'rgba(255,255,255,0.88)':'rgba(255,255,255,0.32)'}}>{m.from_name||'Desconocido'}</span>
-                          {isInternal && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.75)'}}>DM</span>}
-                          {m.source==='whatsapp' && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(37,211,102,0.08)',color:'rgba(37,211,102,0.7)'}}>WA</span>}
-                          {isUnread && m.ai_urgency==='urgent' && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:`${RED}16`,color:RED,border:`1px solid ${RED}30`}}>URG</span>}
-                          {m.attachments?.length>0 && <LucideIcon name="paperclip" size={9} color="rgba(255,255,255,0.2)"/>}
-                          <span className="font-syne text-[7.5px] flex-shrink-0" style={{color:'rgba(255,255,255,0.2)'}}>{relTime(m.received_at)}</span>
+                          <span className="font-syne text-[10px] font-black truncate flex-1" style={{color:sg.unread>0?'rgba(255,255,255,0.9)':'rgba(255,255,255,0.45)'}}>{senderName}</span>
+                          {sg.urgent>0 && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:`${RED}18`,color:RED,border:`1px solid ${RED}30`}}>URG</span>}
+                          {sg.unread>0 && <span className="font-figtree text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style={{background:srcColor+'20',color:srcColor}}>{sg.unread}</span>}
+                          <span className="font-syne text-[7px] flex-shrink-0" style={{color:'rgba(255,255,255,0.2)'}}>{relTime(sg.latest.received_at)}</span>
                         </div>
-                        {/* Row 2: subject */}
-                        <div className="font-figtree text-[12.5px] font-semibold leading-snug truncate mb-1" style={{color:isUnread?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.3)'}}>{m.subject||'Sin asunto'}</div>
-                        {/* Row 3: AI summary or preview */}
-                        <div className="text-[9px] truncate" style={{color:m.ai_summary?'rgba(100,140,255,0.5)':'rgba(255,255,255,0.18)'}}>
-                          {m.ai_summary || m.body_preview?.slice(0,60) || '—'}
+                        <div className="text-[11.5px] truncate mb-0.5" style={{color:sg.unread>0?'rgba(255,255,255,0.6)':'rgba(255,255,255,0.25)'}}>{sg.latest.subject||sg.latest.body_preview?.slice(0,50)||'Sin asunto'}</div>
+                        <div className="font-syne text-[7.5px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{sg.msgs.length} {sg.msgs.length===1?'MENSAJE':'MENSAJES'}</div>
+                      </div>
+                      <LucideIcon name="chevron-right" size={12} color="rgba(255,255,255,0.12)"/>
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          }
+
+          // NORMAL MESSAGE LIST (+ back button when sender active)
+          const displayGroups: {label:string;items:any[]}[] = []
+          const byLabel: Record<string,any[]> = {}
+          displayMsgs.forEach((m:any)=>{ const l=getDateLabel(m.received_at); if(!byLabel[l])byLabel[l]=[]; byLabel[l].push(m) })
+          ;['HOY','AYER','ESTA SEMANA','ANTERIORES'].forEach(l=>{ if(byLabel[l]?.length) displayGroups.push({label:l,items:byLabel[l]}) })
+
+          return (
+            <div className="flex-1 overflow-y-auto">
+              {/* Back to senders button */}
+              {activeSender && (
+                <button onClick={()=>{ setActiveSender(null); setSelected(null) }} className="w-full flex items-center gap-2 px-4 py-3 text-left" style={{borderBottom:`1px solid ${BORDER}`,background:'rgba(27,95,250,0.04)'}}>
+                  <LucideIcon name="chevron-left" size={13} color="rgba(255,255,255,0.3)"/>
+                  <span className="font-syne text-[8.5px] font-black tracking-wide" style={{color:'rgba(255,255,255,0.4)'}}>TODOS LOS CONTACTOS</span>
+                  <span className="font-syne text-[8.5px] font-black truncate ml-1" style={{color:'rgba(255,255,255,0.7)'}}>{activeSender}</span>
+                </button>
+              )}
+              {displayGroups.length === 0 && (
+                <div className="py-20 text-center px-6">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5" style={{background:SURF2,border:`1px solid ${BORDER}`}}>
+                    <LucideIcon name="inbox" size={22} color="rgba(255,255,255,0.15)"/>
+                  </div>
+                  <div className="font-syne text-[10px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.15)'}}>{allMsgs.length===0?'SIN CUENTA CONECTADA':'BANDEJA VACÍA'}</div>
+                  <div className="text-[12px] leading-relaxed" style={{color:'rgba(255,255,255,0.2)'}}>{allMsgs.length===0?'Conecta Gmail en Ajustes para empezar':'No hay mensajes con este filtro'}</div>
+                </div>
+              )}
+              {selected && displayMsgs.length > 1 && (
+                <div className="flex items-center justify-center gap-3 py-2 sticky top-0 z-20" style={{background:'rgba(5,5,16,0.9)',backdropFilter:'blur(8px)',borderBottom:`1px solid ${BORDER}`}}>
+                  <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.12)'}}>
+                    <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.06)',fontFamily:'inherit'}}>J</kbd> siguiente · <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.06)',fontFamily:'inherit'}}>K</kbd> anterior
+                  </span>
+                </div>
+              )}
+              {displayGroups.map(group=>(
+                <div key={group.label}>
+                  <div className="px-5 py-2 flex items-center gap-3 sticky top-0 z-10" style={{background:'rgba(5,5,16,0.94)',backdropFilter:'blur(10px)'}}>
+                    <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.18)'}}>{group.label}</span>
+                    <div className="flex-1 h-px" style={{background:BORDER}}/>
+                    <span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.12)'}}>{group.items.length}</span>
+                  </div>
+                  {group.items.map((m:any)=>{
+                    const isInternal = m.source==='internal'
+                    const isSelected = selected?.id===m.id
+                    const isUnread = !m.is_read
+                    const avatarBg = isInternal ? 'rgba(255,176,32,0.85)' : strColor(m.from_name||'?')
+                    const leftBar = isUnread ? (m.ai_urgency==='urgent' ? RED : isInternal ? 'rgba(255,176,32,0.7)' : BLU) : 'transparent'
+                    return (
+                      <div key={m.id} onClick={()=>handleSelect(m)} className="relative cursor-pointer transition-colors group"
+                        style={{borderLeft:`2.5px solid ${leftBar}`,background:isSelected?'rgba(27,95,250,0.07)':isUnread?'rgba(255,255,255,0.014)':'transparent',borderBottom:`1px solid ${BORDER}`}}
+                        onMouseEnter={e=>{ if(!isSelected)(e.currentTarget.style.background='rgba(255,255,255,0.02)') }}
+                        onMouseLeave={e=>{ if(!isSelected)(e.currentTarget.style.background=isUnread?'rgba(255,255,255,0.014)':'transparent') }}>
+                        <div className="flex items-start gap-3 px-4 py-3.5">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-syne text-[9px] font-black mt-0.5" style={{background:avatarBg+'20',color:avatarBg}}>
+                            {isInternal ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={avatarBg} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> : (m.from_name||'?').slice(0,2).toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="font-syne text-[9px] font-black truncate flex-1" style={{color:isUnread?'rgba(255,255,255,0.88)':'rgba(255,255,255,0.32)'}}>{m.from_name||'Desconocido'}</span>
+                              {isInternal && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.75)'}}>DM</span>}
+                              {m.source==='whatsapp' && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(37,211,102,0.08)',color:'rgba(37,211,102,0.7)'}}>WA</span>}
+                              {isUnread && m.ai_urgency==='urgent' && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:`${RED}16`,color:RED,border:`1px solid ${RED}30`}}>URG</span>}
+                              {m.attachments?.length>0 && <LucideIcon name="paperclip" size={9} color="rgba(255,255,255,0.2)"/>}
+                              <span className="font-syne text-[7.5px] flex-shrink-0" style={{color:'rgba(255,255,255,0.2)'}}>{relTime(m.received_at)}</span>
+                            </div>
+                            <div className="font-figtree text-[12.5px] font-semibold leading-snug truncate mb-1" style={{color:isUnread?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.3)'}}>{m.subject||'Sin asunto'}</div>
+                            <div className="text-[9px] truncate" style={{color:m.ai_summary?'rgba(100,140,255,0.5)':'rgba(255,255,255,0.18)'}}>{m.ai_summary||m.body_preview?.slice(0,60)||'—'}</div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                )
-              })}
+                    )
+                  })}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )
+        })()}
       </div>
 
       {/* ── DETAIL PANEL ───────────────────────────────────────── */}
@@ -2835,6 +2967,9 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
   const [editNotes, setEditNotes] = useState('')
   const [savingClient, setSavingClient] = useState(false)
   const [confirmDeleteClient, setConfirmDeleteClient] = useState(false)
+  const [clientSearch, setClientSearch] = useState('')
+  const [clientStatusFilter, setClientStatusFilter] = useState('Todos')
+  const [clientSort, setClientSort] = useState<'default'|'revenue'|'tareas'|'proyectos'>('default')
 
   const selected = selectedId ? data.clients.find((c: Client)=>c.id===selectedId) : null
 
@@ -3152,10 +3287,6 @@ function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast
       </div>
     )
   }
-
-  const [clientSearch, setClientSearch] = useState('')
-  const [clientStatusFilter, setClientStatusFilter] = useState('Todos')
-  const [clientSort, setClientSort] = useState<'default'|'revenue'|'tareas'|'proyectos'>('default')
 
   // Parse revenue string → number (handles "€12.000/mes", "12000", "12.000€", etc.)
   const parseRevenue = (s: string): number => {
