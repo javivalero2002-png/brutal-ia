@@ -915,6 +915,14 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
             <div>
               <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>GESTIÓN</div>
               <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Tareas</h1>
+              <div className="flex items-center gap-2 mt-1.5">
+                {(['1-8 FILTROS','J/K NAVEGAR','N NUEVA'] as const).map((hint,i,arr)=>(
+                  <span key={hint} className="flex items-center gap-2">
+                    <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>{hint}</span>
+                    {i<arr.length-1&&<span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>}
+                  </span>
+                ))}
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <div className="flex p-1 rounded-xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
@@ -3279,16 +3287,21 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   const [quickProjTask, setQuickProjTask] = useState('')
   const [quickProjCreating, setQuickProjCreating] = useState(false)
   const selectedProject: Project|null = selectedId ? data.projects.find((p: Project)=>p.id===selectedId)||null : null
+  const projViewRef = useRef<'board'|'list'>('board')
+  projViewRef.current = projView
 
   useEffect(() => { setEditProgress(null); setConfirmDeleteDetail(false); setQuickProjTask('') }, [selectedId])
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && selectedId) { onSelect(null); return }
-      if (e.key === 'n' && !selectedId && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) { e.preventDefault(); onOpenModal('proyecto') }
+      if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
+      if (e.key === 'n' && !selectedId) { e.preventDefault(); onOpenModal('proyecto') }
+      if (e.key === 'v' && !selectedId) { e.preventDefault(); setProjView(projViewRef.current === 'board' ? 'list' : 'board') }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, onSelect, onOpenModal])
 
   const saveProgress = async () => {
@@ -3334,6 +3347,14 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
         <div>
           <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>GESTIÓN</div>
           <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Proyectos</h1>
+          <div className="flex items-center gap-2 mt-1.5">
+            {(['V VISTA','N NUEVO'] as const).map((hint,i,arr)=>(
+              <span key={hint} className="flex items-center gap-2">
+                <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>{hint}</span>
+                {i<arr.length-1&&<span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>}
+              </span>
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex p-1 rounded-xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
@@ -4680,6 +4701,7 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
         const rule = visibleReglasRef.current.find((r: Regla)=>r.id===focusedReglaId)
         if (rule) data.updateRegla(rule.id, {active:!rule.active}).then(()=>showToast(rule.active?'Regla pausada':'Regla activada')).catch(()=>{})
       }
+      if (e.key === 'n' && isOwner) { e.preventDefault(); onOpenModal('regla') }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -4692,6 +4714,14 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
         <div>
           <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>SISTEMA</div>
           <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Automatizaciones</h1>
+          <div className="flex items-center gap-2 mt-1.5">
+            {(['J/K NAVEGAR','E ACTIVAR','N NUEVA'] as const).map((hint,i,arr)=>(
+              <span key={hint} className="flex items-center gap-2">
+                <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>{hint}</span>
+                {i<arr.length-1&&<span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>}
+              </span>
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-6">
           {totalFired > 0 && (
