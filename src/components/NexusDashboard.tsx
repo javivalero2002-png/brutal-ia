@@ -831,6 +831,10 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
           return {...x, level: levels[(curr+1)%levels.length]}
         })
       }
+      if (!activeTask && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
+        const fmap: Record<string,'todas'|'urgente'|'high'|'normal'|'hoy'|'semana'|'sin_fecha'|'atrasadas'> = {'1':'todas','2':'urgente','3':'high','4':'normal','5':'hoy','6':'semana','7':'sin_fecha','8':'atrasadas'}
+        if (fmap[e.key]) { e.preventDefault(); setFilter(fmap[e.key]) }
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -4058,6 +4062,9 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
   const prevMonth = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear(y=>y-1) } else setViewMonth(m=>m-1) }
   const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear(y=>y+1) } else setViewMonth(m=>m+1) }
 
+  const selectedDayRef = useRef<Date|null>(selectedDay)
+  selectedDayRef.current = selectedDay
+
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
       if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey || e.ctrlKey || e.altKey) return
@@ -4065,6 +4072,16 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
       else if (e.key === 'ArrowRight') { e.preventDefault(); nextMonth() }
       else if (e.key === 't') { e.preventDefault(); setViewMonth(today.getMonth()); setViewYear(today.getFullYear()); setSelectedDay(today) }
       else if (e.key === 'n') { e.preventDefault(); onOpenModal('tarea') }
+      else if (e.key === 'j' || e.key === 'k') {
+        e.preventDefault()
+        const base = selectedDayRef.current || today
+        const next = new Date(base)
+        next.setDate(base.getDate() + (e.key === 'j' ? 1 : -1))
+        setSelectedDay(next)
+        if (next.getMonth() !== viewMonth || next.getFullYear() !== viewYear) {
+          setViewMonth(next.getMonth()); setViewYear(next.getFullYear())
+        }
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -4149,7 +4166,9 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
             <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>AGENDA</div>
             <h1 className="font-figtree text-[24px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Calendario</h1>
             <div className="flex items-center gap-2 mt-1.5">
-              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>← → NAVEGAR</span>
+              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>← → MES</span>
+              <span className="font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
+              <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>J/K DÍA</span>
               <span className="font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
               <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>T HOY</span>
               <span className="font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
@@ -4494,6 +4513,14 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
             const wordCount = data.memoria.reduce((s: number, m: any)=>s+(m.content||'').split(/\s+/).filter(Boolean).length,0)
             return <div className="font-syne text-[8px] font-black tracking-widest mt-1" style={{color:'rgba(255,255,255,0.15)'}}>{wordCount.toLocaleString('es-ES')} PALABRAS</div>
           })()}
+          <div className="flex items-center gap-2 mt-1.5">
+            {(['N NUEVA','E EDITAR','P ANCLAR'] as const).map((hint,i,arr)=>(
+              <span key={hint} className="flex items-center gap-2">
+                <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>{hint}</span>
+                {i<arr.length-1&&<span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>}
+              </span>
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex p-1 rounded-xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
