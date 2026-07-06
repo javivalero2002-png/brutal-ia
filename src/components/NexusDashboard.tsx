@@ -3849,8 +3849,26 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient}
   const [contentSearch, setContentSearch] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
   const [confirmDeleteContent, setConfirmDeleteContent] = useState(false)
+  const [uploadingVideo, setUploadingVideo] = useState(false)
   const filteredAgendaRef = useRef<any[]>([])
   const contentSearchInputRef = useRef<HTMLInputElement>(null)
+  const videoFileInputRef = useRef<HTMLInputElement>(null)
+
+  const uploadVideo = async (file: File) => {
+    if (!activeItem) return
+    setUploadingVideo(true)
+    try {
+      const fd = new FormData(); fd.append('file', file)
+      const res = await fetch(`/api/agenda/${activeItem.id}/upload-video`, { method:'POST', body:fd })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error||'Error')
+      setEditVideoUrl(json.url)
+      setActiveItem(json.item)
+      data.updateAgenda && data.updateAgenda(activeItem.id, { video_url: json.url })
+      showToast('Vídeo subido correctamente')
+    } catch (err: any) { showToast('Error: '+err.message) }
+    finally { setUploadingVideo(false) }
+  }
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
@@ -4204,16 +4222,41 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient}
               <input value={editAccountName} onChange={e=>setEditAccountName(e.target.value)} placeholder="Ej: Brutal Studios, Pablo, Julio Flores…" className="w-full px-4 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.35)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
             </div>
             <div>
-              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.22)'}}>LINK DE VÍDEO</div>
-              <input value={editVideoUrl} onChange={e=>setEditVideoUrl(e.target.value)} placeholder="YouTube / Vimeo URL…" className="w-full px-4 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.35)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+              <div className="font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.22)'}}>VÍDEO</div>
+              {/* Upload area */}
+              <input ref={videoFileInputRef} type="file" accept="video/*" className="hidden" onChange={e=>{ const f=e.target.files?.[0]; if(f) uploadVideo(f); e.target.value='' }}/>
+              <div className="flex gap-2 mb-2">
+                <input value={editVideoUrl} onChange={e=>setEditVideoUrl(e.target.value)} placeholder="YouTube / Vimeo URL…" className="flex-1 px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,minWidth:0}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.35)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+                <button onClick={()=>videoFileInputRef.current?.click()} disabled={uploadingVideo} className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide flex-shrink-0 disabled:opacity-40 transition-all hover:opacity-80" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.5)',border:`1px solid ${BORDER}`}}>
+                  {uploadingVideo ? <><div className="w-3 h-3 border-2 rounded-full animate-spin flex-shrink-0" style={{borderColor:'rgba(255,255,255,0.3)',borderTopColor:'white'}}/><span>SUBIENDO…</span></> : <><LucideIcon name="upload" size={11} color="rgba(255,255,255,0.5)"/><span>SUBIR</span></>}
+                </button>
+              </div>
+              {/* Player: YouTube/Vimeo embed */}
               {videoEmbed(editVideoUrl) && (
-                <div className="mt-3 rounded-xl overflow-hidden" style={{aspectRatio:'16/9'}}>
+                <div className="rounded-2xl overflow-hidden" style={{aspectRatio:'16/9',background:'#000'}}>
                   <iframe src={videoEmbed(editVideoUrl)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
                 </div>
               )}
-              {activeItem.video_url && !videoEmbed(editVideoUrl) && videoEmbed(activeItem.video_url) && (
-                <div className="mt-3 rounded-xl overflow-hidden" style={{aspectRatio:'16/9'}}>
-                  <iframe src={videoEmbed(activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
+              {/* Player: direct video file (from Supabase storage) */}
+              {!videoEmbed(editVideoUrl) && editVideoUrl && (
+                <div className="rounded-2xl overflow-hidden" style={{background:'#000'}}>
+                  <video src={editVideoUrl} controls className="w-full rounded-2xl" style={{maxHeight:'220px',objectFit:'contain'}} preload="metadata"/>
+                </div>
+              )}
+              {/* Fallback: saved video_url differs from edit state */}
+              {!editVideoUrl && activeItem.video_url && (
+                <div className="rounded-2xl overflow-hidden" style={{background:'#000'}}>
+                  {videoEmbed(activeItem.video_url)
+                    ? <div style={{aspectRatio:'16/9'}}><iframe src={videoEmbed(activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>
+                    : <video src={activeItem.video_url} controls className="w-full rounded-2xl" style={{maxHeight:'220px',objectFit:'contain'}} preload="metadata"/>
+                  }
+                </div>
+              )}
+              {/* Demo hint */}
+              {!editVideoUrl && !activeItem.video_url && (
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.13)'}}>EJEMPLO:</span>
+                  <button onClick={()=>setEditVideoUrl('https://www.youtube.com/watch?v=aqz-KE-bpKQ')} className="font-syne text-[7.5px] font-black tracking-widest transition-opacity hover:opacity-70" style={{color:'rgba(255,80,80,0.4)'}}>▶ Big Buck Bunny</button>
                 </div>
               )}
             </div>
