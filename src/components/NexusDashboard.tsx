@@ -798,6 +798,8 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
   const [confirmLimpiar, setConfirmLimpiar] = useState(false)
   const filteredTasksRef = useRef<Task[]>([])
   const dueDateRef = useRef<HTMLInputElement>(null)
+  const saveTaskRef = useRef<()=>void>(()=>{})
+  const savingRef = useRef(false)
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
@@ -831,6 +833,10 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
           return {...x, level: levels[(curr+1)%levels.length]}
         })
       }
+      if (e.key === 's' && activeTask && !savingRef.current && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
+        e.preventDefault()
+        saveTaskRef.current()
+      }
       if (!activeTask && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
         const fmap: Record<string,'todas'|'urgente'|'high'|'normal'|'hoy'|'semana'|'sin_fecha'|'atrasadas'> = {'1':'todas','2':'urgente','3':'high','4':'normal','5':'hoy','6':'semana','7':'sin_fecha','8':'atrasadas'}
         if (fmap[e.key]) { e.preventDefault(); setFilter(fmap[e.key]) }
@@ -856,6 +862,8 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
     } catch { showToast('Error al guardar') }
     finally { setSaving(false) }
   }
+  saveTaskRef.current = saveTask
+  savingRef.current = saving
 
   const levelPriority = (l: string) => l==='urgent'?0:l==='high'?1:2
   const weekEnd = new Date(Date.now() + 7*24*60*60*1000)
@@ -1135,7 +1143,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
             </div>
           </div>
           <div className="flex items-center justify-center gap-2 py-2" style={{borderBottom:`1px solid ${BORDER}`}}>
-            {(['J/K NAVEGAR','C COMPLETAR','L NIVEL','D FECHA','⌘+ENTER GUARDAR'] as const).map((hint,i,arr)=>(
+            {(['J/K NAVEGAR','C COMPLETAR','L NIVEL','D FECHA','S GUARDAR'] as const).map((hint,i,arr)=>(
               <span key={hint} className="flex items-center gap-2">
                 <span className="font-syne text-[6.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.08)'}}>{hint}</span>
                 {i<arr.length-1&&<span className="font-syne text-[6px]" style={{color:'rgba(255,255,255,0.05)'}}>·</span>}
@@ -3709,12 +3717,14 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient}
   const [savingNotes, setSavingNotes] = useState(false)
   const [confirmDeleteContent, setConfirmDeleteContent] = useState(false)
   const filteredAgendaRef = useRef<any[]>([])
+  const contentSearchInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && activeItem) { setActiveItem(null); return }
       if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
       if (e.key === 'n' && !activeItem) { e.preventDefault(); onOpenModal('contenido') }
+      if (e.key === 'f' && !activeItem) { e.preventDefault(); contentSearchInputRef.current?.focus() }
       if (e.key === 's' && activeItem) {
         e.preventDefault()
         const statuses = ['borrador','pendiente','listo','publicado']
@@ -3800,7 +3810,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient}
               <div className="flex items-baseline gap-3">
                 <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.04em'}}>Pipeline</h1>
                 <div className="flex items-center gap-2">
-                  {(['J/K NAVEGAR','S ESTADO','N NUEVA'] as const).map((hint,i,arr)=>(
+                  {(['J/K NAVEGAR','S ESTADO','F BUSCAR','N NUEVA'] as const).map((hint,i,arr)=>(
                     <span key={hint} className="flex items-center gap-2">
                       <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>{hint}</span>
                       {i<arr.length-1&&<span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>}
@@ -3841,7 +3851,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient}
           {/* Content search */}
           <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl mb-3" style={{background:SURFACE,border:`1px solid ${BORDER}`,maxWidth:'320px'}}>
             <LucideIcon name="search" size={12} color="rgba(255,255,255,0.2)"/>
-            <input value={contentSearch} onChange={e=>setContentSearch(e.target.value)} placeholder="Busca por título…" className="flex-1 bg-transparent text-[12px] outline-none" style={{caretColor:BLU,color:'rgba(255,255,255,0.75)'}}/>
+            <input ref={contentSearchInputRef} value={contentSearch} onChange={e=>setContentSearch(e.target.value)} placeholder="Busca por título…" className="flex-1 bg-transparent text-[12px] outline-none" style={{caretColor:BLU,color:'rgba(255,255,255,0.75)'}}/>
             {contentSearch && <button onClick={()=>setContentSearch('')}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.2)"/></button>}
           </div>
           {/* Client filter */}
@@ -4546,6 +4556,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
 
   const memoriaRef = useRef<any[]>([])
   memoriaRef.current = data.memoria
+  const memSearchInputRef = useRef<HTMLInputElement>(null)
 
   const togglePin = (id: string) => {
     setPinnedIds(prev => {
@@ -4561,6 +4572,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
       if (e.key === 'Escape' && editing) { setEditing(null); return }
       if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
       if (e.key === 'n' && !editing) { e.preventDefault(); onOpenModal('memoria') }
+      if (e.key === 'f' && !editing) { e.preventDefault(); memSearchInputRef.current?.focus() }
       if (e.key === 'e' && expanded && !editing) {
         e.preventDefault()
         const entry = memoriaRef.current.find((m: any) => m.id === expanded)
@@ -4603,7 +4615,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
             return <div className="font-syne text-[8px] font-black tracking-widest mt-1" style={{color:'rgba(255,255,255,0.15)'}}>{wordCount.toLocaleString('es-ES')} PALABRAS</div>
           })()}
           <div className="flex items-center gap-2 mt-1.5">
-            {(['N NUEVA','E EDITAR','P ANCLAR'] as const).map((hint,i,arr)=>(
+            {(['N NUEVA','E EDITAR','P ANCLAR','F BUSCAR'] as const).map((hint,i,arr)=>(
               <span key={hint} className="flex items-center gap-2">
                 <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>{hint}</span>
                 {i<arr.length-1&&<span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>}
@@ -4638,7 +4650,7 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
       {/* Search */}
       <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl mb-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
         <LucideIcon name="search" size={13} color="rgba(255,255,255,0.2)"/>
-        <input value={memSearch} onChange={e=>setMemSearch(e.target.value)} placeholder="Busca en la memoria…" className="flex-1 bg-transparent text-[13px] outline-none" style={{caretColor:BLU,color:'rgba(255,255,255,0.8)'}}/>
+        <input ref={memSearchInputRef} value={memSearch} onChange={e=>setMemSearch(e.target.value)} placeholder="Busca en la memoria…" className="flex-1 bg-transparent text-[13px] outline-none" style={{caretColor:BLU,color:'rgba(255,255,255,0.8)'}}/>
         {memSearch && <button onClick={()=>setMemSearch('')} className="flex-shrink-0"><LucideIcon name="x" size={12} color="rgba(255,255,255,0.2)"/></button>}
       </div>
       {/* Category filter */}
