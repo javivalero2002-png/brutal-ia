@@ -1520,6 +1520,17 @@ function EquipoSection({data, profile, showToast}: any) {
 
 // ── REPORTES SECTION ─────────────────────────────────────────
 function ReportesSection({data, onNavigate}: any) {
+  const printBtnRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(()=>{
+    const handler = (e: KeyboardEvent) => {
+      if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
+      if (e.key === 'p') { e.preventDefault(); printBtnRef.current?.click() }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
   const tasks: Task[] = data.tasks
   const projects: Project[] = data.projects
   const clients: Client[] = data.clients
@@ -1590,8 +1601,9 @@ function ReportesSection({data, onNavigate}: any) {
           printWin.document.write(`<!DOCTYPE html><html><head><title>Reporte Brutal Studios — ${now}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111;padding:40px;max-width:800px;margin:0 auto}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111;padding-bottom:20px;margin-bottom:30px}.logo-area h1{font-size:28px;font-weight:900;letter-spacing:-1px}.logo-area p{color:#666;font-size:13px;margin-top:4px}.date-area{text-align:right;color:#666;font-size:13px}.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:30px}.kpi{padding:16px;border:1px solid #e0e0e0;border-radius:8px;text-align:center}.kpi .num{font-size:36px;font-weight:900;color:#1B5FFA}.kpi .lbl{font-size:11px;color:#666;margin-top:4px}.section{margin-bottom:28px}.section h2{font-size:16px;font-weight:900;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;color:#333;padding-bottom:6px;border-bottom:1px solid #e0e0e0}.footer{margin-top:40px;padding-top:16px;border-top:1px solid #e0e0e0;color:#999;font-size:11px;display:flex;justify-content:space-between}@media print{body{padding:20px}}</style></head><body><div class="header"><div class="logo-area"><h1>Brutal Studios</h1><p>Informe de gestión</p></div><div class="date-area"><strong>${now}</strong><br>brutal.ia · sistema interno</div></div><div class="kpis"><div class="kpi"><div class="num">${donePct}%</div><div class="lbl">Tareas completadas</div></div><div class="kpi"><div class="num" style="color:${urgentTasks>0?'#E51D2A':'#1B5FFA'}">${urgentTasks}</div><div class="lbl">Urgentes pendientes</div></div><div class="kpi"><div class="num" style="color:${overdueProjects.length>0?'#E51D2A':'#1B5FFA'}">${overdueProjects.length}</div><div class="lbl">Proyectos atrasados</div></div><div class="kpi"><div class="num">${projects.length}</div><div class="lbl">Proyectos totales</div></div><div class="kpi"><div class="num">${clients.length}</div><div class="lbl">Clientes</div></div></div><div class="section"><h2>Carga de trabajo del equipo</h2>${membersHtml}</div><div class="section"><h2>Estado de proyectos</h2>${projHtml}</div><div class="footer"><span>Brutal Studios · brutal.ia</span><span>Generado: ${now}</span></div></body></html>`)
           printWin.document.close()
           setTimeout(()=>printWin.print(),500)
-        }} className="flex items-center gap-2 px-4 py-2 rounded-xl font-syne text-[10px] font-black tracking-wide transition-colors" style={{background:'rgba(27,95,250,0.1)',color:BLU,border:'1px solid rgba(27,95,250,0.2)'}}>
+        }} ref={printBtnRef} className="flex items-center gap-2 px-4 py-2 rounded-xl font-syne text-[10px] font-black tracking-wide transition-colors" style={{background:'rgba(27,95,250,0.1)',color:BLU,border:'1px solid rgba(27,95,250,0.2)'}}>
           <LucideIcon name="download" size={13} color={BLU}/>EXPORTAR PDF
+          <span className="font-syne text-[7px] font-black ml-1 px-1.5 py-0.5 rounded" style={{background:'rgba(27,95,250,0.2)',color:BLU+'bb'}}>P</span>
         </button>
       </div>
 
@@ -4424,6 +4436,9 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
     try { return new Set(JSON.parse(localStorage.getItem('pinned_memoria')||'[]')) } catch { return new Set() }
   })
 
+  const memoriaRef = useRef<any[]>([])
+  memoriaRef.current = data.memoria
+
   const togglePin = (id: string) => {
     setPinnedIds(prev => {
       const next = new Set(prev)
@@ -4438,6 +4453,11 @@ function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any
       if (e.key === 'Escape' && editing) { setEditing(null); return }
       if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
       if (e.key === 'n' && !editing) { e.preventDefault(); onOpenModal('memoria') }
+      if (e.key === 'e' && expanded && !editing) {
+        e.preventDefault()
+        const entry = memoriaRef.current.find((m: any) => m.id === expanded)
+        if (entry) { setEditing(expanded); setEditTitle(entry.title||''); setEditContent(entry.content||''); setEditCategory(entry.category||'') }
+      }
       if (e.key === 'p' && expanded && !editing) {
         e.preventDefault()
         const isPinned = pinnedIds.has(expanded)
@@ -4613,7 +4633,32 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
   const totalFired = data.reglas.reduce((s: number, r: Regla)=>s+(r.trigger_count||0),0)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string|null>(null)
   const [reglaSearch, setReglaSearch] = useState('')
+  const [focusedReglaId, setFocusedReglaId] = useState<string|null>(null)
+  const visibleReglasRef = useRef<Regla[]>([])
   const visibleReglas = data.reglas.filter((r: Regla)=>!reglaSearch.trim()||r.name.toLowerCase().includes(reglaSearch.toLowerCase())||(r.condition_text||'').toLowerCase().includes(reglaSearch.toLowerCase())||(r.action_text||'').toLowerCase().includes(reglaSearch.toLowerCase()))
+  visibleReglasRef.current = visibleReglas
+
+  useEffect(()=>{
+    const handler = (e: KeyboardEvent) => {
+      if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
+      if (e.key === 'j' || e.key === 'k') {
+        e.preventDefault()
+        const rules = visibleReglasRef.current
+        const idx = focusedReglaId ? rules.findIndex((r: Regla)=>r.id===focusedReglaId) : -1
+        const next = e.key==='j' ? Math.min(idx+1, rules.length-1) : Math.max(idx-1, 0)
+        if (rules[next]) setFocusedReglaId(rules[next].id)
+      }
+      if (e.key === 'e' && focusedReglaId && isOwner) {
+        e.preventDefault()
+        const rule = visibleReglasRef.current.find((r: Regla)=>r.id===focusedReglaId)
+        if (rule) data.updateRegla(rule.id, {active:!rule.active}).then(()=>showToast(rule.active?'Regla pausada':'Regla activada')).catch(()=>{})
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedReglaId, isOwner])
+
   return (
     <div className="p-8 max-w-[900px] mx-auto">
       <div className="flex items-end justify-between mb-8">
@@ -4644,7 +4689,7 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
       )}
       <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
         {visibleReglas.map((r: Regla, i: number)=>(
-          <div key={r.id} className="group flex items-center gap-4 px-5 py-4 transition-all" style={{borderBottom:i<visibleReglas.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${r.active?BLU+'60':'transparent'}`,opacity:r.active?1:0.45}}>
+          <div key={r.id} onClick={()=>setFocusedReglaId(r.id)} className="group flex items-center gap-4 px-5 py-4 transition-all cursor-pointer" style={{borderBottom:i<visibleReglas.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${r.active?BLU+'60':'transparent'}`,opacity:r.active?1:0.45,background:focusedReglaId===r.id?'rgba(255,255,255,0.025)':'transparent'}}>
             <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:r.active?'rgba(27,95,250,0.08)':'rgba(255,255,255,0.03)',border:`1px solid ${r.active?'rgba(27,95,250,0.18)':BORDER}`}}>
               <LucideIcon name="zap" size={14} color={r.active?BLU:'rgba(255,255,255,0.2)'}/>
             </div>
