@@ -1134,6 +1134,14 @@ function TareasSection({data,onOpenModal,showToast,isOwner,onNavigate,onSelectPr
               </button>
             </div>
           </div>
+          <div className="flex items-center justify-center gap-2 py-2" style={{borderBottom:`1px solid ${BORDER}`}}>
+            {(['J/K NAVEGAR','C COMPLETAR','L NIVEL','D FECHA','⌘+ENTER GUARDAR'] as const).map((hint,i,arr)=>(
+              <span key={hint} className="flex items-center gap-2">
+                <span className="font-syne text-[6.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.08)'}}>{hint}</span>
+                {i<arr.length-1&&<span className="font-syne text-[6px]" style={{color:'rgba(255,255,255,0.05)'}}>·</span>}
+              </span>
+            ))}
+          </div>
 
           <div className="p-7 space-y-6">
             {/* Title editable */}
@@ -1972,6 +1980,9 @@ function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,
         <div>
           <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>{dateStr.toUpperCase()}</div>
           <h1 className="font-figtree text-[32px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>{greeting}, <span style={{color:'rgba(240,240,248,0.55)'}}>{profile.name.split(' ')[0]}</span></h1>
+          <div className="flex items-center gap-2 mt-1.5">
+            <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>N CAPTURA RÁPIDA</span>
+          </div>
         </div>
         <button onClick={()=>onOpenModal('tarea')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white transition-all hover:opacity-90" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
           <LucideIcon name="plus" size={12} color="white"/> NUEVA TAREA
@@ -3656,21 +3667,28 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient}
   const [contentSearch, setContentSearch] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
   const [confirmDeleteContent, setConfirmDeleteContent] = useState(false)
+  const filteredAgendaRef = useRef<any[]>([])
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && activeItem) { setActiveItem(null); return }
-      if (e.key === 'n' && !activeItem && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
-        e.preventDefault()
-        onOpenModal('contenido')
-      }
-      if (e.key === 's' && activeItem && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
+      if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
+      if (e.key === 'n' && !activeItem) { e.preventDefault(); onOpenModal('contenido') }
+      if (e.key === 's' && activeItem) {
         e.preventDefault()
         const statuses = ['borrador','pendiente','listo','publicado']
         const curr = statuses.indexOf(activeItem.status)
         const next = statuses[(curr+1)%statuses.length]
         data.updateAgenda(activeItem.id, {status:next}).catch(()=>{})
         setActiveItem((prev: any) => ({...prev, status: next}))
+      }
+      if (e.key === 'j' || e.key === 'k') {
+        e.preventDefault()
+        const items = filteredAgendaRef.current
+        const idx = activeItem ? items.findIndex((a: any)=>a.id===activeItem.id) : -1
+        const next = e.key==='j' ? Math.min(idx+1, items.length-1) : Math.max(idx-1, 0)
+        const item = items[next]
+        if (item) openItem(item)
       }
     }
     window.addEventListener('keydown', handler)
@@ -3715,6 +3733,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient}
   const filteredByClient = clientFilter === 'Todos' ? data.agenda : data.agenda.filter((a: any) => (a.client?.name||data.clients.find((c: any)=>c.id===a.client_id)?.name) === clientFilter)
   const filteredByAccount = accountFilter === 'Todas' ? filteredByClient : filteredByClient.filter((a: any)=>a.account_name===accountFilter)
   const filteredAgenda = !contentSearch.trim() ? filteredByAccount : filteredByAccount.filter((a: any)=>a.title?.toLowerCase().includes(contentSearch.toLowerCase()))
+  filteredAgendaRef.current = filteredAgenda
 
   const changeStatus = async (item: any, newStatus: string) => {
     try {
@@ -3739,6 +3758,14 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient}
               <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>PRODUCCIÓN</div>
               <div className="flex items-baseline gap-3">
                 <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.04em'}}>Pipeline</h1>
+                <div className="flex items-center gap-2">
+                  {(['J/K NAVEGAR','S ESTADO','N NUEVA'] as const).map((hint,i,arr)=>(
+                    <span key={hint} className="flex items-center gap-2">
+                      <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>{hint}</span>
+                      {i<arr.length-1&&<span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>}
+                    </span>
+                  ))}
+                </div>
                 {(()=>{
                   const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0)
                   const publishedThisMonth = data.agenda.filter((a: any)=>a.status==='publicado'&&a.publish_date&&new Date(a.publish_date+'T00:00:00')>=monthStart).length
