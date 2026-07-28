@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/whatsapp/webhook",
-      "destination": "/api/whatsapp/webhook"
+      "destination": "/api/whatsapp"
     }
   ],
   "crons": [

@@ -2,6 +2,8 @@ const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID
 const TOKEN = process.env.WHATSAPP_TOKEN
 
 export async function sendWhatsAppMessage(to: string, message: string) {
+  // Sin credenciales configuradas, no intentamos enviar (degrada sin romper el webhook)
+  if (!PHONE_NUMBER_ID || !TOKEN) return { skipped: true, reason: 'WhatsApp no configurado' }
   const res = await fetch(
     `https://graph.facebook.com/v21.0/${PHONE_NUMBER_ID}/messages`,
     {

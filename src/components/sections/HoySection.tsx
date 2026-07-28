@@ -515,6 +515,25 @@ CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
               }}/>
             ))}
 
+            {/* Campo de partículas orbitando el orbe */}
+            {Array.from({length:18}).map((_,i)=>{
+              const ang = (i/18)*Math.PI*2 + (i%3)*0.5
+              const rad = 88 + (i%4)*26
+              const x = 160 + Math.cos(ang)*rad
+              const y = 160 + Math.sin(ang)*rad
+              const sz = 1.4 + (i%3)*0.9
+              return (
+                <div key={'p'+i} className="absolute rounded-full pointer-events-none" style={{
+                  left:`${x}px`, top:`${y}px`, width:`${sz}px`, height:`${sz}px`,
+                  background:orbColor[orbMode], transform:'translate(-50%,-50%)',
+                  opacity: orbMode==='idle'?0.14:0.55,
+                  boxShadow:`0 0 ${sz*2.5}px ${orbColor[orbMode]}`,
+                  animation:`shimmer ${1.6+(i%5)*0.35}s ease-in-out ${i*0.11}s infinite`,
+                  transition:'opacity 0.6s, background 0.6s',
+                }}/>
+              )
+            })}
+
             <button onClick={handleOrb}
               className="relative z-10 rounded-full flex flex-col items-center justify-center transition-all duration-700 active:scale-95 disabled:cursor-wait select-none"
               style={{
@@ -584,41 +603,100 @@ CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
             )}
 
             {orbMode==='idle' && !harveyReply && (()=>{
-              const urgentEmail = ((data.inbox||[]) as any[]).find((m:any)=>!m.is_read&&m.ai_urgency==='urgent') ||
-                                  ((data.inbox||[]) as any[]).find((m:any)=>!m.is_read&&m.ai_urgency==='high')
-              const urgentTask = urgentTasks[0]
-              if (!urgentEmail && !urgentTask) return null
-              const isEmail = !!urgentEmail
-              const item = urgentEmail || urgentTask
+              const inboxArr = (data.inbox||[]) as any[]
+              const unread = inboxArr.filter((m:any)=>!m.is_read)
+              const importante = unread.filter((m:any)=>m.ai_urgency==='urgent'||m.ai_urgency==='high').length
+              const baja = unread.length - importante
+              const focusEmail = unread.find((m:any)=>m.ai_urgency==='urgent') || unread.find((m:any)=>m.ai_urgency==='high') || unread[0]
+              const focusTask = urgentTasks[0]
+              if (!focusEmail && !focusTask) return null
+              const isEmail = !!focusEmail
+              const focus:any = focusEmail || focusTask
+              const needsDecision = isEmail ? !!(focus.ai_action && focus.ai_action!=='Ninguna acción requerida') : true
+              const mins = isEmail ? Math.min(15, Math.max(2, Math.round(((focus.ai_summary||focus.body_preview||focus.subject||'').length)/90))) : null
+              const ORANGE = 'rgba(255,176,32,0.95)'
+              // Palabras clave reales: clientes mencionados en el inbox sin leer
+              const kwCount: Record<string,number> = {}
+              unread.forEach((m:any)=>{ const c=m.ai_client; if(c && c!=='Desconocido') kwCount[c]=(kwCount[c]||0)+1 })
+              const KW_COLORS = [BLU, ORANGE, GRN, 'rgba(167,139,250,0.9)', 'rgba(193,53,132,0.9)']
+              const keywords = Object.entries(kwCount).sort((a,b)=>b[1]-a[1]).slice(0,3)
+              const totalU = unread.length
+              const R = 30, CIRC = 2*Math.PI*R
+              const impLen = totalU ? CIRC*(importante/totalU) : 0
+              const bajaLen = totalU ? CIRC*(baja/totalU) : 0
               return (
                 <div className="animate-fadeUp rounded-2xl overflow-hidden mt-4" style={{
-                  background:'rgba(229,29,42,0.04)',
-                  border:'1px solid rgba(229,29,42,0.18)',
-                  maxWidth:'380px',
-                  width: isMobile ? 'calc(100vw - 40px)' : '380px',
+                  background:'rgba(255,255,255,0.022)', border:'1px solid rgba(255,255,255,0.07)',
+                  maxWidth:'620px', width: isMobile ? 'calc(100vw - 40px)' : '620px',
                 }}>
-                  <div className="flex items-center gap-2 px-4 py-2" style={{borderBottom:'1px solid rgba(229,29,42,0.10)',background:'rgba(229,29,42,0.05)'}}>
-                    <div className="w-1.5 h-1.5 rounded-full animate-pls" style={{background:RED,boxShadow:`0 0 6px ${RED}`}}/>
-                    <span className="font-syne text-[7px] font-black tracking-widest" style={{color:RED}}>FOCO AHORA</span>
-                    <span className="ml-auto font-syne text-[6.5px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(229,29,42,0.10)',color:RED}}>{isEmail?'EMAIL':'TAREA'}</span>
+                  <div className="flex items-center gap-2 px-5 py-2.5" style={{borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
+                    <div className="w-1.5 h-1.5 rounded-full animate-pls" style={{background:ORANGE,boxShadow:`0 0 6px ${ORANGE}`}}/>
+                    <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:ORANGE}}>FOCO AHORA</span>
                   </div>
-                  <div className="px-4 py-3 flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:'rgba(229,29,42,0.08)'}}>
-                      <LucideIcon name={isEmail?'mail':'alert-triangle'} size={12} color={RED}/>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-figtree text-[13px] font-semibold truncate" style={{color:'rgba(255,255,255,0.85)'}}>
-                        {isEmail ? (item.subject||'Sin asunto') : item.text}
+                  <div className={`flex ${isMobile?'flex-col':'flex-row'}`}>
+                    {/* Izquierda — asunto foco + acción */}
+                    <div className="flex-1 px-5 py-4" style={!isMobile&&totalU>0?{borderRight:'1px solid rgba(255,255,255,0.05)'}:undefined}>
+                      <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:isEmail?`${ORANGE}14`:`${RED}12`}}>
+                          <LucideIcon name={isEmail?'mail':'alert-triangle'} size={15} color={isEmail?ORANGE:RED}/>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-figtree font-bold leading-tight" style={{fontSize:'15px',color:'rgba(255,255,255,0.9)'}}>
+                            {isEmail ? (focus.subject||'Sin asunto') : focus.text}
+                          </div>
+                          <div className="font-figtree mt-1 truncate" style={{fontSize:'11px',color:'rgba(255,255,255,0.4)'}}>
+                            {isEmail ? ((focus.from_name||'?')+(focus.ai_client&&focus.ai_client!=='Desconocido'?' · '+focus.ai_client:'')) : (focus.assignee?.name||'Sin asignar')}
+                          </div>
+                        </div>
                       </div>
-                      <div className="font-syne text-[7.5px] font-black mt-0.5" style={{color:'rgba(255,255,255,0.28)'}}>
-                        {isEmail ? ((item.from_name||'?')+(item.ai_client&&item.ai_client!=='Desconocido'?' · '+item.ai_client:'')) : (item.assignee?.name||'Sin asignar')}
+                      <div className="flex items-center flex-wrap gap-2 mt-3 mb-3">
+                        {needsDecision && <span className="font-syne text-[7px] font-black px-2 py-1 rounded-md" style={{background:`${ORANGE}16`,color:ORANGE}}>REQUIERE DECISIÓN</span>}
+                        {mins!=null && <span className="inline-flex items-center gap-1 font-syne text-[7.5px] font-black" style={{color:'rgba(255,255,255,0.35)'}}><LucideIcon name="clock" size={9} color="rgba(255,255,255,0.35)"/> {mins} min</span>}
+                        {!isEmail && <span className="font-syne text-[7px] font-black px-2 py-1 rounded-md" style={{background:`${RED}14`,color:RED}}>URGENTE</span>}
                       </div>
+                      <button onClick={()=>onNavigate?.(isEmail?'inbox':'tareas')}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-syne text-[8.5px] font-black tracking-widest transition-all hover:opacity-85 active:scale-[0.98]"
+                        style={{background:BLU,color:'white'}}>
+                        {isEmail?'ABRIR CORREO':'VER TAREA'} <LucideIcon name="arrow-right" size={11} color="white"/>
+                      </button>
                     </div>
-                    <button onClick={()=>onNavigate?.(isEmail?'inbox':'tareas')}
-                      className="flex-shrink-0 flex items-center gap-1 px-3 py-2 rounded-xl font-syne text-[7.5px] font-black tracking-wide transition-all hover:opacity-75 active:scale-95"
-                      style={{background:'rgba(229,29,42,0.08)',border:'1px solid rgba(229,29,42,0.20)',color:RED}}>
-                      VER <LucideIcon name="arrow-right" size={9} color={RED}/>
-                    </button>
+                    {/* Derecha — inteligencia del inbox */}
+                    {totalU>0 && (
+                      <div className="px-5 py-4 flex flex-col items-center justify-center gap-3" style={{minWidth:isMobile?undefined:'232px'}}>
+                        <div className="flex items-center gap-4">
+                          <div className="relative flex-shrink-0">
+                            <svg width="72" height="72" viewBox="0 0 72 72">
+                              <circle cx="36" cy="36" r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6"/>
+                              {baja>0 && <circle cx="36" cy="36" r={R} fill="none" stroke={BLU} strokeWidth="6" strokeLinecap="round" strokeDasharray={`${bajaLen} ${CIRC-bajaLen}`} strokeDashoffset={`${-impLen}`} transform="rotate(-90 36 36)" style={{transition:'stroke-dasharray 0.8s ease'}}/>}
+                              {importante>0 && <circle cx="36" cy="36" r={R} fill="none" stroke={ORANGE} strokeWidth="6" strokeLinecap="round" strokeDasharray={`${impLen} ${CIRC-impLen}`} transform="rotate(-90 36 36)" style={{transition:'stroke-dasharray 0.8s ease'}}/>}
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="font-figtree font-black" style={{fontSize:'22px',color:'rgba(255,255,255,0.92)'}}>{totalU}</span>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full" style={{background:ORANGE}}/><span className="font-figtree" style={{fontSize:'11px',color:'rgba(255,255,255,0.6)'}}><b style={{color:'rgba(255,255,255,0.9)'}}>{importante}</b> importante{importante!==1?'s':''}</span></div>
+                            <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full" style={{background:BLU}}/><span className="font-figtree" style={{fontSize:'11px',color:'rgba(255,255,255,0.6)'}}><b style={{color:'rgba(255,255,255,0.9)'}}>{baja}</b> baja prioridad</span></div>
+                          </div>
+                        </div>
+                        {keywords.length>0 && (
+                          <div className="flex flex-wrap justify-center gap-1.5 w-full">
+                            {keywords.map(([name,cnt],i)=>{
+                              const col = KW_COLORS[i%KW_COLORS.length]
+                              return (
+                                <button key={name} onClick={()=>onNavigate?.('inbox')}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all hover:opacity-80 active:scale-95"
+                                  style={{background:`${col}10`,border:`1px solid ${col}28`}}>
+                                  <div className="w-1.5 h-1.5 rounded-full" style={{background:col,boxShadow:`0 0 5px ${col}`}}/>
+                                  <span className="font-syne text-[8px] font-black tracking-wide truncate" style={{color:col,maxWidth:'80px'}}>{name}</span>
+                                  <span className="font-syne text-[8px] font-black" style={{color:'rgba(255,255,255,0.3)'}}>{cnt}</span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               )
@@ -720,31 +798,7 @@ CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
               )
             })()}
 
-            {orbMode==='idle' && (()=>{
-              const chips: {label:string; q:string; color?:string}[] = []
-              if (urgentTasks.length > 0) chips.push({label:`${urgentTasks.length} urgente${urgentTasks.length>1?'s':''}`, q:`¿Qué tareas urgentes son las más críticas ahora mismo?`, color:RED})
-              if (overdueP > 0) chips.push({label:`${overdueP} proyecto${overdueP>1?'s':''} atrasado${overdueP>1?'s':''}`, q:`¿Cómo recuperamos los proyectos atrasados?`, color:'rgba(255,176,32,0.9)'})
-              if (unreadCount > 0) chips.push({label:`${unreadCount} email${unreadCount>1?'s':''} sin leer`, q:`¿Qué emails sin leer necesitan respuesta urgente?`, color:'rgba(255,176,32,0.7)'})
-              const todayCalEvts = ((data.calendarEvents||[]) as any[]).filter((e:any)=>e.start?.slice(0,10)===todayStr)
-              if (todayCalEvts.length > 0) chips.push({label:`${todayCalEvts.length} evento${todayCalEvts.length>1?'s':''} hoy`, q:`Dame detalles de mis eventos de hoy y cómo prepararme.`})
-              chips.push({label:'Estado general', q:'¿Cuál es el estado general de Brutal Studios hoy?'})
-              chips.push({label:'Proyectos', q:'¿Cómo van los proyectos activos?'})
-              if (pipeline > 0) chips.push({label:`Pipeline · ${pipeline}`, q:`¿Qué contenido deberíamos priorizar publicar esta semana?`, color:'rgba(193,53,132,0.8)'})
-              return (
-                <div className="flex flex-wrap justify-center gap-2 mt-5">
-                  {chips.slice(0,6).map((c,i)=>(
-                    <button key={i} disabled={orbMode!=='idle'}
-                      onClick={()=>{setHarveySpoken(c.q);askHarvey(c.q)}}
-                      className="font-syne font-black tracking-wide px-3.5 py-2 rounded-full transition-all hover:opacity-80 disabled:opacity-20"
-                      style={{fontSize:'8px',background:c.color?`${c.color}10`:'rgba(255,255,255,0.03)',border:`1px solid ${c.color||'rgba(255,255,255,0.07)'}`,color:c.color||'rgba(255,255,255,0.38)'}}>
-                      {c.label}
-                    </button>
-                  ))}
-                </div>
-              )
-            })()}
-
-            <form className="mt-3" onSubmit={e=>{e.preventDefault();const q=textQ.trim();if(!q||orbMode!=='idle')return;setHarveySpoken(q);setTextQ('');askHarvey(q)}}>
+            <form className="mt-4" onSubmit={e=>{e.preventDefault();const q=textQ.trim();if(!q||orbMode!=='idle')return;setHarveySpoken(q);setTextQ('');askHarvey(q)}}>
               <div className="flex items-center gap-3 px-5 py-3.5 rounded-2xl" style={{
                 background:'rgba(255,255,255,0.03)',
                 border:'1px solid rgba(255,255,255,0.06)',
@@ -761,6 +815,35 @@ CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
                 )}
               </div>
             </form>
+
+            {orbMode==='idle' && (()=>{
+              const shortcuts: {icon:string;label:string;nav:string}[] = [
+                ...(unreadCount===0?[{icon:'mail',label:'Inbox',nav:'inbox'}]:[]),
+                {icon:'calendar',label:'Calendario',nav:'calendario'},
+                {icon:'users',label:'Equipo',nav:'equipo'},
+                {icon:'folder',label:'Proyectos',nav:'proyectos'},
+                {icon:'bar-chart-2',label:'Reportes',nav:'reportes'},
+              ]
+              return (
+                <div className="flex items-center justify-center flex-wrap gap-2 mt-4">
+                  {unreadCount>0 && (
+                    <button onClick={()=>onNavigate?.('inbox')}
+                      className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full font-syne text-[8px] font-black tracking-wide transition-all hover:opacity-80 active:scale-95"
+                      style={{background:'rgba(255,176,32,0.1)',border:'1px solid rgba(255,176,32,0.28)',color:'rgba(255,176,32,0.95)'}}>
+                      <LucideIcon name="mail" size={11} color="rgba(255,176,32,0.95)"/>
+                      {unreadCount} email{unreadCount!==1?'s':''} sin leer
+                    </button>
+                  )}
+                  {shortcuts.map((a)=>(
+                    <button key={a.nav} onClick={()=>onNavigate?.(a.nav)} title={a.label}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:bg-white/[0.06] active:scale-95"
+                      style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)'}}>
+                      <LucideIcon name={a.icon} size={14} color="rgba(255,255,255,0.42)"/>
+                    </button>
+                  ))}
+                </div>
+              )
+            })()}
           </div>
         </div>
       </div>
