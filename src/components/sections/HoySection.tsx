@@ -447,9 +447,13 @@ CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
 
   const orbColor: Record<OrbMode,string> = {idle:BLU,recording:RED,thinking:'rgba(139,92,246,0.9)',speaking:BLU}
   const orbLabel: Record<OrbMode,string> = {idle:'PULSA',recording:'STOP',thinking:'PIENSA',speaking:'STOP'}
-  const wispA = orbMode==='recording' ? 'rgba(229,29,42,0.85)' : orbMode==='thinking' ? 'rgba(139,92,246,0.85)' : 'rgba(27,95,250,0.85)'
-  const wispB = orbMode==='recording' ? 'rgba(255,120,60,0.6)' : 'rgba(139,92,246,0.7)'
   const rimCol = orbColor[orbMode]
+  // Colores del orbe de cristal (líquido interior) por estado
+  const liqA = orbMode==='recording' ? '#ff4530' : orbMode==='thinking' ? '#9b6bff' : '#2f6bff'
+  const liqB = orbMode==='recording' ? '#ff7a3c' : orbMode==='thinking' ? '#5f7dff' : '#7c4dff'
+  const rimHi = orbMode==='recording' ? 'rgba(255,160,130,0.95)' : orbMode==='thinking' ? 'rgba(185,165,255,0.95)' : 'rgba(150,190,255,0.95)'
+  const glowC = orbMode==='recording' ? 'rgba(255,90,60,0.55)' : orbMode==='thinking' ? 'rgba(150,110,255,0.55)' : 'rgba(70,130,255,0.55)'
+  const glowCsoft = orbMode==='recording' ? 'rgba(255,90,60,0.12)' : orbMode==='thinking' ? 'rgba(150,110,255,0.12)' : 'rgba(70,130,255,0.12)'
 
   return (
     <div className={isMobile ? 'h-full flex flex-col overflow-y-auto' : 'h-full flex overflow-hidden'} style={{background:'#030308'}}>
@@ -486,28 +490,63 @@ CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
               width:isMobile?'250px':'320px',height:isMobile?'250px':'320px',
               background:`radial-gradient(circle,${rimCol}2e,rgba(139,92,246,0.06) 45%,transparent 70%)`,
               filter:'blur(30px)',transition:'background 0.8s',
+              animation: orbMode!=='idle' ? 'haloPulse 2.4s ease-in-out infinite' : undefined,
             }}/>
 
-            {/* Esfera de cristal (botón) */}
+            {/* Esfera de cristal líquido (botón) */}
             <button onClick={handleOrb} aria-label="Hablar con Harvey"
-              className="relative rounded-full overflow-hidden transition-transform duration-500 active:scale-95 select-none"
-              style={{
-                width:isMobile?'250px':'320px',height:isMobile?'250px':'320px',
-                background:'radial-gradient(circle at 50% 38%,#0c1436 0%,#070a1c 52%,#02030a 100%)',
-                boxShadow:'inset 0 0 64px 12px rgba(0,0,0,0.65),inset 0 -30px 64px rgba(27,95,250,0.18),0 30px 80px rgba(0,0,0,0.6),0 0 80px rgba(27,95,250,0.12)',
-              }}>
-
-              {/* Wisps internos animados */}
-              <div className="absolute rounded-full pointer-events-none" style={{width:'60%',height:'55%',left:'8%',bottom:'6%',background:`radial-gradient(circle,${wispA},transparent 70%)`,filter:'blur(24px)',animation:'orbDrift 9s ease-in-out infinite',transition:'background 0.8s'}}/>
-              <div className="absolute rounded-full pointer-events-none" style={{width:'55%',height:'50%',right:'6%',top:'14%',background:`radial-gradient(circle,${wispB},transparent 70%)`,filter:'blur(24px)',animation:'orbDrift2 11s ease-in-out infinite',transition:'background 0.8s'}}/>
-              <div className="absolute rounded-full pointer-events-none" style={{width:'40%',height:'38%',left:'32%',top:'44%',background:`radial-gradient(circle,${rimCol}99,transparent 70%)`,filter:'blur(24px)',animation:'orbDrift 7s ease-in-out 0.5s infinite',transition:'background 0.8s'}}/>
-
-              {/* Rim light */}
-              <div className="absolute inset-0 rounded-full pointer-events-none" style={{boxShadow:`inset 0 0 3px 1px ${rimCol}, inset 10px 14px 46px ${rimCol}4d, inset -14px -18px 54px rgba(139,92,246,0.22)`,animation:'rimPulse 4s ease-in-out infinite',transition:'box-shadow 0.8s'}}/>
-
-              {/* Brillo especular */}
-              <div className="absolute rounded-full pointer-events-none" style={{top:'7%',left:'16%',width:'50%',height:'30%',background:'radial-gradient(circle at 42% 40%,rgba(255,255,255,0.30),rgba(255,255,255,0.05) 55%,transparent 72%)',filter:'blur(4px)'}}/>
-              <div className="absolute rounded-full pointer-events-none" style={{bottom:'12%',right:'20%',width:'22%',height:'12%',background:'radial-gradient(circle,rgba(160,190,255,0.35),transparent 70%)',filter:'blur(5px)'}}/>
+              className="relative transition-transform duration-500 active:scale-95 select-none"
+              style={{width:isMobile?'260px':'320px',height:isMobile?'260px':'320px'}}>
+              <svg viewBox="0 0 320 320" width="100%" height="100%" style={{display:'block',filter:`drop-shadow(0 26px 60px rgba(0,0,0,0.6)) drop-shadow(0 0 55px ${glowC})`}}>
+                <defs>
+                  <radialGradient id="orbSphere" cx="50%" cy="34%" r="72%">
+                    <stop offset="0%" stopColor="#0c1230"/><stop offset="42%" stopColor="#060a1c"/><stop offset="100%" stopColor="#01020a"/>
+                  </radialGradient>
+                  <radialGradient id="orbGloss" cx="42%" cy="38%" r="52%">
+                    <stop offset="0%" stopColor="rgba(210,224,255,0.36)"/><stop offset="42%" stopColor="rgba(210,224,255,0.05)"/><stop offset="68%" stopColor="transparent"/>
+                  </radialGradient>
+                  <radialGradient id="orbBot" cx="62%" cy="86%" r="42%">
+                    <stop offset="0%" stopColor={glowC}/><stop offset="60%" stopColor={glowCsoft}/><stop offset="100%" stopColor="transparent"/>
+                  </radialGradient>
+                  <radialGradient id="orbRim" cx="50%" cy="50%" r="50%">
+                    <stop offset="86%" stopColor="transparent"/><stop offset="96%" stopColor={glowCsoft}/><stop offset="99.2%" stopColor={rimHi}/><stop offset="100%" stopColor="rgba(150,120,255,0.5)"/>
+                  </radialGradient>
+                  <linearGradient id="orbVMask" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#000"/><stop offset="38%" stopColor="#000"/><stop offset="72%" stopColor="#888"/><stop offset="100%" stopColor="#fff"/>
+                  </linearGradient>
+                  <mask id="orbLowMask"><rect width="320" height="320" fill="url(#orbVMask)"/></mask>
+                  <filter id="orbLiqA" x="-30%" y="-30%" width="160%" height="160%">
+                    <feTurbulence type="fractalNoise" baseFrequency="0.011" numOctaves="4" seed="7" result="t">
+                      <animate attributeName="seed" values="7;13;7" dur="28s" repeatCount="indefinite"/>
+                    </feTurbulence>
+                    <feColorMatrix in="t" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1.3 0 0 0 -0.72" result="a"/>
+                    <feFlood floodColor={liqA} result="c"/>
+                    <feComposite in="c" in2="a" operator="in" result="col"/>
+                    <feGaussianBlur in="col" stdDeviation="6"/>
+                  </filter>
+                  <filter id="orbLiqB" x="-30%" y="-30%" width="160%" height="160%">
+                    <feTurbulence type="fractalNoise" baseFrequency="0.017 0.01" numOctaves="3" seed="21" result="t">
+                      <animate attributeName="seed" values="21;16;21" dur="34s" repeatCount="indefinite"/>
+                    </feTurbulence>
+                    <feColorMatrix in="t" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1.4 0 0 0 -0.9" result="a"/>
+                    <feFlood floodColor={liqB} result="c"/>
+                    <feComposite in="c" in2="a" operator="in" result="col"/>
+                    <feGaussianBlur in="col" stdDeviation="7"/>
+                  </filter>
+                  <clipPath id="orbClip"><circle cx="160" cy="160" r="159"/></clipPath>
+                </defs>
+                <g clipPath="url(#orbClip)">
+                  <circle cx="160" cy="160" r="159" fill="url(#orbSphere)"/>
+                  <g mask="url(#orbLowMask)">
+                    <rect x="0" y="0" width="320" height="320" filter="url(#orbLiqA)" opacity="0.7"/>
+                    <rect x="0" y="0" width="320" height="320" filter="url(#orbLiqB)" opacity="0.5"/>
+                  </g>
+                  <circle cx="160" cy="160" r="159" fill="url(#orbBot)"/>
+                  <ellipse cx="118" cy="80" rx="78" ry="44" fill="url(#orbGloss)"/>
+                  <circle cx="160" cy="160" r="159" fill="url(#orbRim)"/>
+                </g>
+                <circle cx="160" cy="160" r="159.2" fill="none" stroke={rimHi} strokeOpacity="0.4" strokeWidth="1"/>
+              </svg>
 
               {/* Contenido central */}
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 pointer-events-none">
@@ -777,22 +816,22 @@ CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
           )
         }
         return (
-          <div className="flex-shrink-0 flex items-start justify-center pt-16 pr-6 pl-2" style={{width:'150px'}}>
-            <div className="flex flex-col items-center py-5 rounded-[44px]" style={{width:'88px',background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,255,255,0.07)'}}>
-              <div className="mb-2"><LucideIcon name="sun" size={16} color="rgba(150,150,180,0.45)"/></div>
+          <div className="flex-shrink-0 flex items-start justify-center pt-14 pr-7 pl-2" style={{width:'162px'}}>
+            <div className="flex flex-col items-center px-3 py-6 rounded-[46px]" style={{width:'92px',background:'linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.012))',border:'1px solid rgba(255,255,255,0.08)',boxShadow:'inset 0 1px 0 rgba(255,255,255,0.05),0 20px 50px rgba(0,0,0,0.4)'}}>
+              <div className="mb-3 opacity-60"><LucideIcon name="sun" size={15} color="rgba(160,175,220,0.5)"/></div>
               {railStats.map((s,i)=>(
                 <div key={i} className="w-full flex flex-col items-center">
-                  {i>0 && <div style={{width:'34px',height:'1px',background:'rgba(255,255,255,0.07)'}}/>}
-                  <button onClick={()=>onNavigate?.(s.nav)} className="flex flex-col items-center gap-1.5 py-3.5 transition-all hover:opacity-80 active:scale-95" title={s.l}>
-                    <div className="font-figtree font-black" style={{fontSize:'24px',color:s.c,lineHeight:'1'}}>{s.n}</div>
-                    <div className="font-figtree" style={{fontSize:'8.5px',color:'rgba(255,255,255,0.32)'}}>{s.l}</div>
-                    <LucideIcon name={s.icon} size={14} color={s.c}/>
+                  {i>0 && <div style={{width:'30px',height:'1px',background:'rgba(255,255,255,0.06)',margin:'2px 0'}}/>}
+                  <button onClick={()=>onNavigate?.(s.nav)} className="group/rs flex flex-col items-center gap-1 py-4 transition-all active:scale-95" title={s.l}>
+                    <div className="font-figtree tabular-nums" style={{fontSize:'27px',fontWeight:400,color:s.c,lineHeight:'1',letterSpacing:'-0.01em',transition:'color 0.3s'}}>{s.n}</div>
+                    <div className="font-figtree" style={{fontSize:'9px',color:'rgba(255,255,255,0.34)',letterSpacing:'0.02em'}}>{s.l}</div>
+                    <div className="mt-1 opacity-55 group-hover/rs:opacity-100 transition-opacity"><LucideIcon name={s.icon} size={13} color={s.c}/></div>
                   </button>
                 </div>
               ))}
-              <div style={{width:'34px',height:'1px',background:'rgba(255,255,255,0.07)'}}/>
-              <button onClick={()=>onOpenModal('tarea')} className="mt-3.5 w-11 h-11 rounded-full flex items-center justify-center transition-all hover:opacity-85 active:scale-95" style={{background:`${BLU}18`,border:`1px solid ${BLU}35`}} title="Crear tarea">
-                <LucideIcon name="plus" size={18} color={BLU}/>
+              <div style={{width:'30px',height:'1px',background:'rgba(255,255,255,0.06)',margin:'4px 0'}}/>
+              <button onClick={()=>onOpenModal('tarea')} className="mt-3 w-11 h-11 rounded-full flex items-center justify-center transition-all hover:opacity-85 active:scale-95" style={{background:`radial-gradient(circle at 40% 35%,${BLU}40,${BLU}12)`,border:`1px solid ${BLU}40`,boxShadow:`0 0 16px ${BLU}22`}} title="Crear tarea">
+                <LucideIcon name="plus" size={18} color="#9dc0ff"/>
               </button>
             </div>
           </div>
