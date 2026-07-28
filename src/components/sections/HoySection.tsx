@@ -32,8 +32,9 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
     if (pendingAction && isMobile) actionCardRef.current?.scrollIntoView({behavior:'smooth',block:'center'})
   }, [pendingAction, isMobile])
 
+  // Al terminar, mostramos SIEMPRE el resumen visual (nunca el muro de texto); el texto completo va bajo demanda
   useEffect(() => {
-    if (orbMode === 'idle' && harveyReply) setShowTranscript(true)
+    if (orbMode === 'idle' && harveyReply) setShowTranscript(false)
   }, [orbMode, harveyReply])
 
   const replyBoxRef = useRef<HTMLDivElement>(null)
@@ -723,43 +724,83 @@ CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
                     }}/>
                   ))}
                 </div>
-              ) : harveyReply ? (
-                <div ref={replyBoxRef} className="relative px-6 py-5 rounded-2xl overflow-hidden text-center" style={{
+              ) : harveyReply ? (()=>{
+                const clean = harveyReply.replace(/\s+/g,' ').trim()
+                const sentences = clean.split(/(?<=[.!?…])\s+/).map(s=>s.trim()).filter(s=>s.length>0)
+                const question = sentences.length>1 && /[?？]$/.test(sentences[sentences.length-1]) ? sentences[sentences.length-1] : null
+                const body = question ? sentences.slice(0,-1) : sentences
+                // Saltamos saludos/frases muy cortas para que el titular tenga contenido real
+                const GREET = /^(buen[oa]s\s+(d[ií]as|tardes|noches)|hola|hey|vale|perfecto|claro|de acuerdo|entendido)\b/i
+                const bodyT = [...body]
+                while (bodyT.length>1 && (bodyT[0].length<22 || GREET.test(bodyT[0]))) bodyT.shift()
+                const titular = bodyT[0] || body[0] || clean
+                const points = bodyT.slice(1).filter(s=>s.length>10).slice(0,3)
+                const trunc = (s:string,n:number)=> s.length>n ? s.slice(0,n-1).trimEnd()+'…' : s
+                return (
+                <div ref={replyBoxRef} className="relative rounded-2xl overflow-hidden animate-fadeUp" style={{
                   background:'rgba(255,255,255,0.023)',
                   border:'1px solid rgba(255,255,255,0.06)',
                 }}>
                   <div className="absolute top-0 left-1/2 -translate-x-1/2" style={{width:'120px',height:'1px',background:`linear-gradient(90deg,transparent,${BLU}50,transparent)`}}/>
-                  {orbMode==='speaking' && (
-                    <div className="flex items-center justify-center gap-3 mb-3">
-                      <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2 px-5 pt-4 pb-2">
+                    {orbMode==='speaking' ? (
+                      <div className="flex items-center gap-1">
                         {[0,1,2,3,4].map(i=>(
-                          <div key={i} className="rounded-full" style={{width:'3px',height:`${[6,10,14,10,6][i]}px`,background:BLU,opacity:0.6,animation:`wave${i+1} 0.55s ease-in-out infinite`}}/>
+                          <div key={i} className="rounded-full" style={{width:'2.5px',height:`${[5,9,13,9,5][i]}px`,background:BLU,opacity:0.65,animation:`wave${i+1} 0.55s ease-in-out infinite`}}/>
                         ))}
                       </div>
-                      <button onClick={()=>setShowTranscript(v=>!v)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[7.5px] font-black tracking-widest transition-all hover:opacity-80 active:scale-95"
-                        style={{background:showTranscript?`${BLU}18`:'rgba(255,255,255,0.04)',border:`1px solid ${showTranscript?`${BLU}35`:'rgba(255,255,255,0.08)'}`,color:showTranscript?BLU:'rgba(255,255,255,0.3)'}}>
-                        <LucideIcon name={showTranscript?'eye-off':'eye'} size={10} color={showTranscript?BLU:'rgba(255,255,255,0.3)'}/>
-                        {showTranscript?'OCULTAR TEXTO':'LEER TEXTO'}
-                      </button>
-                    </div>
-                  )}
-                  {(orbMode!=='speaking' || showTranscript) && (
-                    <div style={{maxHeight:isMobile?'32vh':'300px',overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
-                      <p className="font-figtree leading-relaxed" style={{fontSize:'14px',color:'rgba(255,255,255,0.82)',fontWeight:400}}>
+                    ) : (
+                      <LucideIcon name="sparkles" size={12} color={BLU}/>
+                    )}
+                    <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(27,95,250,0.7)'}}>HARVEY{orbMode==='speaking'?' · HABLANDO':''}</span>
+                    <button onClick={()=>setShowTranscript(v=>!v)}
+                      className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg font-syne text-[7px] font-black tracking-widest transition-all hover:opacity-80 active:scale-95"
+                      style={{background:showTranscript?`${BLU}18`:'rgba(255,255,255,0.04)',border:`1px solid ${showTranscript?`${BLU}30`:'rgba(255,255,255,0.07)'}`,color:showTranscript?BLU:'rgba(255,255,255,0.32)'}}>
+                      <LucideIcon name={showTranscript?'eye-off':'eye'} size={9} color={showTranscript?BLU:'rgba(255,255,255,0.32)'}/>
+                      {showTranscript?'RESUMEN':'VER TEXTO'}
+                    </button>
+                  </div>
+                  {showTranscript ? (
+                    <div className="px-5 pb-4" style={{maxHeight:isMobile?'30vh':'260px',overflowY:'auto',WebkitOverflowScrolling:'touch'}}>
+                      <p className="font-figtree leading-relaxed text-left" style={{fontSize:'13.5px',color:'rgba(255,255,255,0.82)'}}>
                         {harveyReply}
                       </p>
                     </div>
+                  ) : (
+                    <div className="px-5 pb-4 text-left">
+                      <div className="font-figtree font-semibold" style={{fontSize:'15px',color:'rgba(255,255,255,0.9)',lineHeight:'1.35',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>
+                        {titular}
+                      </div>
+                      {points.length>0 && (
+                        <div className="flex flex-col gap-2 mt-3">
+                          {points.map((p,i)=>(
+                            <div key={i} className="flex items-start gap-2.5">
+                              <div className="rounded-full flex-shrink-0" style={{width:'5px',height:'5px',marginTop:'6px',background:BLU,boxShadow:`0 0 5px ${BLU}80`}}/>
+                              <span className="font-figtree" style={{fontSize:'12.5px',color:'rgba(255,255,255,0.62)',lineHeight:'1.35'}}>{trunc(p,90)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {question && (
+                        <div className="mt-3 flex items-start gap-2.5 px-3 py-2.5 rounded-xl" style={{background:`${BLU}0d`,border:`1px solid ${BLU}22`}}>
+                          <div className="flex-shrink-0" style={{marginTop:'1px'}}><LucideIcon name="message-circle" size={12} color={BLU}/></div>
+                          <span className="font-figtree font-medium" style={{fontSize:'12.5px',color:'rgba(27,95,250,0.92)',lineHeight:'1.35'}}>{trunc(question,120)}</span>
+                        </div>
+                      )}
+                    </div>
                   )}
                   {replayUrl && orbMode==='idle' && (
-                    <button onClick={()=>{ const a=getSharedAudio(); if(!a) return; a.src=replayUrl; a.onended=()=>{ if(orbModeRef.current==='speaking') setOrbMode('idle') }; setOrbMode('speaking'); a.play().catch(()=>setOrbMode('idle')) }}
-                      className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-syne text-[8px] font-black tracking-widest transition-all hover:opacity-80"
-                      style={{background:'rgba(27,95,250,0.1)',border:'1px solid rgba(27,95,250,0.22)',color:BLU}}>
-                      <LucideIcon name="volume-2" size={11} color={BLU}/> ESCUCHAR
-                    </button>
+                    <div className="px-5 pb-4">
+                      <button onClick={()=>{ const a=getSharedAudio(); if(!a) return; a.src=replayUrl; a.onended=()=>{ if(orbModeRef.current==='speaking') setOrbMode('idle') }; setOrbMode('speaking'); a.play().catch(()=>setOrbMode('idle')) }}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-syne text-[8px] font-black tracking-widest transition-all hover:opacity-80"
+                        style={{background:'rgba(27,95,250,0.1)',border:'1px solid rgba(27,95,250,0.22)',color:BLU}}>
+                        <LucideIcon name="volume-2" size={11} color={BLU}/> ESCUCHAR
+                      </button>
+                    </div>
                   )}
                 </div>
-              ) : (
+                )
+              })() : (
                 <p className="text-center font-figtree" style={{fontSize:'12px',color:'rgba(255,255,255,0.12)',fontStyle:'italic'}}>
                   Pulsa el orbe o escribe para hablar con Harvey
                 </p>
