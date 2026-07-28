@@ -352,22 +352,22 @@ export default function NexusDashboard({ profile }: Props) {
     const sc = NAV_SC[id]
     return (
       <button key={id} onClick={()=>{setSection(id); if (isMobile) setSidebarOpen(false)}}
-        className="flex items-center gap-2.5 w-full py-2.5 rounded-lg text-left transition-all duration-150 group"
+        className="flex items-center gap-3 w-full py-2.5 px-3 rounded-xl text-left transition-all duration-150 group"
         style={{
-          background: act ? 'rgba(27,95,250,0.1)' : 'transparent',
-          color: act ? '#F0F0F8' : 'rgba(240,240,248,0.38)',
-          borderLeft: act ? `2px solid ${BLU}` : '2px solid transparent',
-          paddingLeft: '10px',
-          paddingRight: '10px',
-          fontSize: '13px',
-          fontWeight: act ? '600' : '400',
-          marginBottom: '1px',
-          boxShadow: act ? `inset 0 0 20px rgba(27,95,250,0.05)` : 'none',
-        }}>
-        <LucideIcon name={icon} size={14} color={act ? BLU : 'rgba(240,240,248,0.2)'}/>
+          background: act ? 'rgba(84,116,232,0.13)' : 'transparent',
+          border: act ? '1px solid rgba(124,152,255,0.16)' : '1px solid transparent',
+          color: act ? '#eef1fb' : 'rgba(230,235,247,0.5)',
+          fontSize: '14px',
+          fontWeight: act ? 600 : 450,
+          marginBottom: '2px',
+          boxShadow: act ? '0 0 22px rgba(70,100,225,0.10), inset 0 1px 0 rgba(255,255,255,0.04)' : 'none',
+        }}
+        onMouseEnter={e=>{ if(!act) e.currentTarget.style.background='rgba(255,255,255,0.032)' }}
+        onMouseLeave={e=>{ if(!act) e.currentTarget.style.background='transparent' }}>
+        <LucideIcon name={icon} size={17} color={act ? '#93b4ff' : 'rgba(206,216,240,0.42)'}/>
         <span className="flex-1 truncate">{label}</span>
         {badge !== undefined && badge > 0 && (
-          <span className="font-syne text-[8px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center" style={{background: act ? BLU+'30' : 'rgba(229,29,42,0.15)', color: act ? BLU : RED}}>{badge}</span>
+          <span className="font-figtree text-[10px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center" style={{background:'rgba(214,172,102,0.16)', color:'#e2b877'}}>{badge}</span>
         )}
         {sc && !(badge && badge > 0) && (
           <span className="opacity-0 group-hover:opacity-100 transition-opacity font-syne text-[7px] font-black flex-shrink-0" style={{color:'rgba(255,255,255,0.15)'}}>G·{sc}</span>
@@ -377,8 +377,8 @@ export default function NexusDashboard({ profile }: Props) {
   }
 
   const navLabel = (text: string) => (
-    <div className="px-2 pt-3 pb-1">
-      <span className="font-syne text-[8px] font-black tracking-[0.2em]" style={{color:'rgba(255,255,255,0.12)'}}>{text}</span>
+    <div className="px-3 pt-4 pb-1.5">
+      <span className="font-syne font-black" style={{fontSize:'8.5px',letterSpacing:'0.22em',color:'rgba(230,235,250,0.24)'}}>{text}</span>
     </div>
   )
 
@@ -517,7 +517,7 @@ export default function NexusDashboard({ profile }: Props) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto px-2 pb-2">
+        <nav className="flex-1 overflow-y-auto px-2.5 pb-2">
           {navLabel('TRABAJO')}
           {navItem('hoy','Hoy','sun',urgentCount)}
           {navItem('inbox','Inbox','inbox',unreadCount)}
@@ -533,17 +533,17 @@ export default function NexusDashboard({ profile }: Props) {
           {navItem('chat','Brutal.IA','message-square')}
           {profile.role==='owner' && (
             <button onClick={()=>{setSection('harvey'); if (isMobile) setSidebarOpen(false)}}
-              className="flex items-center gap-2.5 w-full py-2.5 rounded-lg text-left transition-all duration-150 mt-0.5"
+              className="flex items-center gap-3 w-full py-2.5 px-3 rounded-xl text-left transition-all duration-150"
               style={{
-                background: section==='harvey' ? 'rgba(27,95,250,0.14)' : 'rgba(27,95,250,0.04)',
-                color: section==='harvey' ? '#F0F0F8' : 'rgba(100,150,255,0.65)',
-                borderLeft: `2px solid ${section==='harvey' ? BLU : 'rgba(27,95,250,0.2)'}`,
-                paddingLeft:'10px', paddingRight:'10px', fontSize:'13px', fontWeight:section==='harvey'?'600':'500',
-                boxShadow: section==='harvey' ? `inset 0 0 16px rgba(27,95,250,0.07), 0 0 12px rgba(27,95,250,0.06)` : 'none',
+                background: section==='harvey' ? 'rgba(84,116,232,0.15)' : 'rgba(84,116,232,0.05)',
+                border: `1px solid ${section==='harvey' ? 'rgba(124,152,255,0.2)' : 'rgba(124,152,255,0.1)'}`,
+                color: section==='harvey' ? '#eef1fb' : 'rgba(147,180,255,0.7)',
+                fontSize:'14px', fontWeight:section==='harvey'?600:500, marginBottom:'2px',
+                boxShadow: section==='harvey' ? '0 0 22px rgba(70,100,225,0.12)' : 'none',
               }}>
-              <LucideIcon name="cpu" size={14} color={section==='harvey'?BLU:'rgba(27,95,250,0.5)'}/>
+              <LucideIcon name="cpu" size={17} color={section==='harvey'?'#93b4ff':'rgba(147,180,255,0.6)'}/>
               <span className="flex-1 truncate">Harvey</span>
-              <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(27,95,250,0.12)',color:'rgba(27,95,250,0.6)',letterSpacing:'0.1em'}}>AI</span>
+              <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(124,152,255,0.14)',color:'rgba(147,180,255,0.7)',letterSpacing:'0.1em'}}>AI</span>
             </button>
           )}
           {navItem('ajustes','Operativa','settings')}
