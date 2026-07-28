@@ -13,6 +13,16 @@
 @keyframes dot3 { 0%,40%,100% { transform:scale(.6);opacity:.3 } 70% { transform:scale(1);opacity:1 } }
 @keyframes shimmer { 0% { opacity:0.6 } 50% { opacity:1 } 100% { opacity:0.6 } }
 @keyframes riseT { from { transform:translate(-50%,10px) } to { transform:translate(-50%,0) } }
+@keyframes spin { to { transform: rotate(360deg) } }
+@keyframes orbBreath { 0%,100% { opacity:0.9;transform:scale(1) } 50% { opacity:1;transform:scale(1.02) } }
+@keyframes scanLine { 0% { transform:translateX(-100%) } 100% { transform:translateX(400%) } }
+@keyframes wave1 { 0%,100%{height:4px} 50%{height:18px} }
+@keyframes wave2 { 0%,100%{height:8px} 50%{height:24px} }
+@keyframes wave3 { 0%,100%{height:14px} 50%{height:28px} }
+@keyframes wave4 { 0%,100%{height:6px} 50%{height:20px} }
+@keyframes wave5 { 0%,100%{height:10px} 50%{height:22px} }
+@keyframes ringBreathe { 0%,100% { transform: scale(1) } 50% { transform: scale(1.014) } }
+@keyframes glowPulseR { 0%, 100% { box-shadow: 0 0 0 0 rgba(229,29,42,0) } 50% { box-shadow: 0 0 30px 8px rgba(229,29,42,0.20) } }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; overflow: hidden; background: #040409; }
@@ -29,7 +39,61 @@ html, body { height: 100%; overflow: hidden; background: #040409; }
 .animate-dot2 { animation: dot2 1.2s infinite; }
 .animate-dot3 { animation: dot3 1.2s infinite; }
 .animate-shimmer { animation: shimmer 2s ease infinite; }
+.animate-wave1 { animation: wave1 0.6s ease-in-out infinite; }
+.animate-wave2 { animation: wave2 0.6s ease-in-out infinite 0.1s; }
+.animate-wave3 { animation: wave3 0.6s ease-in-out infinite 0.2s; }
+.animate-wave4 { animation: wave4 0.6s ease-in-out infinite 0.3s; }
+.animate-wave5 { animation: wave5 0.6s ease-in-out infinite 0.15s; }
 .animate-riseT { animation: riseT 0.25s ease; }
+.animate-scanLine { animation: scanLine 1.4s ease-in-out infinite; }
 
 .font-syne { font-family: 'Syne', sans-serif; }
 .font-figtree { font-family: 'Figtree', system-ui, sans-serif; }
+
+/* Altura de viewport dinámica: la tab bar no salta cuando la barra de URL
+   del navegador móvil se colapsa/expande (fallback: h-screen de Tailwind).
+   html/body deben seguir la misma medida o recortan/desplazan la tab bar. */
+@supports (height: 100dvh) {
+  html, body { height: 100dvh; }
+  .nx-app-root { height: 100dvh; }
+}
+
+/* ── Móvil ─────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* Los wrappers de sección usan p-8/p-6: compactar en pantallas pequeñas */
+  .p-8 { padding: 1.1rem !important; }
+  .p-6 { padding: 1rem !important; }
+  .px-6 { padding-left: 1rem !important; padding-right: 1rem !important; }
+  .px-7 { padding-left: 1.1rem !important; padding-right: 1.1rem !important; }
+
+  /* Evitar zoom automático de iOS al enfocar inputs (necesita >=16px) */
+  input, select, textarea { font-size: 16px !important; }
+
+  /* Pistas de atajos de teclado: sin sentido en táctil */
+  .nx-kbd-hints { display: none !important; }
+
+  /* Scroll táctil suave en contenedores horizontales */
+  .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+}
+
+/* ── Modo claro ────────────────────────────────────────────── */
+/* La UI está pintada en oscuro con estilos inline; el modo claro invierte
+   perceptualmente toda la app y re-invierte las imágenes/vídeos para que
+   se vean normales. hue-rotate(180deg) devuelve los colores de marca
+   (azul BRUTAL, rojo, verde) a su tono original.
+   contrast(1.15) compensa los grises que genera la inversión sobre
+   texto rgba(255,255,255,α) con alfa baja. */
+html.theme-light body {
+  filter: invert(1) hue-rotate(180deg) contrast(1.15);
+  background: #0b0b12;
+}
+html.theme-light body img,
+html.theme-light body video,
+html.theme-light body iframe,
+html.theme-light body canvas,
+html.theme-light body .nx-noinvert {
+  filter: invert(1) hue-rotate(180deg) contrast(0.87);
+}
+html.theme-light { background: #f4f4ed; color-scheme: light; }
+html.theme-light body img[src*="brutal-logo-white"] { filter: none; }
+html.theme-light ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); }

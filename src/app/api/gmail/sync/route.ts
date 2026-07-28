@@ -2,6 +2,9 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
 import { analyzeEmail, EmailAnalysis } from '@/lib/ai'
 import { NextResponse } from 'next/server'
+import { sendPushToUser, sendPushToAll } from '@/lib/push'
+
+const MEETING_RE = /meet\.google\.com\/[a-z-]+|zoom\.us\/j\/\d+|teams\.microsoft\.com\/l\/meetup/i
 
 const COMPANY_EMAIL = 'colaboraciones@brutalstudios.es'
 
@@ -31,9 +34,22 @@ export async function POST() {
     emails = await getEmailsWithRefreshToken(profile.gmail_refresh_token, 20)
     gmailAccount = await getGmailAccountEmail(profile.gmail_refresh_token)
   } catch (err: unknown) {
-    const error = err as Error & { code?: number; response?: { data?: unknown } }
+    const error = err as Error & { code?: number; response?: { data?: { error?: string } } }
+    const isTokenExpired = error.message?.includes('invalid_grant')
+      || error.response?.data?.error === 'invalid_grant'
+      || error.message?.includes('Token has been expired or revoked')
+
+    if (isTokenExpired) {
+      await admin.from('profiles').update({ gmail_connected: false, gmail_refresh_token: null }).eq('id', user.id)
+      return NextResponse.json(
+        { error: 'token_expired', message: 'El token de Gmail ha caducado. Reconecta tu cuenta desde Operativa → Sincronización.' },
+        { status: 401 }
+      )
+    }
+
+    console.error('Gmail sync error:', error.message, error.code)
     return NextResponse.json(
-      { error: 'Gmail API error', message: error.message, code: error.code, details: error.response?.data },
+      { error: 'gmail_error', message: 'Error al conectar con Gmail. Inténtalo de nuevo.' },
       { status: 500 }
     )
   }
@@ -42,6 +58,7 @@ export async function POST() {
   const isCompanyAccount = gmailAccount === COMPANY_EMAIL
 
   let newCount = 0
+  const newUnread: { from_name: string; subject: string; urgency: string }[] = []
 
   for (const email of emails) {
     const { data: existing } = await admin
@@ -94,7 +111,35 @@ export async function POST() {
       })
     }
 
+    // Email con enlace de reunión → tarea con fecha (aparece en el Calendario)
+    const meetingText = `${email.subject || ''} ${email.body_preview || ''}`
+    if (MEETING_RE.test(meetingText)) {
+      const day = (email.received_at || new Date().toISOString()).slice(0, 10)
+      await admin.from('tasks').insert({
+        created_by: user.id,
+        assigned_to: isCompanyAccount ? null : user.id,
+        text: `Reunión: ${email.subject || email.from_name || 'sin asunto'}`,
+        level: 'high',
+        due_date: day,
+        source: 'gmail',
+      })
+    }
+
+    if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgency: analysis.urgency })
     newCount++
+  }
+
+  // Notificación push por los emails nuevos sin leer
+  if (newUnread.length > 0) {
+    const first = newUnread[0]
+    const payload = {
+      title: newUnread.length === 1 ? `📩 ${first.from_name}` : `📩 ${newUnread.length} emails nuevos`,
+      body: newUnread.length === 1 ? first.subject : `${first.from_name}: ${first.subject} y ${newUnread.length - 1} más`,
+      url: '/dashboard',
+      tag: 'gmail-sync',
+    }
+    if (isCompanyAccount) sendPushToAll(admin, payload).catch(() => {})
+    else sendPushToUser(admin, user.id, payload).catch(() => {})
   }
 
   return NextResponse.json({ synced: newCount, total: emails.length, account: gmailAccount, shared: isCompanyAccount })

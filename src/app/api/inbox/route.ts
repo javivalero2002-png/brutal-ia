@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { sendPushToUser } from '@/lib/push'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET() {
@@ -8,7 +9,7 @@ export async function GET() {
 
   const admin = await createAdminClient()
 
-  // Return own messages + shared company messages (colaboraciones@)
+  // Own messages + shared company (colabs) messages
   const { data, error } = await admin
     .from('inbox_messages')
     .select('*')
@@ -16,7 +17,18 @@ export async function GET() {
     .order('received_at', { ascending: false })
     .limit(100)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    // shared column may not exist yet — fall back to own messages only
+    const { data: fallback, error: fbErr } = await admin
+      .from('inbox_messages')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('received_at', { ascending: false })
+      .limit(100)
+    if (fbErr) return NextResponse.json({ error: fbErr.message }, { status: 500 })
+    return NextResponse.json(fallback)
+  }
+
   return NextResponse.json(data)
 }
 
@@ -42,6 +54,14 @@ export async function POST(request: NextRequest) {
   }).select().single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Notificación push al destinatario del mensaje interno
+  sendPushToUser(admin, to_user_id, {
+    title: `Mensaje de ${from_name || 'Equipo'}`,
+    body: (subject && subject !== '(sin asunto)' ? subject + ' — ' : '') + body.slice(0, 100),
+    url: '/dashboard',
+    tag: `dm-${data?.id || ''}`,
+  }).catch(() => {})
   return NextResponse.json(data)
 }
 
@@ -52,10 +72,12 @@ export async function PATCH(request: NextRequest) {
 
   const { id, is_read } = await request.json()
   const admin = await createAdminClient()
+  // Allow marking own messages OR shared (colabs) messages as read
   const { error } = await admin
     .from('inbox_messages')
     .update({ is_read, is_unread: !is_read })
     .eq('id', id)
+    .or(`user_id.eq.${user.id},shared.eq.true`)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })

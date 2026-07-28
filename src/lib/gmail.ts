@@ -8,20 +8,20 @@ export function getOAuthClient() {
   return new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI)
 }
 
-export function getAuthUrl(userId: string, includeCalendar = true) {
+export function getAuthUrl(userId: string, account: 'personal' | 'colabs' = 'personal') {
   const oauth2Client = getOAuthClient()
   const scopes = [
     'https://www.googleapis.com/auth/gmail.readonly',
     'https://www.googleapis.com/auth/userinfo.email',
   ]
-  if (includeCalendar) {
-    scopes.push('https://www.googleapis.com/auth/calendar.readonly')
+  if (account === 'personal') {
+    scopes.push('https://www.googleapis.com/auth/calendar.events')
   }
   return oauth2Client.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
     scope: scopes,
-    state: userId,
+    state: `${userId}:${account}`,
   })
 }
 
@@ -47,7 +47,7 @@ export async function getEmailsWithRefreshToken(refreshToken: string, maxResults
 
   const messages = listRes.data.messages || []
 
-  const emails = await Promise.all(
+  const results = await Promise.allSettled(
     messages.map(async (msg) => {
       const full = await gmail.users.messages.get({
         userId: 'me',
@@ -76,14 +76,14 @@ export async function getEmailsWithRefreshToken(refreshToken: string, maxResults
         from_email: fromEmail,
         subject,
         body_preview: body.slice(0, 500),
-        received_at: new Date(date).toISOString(),
+        received_at: (date && !isNaN(new Date(date).getTime()) ? new Date(date) : new Date()).toISOString(),
         is_unread: (full.data.labelIds || []).includes('UNREAD'),
         attachments,
       }
     })
   )
 
-  return emails
+  return results.filter(r => r.status === 'fulfilled').map(r => (r as PromiseFulfilledResult<any>).value)
 }
 
 export async function getCalendarEvents(refreshToken: string, monthsAhead = 2) {
@@ -114,6 +114,52 @@ export async function getCalendarEvents(refreshToken: string, monthsAhead = 2) {
     colorId: e.colorId || '',
     htmlLink: e.htmlLink || '',
   }))
+}
+
+export async function createCalendarEvent(refreshToken: string, opts: {
+  title: string
+  date: string        // YYYY-MM-DD
+  time?: string       // HH:MM, optional
+  durationMinutes?: number
+  description?: string
+  attendees?: string[] // emails — reciben invitación y el evento aparece en su Calendar
+}) {
+  const oauth2Client = getOAuthClient()
+  oauth2Client.setCredentials({ refresh_token: refreshToken })
+  const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
+
+  let start: any, end: any
+  if (opts.time) {
+    const startDT = new Date(`${opts.date}T${opts.time}:00`)
+    const endDT = new Date(startDT.getTime() + (opts.durationMinutes ?? 60) * 60000)
+    start = { dateTime: startDT.toISOString(), timeZone: 'Europe/Madrid' }
+    end   = { dateTime: endDT.toISOString(),   timeZone: 'Europe/Madrid' }
+  } else {
+    const nextDay = new Date(opts.date + 'T00:00:00')
+    nextDay.setDate(nextDay.getDate() + 1)
+    const nextDayStr = nextDay.toISOString().slice(0, 10)
+    start = { date: opts.date }
+    end   = { date: nextDayStr }
+  }
+
+  const { data } = await calendar.events.insert({
+    calendarId: 'primary',
+    sendUpdates: opts.attendees?.length ? 'all' : 'none',
+    requestBody: {
+      summary: opts.title,
+      description: opts.description ?? 'Creado por Harvey · Brutal Studios',
+      start,
+      end,
+      ...(opts.attendees?.length ? { attendees: opts.attendees.map(email => ({ email })) } : {}),
+    },
+  })
+
+  return {
+    id: data.id ?? '',
+    htmlLink: data.htmlLink ?? '',
+    title: data.summary ?? opts.title,
+    start: data.start?.dateTime ?? data.start?.date ?? opts.date,
+  }
 }
 
 function extractAttachments(payload: any): {attachmentId: string; filename: string; mimeType: string; size: number}[] {

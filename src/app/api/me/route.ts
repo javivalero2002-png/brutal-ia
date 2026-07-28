@@ -37,19 +37,10 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // 3. First time user — create profile
-  const name = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Usuario'
-  const rawInitials = name.split(' ').map((n: string) => n[0]).join('').toUpperCase()
-  const initials = rawInitials.slice(0, 2) || 'US'
-  const colors = ['#1B5FFA', '#9B5FFA', '#E51D2A', '#FA8B1B', '#1BFA9B']
-  const avatar_color = colors[Math.abs((user.email?.charCodeAt(0) ?? 0)) % colors.length]
-
-  const { data: newProfile, error: insertErr } = await admin
-    .from('profiles')
-    .insert({ id: user.id, email: user.email!, name, initials, avatar_color, role: 'member' })
-    .select()
-    .single()
-
-  if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 })
-  return NextResponse.json(newProfile)
+  // 3. Unknown user — self-registration is disabled
+  // All accounts must be pre-created by the owner via /api/admin/team
+  return NextResponse.json(
+    { error: 'Acceso no autorizado. Contacta con el administrador de Brutal Studios.' },
+    { status: 403 }
+  )
 }

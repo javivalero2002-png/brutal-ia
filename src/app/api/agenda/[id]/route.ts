@@ -1,6 +1,11 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
+// Solo columnas conocidas: campos desconocidos no deben tumbar la petición
+// ni permitir escribir columnas arbitrarias (p. ej. created_by).
+const pick = (obj: any, keys: string[]) => Object.fromEntries(Object.entries(obj || {}).filter(([k, v]) => keys.includes(k) && v !== undefined))
+
+
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -9,12 +14,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { id } = await params
   const body = await request.json()
   const admin = await createAdminClient()
-  const { data, error } = await admin
-    .from('content_agenda')
-    .update(body)
-    .eq('id', id)
-    .select('*, client:clients(id,name,initials,color)')
-    .single()
+  const payload: any = pick(body, ['title','platform','content_type','status','publish_date','publish_time','notes','client_id','account_name','video_url'])
+  let { data, error } = await admin.from('content_agenda').update(payload).eq('id', id).select('*, client:clients(id,name,initials,color)').single()
+  if (error && /account_name|video_url/.test(error.message)) {
+    delete payload.account_name; delete payload.video_url
+    ;({ data, error } = await admin.from('content_agenda').update(payload).eq('id', id).select('*, client:clients(id,name,initials,color)').single())
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)

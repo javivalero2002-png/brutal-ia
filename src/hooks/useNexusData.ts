@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Client, Project, Task, InboxMessage, MemoriaEntry, ContentItem, Regla, ChatMessage, Profile } from '@/types'
 
@@ -22,6 +22,8 @@ async function apiFetch(url: string, opts?: RequestInit) {
 }
 
 export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: InboxMessage) => void) {
+  const onNewInboxRef = useRef(onNewInboxMessage)
+  onNewInboxRef.current = onNewInboxMessage
   const [clients, setClients] = useState<Client[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
@@ -32,10 +34,15 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [team, setTeam] = useState<Profile[]>([])
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
+  const [calendarScopeError, setCalendarScopeError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<{ ok: boolean; message: string } | null>(null)
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
+
+  const aliveRef = useRef(true)
+  useEffect(() => () => { aliveRef.current = false }, [])
 
   const load = useCallback(async () => {
     if (!profile) return
@@ -50,24 +57,29 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
         apiFetch('/api/reglas'),
         apiFetch('/api/chat/history'),
       ])
+      if (!aliveRef.current) return
       setClients(c); setProjects(p); setTasks(t); setInbox(i)
       setMemoria(m); setAgenda(a); setReglas(r); setChatMessages(ch)
       const teamData = await apiFetch('/api/team')
+      if (!aliveRef.current) return
       setTeam(teamData)
-      // Load calendar events (non-blocking)
-      apiFetch('/api/calendar/events').then(setCalendarEvents).catch(()=>{})
+      apiFetch('/api/calendar/events').then((res: any) => {
+        if (!aliveRef.current) return
+        if (res?.__error === 'no_scope') { setCalendarScopeError(true); setCalendarEvents([]) }
+        else { setCalendarScopeError(false); setCalendarEvents(Array.isArray(res) ? res : []) }
+      }).catch(()=>{})
     } finally {
-      setLoading(false)
+      if (aliveRef.current) setLoading(false)
     }
   }, [profile])
 
   useEffect(() => { load() }, [load])
 
-  // Supabase Realtime — inbox
+  // Supabase Realtime — own inbox messages
   useEffect(() => {
     if (!profile) return
     const channel = supabase
-      .channel(`inbox-${profile.id}`)
+      .channel(`inbox-own-${profile.id}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -79,15 +91,44 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
           if (prev.some(m => m.id === msg.id)) return prev
           return [msg, ...prev]
         })
-        if (onNewInboxMessage) onNewInboxMessage(msg)
+        onNewInboxRef.current?.(msg)
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id])
 
-  const syncGmail = useCallback(async () => {
-    if (!profile?.gmail_connected) return
+  // Supabase Realtime — shared colabs emails (visible to all team members)
+  useEffect(() => {
+    if (!profile) return
+    const sharedChannel = supabase
+      .channel(`inbox-shared-${profile.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'inbox_messages',
+        filter: `shared=eq.true`,
+      }, (payload) => {
+        const msg = payload.new as InboxMessage
+        setInbox(prev => {
+          if (prev.some(m => m.id === msg.id)) return prev
+          return [msg, ...prev]
+        })
+        onNewInboxRef.current?.(msg)
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(sharedChannel) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id])
+
+  const reloadInbox = useCallback(async () => {
+    const newInbox = await apiFetch('/api/inbox')
+    setInbox(newInbox)
+    return newInbox
+  }, [])
+
+  const syncGmail = useCallback(async (): Promise<{synced:number;total:number}> => {
+    if (!profile?.gmail_connected) throw new Error('Gmail no conectado')
     setSyncing(true)
     setSyncResult(null)
     try {
@@ -95,9 +136,11 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
       const newInbox = await apiFetch('/api/inbox')
       setInbox(newInbox)
       setSyncResult({ ok: true, message: `✓ ${result.synced ?? 0} emails nuevos (${result.total ?? 0} revisados)` })
+      return result
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
       setSyncResult({ ok: false, message: `Error: ${msg.slice(0, 200)}` })
+      throw err
     } finally {
       setSyncing(false)
     }
@@ -123,8 +166,14 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
   const toggleTask = useCallback(async (id: string) => {
     const task = tasks.find(t => t.id === id)
     if (!task) return
-    await updateTask(id, { done: !task.done })
-  }, [tasks, updateTask])
+    const done = !task.done
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, done } : t))
+    try {
+      await apiFetch(`/api/tasks/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done }) })
+    } catch {
+      setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !done } : t))
+    }
+  }, [tasks])
 
   // ── CLIENTS ────────────────────────────────────────────────
   const createClientRecord = useCallback(async (client: Partial<Client>) => {
@@ -179,9 +228,14 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
   const sendChatMessage = useCallback(async (message: string): Promise<string> => {
     const tempId = crypto.randomUUID()
     setChatMessages(prev => [...prev, { id: tempId, role: 'user', content: message, created_at: new Date().toISOString() }])
-    const { reply } = await apiFetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message }) })
-    setChatMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'ai', content: reply, created_at: new Date().toISOString() }])
-    return reply
+    try {
+      const { reply, searched } = await apiFetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message }) })
+      setChatMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'ai', content: reply, created_at: new Date().toISOString(), searched: !!searched }])
+      return reply
+    } catch (err) {
+      setChatMessages(prev => prev.filter(m => m.id !== tempId))
+      throw err
+    }
   }, [])
 
   const clearChat = useCallback(() => setChatMessages([]), [])
@@ -239,11 +293,11 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     clients, createClient: createClientRecord, updateClient: updateClientRecord, deleteClient,
     projects, createProject, updateProject, deleteProject,
     tasks, createTask, updateTask, deleteTask, toggleTask,
-    inbox, markRead, markUnread, sendInternalMessage,
+    inbox, markRead, markUnread, sendInternalMessage, reloadInbox,
     memoria, createMemoria, updateMemoria, deleteMemoria,
     agenda, createAgenda, updateAgenda, deleteAgenda,
     reglas, createRegla, updateRegla, deleteRegla,
     chatMessages, sendChatMessage, clearChat,
-    team, calendarEvents, reload: load,
+    team, calendarEvents, calendarScopeError, reload: load,
   }
 }

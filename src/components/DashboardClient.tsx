@@ -38,20 +38,18 @@ export default function DashboardClient() {
   }, [])
 
   if (loading) {
+    // Misma pantalla EXACTA que la de carga de datos de NexusDashboard,
+    // para que el paso de una a otra sea imperceptible (sin parpadeo al abrir).
     return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#040409' }}>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {[0, 1, 2].map(i => (
-            <div
-              key={i}
-              style={{
-                width: '8px', height: '8px', borderRadius: '50%', background: '#1B5FFA',
-                animation: `pulse 1.2s ${i * 0.2}s infinite ease-in-out`,
-              }}
-            />
-          ))}
+      <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#030308' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div className="font-syne" style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '0.3em', marginBottom: '24px', color: 'rgba(27,95,250,0.5)' }}>BRUTAL.IA</div>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+            <div className="w-1.5 h-1.5 rounded-full animate-dot1" style={{ background: '#1B5FFA' }} />
+            <div className="w-1.5 h-1.5 rounded-full animate-dot2" style={{ background: '#1B5FFA' }} />
+            <div className="w-1.5 h-1.5 rounded-full animate-dot3" style={{ background: '#1B5FFA' }} />
+          </div>
         </div>
-        <style>{`@keyframes pulse{0%,80%,100%{opacity:.2;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}`}</style>
       </div>
     )
   }

@@ -17,11 +17,12 @@ export async function GET() {
       .eq('is_read', false)
       .order('received_at', { ascending: false })
       .limit(10),
-    // Urgent tasks assigned to me
+    // Urgent tasks assigned to me or created by me
     admin.from('tasks')
       .select('id, text, level, due_date')
       .eq('done', false)
       .eq('level', 'urgent')
+      .or(`assigned_to.eq.${user.id},created_by.eq.${user.id}`)
       .order('created_at', { ascending: false })
       .limit(5),
   ])

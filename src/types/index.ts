@@ -7,6 +7,10 @@ export interface Profile {
   initials: string
   gmail_connected: boolean
   gmail_refresh_token?: string
+  gmail_account?: string
+  gmail_colabs_connected?: boolean
+  gmail_colabs_refresh_token?: string
+  gmail_colabs_account?: string
 }
 
 export interface Client {
@@ -99,6 +103,7 @@ export interface ContentItem {
   publish_time?: string
   notes?: string
   video_url?: string
+  cover_url?: string
   feedback?: string
   client_id?: string
   client?: Client
@@ -119,4 +124,5 @@ export interface ChatMessage {
   role: 'user' | 'ai'
   content: string
   created_at: string
+  searched?: boolean
 }

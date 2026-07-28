@@ -29,12 +29,14 @@ ${tasks?.slice(0,5).map((t: any) => `  - ${t.text} [${t.level}]`).join('\n') || 
 `
 
   const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  const msg = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 800,
-    messages: [{
-      role: 'user',
-      content: `Eres el estratega creativo de Brutal Studios, una agencia creativa boutique. Analiza este cliente y da exactamente 3 recomendaciones concretas y accionables para los próximos 30 días.
+  let msg: Awaited<ReturnType<typeof anthropic.messages.create>>
+  try {
+    msg = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 800,
+      messages: [{
+        role: 'user',
+        content: `Eres el estratega creativo de Brutal Studios, una agencia creativa boutique. Analiza este cliente y da exactamente 3 recomendaciones concretas y accionables para los próximos 30 días.
 
 ${context}
 
@@ -42,8 +44,11 @@ Formato estricto: devuelve JSON con este esquema exacto:
 {"recommendations": [{"title": "Título corto (3-5 palabras)", "body": "Explicación en 1-2 frases directas", "priority": "alta|media|baja"}]}
 
 Sin texto fuera del JSON. Sin asteriscos. En español. Sé específico y directo.`,
-    }],
-  })
+      }],
+    })
+  } catch {
+    return NextResponse.json({ error: 'AI no disponible' }, { status: 502 })
+  }
 
   try {
     const raw = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '{}'

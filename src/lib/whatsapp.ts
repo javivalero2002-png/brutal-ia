@@ -52,11 +52,14 @@ export async function downloadWhatsAppMedia(mediaId: string): Promise<string> {
   const urlRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
     headers: { Authorization: `Bearer ${TOKEN}` },
   })
+  if (!urlRes.ok) throw new Error(`WhatsApp media URL fetch failed: ${urlRes.status}`)
   const { url } = await urlRes.json()
+  if (!url) throw new Error('WhatsApp media URL missing from response')
 
   const mediaRes = await fetch(url, {
     headers: { Authorization: `Bearer ${TOKEN}` },
   })
+  if (!mediaRes.ok) throw new Error(`WhatsApp media download failed: ${mediaRes.status}`)
   const buffer = await mediaRes.arrayBuffer()
   return Buffer.from(buffer).toString('base64')
 }

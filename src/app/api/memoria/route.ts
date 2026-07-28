@@ -1,6 +1,11 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
+// Solo columnas conocidas: campos desconocidos no deben tumbar la petición
+// ni permitir escribir columnas arbitrarias (p. ej. created_by).
+const pick = (obj: any, keys: string[]) => Object.fromEntries(Object.entries(obj || {}).filter(([k, v]) => keys.includes(k) && v !== undefined))
+
+
 export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -17,7 +22,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await request.json()
   const admin = await createAdminClient()
-  const { data, error } = await admin.from('memoria').insert({ ...body, created_by: user.id }).select().single()
+  const { data, error } = await admin.from('memoria').insert({ ...pick(body, ['title','category','content','client_id','source']), created_by: user.id }).select('*, client:clients(id,name,initials,color)').single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }

@@ -33,13 +33,17 @@ export async function GET(req: Request) {
   oauth2Client.setCredentials({ refresh_token: profile.gmail_refresh_token })
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
 
-  const att = await gmail.users.messages.attachments.get({
-    userId: 'me',
-    messageId: gmailMessageId,
-    id: attachmentId,
-  })
-
-  const data = att.data.data
+  let data: string | null | undefined
+  try {
+    const att = await gmail.users.messages.attachments.get({
+      userId: 'me',
+      messageId: gmailMessageId,
+      id: attachmentId,
+    })
+    data = att.data.data
+  } catch {
+    return NextResponse.json({ error: 'No se pudo descargar el adjunto' }, { status: 502 })
+  }
   if (!data) return NextResponse.json({ error: 'No data' }, { status: 404 })
 
   const bytes = Buffer.from(data, 'base64url')

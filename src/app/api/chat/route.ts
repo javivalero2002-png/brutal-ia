@@ -18,7 +18,12 @@ export async function POST(request: NextRequest) {
     admin.from('projects').select('name,status'),
     admin.from('tasks').select('text,level,assignee:profiles!assigned_to(name)').eq('done', false),
     admin.from('profiles').select('id'),
-    admin.from('inbox_messages').select('id').eq('user_id', user.id).eq('is_read', false),
+    // Fetch emails with content so Brutal IA and Harvey know what they're about
+    admin.from('inbox_messages')
+      .select('from_name,subject,ai_summary,ai_urgency,shared,received_at,is_read')
+      .or(`user_id.eq.${user.id},shared.eq.true`)
+      .order('received_at', { ascending: false })
+      .limit(20),
     // Fetch history BEFORE saving current message so it doesn't appear twice in the messages array
     admin.from('chat_messages').select('role, content').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20),
   ])
@@ -26,21 +31,38 @@ export async function POST(request: NextRequest) {
   // Save user message after fetching history
   await admin.from('chat_messages').insert({ user_id: user.id, role: 'user', content: message })
 
-  const reply = await chat(
-    message,
-    (history || []).reverse().map(h => ({ role: h.role as 'user' | 'ai', content: h.content })),
-    {
-      userName: profile?.name || 'Usuario',
-      clients: (clients || []).map(c => c.name),
-      projects: (projects || []).map(p => ({ name: p.name, status: p.status })),
-      tasks: (tasks || []).map(t => ({ text: t.text, level: t.level, assignee: (t.assignee as any)?.name })),
-      unreadInbox: inbox?.length || 0,
-      teamSize: team?.length || 1,
-    }
-  )
+  const emailsList = (inbox || []).map((e: any) => ({
+    from: e.from_name || '',
+    subject: e.subject || '(sin asunto)',
+    summary: e.ai_summary || '',
+    urgency: e.ai_urgency || 'normal',
+    shared: !!e.shared,
+    received_at: e.received_at || '',
+  }))
 
-  // Save AI reply
+  let reply: string
+  let searched: boolean | undefined
+  try {
+    const result = await chat(
+      message,
+      (history || []).reverse().map(h => ({ role: h.role as 'user' | 'ai', content: h.content })),
+      {
+        userName: profile?.name || 'Usuario',
+        clients: (clients || []).map(c => c.name),
+        projects: (projects || []).map(p => ({ name: p.name, status: p.status })),
+        tasks: (tasks || []).map(t => ({ text: t.text, level: t.level, assignee: (t.assignee as any)?.name })),
+        unreadInbox: (inbox || []).filter((e: any) => !e.is_read).length,
+        emails: emailsList,
+        teamSize: team?.length || 1,
+      }
+    )
+    reply = result.reply
+    searched = result.searched
+  } catch {
+    return NextResponse.json({ error: 'Error al procesar el mensaje' }, { status: 502 })
+  }
+
   await admin.from('chat_messages').insert({ user_id: user.id, role: 'ai', content: reply })
 
-  return NextResponse.json({ reply })
+  return NextResponse.json({ reply, searched })
 }

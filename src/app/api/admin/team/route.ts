@@ -41,7 +41,8 @@ export async function POST(request: NextRequest) {
   const rawInitials = initials || name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
   const colors = ['#1B5FFA','#9B5FFA','#E51D2A','#FA8B1B','#1BFA9B','#F97316','#06B6D4']
   const color = avatar_color || colors[Math.abs(email.charCodeAt(0)) % colors.length]
-  const pwd = password || Math.random().toString(36).slice(-10) + 'Aa1!'
+  const { randomBytes } = await import('crypto')
+  const pwd = password || randomBytes(16).toString('base64url') + 'Aa1!'
 
   // Check if user already exists
   const { data: existingProfile } = await admin
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, action: 'updated', email })
   }
 
-  // Create new auth user (no email confirmation needed — admin API)
+  // Create new auth user (pre-confirmed — owner creates accounts, no email verify loop)
   const { data: newUser, error: createErr } = await admin.auth.admin.createUser({
     email,
     password: pwd,
@@ -80,20 +81,70 @@ export async function POST(request: NextRequest) {
 
   if (profileErr) return NextResponse.json({ error: profileErr.message }, { status: 500 })
 
-  return NextResponse.json({ ok: true, action: 'created', email, tempPassword: pwd })
+  // Generate a password-reset link so the new member can set their own password
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://brutalstudios-ia.vercel.app'
+  let inviteLink: string | null = null
+  try {
+    const { data: linkData } = await admin.auth.admin.generateLink({
+      type: 'recovery',
+      email,
+      options: { redirectTo: `${appUrl}/dashboard` },
+    })
+    inviteLink = (linkData as any)?.properties?.action_link || null
+  } catch { /* non-fatal */ }
+
+  return NextResponse.json({ ok: true, action: 'created', email, inviteLink })
 }
 
-// PATCH: update an existing profile by email
+// PATCH: update profile by email, or regenerate invite link
 export async function PATCH(request: NextRequest) {
   const ctx = await requireOwner()
   if (!ctx) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { admin } = ctx
-  const { email, ...updates } = await request.json()
+  const body = await request.json()
+  const { email, action, ...updates } = body
   if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
 
-  const { error } = await admin.from('profiles').update(updates).eq('email', email)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (action === 'regenerate_invite') {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://brutalstudios-ia.vercel.app'
+    let inviteLink: string | null = null
+    try {
+      const { data: linkData } = await admin.auth.admin.generateLink({
+        type: 'recovery',
+        email,
+        options: { redirectTo: `${appUrl}/dashboard` },
+      })
+      inviteLink = (linkData as any)?.properties?.action_link || null
+    } catch { /* non-fatal */ }
+    return NextResponse.json({ ok: true, inviteLink })
+  }
 
+  const ALLOWED_COLS = ['name', 'role', 'initials', 'avatar_color']
+  const safeUpdates: Record<string, unknown> = {}
+  for (const k of ALLOWED_COLS) if (k in updates) safeUpdates[k] = updates[k]
+  if (Object.keys(safeUpdates).length === 0) return NextResponse.json({ error: 'No valid fields' }, { status: 400 })
+  const { error } = await admin.from('profiles').update(safeUpdates).eq('email', email)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
+
+// DELETE: remove a team member (cannot delete owner)
+export async function DELETE(request: NextRequest) {
+  const ctx = await requireOwner()
+  if (!ctx) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const { admin } = ctx
+  const email = request.nextUrl.searchParams.get('email')
+  if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
+
+  const { data: profile } = await admin.from('profiles').select('id, role').eq('email', email).single()
+  if (!profile) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  if (profile.role === 'owner') return NextResponse.json({ error: 'Cannot delete owner' }, { status: 403 })
+
+  const { error: authErr } = await admin.auth.admin.deleteUser(profile.id)
+  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 500 })
+
+  await admin.from('profiles').delete().eq('id', profile.id)
   return NextResponse.json({ ok: true })
 }

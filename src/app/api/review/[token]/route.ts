@@ -7,7 +7,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const admin = await createAdminClient()
 
   const { data, error } = await admin
-    .from('agenda')
+    .from('content_agenda')
     .select('id, title, platform, status, video_url, notes, feedback, publish_date, client_id')
     .eq('id', token)
     .single()
@@ -19,12 +19,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
-  const { feedback } = await req.json()
-  if (!feedback?.trim()) return NextResponse.json({ error: 'feedback required' }, { status: 400 })
+  let feedback: string
+  try {
+    const body = await req.json()
+    feedback = body.feedback || ''
+  } catch {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
+  }
+  if (!feedback.trim()) return NextResponse.json({ error: 'feedback required' }, { status: 400 })
+  if (feedback.length > 5000) return NextResponse.json({ error: 'Feedback too long' }, { status: 400 })
 
   const admin = await createAdminClient()
   const { error } = await admin
-    .from('agenda')
+    .from('content_agenda')
     .update({ feedback: feedback.trim() })
     .eq('id', token)
 

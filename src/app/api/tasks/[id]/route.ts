@@ -1,6 +1,11 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
+// Solo columnas conocidas: campos desconocidos no deben tumbar la petición
+// ni permitir escribir columnas arbitrarias (p. ej. created_by).
+const pick = (obj: any, keys: string[]) => Object.fromEntries(Object.entries(obj || {}).filter(([k, v]) => keys.includes(k) && v !== undefined))
+
+
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -11,7 +16,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const admin = await createAdminClient()
   const { data, error } = await admin
     .from('tasks')
-    .update({ ...body, updated_at: new Date().toISOString() })
+    .update({ ...pick(body, ['text','level','done','due_date','project_id','client_id','assigned_to']), updated_at: new Date().toISOString() })
     .eq('id', id)
     .select('*, assignee:profiles!assigned_to(id,name,initials,avatar_color), client:clients(id,name,initials,color)')
     .single()

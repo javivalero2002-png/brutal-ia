@@ -2,8 +2,10 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { analyzeWhatsAppMessage } from '@/lib/ai'
 import { sendWhatsAppMessage, parseWebhookMessage, downloadWhatsAppMedia } from '@/lib/whatsapp'
 import { NextRequest, NextResponse } from 'next/server'
+import { createHmac } from 'crypto'
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN
+const APP_SECRET = process.env.WHATSAPP_APP_SECRET
 
 // Webhook verification
 export async function GET(request: NextRequest) {
@@ -20,7 +22,19 @@ export async function GET(request: NextRequest) {
 
 // Receive messages
 export async function POST(request: NextRequest) {
-  const body = await request.json()
+  const rawBody = await request.text()
+
+  if (APP_SECRET) {
+    const sig = request.headers.get('x-hub-signature-256')
+    if (!sig) return NextResponse.json({ error: 'Missing signature' }, { status: 401 })
+    const expected = 'sha256=' + createHmac('sha256', APP_SECRET).update(rawBody).digest('hex')
+    if (sig !== expected) return NextResponse.json({ error: 'Invalid signature' }, { status: 403 })
+  }
+
+  let body: any
+  try { body = JSON.parse(rawBody) } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
   const message = parseWebhookMessage(body)
 
   if (!message) return NextResponse.json({ ok: true })
@@ -45,7 +59,12 @@ export async function POST(request: NextRequest) {
     try { imageBase64 = await downloadWhatsAppMedia(mediaId) } catch { }
   }
 
-  const analysis = await analyzeWhatsAppMessage(text, imageBase64, knownClients)
+  let analysis: Awaited<ReturnType<typeof analyzeWhatsAppMessage>>
+  try {
+    analysis = await analyzeWhatsAppMessage(text, imageBase64, knownClients)
+  } catch {
+    analysis = { extractedInfo: text.slice(0, 200), shouldCreateTask: false, urgency: 'normal', confirmationQuestion: '' }
+  }
 
   // Add to inbox_messages for the linked user
   if (session?.user_id) {
@@ -65,30 +84,14 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  // Update session context
-  await supabase.from('whatsapp_sessions').upsert({
-    phone: from,
-    last_message_at: new Date().toISOString(),
-    context: {
-      lastAnalysis: analysis,
-      awaitingConfirmation: analysis.shouldCreateTask,
-    },
-  }, { onConflict: 'phone' })
-
-  // Build reply
+  // Check confirmation BEFORE overwriting context
   let reply = ''
-
-  if (analysis.shouldCreateTask) {
-    reply = `✅ *Brutal.IA* entendió:\n\n${analysis.extractedInfo}\n\n${analysis.confirmationQuestion}\n\nResponde *sí* para crear la tarea o *no* para cancelar.`
-  } else {
-    reply = `✅ *Brutal.IA* registró:\n\n${analysis.extractedInfo}\n\nInformación guardada en tu tablón.`
-  }
-
-  // Check if this is a confirmation response
   const lowerText = text.toLowerCase().trim()
-  if ((lowerText === 'sí' || lowerText === 'si' || lowerText === 'yes') &&
-      session?.context?.awaitingConfirmation &&
-      session?.context?.lastAnalysis?.taskText) {
+  const isConfirmation = (lowerText === 'sí' || lowerText === 'si' || lowerText === 'yes') &&
+    session?.context?.awaitingConfirmation &&
+    session?.context?.lastAnalysis?.taskText
+
+  if (isConfirmation) {
     const prev = session.context.lastAnalysis
     if (session?.user_id) {
       await supabase.from('tasks').insert({
@@ -99,7 +102,26 @@ export async function POST(request: NextRequest) {
       })
     }
     reply = `✅ Tarea creada en Brutal.IA:\n\n"${prev.taskText}"\n\nPuedes verla en tu tablón.`
-    await supabase.from('whatsapp_sessions').update({ context: { awaitingConfirmation: false } }).eq('phone', from)
+    await supabase.from('whatsapp_sessions').upsert({
+      phone: from,
+      last_message_at: new Date().toISOString(),
+      context: { awaitingConfirmation: false },
+    }, { onConflict: 'phone' })
+  } else {
+    await supabase.from('whatsapp_sessions').upsert({
+      phone: from,
+      last_message_at: new Date().toISOString(),
+      context: {
+        lastAnalysis: analysis,
+        awaitingConfirmation: analysis.shouldCreateTask,
+      },
+    }, { onConflict: 'phone' })
+
+    if (analysis.shouldCreateTask) {
+      reply = `✅ *Brutal.IA* entendió:\n\n${analysis.extractedInfo}\n\n${analysis.confirmationQuestion}\n\nResponde *sí* para crear la tarea o *no* para cancelar.`
+    } else {
+      reply = `✅ *Brutal.IA* registró:\n\n${analysis.extractedInfo}\n\nInformación guardada en tu tablón.`
+    }
   }
 
   await sendWhatsAppMessage(from, reply)

@@ -28,8 +28,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { body } = await req.json()
-  if (!body?.trim()) return NextResponse.json({ error: 'Empty' }, { status: 400 })
+  let body: string
+  try {
+    const parsed = await req.json()
+    body = parsed.body || ''
+  } catch {
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
+  }
+  if (!body.trim()) return NextResponse.json({ error: 'Empty' }, { status: 400 })
+  if (body.length > 2000) return NextResponse.json({ error: 'Comment too long' }, { status: 400 })
 
   const admin = await createAdminClient()
   const { data, error } = await admin

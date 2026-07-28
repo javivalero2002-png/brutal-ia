@@ -1,6 +1,11 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
+// Solo columnas conocidas: campos desconocidos no deben tumbar la petición
+// ni permitir escribir columnas arbitrarias (p. ej. created_by).
+const pick = (obj: any, keys: string[]) => Object.fromEntries(Object.entries(obj || {}).filter(([k, v]) => keys.includes(k) && v !== undefined))
+
+
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -10,7 +15,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (profile?.role !== 'owner') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { id } = await params
   const body = await request.json()
-  const { data, error } = await admin.from('reglas').update(body).eq('id', id).select().single()
+  const { data, error } = await admin.from('reglas').update(pick(body, ['name','description','condition_text','action_text','active'])).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }

@@ -16,27 +16,29 @@ export async function GET(req: NextRequest) {
 
   const admin = await createAdminClient()
 
-  // Get MY profile name so we can match it in the other person's inbox
   const { data: myProfile } = await admin.from('profiles').select('name').eq('id', user.id).single()
   const myName = myProfile?.name || ''
 
-  // Messages they sent to me (in my inbox, from_name matches their name)
-  const { data: received } = await admin
+  const withFirst = withName.split(' ')[0]
+  const myFirst = myName.split(' ')[0]
+
+  let receivedQuery = admin
     .from('inbox_messages')
     .select('*')
     .eq('user_id', user.id)
     .eq('source', 'internal')
-    .ilike('from_name', `%${withName.split(' ')[0]}%`)
     .order('received_at', { ascending: true })
+  if (withFirst) receivedQuery = receivedQuery.ilike('from_name', `%${withFirst}%`)
 
-  // Messages I sent to them (in their inbox, from_name matches my name)
-  const { data: sent } = await admin
+  let sentQuery = admin
     .from('inbox_messages')
     .select('*')
     .eq('user_id', withUserId)
     .eq('source', 'internal')
-    .ilike('from_name', `%${myName.split(' ')[0]}%`)
     .order('received_at', { ascending: true })
+  if (myFirst) sentQuery = sentQuery.ilike('from_name', `%${myFirst}%`)
+
+  const [{ data: received }, { data: sent }] = await Promise.all([receivedQuery, sentQuery])
 
   // Merge + sort by time, mark direction
   const thread = [

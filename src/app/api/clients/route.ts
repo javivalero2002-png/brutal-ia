@@ -1,6 +1,11 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
+// Solo columnas conocidas: campos desconocidos no deben tumbar la petición
+// ni permitir escribir columnas arbitrarias (p. ej. created_by).
+const pick = (obj: any, keys: string[]) => Object.fromEntries(Object.entries(obj || {}).filter(([k, v]) => keys.includes(k) && v !== undefined))
+
+
 export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -27,7 +32,7 @@ export async function POST(request: NextRequest) {
 
   const { data, error } = await admin
     .from('clients')
-    .insert({ ...body, initials, created_by: user.id })
+    .insert({ ...pick(body, ['name','industry','status','revenue','notes','color']), initials, created_by: user.id })
     .select()
     .single()
 
