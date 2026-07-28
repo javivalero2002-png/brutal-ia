@@ -447,22 +447,9 @@ CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
 
   const orbColor: Record<OrbMode,string> = {idle:BLU,recording:RED,thinking:'rgba(139,92,246,0.9)',speaking:BLU}
   const orbLabel: Record<OrbMode,string> = {idle:'PULSA',recording:'STOP',thinking:'PIENSA',speaking:'STOP'}
-
-  const todayItems = [
-    ...urgentTasks.slice(0,3).map((t:Task)=>({text:t.text,type:'URGENTE',color:RED,nav:'tareas'})),
-    ...data.tasks.filter((t:Task)=>!t.done&&t.due_date?.slice(0,10)===todayStr&&t.level!=='urgent').slice(0,2).map((t:Task)=>({text:t.text,type:'HOY',color:BLU,nav:'tareas'})),
-    ...(data.agenda||[]).filter((a:any)=>a.publish_date?.toString().slice(0,10)===todayStr).slice(0,2).map((a:any)=>({text:a.title||'Contenido',type:'PUBLICAR',color:'rgba(193,53,132,0.85)',nav:'contenido'})),
-    ...(data.calendarEvents||[]).filter((e:any)=>e.start?.slice(0,10)===todayStr).slice(0,1).map((e:any)=>({text:e.title,type:'EVENTO',color:'rgba(167,139,250,0.85)',nav:'calendario'})),
-  ].slice(0,5)
-
-  const statCards = [
-    {v:pendingAll, l:'Tareas pend.', c:urgentTasks.length>0?RED:BLU, alert:urgentTasks.length>0?`${urgentTasks.length} urgentes`:null, nav:'tareas'},
-    {v:activeProjectsCount, l:'Proyectos', c:overdueP>0?RED:BLU, alert:overdueP>0?`${overdueP} atrasados`:null, nav:'proyectos'},
-    {v:activeClients, l:'Clientes', c:GRN, alert:null, nav:'clientes'},
-    {v:pipeline, l:'Pipeline', c:'rgba(193,53,132,0.85)', alert:null, nav:'contenido'},
-    {v:unreadCount, l:'Inbox', c:unreadCount>0?'rgba(255,176,32,0.9)':BLU, alert:null, nav:'inbox'},
-    {v:completedToday, l:'Completadas hoy', c:completedToday>0?GRN:'rgba(255,255,255,0.18)', alert:null, nav:'tareas'},
-  ]
+  const wispA = orbMode==='recording' ? 'rgba(229,29,42,0.85)' : orbMode==='thinking' ? 'rgba(139,92,246,0.85)' : 'rgba(27,95,250,0.85)'
+  const wispB = orbMode==='recording' ? 'rgba(255,120,60,0.6)' : 'rgba(139,92,246,0.7)'
+  const rimCol = orbColor[orbMode]
 
   return (
     <div className={isMobile ? 'h-full flex flex-col overflow-y-auto' : 'h-full flex overflow-hidden'} style={{background:'#030308'}}>
@@ -486,222 +473,122 @@ CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
 
         <div className="flex-1 flex flex-col items-center justify-center gap-0" style={isMobile?{paddingTop:'72px'}:undefined}>
 
-          <div className="relative flex items-center justify-center" style={{
-            width:'320px',height:'320px',
-            animation: orbMode==='recording' ? 'glowPulseR 1.4s ease-in-out infinite' : orbMode!=='idle' ? 'glowPulse 1.4s ease-in-out infinite' : undefined,
-          }}>
+          <div className="relative flex items-center justify-center flex-shrink-0" style={{width:isMobile?'300px':'400px',height:isMobile?'300px':'400px'}}>
 
+            {/* Órbitas elípticas */}
+            <div className="absolute pointer-events-none" style={{width:isMobile?'440px':'580px',height:isMobile?'270px':'350px',borderRadius:'50%',border:'1px dashed rgba(120,150,255,0.05)',transform:'rotate(-20deg)'}}/>
+            <div className="absolute pointer-events-none" style={{width:isMobile?'410px':'540px',height:isMobile?'250px':'325px',borderRadius:'50%',border:'1px solid rgba(120,150,255,0.10)',transform:'rotate(-20deg)',animation:'orbSpin 44s linear infinite'}}>
+              <div className="absolute rounded-full" style={{top:'50%',left:0,width:'5px',height:'5px',background:'#5b8bff',boxShadow:'0 0 8px #5b8bff,0 0 18px #5b8bff',transform:'translate(-50%,-50%)'}}/>
+            </div>
+
+            {/* Halo exterior */}
             <div className="absolute rounded-full pointer-events-none" style={{
-              width:'300px',height:'300px',
-              background:`radial-gradient(circle,${orbColor[orbMode]}20 0%,transparent 65%)`,
-              filter:'blur(40px)',
-              transition:'background 0.8s',
+              width:isMobile?'250px':'320px',height:isMobile?'250px':'320px',
+              background:`radial-gradient(circle,${rimCol}2e,rgba(139,92,246,0.06) 45%,transparent 70%)`,
+              filter:'blur(30px)',transition:'background 0.8s',
             }}/>
 
-            {[
-              {sz:292, iO:0.04, aO:0.18, bw:'1px', delay:'1.6s', idleD:'5.8s', idleE:'0s'},
-              {sz:260, iO:0.06, aO:0.25, bw:'1px', delay:'1.2s', idleD:'5.2s', idleE:'0.2s'},
-              {sz:224, iO:0.09, aO:0.34, bw:'1px', delay:'0.8s', idleD:'4.6s', idleE:'0.4s'},
-              {sz:184, iO:0.14, aO:0.46, bw:'1.5px', delay:'0.4s', idleD:'4.0s', idleE:'0.15s'},
-              {sz:148, iO:0.21, aO:0.62, bw:'1.5px', delay:'0s', idleD:'3.4s', idleE:'0.3s'},
-            ].map(({sz,iO,aO,bw,delay,idleD,idleE},i)=>(
-              <div key={i} className="absolute rounded-full pointer-events-none" style={{
-                width:`${sz}px`,height:`${sz}px`,
-                border:`${bw} solid ${orbColor[orbMode]}`,
-                opacity: orbMode==='idle' ? iO : aO,
-                animation: orbMode!=='idle'
-                  ? `ping 2.0s cubic-bezier(0,0,0.2,1) ${delay} infinite`
-                  : `ringBreathe ${idleD} ease-in-out ${idleE} infinite`,
-                transition:'opacity 0.7s ease, border-color 0.6s',
-              }}/>
-            ))}
-
-            {/* Campo de partículas orbitando el orbe */}
-            {Array.from({length:18}).map((_,i)=>{
-              const ang = (i/18)*Math.PI*2 + (i%3)*0.5
-              const rad = 88 + (i%4)*26
-              const x = 160 + Math.cos(ang)*rad
-              const y = 160 + Math.sin(ang)*rad
-              const sz = 1.4 + (i%3)*0.9
-              return (
-                <div key={'p'+i} className="absolute rounded-full pointer-events-none" style={{
-                  left:`${x}px`, top:`${y}px`, width:`${sz}px`, height:`${sz}px`,
-                  background:orbColor[orbMode], transform:'translate(-50%,-50%)',
-                  opacity: orbMode==='idle'?0.14:0.55,
-                  boxShadow:`0 0 ${sz*2.5}px ${orbColor[orbMode]}`,
-                  animation:`shimmer ${1.6+(i%5)*0.35}s ease-in-out ${i*0.11}s infinite`,
-                  transition:'opacity 0.6s, background 0.6s',
-                }}/>
-              )
-            })}
-
-            <button onClick={handleOrb}
-              className="relative z-10 rounded-full flex flex-col items-center justify-center transition-all duration-700 active:scale-95 disabled:cursor-wait select-none"
+            {/* Esfera de cristal (botón) */}
+            <button onClick={handleOrb} aria-label="Hablar con Harvey"
+              className="relative rounded-full overflow-hidden transition-transform duration-500 active:scale-95 select-none"
               style={{
-                width:'118px',height:'118px',
-                background:`radial-gradient(circle at 36% 30%,${orbColor[orbMode]}28 0%,${orbColor[orbMode]}08 55%,rgba(2,2,10,0.95) 100%)`,
-                border:`1.5px solid ${orbColor[orbMode]}`,
-                boxShadow:[
-                  `0 0 0 1px ${orbColor[orbMode]}12`,
-                  `0 0 28px ${orbColor[orbMode]}50`,
-                  `0 0 70px ${orbColor[orbMode]}20`,
-                  `0 0 140px ${orbColor[orbMode]}08`,
-                  `inset 0 1px 0 rgba(255,255,255,0.09)`,
-                  `inset 0 -1px 0 rgba(0,0,0,0.4)`,
-                ].join(','),
+                width:isMobile?'250px':'320px',height:isMobile?'250px':'320px',
+                background:'radial-gradient(circle at 50% 38%,#0c1436 0%,#070a1c 52%,#02030a 100%)',
+                boxShadow:'inset 0 0 64px 12px rgba(0,0,0,0.65),inset 0 -30px 64px rgba(27,95,250,0.18),0 30px 80px rgba(0,0,0,0.6),0 0 80px rgba(27,95,250,0.12)',
               }}>
 
-              {(orbMode==='speaking'||orbMode==='recording')&&(
-                <div className="absolute bottom-5 left-0 right-0 flex items-end justify-center gap-px pointer-events-none">
-                  {[4,7,11,8,14,9,12,7,5].map((h,i)=>(
-                    <div key={i} className="rounded-full" style={{
-                      width:'2.5px',height:`${h}px`,
-                      background:orbColor[orbMode],
-                      opacity:0.75,
-                      animation:`pulse ${0.38+i*0.06}s ease-in-out ${i*0.04}s infinite alternate`,
-                    }}/>
-                  ))}
-                </div>
-              )}
+              {/* Wisps internos animados */}
+              <div className="absolute rounded-full pointer-events-none" style={{width:'60%',height:'55%',left:'8%',bottom:'6%',background:`radial-gradient(circle,${wispA},transparent 70%)`,filter:'blur(24px)',animation:'orbDrift 9s ease-in-out infinite',transition:'background 0.8s'}}/>
+              <div className="absolute rounded-full pointer-events-none" style={{width:'55%',height:'50%',right:'6%',top:'14%',background:`radial-gradient(circle,${wispB},transparent 70%)`,filter:'blur(24px)',animation:'orbDrift2 11s ease-in-out infinite',transition:'background 0.8s'}}/>
+              <div className="absolute rounded-full pointer-events-none" style={{width:'40%',height:'38%',left:'32%',top:'44%',background:`radial-gradient(circle,${rimCol}99,transparent 70%)`,filter:'blur(24px)',animation:'orbDrift 7s ease-in-out 0.5s infinite',transition:'background 0.8s'}}/>
 
-              <div style={{filter:`drop-shadow(0 0 14px ${orbColor[orbMode]})`,marginBottom:(orbMode==='speaking'||orbMode==='recording')?'18px':'0'}}>
-                {orbMode==='idle'&&<LucideIcon name="mic" size={32} color={`${orbColor[orbMode]}c0`}/>}
-                {orbMode==='recording'&&<LucideIcon name="mic" size={32} color={RED}/>}
-                {orbMode==='thinking'&&<LucideIcon name="cpu" size={32} color="rgba(139,92,246,0.9)"/>}
-                {orbMode==='speaking'&&<LucideIcon name="volume-2" size={32} color={orbColor[orbMode]}/>}
+              {/* Rim light */}
+              <div className="absolute inset-0 rounded-full pointer-events-none" style={{boxShadow:`inset 0 0 3px 1px ${rimCol}, inset 10px 14px 46px ${rimCol}4d, inset -14px -18px 54px rgba(139,92,246,0.22)`,animation:'rimPulse 4s ease-in-out infinite',transition:'box-shadow 0.8s'}}/>
+
+              {/* Brillo especular */}
+              <div className="absolute rounded-full pointer-events-none" style={{top:'7%',left:'16%',width:'50%',height:'30%',background:'radial-gradient(circle at 42% 40%,rgba(255,255,255,0.30),rgba(255,255,255,0.05) 55%,transparent 72%)',filter:'blur(4px)'}}/>
+              <div className="absolute rounded-full pointer-events-none" style={{bottom:'12%',right:'20%',width:'22%',height:'12%',background:'radial-gradient(circle,rgba(160,190,255,0.35),transparent 70%)',filter:'blur(5px)'}}/>
+
+              {/* Contenido central */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 pointer-events-none">
+                {orbMode==='thinking' ? (
+                  <div className="flex items-center gap-2">
+                    {[0,1,2,3].map(i=>(<div key={i} className="rounded-full" style={{width:'7px',height:'7px',background:'rgba(167,139,250,0.95)',boxShadow:'0 0 10px rgba(167,139,250,0.8)',animation:`pulse ${0.55+i*0.09}s ease-in-out ${i*0.11}s infinite alternate`}}/>))}
+                  </div>
+                ) : orbMode==='recording' ? (
+                  <>
+                    <div className="font-syne font-black tracking-[0.3em]" style={{fontSize:isMobile?'13px':'15px',color:'#ffd0d0',textShadow:'0 0 16px rgba(229,29,42,0.8)'}}>ESCUCHANDO</div>
+                    <div className="flex items-center gap-[3px]" style={{height:'18px'}}>
+                      {[8,14,20,11,17,9,15].map((h,i)=>(<div key={i} style={{width:'3px',height:`${h}px`,borderRadius:'2px',background:'#ff6b6b',boxShadow:'0 0 8px #ff6b6b',transformOrigin:'center',animation:`eqBar ${0.4+i*0.07}s ease-in-out ${i*0.05}s infinite alternate`}}/>))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="font-syne" style={{fontWeight:700,fontSize:isMobile?'19px':'23px',letterSpacing:'0.42em',textIndent:'0.42em',color:'#dbe4ff',textShadow:'0 0 18px rgba(120,160,255,0.7)'}}>HARVEY</div>
+                    <div className="flex items-center gap-[3px]" style={{height:'18px'}}>
+                      {[8,13,18,10,15,8].map((h,i)=>(<div key={i} style={{width:'3px',height:`${h}px`,borderRadius:'2px',background:'#6f9bff',boxShadow:'0 0 8px #6f9bff',transformOrigin:'center',opacity:orbMode==='speaking'?1:0.5,animation:orbMode==='speaking'?`eqBar ${0.5+i*0.08}s ease-in-out ${i*0.06}s infinite alternate`:'none'}}/>))}
+                    </div>
+                  </>
+                )}
               </div>
-
-              {orbMode!=='speaking'&&orbMode!=='recording'&&(
-                <span className="font-syne font-black tracking-[0.25em] mt-2" style={{
-                  fontSize:'6px',
-                  color:orbMode==='idle'?'rgba(255,255,255,0.18)':orbColor[orbMode],
-                  textShadow:orbMode!=='idle'?`0 0 14px ${orbColor[orbMode]}`:'none',
-                  letterSpacing:orbMode==='idle'?'0.3em':'0.25em',
-                }}>{orbLabel[orbMode]}</span>
-              )}
             </button>
           </div>
 
-          <div className="flex flex-col items-center gap-2 mt-1">
-            <div className="font-syne font-black tracking-[0.5em]" style={{fontSize:'6px',color:'rgba(27,95,250,0.28)'}}>HARVEY · IA</div>
-            {orbMode === 'idle' && !harveyReply && (
-              <button
-                onClick={()=>{
-                  const greeting = hour<13?'Buenos días':'Buenas tardes'
-                  const urgMsg = urgentTasks.length>0?`Hay ${urgentTasks.length} tarea(s) urgente(s): ${urgentTasks.slice(0,2).map((t:Task)=>t.text).join(' y ')}.`:'Sin urgencias.'
-                  const inboxMsg = unreadCount>0?`${unreadCount} email(s) sin leer en el inbox.`:'Inbox al día.'
-                  const calEvts = ((data.calendarEvents||[]) as any[]).filter((e:any)=>e.start?.slice(0,10)===todayStr)
-                  const calMsg = calEvts.length>0?`Hoy tienes ${calEvts.length} evento(s): ${calEvts.slice(0,2).map((e:any)=>e.title).join(', ')}.`:'Sin eventos de calendario hoy.'
-                  const briefQ = `${greeting}. Dame el briefing del día de Brutal Studios. ${urgMsg} ${inboxMsg} ${calMsg} ¿Cuál es el plan?`
-                  setHarveySpoken(briefQ); askHarvey(briefQ)
-                }}
-                className="flex items-center gap-2 px-5 py-2 rounded-full font-syne text-[8px] font-black tracking-widest transition-all hover:opacity-80 active:scale-95"
-                style={{background:`linear-gradient(135deg,${BLU}22,${BLU}0a)`,border:`1px solid ${BLU}35`,color:BLU}}
-              >
-                <LucideIcon name="sunrise" size={11} color={BLU}/>
-                BRIEFING DEL DÍA
-              </button>
-            )}
-
+          <div className="flex flex-col items-center gap-2 mt-4 w-full" style={{maxWidth:'600px'}}>
             {orbMode==='idle' && !harveyReply && (()=>{
               const inboxArr = (data.inbox||[]) as any[]
               const unread = inboxArr.filter((m:any)=>!m.is_read)
               const importante = unread.filter((m:any)=>m.ai_urgency==='urgent'||m.ai_urgency==='high').length
-              const baja = unread.length - importante
-              const focusEmail = unread.find((m:any)=>m.ai_urgency==='urgent') || unread.find((m:any)=>m.ai_urgency==='high') || unread[0]
-              const focusTask = urgentTasks[0]
-              if (!focusEmail && !focusTask) return null
-              const isEmail = !!focusEmail
-              const focus:any = focusEmail || focusTask
-              const needsDecision = isEmail ? !!(focus.ai_action && focus.ai_action!=='Ninguna acción requerida') : true
-              const mins = isEmail ? Math.min(15, Math.max(2, Math.round(((focus.ai_summary||focus.body_preview||focus.subject||'').length)/90))) : null
-              const ORANGE = 'rgba(255,176,32,0.95)'
-              // Palabras clave reales: clientes mencionados en el inbox sin leer
-              const kwCount: Record<string,number> = {}
-              unread.forEach((m:any)=>{ const c=m.ai_client; if(c && c!=='Desconocido') kwCount[c]=(kwCount[c]||0)+1 })
-              const KW_COLORS = [BLU, ORANGE, GRN, 'rgba(167,139,250,0.9)', 'rgba(193,53,132,0.9)']
-              const keywords = Object.entries(kwCount).sort((a,b)=>b[1]-a[1]).slice(0,3)
-              const totalU = unread.length
-              const R = 30, CIRC = 2*Math.PI*R
-              const impLen = totalU ? CIRC*(importante/totalU) : 0
-              const bajaLen = totalU ? CIRC*(baja/totalU) : 0
+              const todayEvts = ((data.calendarEvents||[]) as any[]).filter((e:any)=>e.start?.slice(0,10)===todayStr)
+              const focusEmail = unread.find((m:any)=>m.ai_urgency==='urgent') || unread.find((m:any)=>m.ai_urgency==='high')
+              type BItem = {icon:string;color:string;text:string;nav:string}
+              const items: BItem[] = []
+              if (focusEmail) items.push({icon:'mail',color:'rgba(255,176,32,0.95)',text:`Responde a ${focusEmail.from_name||'un contacto'}${focusEmail.ai_client&&focusEmail.ai_client!=='Desconocido'?' ('+focusEmail.ai_client+')':''}: ${focusEmail.subject||'propuesta'}`,nav:'inbox'})
+              if (urgentTasks.length>0) items.push({icon:'alert-triangle',color:RED,text:`${urgentTasks.length} tarea${urgentTasks.length>1?'s':''} urgente${urgentTasks.length>1?'s':''} por cerrar: ${urgentTasks[0].text}`,nav:'tareas'})
+              if (importante>0 && !focusEmail) items.push({icon:'mail',color:'rgba(255,176,32,0.95)',text:`${importante} correo${importante>1?'s':''} importante${importante>1?'s':''} esperan respuesta`,nav:'inbox'})
+              if (todayEvts.length>0) items.push({icon:'calendar',color:'rgba(167,139,250,0.9)',text:`${todayEvts.length} evento${todayEvts.length>1?'s':''} hoy: ${todayEvts.slice(0,2).map((e:any)=>e.title).join(', ')}`,nav:'calendario'})
+              if (overdueP>0) items.push({icon:'folder',color:RED,text:`${overdueP} proyecto${overdueP>1?'s':''} atrasado${overdueP>1?'s':''} por recuperar`,nav:'proyectos'})
+              if (pipeline>0) items.push({icon:'film',color:'rgba(193,53,132,0.9)',text:`${pipeline} pieza${pipeline>1?'s':''} de contenido en el pipeline`,nav:'contenido'})
+              if (unread.length>0 && importante===0 && !focusEmail) items.push({icon:'mail',color:BLU,text:`Revisa ${unread.length} correo${unread.length>1?'s':''} sin leer`,nav:'inbox'})
+              const shown = items.slice(0,4)
+              const greeting = hour<13?'Buenos días':hour<20?'Buenas tardes':'Buenas noches'
+              const urgMsg = urgentTasks.length>0?`Hay ${urgentTasks.length} tarea(s) urgente(s): ${urgentTasks.slice(0,2).map((t:Task)=>t.text).join(' y ')}.`:'Sin urgencias.'
+              const inboxMsg = unreadCount>0?`${unreadCount} email(s) sin leer en el inbox.`:'Inbox al día.'
+              const calMsg = todayEvts.length>0?`Hoy tienes ${todayEvts.length} evento(s): ${todayEvts.slice(0,2).map((e:any)=>e.title).join(', ')}.`:'Sin eventos de calendario hoy.'
+              const briefQ = `${greeting}. Dame el briefing del día de Brutal Studios. ${urgMsg} ${inboxMsg} ${calMsg} ¿Cuál es el plan?`
               return (
-                <div className="animate-fadeUp rounded-2xl overflow-hidden mt-4" style={{
-                  background:'rgba(255,255,255,0.022)', border:'1px solid rgba(255,255,255,0.07)',
-                  maxWidth:'620px', width: isMobile ? 'calc(100vw - 40px)' : '620px',
-                }}>
-                  <div className="flex items-center gap-2 px-5 py-2.5" style={{borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
-                    <div className="w-1.5 h-1.5 rounded-full animate-pls" style={{background:ORANGE,boxShadow:`0 0 6px ${ORANGE}`}}/>
-                    <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:ORANGE}}>FOCO AHORA</span>
+                <div className="animate-fadeUp rounded-3xl px-6 py-5 w-full" style={{background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,255,255,0.06)',backdropFilter:'blur(4px)'}}>
+                  <div className="flex items-center gap-2">
+                    <LucideIcon name="sparkles" size={16} color="#6f9bff"/>
+                    <span className="font-figtree" style={{fontSize:'16px',fontWeight:600,color:'rgba(255,255,255,0.9)'}}>Tu briefing</span>
+                    <button onClick={()=>{setHarveySpoken(briefQ);askHarvey(briefQ)}}
+                      className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full font-syne text-[7.5px] font-black tracking-widest transition-all hover:opacity-80 active:scale-95"
+                      style={{background:`${BLU}14`,border:`1px solid ${BLU}30`,color:BLU}}>
+                      <LucideIcon name="volume-2" size={10} color={BLU}/> ESCUCHAR
+                    </button>
                   </div>
-                  <div className={`flex ${isMobile?'flex-col':'flex-row'}`}>
-                    {/* Izquierda — asunto foco + acción */}
-                    <div className="flex-1 px-5 py-4" style={!isMobile&&totalU>0?{borderRight:'1px solid rgba(255,255,255,0.05)'}:undefined}>
-                      <div className="flex items-start gap-3">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:isEmail?`${ORANGE}14`:`${RED}12`}}>
-                          <LucideIcon name={isEmail?'mail':'alert-triangle'} size={15} color={isEmail?ORANGE:RED}/>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="font-figtree font-bold leading-tight" style={{fontSize:'15px',color:'rgba(255,255,255,0.9)'}}>
-                            {isEmail ? (focus.subject||'Sin asunto') : focus.text}
-                          </div>
-                          <div className="font-figtree mt-1 truncate" style={{fontSize:'11px',color:'rgba(255,255,255,0.4)'}}>
-                            {isEmail ? ((focus.from_name||'?')+(focus.ai_client&&focus.ai_client!=='Desconocido'?' · '+focus.ai_client:'')) : (focus.assignee?.name||'Sin asignar')}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center flex-wrap gap-2 mt-3 mb-3">
-                        {needsDecision && <span className="font-syne text-[7px] font-black px-2 py-1 rounded-md" style={{background:`${ORANGE}16`,color:ORANGE}}>REQUIERE DECISIÓN</span>}
-                        {mins!=null && <span className="inline-flex items-center gap-1 font-syne text-[7.5px] font-black" style={{color:'rgba(255,255,255,0.35)'}}><LucideIcon name="clock" size={9} color="rgba(255,255,255,0.35)"/> {mins} min</span>}
-                        {!isEmail && <span className="font-syne text-[7px] font-black px-2 py-1 rounded-md" style={{background:`${RED}14`,color:RED}}>URGENTE</span>}
-                      </div>
-                      <button onClick={()=>onNavigate?.(isEmail?'inbox':'tareas')}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-syne text-[8.5px] font-black tracking-widest transition-all hover:opacity-85 active:scale-[0.98]"
-                        style={{background:BLU,color:'white'}}>
-                        {isEmail?'ABRIR CORREO':'VER TAREA'} <LucideIcon name="arrow-right" size={11} color="white"/>
-                      </button>
+                  <div className="mt-3 mb-1" style={{height:'1px',background:'rgba(255,255,255,0.06)'}}/>
+                  {shown.length>0 ? (
+                    <div className="flex flex-col">
+                      {shown.map((it,i)=>(
+                        <button key={i} onClick={()=>onNavigate?.(it.nav)}
+                          className="flex items-center gap-3 py-2.5 text-left transition-all hover:opacity-80 active:scale-[0.99]">
+                          <LucideIcon name={it.icon} size={16} color={it.color}/>
+                          <span className="font-figtree flex-1 truncate" style={{fontSize:'14px',color:'rgba(255,255,255,0.66)'}}>{it.text}</span>
+                          <LucideIcon name="chevron-right" size={13} color="rgba(255,255,255,0.14)"/>
+                        </button>
+                      ))}
                     </div>
-                    {/* Derecha — inteligencia del inbox */}
-                    {totalU>0 && (
-                      <div className="px-5 py-4 flex flex-col items-center justify-center gap-3" style={{minWidth:isMobile?undefined:'232px'}}>
-                        <div className="flex items-center gap-4">
-                          <div className="relative flex-shrink-0">
-                            <svg width="72" height="72" viewBox="0 0 72 72">
-                              <circle cx="36" cy="36" r={R} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6"/>
-                              {baja>0 && <circle cx="36" cy="36" r={R} fill="none" stroke={BLU} strokeWidth="6" strokeLinecap="round" strokeDasharray={`${bajaLen} ${CIRC-bajaLen}`} strokeDashoffset={`${-impLen}`} transform="rotate(-90 36 36)" style={{transition:'stroke-dasharray 0.8s ease'}}/>}
-                              {importante>0 && <circle cx="36" cy="36" r={R} fill="none" stroke={ORANGE} strokeWidth="6" strokeLinecap="round" strokeDasharray={`${impLen} ${CIRC-impLen}`} transform="rotate(-90 36 36)" style={{transition:'stroke-dasharray 0.8s ease'}}/>}
-                            </svg>
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <span className="font-figtree font-black" style={{fontSize:'22px',color:'rgba(255,255,255,0.92)'}}>{totalU}</span>
-                            </div>
-                          </div>
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full" style={{background:ORANGE}}/><span className="font-figtree" style={{fontSize:'11px',color:'rgba(255,255,255,0.6)'}}><b style={{color:'rgba(255,255,255,0.9)'}}>{importante}</b> importante{importante!==1?'s':''}</span></div>
-                            <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-full" style={{background:BLU}}/><span className="font-figtree" style={{fontSize:'11px',color:'rgba(255,255,255,0.6)'}}><b style={{color:'rgba(255,255,255,0.9)'}}>{baja}</b> baja prioridad</span></div>
-                          </div>
-                        </div>
-                        {keywords.length>0 && (
-                          <div className="flex flex-wrap justify-center gap-1.5 w-full">
-                            {keywords.map(([name,cnt],i)=>{
-                              const col = KW_COLORS[i%KW_COLORS.length]
-                              return (
-                                <button key={name} onClick={()=>onNavigate?.('inbox')}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-all hover:opacity-80 active:scale-95"
-                                  style={{background:`${col}10`,border:`1px solid ${col}28`}}>
-                                  <div className="w-1.5 h-1.5 rounded-full" style={{background:col,boxShadow:`0 0 5px ${col}`}}/>
-                                  <span className="font-syne text-[8px] font-black tracking-wide truncate" style={{color:col,maxWidth:'80px'}}>{name}</span>
-                                  <span className="font-syne text-[8px] font-black" style={{color:'rgba(255,255,255,0.3)'}}>{cnt}</span>
-                                </button>
-                              )
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  ) : (
+                    <div className="flex items-center gap-3 py-3">
+                      <LucideIcon name="check-circle" size={16} color={GRN}/>
+                      <span className="font-figtree" style={{fontSize:'14px',color:'rgba(255,255,255,0.5)'}}>Todo al día. Sin pendientes ahora mismo.</span>
+                    </div>
+                  )}
                 </div>
               )
             })()}
+
           </div>
 
           <div className={`w-full mt-6 ${isMobile?'px-5':'px-10'}`} style={{maxWidth:'600px'}}>
@@ -712,7 +599,7 @@ CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
               </div>
             )}
 
-            <div style={{minHeight:'64px'}}>
+            <div style={{minHeight:(orbMode==='thinking'||harveyReply)?'64px':'0'}}>
               {orbMode==='thinking' ? (
                 <div className="flex items-center justify-center gap-2 py-5">
                   {[0,1,2,3].map(i=>(
@@ -800,11 +687,7 @@ CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
                   )}
                 </div>
                 )
-              })() : (
-                <p className="text-center font-figtree" style={{fontSize:'12px',color:'rgba(255,255,255,0.12)',fontStyle:'italic'}}>
-                  Pulsa el orbe o escribe para hablar con Harvey
-                </p>
-              )}
+              })() : null}
             </div>
 
             {pendingAction && orbMode==='idle' && !isMobile && (()=>{
@@ -839,205 +722,82 @@ CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
               )
             })()}
 
-            <form className="mt-4" onSubmit={e=>{e.preventDefault();const q=textQ.trim();if(!q||orbMode!=='idle')return;setHarveySpoken(q);setTextQ('');askHarvey(q)}}>
-              <div className="flex items-center gap-3 px-5 py-3.5 rounded-2xl" style={{
-                background:'rgba(255,255,255,0.03)',
-                border:'1px solid rgba(255,255,255,0.06)',
-              }}>
-                <LucideIcon name="message-circle" size={13} color="rgba(255,255,255,0.15)"/>
+            <form className="mt-4 w-full" style={{maxWidth:'600px'}} onSubmit={e=>{e.preventDefault();const q=textQ.trim();if(!q||orbMode!=='idle')return;setHarveySpoken(q);setTextQ('');askHarvey(q)}}>
+              <div className="flex items-center gap-3 pl-5 pr-2 py-2 rounded-full" style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)'}}>
+                <LucideIcon name="message-circle" size={14} color="rgba(255,255,255,0.2)"/>
                 <input value={textQ} onChange={e=>setTextQ(e.target.value)} disabled={orbMode!=='idle'}
                   placeholder="Escribe a Harvey…"
                   className="flex-1 bg-transparent outline-none disabled:opacity-25 font-figtree"
-                  style={{fontSize:'14px',color:'rgba(255,255,255,0.75)',caretColor:BLU}}/>
-                {textQ.trim()&&orbMode==='idle'&&(
-                  <button type="submit" className="font-syne font-black text-[8px] tracking-widest px-3 py-1.5 rounded-lg transition-all hover:opacity-80" style={{background:BLU,color:'white'}}>
-                    ENVIAR
+                  style={{fontSize:'15px',color:'rgba(255,255,255,0.75)',caretColor:BLU}}/>
+                {textQ.trim()&&orbMode==='idle' ? (
+                  <button type="submit" aria-label="Enviar" className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:opacity-85 active:scale-95" style={{background:BLU}}>
+                    <LucideIcon name="arrow-right" size={16} color="white"/>
+                  </button>
+                ) : (
+                  <button type="button" onClick={handleOrb} aria-label="Hablar con Harvey"
+                    className="w-11 h-11 rounded-full flex items-center justify-center transition-all active:scale-95"
+                    style={{background:`radial-gradient(circle at 40% 35%,${BLU}59,${BLU}14)`,border:`1px solid ${BLU}66`}}>
+                    <div className="flex items-center gap-[2px]" style={{height:'14px'}}>
+                      {[6,10,8,11,7].map((h,i)=>(<div key={i} style={{width:'2px',height:`${h}px`,borderRadius:'2px',background:'#6f9bff',boxShadow:'0 0 6px #6f9bff',transformOrigin:'center',animation:orbMode==='recording'?`eqBar ${0.4+i*0.08}s ease-in-out ${i*0.05}s infinite alternate`:'none'}}/>))}
+                    </div>
                   </button>
                 )}
               </div>
             </form>
-
-            {orbMode==='idle' && (()=>{
-              const shortcuts: {icon:string;label:string;nav:string}[] = [
-                ...(unreadCount===0?[{icon:'mail',label:'Inbox',nav:'inbox'}]:[]),
-                {icon:'calendar',label:'Calendario',nav:'calendario'},
-                {icon:'users',label:'Equipo',nav:'equipo'},
-                {icon:'folder',label:'Proyectos',nav:'proyectos'},
-                {icon:'bar-chart-2',label:'Reportes',nav:'reportes'},
-              ]
-              return (
-                <div className="flex items-center justify-center flex-wrap gap-2 mt-4">
-                  {unreadCount>0 && (
-                    <button onClick={()=>onNavigate?.('inbox')}
-                      className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full font-syne text-[8px] font-black tracking-wide transition-all hover:opacity-80 active:scale-95"
-                      style={{background:'rgba(255,176,32,0.1)',border:'1px solid rgba(255,176,32,0.28)',color:'rgba(255,176,32,0.95)'}}>
-                      <LucideIcon name="mail" size={11} color="rgba(255,176,32,0.95)"/>
-                      {unreadCount} email{unreadCount!==1?'s':''} sin leer
-                    </button>
-                  )}
-                  {shortcuts.map((a)=>(
-                    <button key={a.nav} onClick={()=>onNavigate?.(a.nav)} title={a.label}
-                      className="w-9 h-9 rounded-xl flex items-center justify-center transition-all hover:bg-white/[0.06] active:scale-95"
-                      style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)'}}>
-                      <LucideIcon name={a.icon} size={14} color="rgba(255,255,255,0.42)"/>
-                    </button>
-                  ))}
-                </div>
-              )
-            })()}
           </div>
         </div>
       </div>
 
-      {/* ══ RIGHT PANEL ══ */}
-      <div className={isMobile ? 'w-full flex-shrink-0 flex flex-col px-5 py-6' : 'w-[292px] flex-shrink-0 flex flex-col overflow-y-auto py-7 pr-7 pl-5'} style={isMobile?{borderTop:'1px solid rgba(255,255,255,0.04)',gap:'28px'}:{borderLeft:'1px solid rgba(255,255,255,0.04)',gap:'28px'}}>
-
-        <div>
-          <div className="font-syne font-black tracking-[0.38em] mb-3" style={{fontSize:'7px',color:'rgba(255,255,255,0.12)'}}>ESTADO</div>
-          <div className="flex flex-col gap-2">
-            {statCards.map((s,i)=>(
-              <button key={i} onClick={()=>onNavigate?.(s.nav)}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-200 hover:bg-white/[0.04] group"
-                style={{background:'rgba(255,255,255,0.022)',border:'1px solid rgba(255,255,255,0.05)'}}>
-                <div className="font-figtree font-black leading-none flex-shrink-0" style={{
-                  fontSize:'32px',color:s.c,lineHeight:'1',
-                  textShadow:s.alert?`0 0 24px ${s.c}50`:undefined,
-                  minWidth:'40px',
-                }}>
-                  {s.v}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-syne font-black" style={{fontSize:'7.5px',color:'rgba(255,255,255,0.28)',letterSpacing:'0.14em'}}>
-                    {s.l.toUpperCase()}
-                  </div>
-                  {s.alert&&(
-                    <div className="font-syne font-black mt-0.5 inline-block px-1.5 py-px rounded-full" style={{fontSize:'6px',background:`${RED}12`,color:RED,letterSpacing:'0.08em'}}>
-                      {s.alert.toUpperCase()}
-                    </div>
-                  )}
-                </div>
-                <LucideIcon name="chevron-right" size={11} color="rgba(255,255,255,0.08)"/>
-              </button>
-            ))}
-          </div>
-
-          {(()=>{
-            const totalT = data.tasks.length
-            const ctrlPct = totalT > 0 ? Math.round((totalT - urgentCount) / totalT * 100) : 100
-            const ctrlColor = ctrlPct >= 90 ? GRN : ctrlPct >= 65 ? BLU : RED
-            const R = 44
-            const C = 2 * Math.PI * R
-            const offset = C * (1 - ctrlPct / 100)
-            return (
-              <div className="flex items-center gap-4 mt-4 px-4 py-3 rounded-xl" style={{background:'rgba(255,255,255,0.018)',border:'1px solid rgba(255,255,255,0.04)'}}>
-                <div className="relative flex-shrink-0">
-                  <svg width="96" height="96" viewBox="0 0 96 96">
-                    <circle cx="48" cy="48" r={R} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="7"/>
-                    <circle cx="48" cy="48" r={R} fill="none"
-                      stroke={ctrlColor} strokeWidth="7"
-                      strokeDasharray={C} strokeDashoffset={offset}
-                      strokeLinecap="round"
-                      transform="rotate(-90 48 48)"
-                      style={{transition:'stroke-dashoffset 1.2s ease, stroke 0.6s'}}/>
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <div className="font-figtree font-black" style={{fontSize:'20px',color:ctrlColor,lineHeight:'1'}}>{ctrlPct}%</div>
-                  </div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-syne font-black mb-0.5" style={{fontSize:'8px',color:ctrlColor,letterSpacing:'0.12em'}}>
-                    {ctrlPct>=90?'BAJO CONTROL':ctrlPct>=65?'EN PROGRESO':'ATENCIÓN'}
-                  </div>
-                  <div className="font-syne" style={{fontSize:'7px',color:'rgba(255,255,255,0.22)',lineHeight:'1.5'}}>
-                    {totalT - urgentCount} de {totalT}<br/>sin urgencia
-                  </div>
-                </div>
-              </div>
-            )
-          })()}
-        </div>
-
-        {todayItems.length>0&&(
-          <div>
-            <div className="font-syne font-black tracking-[0.38em] mb-3" style={{fontSize:'7px',color:'rgba(255,255,255,0.12)'}}>AGENDA HOY</div>
-            <div className="space-y-1.5">
-              {todayItems.map((item,i)=>(
-                <button key={i} onClick={()=>onNavigate?.(item.nav)}
-                  className="w-full text-left flex items-center gap-3 px-4 py-3 rounded-xl transition-all hover:bg-white/[0.03]"
-                  style={{borderLeft:`2px solid ${item.color}`,background:'rgba(255,255,255,0.02)'}}>
-                  <span className="flex-1 font-figtree truncate" style={{fontSize:'12px',color:'rgba(255,255,255,0.62)'}}>
-                    {item.text}
-                  </span>
-                  <span className="font-syne font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{fontSize:'6px',background:`${item.color}14`,color:item.color}}>
-                    {item.type}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {(()=>{
-          const focusTasks = data.tasks.filter((t:Task)=>!t.done&&(t.level==='urgent'||t.level==='high')).slice(0,5)
-          if (focusTasks.length === 0) return null
-          const doneToday = data.tasks.filter((t:Task)=>t.done&&(t.updated_at||t.created_at).slice(0,10)===todayStr).length
-          const total = focusTasks.length + doneToday
-          const pct = total > 0 ? Math.round(doneToday/total*100) : 0
+      {/* ══ RIGHT RAIL (stats slim) ══ */}
+      {(()=>{
+        const railStats = [
+          {n:unreadCount, l:'sin leer', c:unreadCount>0?'rgba(255,176,32,0.95)':'rgba(255,255,255,0.5)', icon:'mail', nav:'inbox'},
+          {n:pendingAll, l:pendingAll===1?'tarea':'tareas', c:urgentTasks.length>0?RED:BLU, icon:'check-square', nav:'tareas'},
+          {n:pipeline, l:pipeline===1?'oportunidad':'oportunidades', c:'rgba(167,139,250,0.9)', icon:'target', nav:'contenido'},
+          {n:activeProjectsCount, l:activeProjectsCount===1?'proyecto':'proyectos', c:overdueP>0?RED:BLU, icon:'folder', nav:'proyectos'},
+          {n:activeClients, l:activeClients===1?'cliente':'clientes', c:GRN, icon:'users', nav:'clientes'},
+        ]
+        if (isMobile) {
           return (
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <div className="font-syne font-black tracking-[0.38em]" style={{fontSize:'7px',color:'rgba(255,255,255,0.12)'}}>FOCUS</div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-20 h-1 rounded-full overflow-hidden" style={{background:'rgba(255,255,255,0.05)'}}>
-                    <div className="h-full rounded-full transition-all" style={{width:`${pct}%`,background:pct===100?GRN:BLU}}/>
-                  </div>
-                  <span className="font-syne text-[7px] font-black" style={{color:pct===100?GRN:'rgba(255,255,255,0.2)'}}>{pct}%</span>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                {focusTasks.map((t:Task)=>(
-                  <div key={t.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl group/ft" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${t.level==='urgent'?`${RED}18`:BORDER}`}}>
-                    <button onClick={async()=>{ try{await data.toggleTask(t.id);showToast('Tarea completada')}catch{} }}
-                      className="w-4 h-4 rounded-md border flex-shrink-0 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
-                      style={{background:'transparent',borderColor:t.level==='urgent'?`${RED}50`:`${BLU}40`}}>
-                      <LucideIcon name="check" size={9} color={t.level==='urgent'?RED:BLU}/>
-                    </button>
-                    <span className="flex-1 font-syne text-[9px] truncate" style={{color:'rgba(255,255,255,0.55)'}}>{t.text}</span>
-                    <span className="font-syne text-[6px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0 opacity-0 group-hover/ft:opacity-100 transition-opacity" style={{background:t.level==='urgent'?`${RED}12`:`${BLU}12`,color:t.level==='urgent'?RED:BLU}}>{t.level==='urgent'?'URG':'HIGH'}</span>
-                  </div>
+            <div className="w-full flex-shrink-0 px-4 py-4" style={{borderTop:'1px solid rgba(255,255,255,0.04)'}}>
+              <div className="flex gap-2 overflow-x-auto pb-1" style={{WebkitOverflowScrolling:'touch'}}>
+                {railStats.map((s,i)=>(
+                  <button key={i} onClick={()=>onNavigate?.(s.nav)} className="flex flex-col items-center gap-1 px-4 py-3 rounded-2xl flex-shrink-0 active:scale-95 transition-transform" style={{background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.06)',minWidth:'80px'}}>
+                    <div className="font-figtree font-black" style={{fontSize:'22px',color:s.c,lineHeight:'1'}}>{s.n}</div>
+                    <div className="font-figtree" style={{fontSize:'9px',color:'rgba(255,255,255,0.35)'}}>{s.l}</div>
+                    <LucideIcon name={s.icon} size={13} color={s.c}/>
+                  </button>
                 ))}
+                <button onClick={()=>onOpenModal('tarea')} className="flex flex-col items-center justify-center gap-1.5 px-4 py-3 rounded-2xl flex-shrink-0 active:scale-95 transition-transform" style={{background:`${BLU}12`,border:`1px solid ${BLU}30`,minWidth:'66px'}}>
+                  <LucideIcon name="plus" size={18} color={BLU}/>
+                  <div className="font-figtree" style={{fontSize:'9px',color:BLU}}>crear</div>
+                </button>
               </div>
-              <button onClick={()=>onNavigate?.('tareas')} className="mt-2 w-full font-syne text-[7px] font-black tracking-widest text-center py-1.5 rounded-lg transition-all hover:opacity-70" style={{color:'rgba(255,255,255,0.14)',background:'rgba(255,255,255,0.02)'}}>
-                VER TODAS → TAREAS
-              </button>
             </div>
           )
-        })()}
-
-        <div className="mt-auto">
-          <div className="font-syne font-black tracking-[0.38em] mb-3" style={{fontSize:'7px',color:'rgba(255,255,255,0.12)'}}>CREAR</div>
-          <div className="grid grid-cols-2 gap-2">
-            {([
-              {label:'Tarea',modal:'tarea',icon:'check-square',c:BLU},
-              {label:'Cliente',modal:'cliente',icon:'users',c:GRN},
-              {label:'Proyecto',modal:'proyecto',icon:'folder-open',c:'rgba(167,139,250,0.85)'},
-              {label:'Contenido',modal:'contenido',icon:'film',c:'rgba(193,53,132,0.85)'},
-            ] as const).map((a,i)=>(
-              <button key={i} onClick={()=>onOpenModal(a.modal)}
-                className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl transition-all hover:opacity-75"
-                style={{background:'rgba(255,255,255,0.025)',border:`1px solid ${a.c}18`}}>
-                <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:`${a.c}15`}}>
-                  <LucideIcon name={a.icon} size={11} color={a.c}/>
+        }
+        return (
+          <div className="flex-shrink-0 flex items-start justify-center pt-16 pr-6 pl-2" style={{width:'150px'}}>
+            <div className="flex flex-col items-center py-5 rounded-[44px]" style={{width:'88px',background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,255,255,0.07)'}}>
+              <div className="mb-2"><LucideIcon name="sun" size={16} color="rgba(150,150,180,0.45)"/></div>
+              {railStats.map((s,i)=>(
+                <div key={i} className="w-full flex flex-col items-center">
+                  {i>0 && <div style={{width:'34px',height:'1px',background:'rgba(255,255,255,0.07)'}}/>}
+                  <button onClick={()=>onNavigate?.(s.nav)} className="flex flex-col items-center gap-1.5 py-3.5 transition-all hover:opacity-80 active:scale-95" title={s.l}>
+                    <div className="font-figtree font-black" style={{fontSize:'24px',color:s.c,lineHeight:'1'}}>{s.n}</div>
+                    <div className="font-figtree" style={{fontSize:'8.5px',color:'rgba(255,255,255,0.32)'}}>{s.l}</div>
+                    <LucideIcon name={s.icon} size={14} color={s.c}/>
+                  </button>
                 </div>
-                <span className="font-syne font-black" style={{fontSize:'8px',color:'rgba(255,255,255,0.42)',letterSpacing:'0.08em'}}>
-                  + {a.label}
-                </span>
+              ))}
+              <div style={{width:'34px',height:'1px',background:'rgba(255,255,255,0.07)'}}/>
+              <button onClick={()=>onOpenModal('tarea')} className="mt-3.5 w-11 h-11 rounded-full flex items-center justify-center transition-all hover:opacity-85 active:scale-95" style={{background:`${BLU}18`,border:`1px solid ${BLU}35`}} title="Crear tarea">
+                <LucideIcon name="plus" size={18} color={BLU}/>
               </button>
-            ))}
+            </div>
           </div>
-        </div>
-
-      </div>
+        )
+      })()}
 
       {isMobile && pendingAction && orbMode==='idle' && (()=>{
         const iconMap: Record<string,string> = {tarea:'check-square',evento:'calendar',proyecto:'folder',cliente:'user-plus',pieza:'film'}
