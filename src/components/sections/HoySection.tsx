@@ -448,12 +448,21 @@ CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
   const orbColor: Record<OrbMode,string> = {idle:BLU,recording:RED,thinking:'rgba(139,92,246,0.9)',speaking:BLU}
   const orbLabel: Record<OrbMode,string> = {idle:'PULSA',recording:'STOP',thinking:'PIENSA',speaking:'STOP'}
   const rimCol = orbColor[orbMode]
-  // Colores del orbe de cristal (líquido interior) por estado
-  const liqA = orbMode==='recording' ? '#ff4530' : orbMode==='thinking' ? '#9b6bff' : '#2f6bff'
-  const liqB = orbMode==='recording' ? '#ff7a3c' : orbMode==='thinking' ? '#5f7dff' : '#7c4dff'
-  const rimHi = orbMode==='recording' ? 'rgba(255,160,130,0.95)' : orbMode==='thinking' ? 'rgba(185,165,255,0.95)' : 'rgba(150,190,255,0.95)'
-  const glowC = orbMode==='recording' ? 'rgba(255,90,60,0.55)' : orbMode==='thinking' ? 'rgba(150,110,255,0.55)' : 'rgba(70,130,255,0.55)'
-  const glowCsoft = orbMode==='recording' ? 'rgba(255,90,60,0.12)' : orbMode==='thinking' ? 'rgba(150,110,255,0.12)' : 'rgba(70,130,255,0.12)'
+  // Orbe de cristal líquido — 100% CSS (Safari-safe). Colores por estado.
+  const _rec = orbMode==='recording', _thk = orbMode==='thinking'
+  const orbBase = _rec ? 'radial-gradient(circle at 50% 30%,#24080c 0%,#180509 42%,#0d0305 68%,#060102 100%)'
+    : _thk ? 'radial-gradient(circle at 50% 30%,#1a0f34 0%,#120a26 42%,#080512 68%,#020109 100%)'
+    : 'radial-gradient(circle at 50% 30%,#0a1130 0%,#070b22 42%,#03050f 68%,#010208 100%)'
+  const blob1 = _rec ? '#ff3b2f' : _thk ? '#8b5cff' : '#1e5bff'
+  const blob2 = _rec ? '#ff7a3c' : _thk ? '#b06bff' : '#7b3dff'
+  const blob3 = _rec ? '#ffb347' : _thk ? '#5f8bff' : '#00c6ff'
+  const rimGrad = _rec ? 'radial-gradient(circle,transparent 82%,rgba(255,110,70,0.12) 92%,rgba(255,185,155,0.97) 98.5%,rgba(255,120,80,0.6) 100%)'
+    : _thk ? 'radial-gradient(circle,transparent 82%,rgba(150,110,255,0.12) 92%,rgba(200,180,255,0.95) 98.5%,rgba(160,120,255,0.6) 100%)'
+    : 'radial-gradient(circle,transparent 82%,rgba(60,120,255,0.12) 92%,rgba(155,198,255,0.95) 98.5%,rgba(150,120,255,0.55) 100%)'
+  const rimShadow = _rec ? 'inset 0 0 40px rgba(255,80,50,0.22),inset -14px -18px 56px rgba(255,120,60,0.2)'
+    : _thk ? 'inset 0 0 40px rgba(139,92,246,0.22),inset -14px -18px 56px rgba(160,120,255,0.2)'
+    : 'inset 0 0 40px rgba(30,90,255,0.22),inset -14px -18px 56px rgba(139,92,246,0.2)'
+  const glowC = _rec ? 'rgba(255,90,60,0.32)' : _thk ? 'rgba(150,110,255,0.3)' : 'rgba(40,90,255,0.32)'
 
   return (
     <div className={isMobile ? 'h-full flex flex-col overflow-y-auto' : 'h-full flex overflow-hidden'} style={{background:'#030308'}}>
@@ -493,60 +502,27 @@ CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
               animation: orbMode!=='idle' ? 'haloPulse 2.4s ease-in-out infinite' : undefined,
             }}/>
 
-            {/* Esfera de cristal líquido (botón) */}
+            {/* Esfera de cristal líquido (botón · 100% CSS, Safari-safe) */}
             <button onClick={handleOrb} aria-label="Hablar con Harvey"
-              className="relative transition-transform duration-500 active:scale-95 select-none"
-              style={{width:isMobile?'260px':'320px',height:isMobile?'260px':'320px'}}>
-              <svg viewBox="0 0 320 320" width="100%" height="100%" style={{display:'block',filter:`drop-shadow(0 26px 60px rgba(0,0,0,0.6)) drop-shadow(0 0 55px ${glowC})`}}>
-                <defs>
-                  <radialGradient id="orbSphere" cx="50%" cy="34%" r="72%">
-                    <stop offset="0%" stopColor="#0c1230"/><stop offset="42%" stopColor="#060a1c"/><stop offset="100%" stopColor="#01020a"/>
-                  </radialGradient>
-                  <radialGradient id="orbGloss" cx="42%" cy="38%" r="52%">
-                    <stop offset="0%" stopColor="rgba(210,224,255,0.36)"/><stop offset="42%" stopColor="rgba(210,224,255,0.05)"/><stop offset="68%" stopColor="transparent"/>
-                  </radialGradient>
-                  <radialGradient id="orbBot" cx="62%" cy="86%" r="42%">
-                    <stop offset="0%" stopColor={glowC}/><stop offset="60%" stopColor={glowCsoft}/><stop offset="100%" stopColor="transparent"/>
-                  </radialGradient>
-                  <radialGradient id="orbRim" cx="50%" cy="50%" r="50%">
-                    <stop offset="86%" stopColor="transparent"/><stop offset="96%" stopColor={glowCsoft}/><stop offset="99.2%" stopColor={rimHi}/><stop offset="100%" stopColor="rgba(150,120,255,0.5)"/>
-                  </radialGradient>
-                  <linearGradient id="orbVMask" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#000"/><stop offset="38%" stopColor="#000"/><stop offset="72%" stopColor="#888"/><stop offset="100%" stopColor="#fff"/>
-                  </linearGradient>
-                  <mask id="orbLowMask"><rect width="320" height="320" fill="url(#orbVMask)"/></mask>
-                  <filter id="orbLiqA" x="-30%" y="-30%" width="160%" height="160%">
-                    <feTurbulence type="fractalNoise" baseFrequency="0.011" numOctaves="4" seed="7" result="t">
-                      <animate attributeName="seed" values="7;13;7" dur="28s" repeatCount="indefinite"/>
-                    </feTurbulence>
-                    <feColorMatrix in="t" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1.3 0 0 0 -0.72" result="a"/>
-                    <feFlood floodColor={liqA} result="c"/>
-                    <feComposite in="c" in2="a" operator="in" result="col"/>
-                    <feGaussianBlur in="col" stdDeviation="6"/>
-                  </filter>
-                  <filter id="orbLiqB" x="-30%" y="-30%" width="160%" height="160%">
-                    <feTurbulence type="fractalNoise" baseFrequency="0.017 0.01" numOctaves="3" seed="21" result="t">
-                      <animate attributeName="seed" values="21;16;21" dur="34s" repeatCount="indefinite"/>
-                    </feTurbulence>
-                    <feColorMatrix in="t" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  1.4 0 0 0 -0.9" result="a"/>
-                    <feFlood floodColor={liqB} result="c"/>
-                    <feComposite in="c" in2="a" operator="in" result="col"/>
-                    <feGaussianBlur in="col" stdDeviation="7"/>
-                  </filter>
-                  <clipPath id="orbClip"><circle cx="160" cy="160" r="159"/></clipPath>
-                </defs>
-                <g clipPath="url(#orbClip)">
-                  <circle cx="160" cy="160" r="159" fill="url(#orbSphere)"/>
-                  <g mask="url(#orbLowMask)">
-                    <rect x="0" y="0" width="320" height="320" filter="url(#orbLiqA)" opacity="0.7"/>
-                    <rect x="0" y="0" width="320" height="320" filter="url(#orbLiqB)" opacity="0.5"/>
-                  </g>
-                  <circle cx="160" cy="160" r="159" fill="url(#orbBot)"/>
-                  <ellipse cx="118" cy="80" rx="78" ry="44" fill="url(#orbGloss)"/>
-                  <circle cx="160" cy="160" r="159" fill="url(#orbRim)"/>
-                </g>
-                <circle cx="160" cy="160" r="159.2" fill="none" stroke={rimHi} strokeOpacity="0.4" strokeWidth="1"/>
-              </svg>
+              className="relative rounded-full overflow-hidden transition-transform duration-500 active:scale-95 select-none"
+              style={{
+                width:isMobile?'260px':'320px',height:isMobile?'260px':'320px',
+                background:orbBase,
+                boxShadow:`0 30px 80px rgba(0,0,0,0.6), 0 0 70px ${glowC}`,
+                transition:'background 0.8s, box-shadow 0.8s',
+                isolation:'isolate',
+              }}>
+              {/* Líquido interior (blobs, blend screen) */}
+              <div className="absolute rounded-full pointer-events-none" style={{width:'78%',height:'52%',left:'11%',bottom:'-8%',background:`radial-gradient(circle,${blob1},transparent 68%)`,filter:'blur(30px)',mixBlendMode:'screen',opacity:0.5,animation:'orbDrift 11s ease-in-out infinite',transition:'background 0.8s'}}/>
+              <div className="absolute rounded-full pointer-events-none" style={{width:'52%',height:'40%',right:'8%',bottom:'4%',background:`radial-gradient(circle,${blob2},transparent 70%)`,filter:'blur(30px)',mixBlendMode:'screen',opacity:0.5,animation:'orbDrift2 14s ease-in-out infinite',transition:'background 0.8s'}}/>
+              <div className="absolute rounded-full pointer-events-none" style={{width:'44%',height:'34%',left:'24%',bottom:'8%',background:`radial-gradient(circle,${blob3},transparent 72%)`,filter:'blur(30px)',mixBlendMode:'screen',opacity:0.55,animation:'orbDrift3 9s ease-in-out infinite',transition:'background 0.8s'}}/>
+              {/* Top oscuro (efecto cristal) */}
+              <div className="absolute inset-0 rounded-full pointer-events-none" style={{background:'radial-gradient(circle at 50% 26%,rgba(0,0,0,0.62) 0%,rgba(0,0,0,0.35) 34%,transparent 58%)'}}/>
+              {/* Brillo especular */}
+              <div className="absolute rounded-full pointer-events-none" style={{top:'7%',left:'16%',width:'48%',height:'27%',background:'radial-gradient(circle at 42% 40%,rgba(220,232,255,0.34),rgba(220,232,255,0.05) 52%,transparent 70%)',filter:'blur(4px)'}}/>
+              <div className="absolute rounded-full pointer-events-none" style={{bottom:'15%',right:'23%',width:'18%',height:'10%',background:'radial-gradient(circle,rgba(180,205,255,0.35),transparent 70%)',filter:'blur(4px)'}}/>
+              {/* Rim brillante */}
+              <div className="absolute inset-0 rounded-full pointer-events-none" style={{background:rimGrad,boxShadow:rimShadow,transition:'background 0.8s, box-shadow 0.8s'}}/>
 
               {/* Contenido central */}
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 pointer-events-none">
