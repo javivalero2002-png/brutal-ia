@@ -147,10 +147,16 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
   }
 
   const PREDEFINED_ACCOUNTS = ['Brutal Studios','Julio','Pablo']
-  const allAccounts: string[] = ['Todas', ...Array.from(new Set<string>([...PREDEFINED_ACCOUNTS, ...data.agenda.filter((a: any)=>a.account_name).map((a: any)=>a.account_name as string)]))]
+  // Dedup insensible a mayúsculas/espacios (evita "Brutal Studios" duplicado por variantes en la BD)
+  const _accSeen = new Map<string,string>()
+  for (const raw of [...PREDEFINED_ACCOUNTS, ...data.agenda.filter((a: any)=>a.account_name).map((a: any)=>String(a.account_name).trim())]) {
+    const key = raw.toLowerCase()
+    if (raw && !_accSeen.has(key)) _accSeen.set(key, raw)
+  }
+  const allAccounts: string[] = ['Todas', ..._accSeen.values()]
   const allContentClients: string[] = ['Todos', ...Array.from(new Set<string>(data.agenda.filter((a: any)=>a.client?.name||a.client_id).map((a: any)=>a.client?.name||(data.clients.find((c: any)=>c.id===a.client_id)?.name)||'').filter(Boolean)))]
   const filteredByClient = clientFilter === 'Todos' ? data.agenda : data.agenda.filter((a: any) => (a.client?.name||data.clients.find((c: any)=>c.id===a.client_id)?.name) === clientFilter)
-  const filteredByAccount = accountFilter === 'Todas' ? filteredByClient : filteredByClient.filter((a: any)=>a.account_name===accountFilter)
+  const filteredByAccount = accountFilter === 'Todas' ? filteredByClient : filteredByClient.filter((a: any)=>String(a.account_name||'').trim().toLowerCase()===accountFilter.trim().toLowerCase())
   const filteredAgenda = !contentSearch.trim() ? filteredByAccount : filteredByAccount.filter((a: any)=>a.title?.toLowerCase().includes(contentSearch.toLowerCase()))
   filteredAgendaRef.current = filteredAgenda
 
@@ -246,7 +252,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
               {allAccounts.map((acc: string)=>{
                 const isAll = acc === 'Todas'
                 const isActive = accountFilter === acc
-                const firstItem = data.agenda.find((a: any)=>a.account_name===acc)
+                const firstItem = data.agenda.find((a: any)=>String(a.account_name||'').trim().toLowerCase()===acc.toLowerCase())
                 const accColor = firstItem ? (platColor[firstItem.platform]||BLU) : BLU
                 return (
                   <button key={acc} onClick={()=>setAccountFilter(acc)} className="flex items-center gap-1.5 font-syne text-[8.5px] font-black px-3 py-1.5 rounded-xl transition-all" style={{
@@ -569,6 +575,67 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
 
             {/* ── RIGHT COLUMN: Notes + Team Opinions ── */}
             <div className={isMobile ? "flex-1 flex flex-col" : "flex-1 flex flex-col overflow-y-auto"}>
+              {/* Boceto / Vista previa del post */}
+              {(()=>{
+                const plat = String(activeItem.platform||'').toLowerCase()
+                const account = editAccountName || activeItem.account_name || 'Brutal Studios'
+                const initial = (account.trim().charAt(0)||'B').toUpperCase()
+                const media = editCoverUrl || activeItem.cover_url || ''
+                const caption = activeItem.title || ''
+                const isLinkedin = plat.includes('linkedin')
+                const igIcon = (d:string)=><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
+                return (
+                  <div className="px-7 pt-7 pb-5 flex-shrink-0" style={{borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
+                    <div className="font-syne text-[8.5px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.2)'}}>BOCETO · {isLinkedin?'LINKEDIN':plat.includes('instagram')?'INSTAGRAM':(activeItem.platform||'').toUpperCase()||'POST'}</div>
+                    <div className="flex justify-center">
+                    {isLinkedin ? (
+                      <div className="w-full rounded-xl overflow-hidden" style={{maxWidth:'340px',background:'#1b1f23',border:'1px solid rgba(255,255,255,0.1)'}}>
+                        <div className="flex items-center gap-2.5 px-3 pt-3 pb-2">
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center font-figtree text-[13px] font-bold text-white flex-shrink-0" style={{background:'#0a66c2'}}>{initial}</div>
+                          <div className="flex-1 min-w-0"><div className="text-white text-[12.5px] font-semibold leading-tight truncate">{account}</div><div className="text-[10px] leading-tight" style={{color:'rgba(255,255,255,0.4)'}}>Agencia creativa · Ahora · 🌐</div></div>
+                          <span style={{color:'rgba(255,255,255,0.4)'}}>···</span>
+                        </div>
+                        <div className="px-3 pb-2.5 text-[12.5px] leading-relaxed whitespace-pre-wrap" style={{color:'rgba(255,255,255,0.85)'}}>{caption}</div>
+                        {media
+                          ? <img src={media} alt="" className="w-full" style={{maxHeight:'220px',objectFit:'cover'}}/>
+                          : <div style={{height:'160px',background:'linear-gradient(135deg,#243b55,#141e30)'}} className="flex items-center justify-center"><PlatformLogo platform={activeItem.platform} size={30}/></div>}
+                        <div className="flex items-center gap-1.5 px-3 py-2" style={{borderTop:'1px solid rgba(255,255,255,0.08)'}}>
+                          <span className="text-[13px]">👍</span><span className="text-[13px] -ml-1.5">❤️</span><span className="text-[10px] ml-1" style={{color:'rgba(255,255,255,0.4)'}}>42</span>
+                          <div className="flex-1"/>
+                          {['Recomendar','Comentar','Compartir'].map(l=><span key={l} className="font-figtree text-[10px] px-1.5" style={{color:'rgba(255,255,255,0.45)'}}>{l}</span>)}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-full rounded-xl overflow-hidden" style={{maxWidth:'300px',background:'#000',border:'1px solid rgba(255,255,255,0.12)'}}>
+                        <div className="flex items-center gap-2.5 px-3 py-2.5">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{background:'linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)',padding:'2px'}}>
+                            <div className="w-full h-full rounded-full flex items-center justify-center font-figtree text-[11px] font-bold text-white" style={{background:'#000'}}>{initial}</div>
+                          </div>
+                          <span className="flex-1 text-white text-[12px] font-semibold truncate">{account}</span>
+                          <span className="text-white text-[15px] leading-none">···</span>
+                        </div>
+                        {media
+                          ? <img src={media} alt="" style={{aspectRatio:'1/1',width:'100%',objectFit:'cover'}}/>
+                          : <div style={{aspectRatio:'1/1',background:'linear-gradient(135deg,#1a1a2e,#0f1230)'}} className="flex flex-col items-center justify-center gap-3 p-5"><PlatformLogo platform={activeItem.platform} size={34}/><span className="text-center font-figtree text-[13px] font-semibold leading-snug" style={{color:'rgba(255,255,255,0.55)'}}>{caption}</span></div>}
+                        <div className="flex items-center gap-3.5 px-3 pt-2.5">
+                          {igIcon('M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1L12 21l7.7-7.6 1.1-1a5.5 5.5 0 0 0 0-7.8z')}
+                          {igIcon('M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z')}
+                          {igIcon('M22 2 11 13M22 2 15 22 11 13 2 9l20-7z')}
+                          <div className="flex-1"/>
+                          {igIcon('M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z')}
+                        </div>
+                        <div className="px-3 pt-1.5 pb-3">
+                          <div className="text-white text-[11px] font-semibold">128 Me gusta</div>
+                          <div className="text-white text-[12px] leading-snug mt-0.5"><span className="font-semibold">{account}</span> {caption}</div>
+                        </div>
+                      </div>
+                    )}
+                    </div>
+                    <div className="font-syne text-[7px] text-center mt-2.5" style={{color:'rgba(255,255,255,0.15)'}}>Vista aproximada — se actualiza con la portada y el título</div>
+                  </div>
+                )
+              })()}
+
               {/* Notes */}
               <div className="px-7 pt-7 pb-5 flex-shrink-0" style={{borderBottom:`1px solid rgba(255,255,255,0.05)`}}>
                 <div className="font-syne text-[8.5px] font-black tracking-widest mb-2.5" style={{color:'rgba(255,255,255,0.2)'}}>NOTAS DE PRODUCCIÓN</div>
