@@ -5,7 +5,8 @@ import Anthropic from '@anthropic-ai/sdk'
 export const maxDuration = 60
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-const BUCKET = 'documentos'
+// Reutilizamos el bucket que ya existe (la creación automática de buckets no funciona en el plan actual)
+const BUCKET = 'content-videos'
 const MAX_BYTES = 20 * 1024 * 1024 // 20MB en storage
 
 // Sube un PDF a la nube (bucket 'documentos') y devuelve un resumen denso hecho por la IA,
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
 
   const buffer = Buffer.from(await file.arrayBuffer())
   const safe = file.name.replace(/[^\w.\-]+/g, '_')
-  const path = `${user.id}/${Date.now()}_${safe}`
+  const path = `docs/${user.id}/${Date.now()}_${safe}`
   const { error: ue } = await admin.storage.from(BUCKET).upload(path, buffer, { contentType: 'application/pdf', upsert: true })
   if (ue) return NextResponse.json({ error: 'Error al subir: ' + ue.message }, { status: 500 })
   const { data: { publicUrl } } = admin.storage.from(BUCKET).getPublicUrl(path)

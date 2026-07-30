@@ -287,8 +287,10 @@ export default function NexusDashboard({ profile }: Props) {
           : null
         const color = client?.color || ACCENT_COLORS[data.projects.length % ACCENT_COLORS.length]
         const projStatus = (mf.estado || 'activo') as 'plan.'|'activo'|'urgente'|'revisión'|'completado'
-        await data.createProject({ name:mf.nombre.trim(), client_id:client?.id, status:projStatus, progress:0, deadline:mf.deadline||'TBD', color })
+        const createdProj = await data.createProject({ name:mf.nombre.trim(), client_id:client?.id, status:projStatus, progress:0, deadline:mf.deadline||'TBD', color })
         showToast('Proyecto creado: '+mf.nombre)
+        // Abrir el detalle del nuevo proyecto para poder subir el PDF y pedir recomendaciones de primeras
+        if (createdProj?.id) { setSelectedProject(createdProj.id); setProjView('list'); setSection('proyectos') }
       } else if (modal === 'tarea') {
         if (!mf.text?.trim()) { showToast('Escribe la tarea'); return }
         const level: 'urgent'|'high'|'normal' = mf.priority==='urgente'?'urgent':mf.priority==='high'?'high':'normal'

@@ -1,7 +1,8 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
-const BUCKET = 'content-covers'
+// Reutilizamos el bucket que ya existe (la creación automática de buckets no funciona en el plan actual)
+const BUCKET = 'content-videos'
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   await admin.storage.createBucket(BUCKET, { public: true, fileSizeLimit: MAX_BYTES }).then(()=>{}, ()=>{})
 
   const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-  const path = `${id}/${Date.now()}.${ext}`
+  const path = `covers/${id}/${Date.now()}.${ext}`
 
   const buffer = Buffer.from(await file.arrayBuffer())
   const { error: uploadError } = await admin.storage.from(BUCKET).upload(path, buffer, {
