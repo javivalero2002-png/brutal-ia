@@ -24,6 +24,9 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
   const [uploadingVideo, setUploadingVideo] = useState(false)
   const [uploadingCover, setUploadingCover] = useState(false)
   const [editCoverUrl, setEditCoverUrl] = useState('')
+  const [bocetoPlatform, setBocetoPlatform] = useState<'instagram'|'linkedin'|null>(null)
+  const [bocetoCaption, setBocetoCaption] = useState<string|null>(null)
+  useEffect(()=>{ setBocetoPlatform(null); setBocetoCaption(null) }, [activeItem?.id])
   const coverFileInputRef = useRef<HTMLInputElement>(null)
   const filteredAgendaRef = useRef<any[]>([])
   const contentSearchInputRef = useRef<HTMLInputElement>(null)
@@ -575,18 +578,27 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
 
             {/* ── RIGHT COLUMN: Notes + Team Opinions ── */}
             <div className={isMobile ? "flex-1 flex flex-col" : "flex-1 flex flex-col overflow-y-auto"}>
-              {/* Boceto / Vista previa del post */}
+              {/* Boceto / Vista previa del post — interactivo */}
               {(()=>{
                 const plat = String(activeItem.platform||'').toLowerCase()
+                const isLinkedin = bocetoPlatform ? bocetoPlatform==='linkedin' : plat.includes('linkedin')
                 const account = editAccountName || activeItem.account_name || 'Brutal Studios'
                 const initial = (account.trim().charAt(0)||'B').toUpperCase()
                 const media = editCoverUrl || activeItem.cover_url || ''
-                const caption = activeItem.title || ''
-                const isLinkedin = plat.includes('linkedin')
+                const caption = bocetoCaption ?? (activeItem.title || '')
+                const dirty = bocetoCaption!==null && bocetoCaption.trim() && bocetoCaption.trim()!==(activeItem.title||'')
                 const igIcon = (d:string)=><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
                 return (
                   <div className="px-7 pt-7 pb-5 flex-shrink-0" style={{borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
-                    <div className="font-syne text-[8.5px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.2)'}}>BOCETO · {isLinkedin?'LINKEDIN':plat.includes('instagram')?'INSTAGRAM':(activeItem.platform||'').toUpperCase()||'POST'}</div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="font-syne text-[8.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>BOCETO EN VIVO</div>
+                      <div className="flex items-center gap-1 p-0.5 rounded-lg" style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.06)'}}>
+                        {(['instagram','linkedin'] as const).map(p=>{
+                          const on = isLinkedin ? p==='linkedin' : p==='instagram'
+                          return <button key={p} onClick={()=>setBocetoPlatform(p)} className="px-2.5 py-1 rounded-md font-syne text-[7.5px] font-black tracking-wide transition-all" style={{background:on?(p==='linkedin'?'#0a66c2':'#dc2743')+'22':'transparent',color:on?(p==='linkedin'?'#4a9fe0':'#ff6ba0'):'rgba(255,255,255,0.3)'}}>{p==='linkedin'?'LINKEDIN':'INSTAGRAM'}</button>
+                        })}
+                      </div>
+                    </div>
                     <div className="flex justify-center">
                     {isLinkedin ? (
                       <div className="w-full rounded-xl overflow-hidden" style={{maxWidth:'340px',background:'#1b1f23',border:'1px solid rgba(255,255,255,0.1)'}}>
@@ -631,7 +643,14 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                       </div>
                     )}
                     </div>
-                    <div className="font-syne text-[7px] text-center mt-2.5" style={{color:'rgba(255,255,255,0.15)'}}>Vista aproximada — se actualiza con la portada y el título</div>
+                    {/* Editor de copy en vivo */}
+                    <div className="mt-3">
+                      <textarea value={caption} onChange={e=>setBocetoCaption(e.target.value)} rows={2} placeholder="Escribe el copy del post — se actualiza en el boceto…" className="w-full px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none resize-none" style={{background:'rgba(255,255,255,0.03)',border:'1.5px solid rgba(255,255,255,0.07)',caretColor:BLU,lineHeight:'1.5'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+                      <div className="flex items-center justify-between mt-1.5">
+                        <span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.15)'}}>{caption.length} caracteres · edita para ver cómo queda</span>
+                        {dirty && <button onClick={async()=>{ try{ await data.updateAgenda(activeItem.id,{title:(bocetoCaption||'').trim()}); setActiveItem((a:any)=>a?{...a,title:(bocetoCaption||'').trim()}:a); setBocetoCaption(null); showToast('Copy guardado') }catch{ showToast('Error al guardar') } }} className="font-syne text-[7.5px] font-black tracking-widest px-2.5 py-1 rounded-lg transition-all hover:opacity-80" style={{background:`${BLU}14`,color:BLU,border:`1px solid ${BLU}28`}}>GUARDAR COPY</button>}
+                      </div>
+                    </div>
                   </div>
                 )
               })()}
