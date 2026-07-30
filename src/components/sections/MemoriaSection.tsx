@@ -16,6 +16,21 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
   const [copiedId, setCopiedId] = useState<string|null>(null)
   const [memSort, setMemSort] = useState<'reciente'|'az'>('reciente')
   const [memClientFilter, setMemClientFilter] = useState<string>('Todos')
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const docInputRef = useRef<HTMLInputElement>(null)
+  const uploadDoc = async (file: File) => {
+    if (file.type !== 'application/pdf') { showToast('Solo se admiten PDF'); return }
+    setUploadingDoc(true)
+    try {
+      const fd = new FormData(); fd.append('file', file)
+      const res = await fetch('/api/documents', { method: 'POST', body: fd })
+      const j = await res.json().catch(()=>({}))
+      if (!res.ok) { showToast(j.error || 'Error al subir'); return }
+      await data.createMemoria({ title: (j.name||file.name).replace(/\.pdf$/i,''), category: 'Documento', content: `${j.summary||''}\n\n📎 Documento: ${j.url}` })
+      showToast('Documento guardado en la memoria')
+    } catch { showToast('Error al subir el documento') }
+    finally { setUploadingDoc(false) }
+  }
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(()=>{
     try { return new Set(JSON.parse(localStorage.getItem('pinned_memoria')||'[]')) } catch { return new Set() }
   })
@@ -109,6 +124,10 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
           }} className="flex items-center gap-2 px-4 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.35)'}} title="Exportar como Markdown">
             <LucideIcon name="download" size={13} color="rgba(255,255,255,0.35)"/>
             <span>MD</span>
+          </button>
+          <input ref={docInputRef} type="file" accept="application/pdf" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f) uploadDoc(f); e.target.value=''}}/>
+          <button onClick={()=>docInputRef.current?.click()} disabled={uploadingDoc} className="flex items-center gap-2 px-4 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest disabled:opacity-50" style={{background:'rgba(27,95,250,0.08)',border:`1px solid rgba(27,95,250,0.2)`,color:BLU}} title="Sube un PDF: la IA lo resume y lo guarda en la memoria">
+            {uploadingDoc ? <><div className="w-3.5 h-3.5 border-2 rounded-full animate-spin" style={{borderColor:'rgba(27,95,250,0.3)',borderTopColor:BLU}}/><span>SUBIENDO…</span></> : <><LucideIcon name="upload" size={13} color={BLU}/><span>+ DOCUMENTO</span></>}
           </button>
           <button onClick={()=>onOpenModal('memoria')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ ENTRADA</button>
         </div>

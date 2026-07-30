@@ -176,6 +176,9 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
       return `${e.title} (${e.start?.slice(0,10)||'?'}${timeStr})`
     }).join(' · ')
 
+    const memAll = (data.memoria||[]) as any[]
+    const memLines = memAll.slice(0,12).map((m:any)=>`  - ${m.title}${m.category?` [${m.category}]`:''}: ${(m.content||'').replace(/\s+/g,' ').slice(0,400)}`).join('\n')
+
     return `BRUTAL STUDIOS — ${now.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'})}
 
 TAREAS: ${pendingAll} pendientes | ${completedToday} completadas hoy
@@ -191,7 +194,10 @@ PIPELINE CONTENIDO: ${pip.length} piezas pendientes
 INBOX — ${unreadCount} sin leer (${inboxAll.length} total):
 ${emailLines||'  Sin emails sin leer'}
 
-CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
+CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}
+
+DOCUMENTOS Y CONOCIMIENTO (memoria — úsalo si es relevante):
+${memLines||'  sin documentos'}`
   }
   const askHarvey = async (userMsg: string) => {
     const run = ++voiceRunRef.current

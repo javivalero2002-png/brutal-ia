@@ -127,6 +127,8 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
       return `${e.title} (${e.start?.slice(0,10)||'?'}${timeStr})`
     }).join(' · ')
 
+    const memLines2 = ((data.memoria||[]) as any[]).slice(0,12).map((m:any)=>`  - ${m.title}${m.category?` [${m.category}]`:''}: ${(m.content||'').replace(/\s+/g,' ').slice(0,400)}`).join('\n')
+
     return `BRUTAL STUDIOS — ${new Date().toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'})}
 
 TAREAS: ${tasks.filter(t=>!t.done).length} pendientes | ${completedToday} completadas hoy
@@ -141,7 +143,10 @@ PIPELINE CONTENIDO: ${pipeline.length} piezas pendientes
 INBOX — ${unreadEmails.length} sin leer:
 ${emailLines||'  (inbox vacío)'}
 
-CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}`
+CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}
+
+DOCUMENTOS Y CONOCIMIENTO (memoria — úsalo si es relevante):
+${memLines2||'  sin documentos'}`
   }
 
   const stopAudio = () => {
