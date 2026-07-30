@@ -43,7 +43,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
       setEditVideoUrl(json.url)
       setActiveItem((prev: any) => ({...prev, video_url: json.url}))
       data.updateAgenda && data.updateAgenda(activeItem.id, { video_url: json.url }).catch(()=>{})
-      showToast('Vídeo subido correctamente')
+      showToast(json.warning || 'Vídeo subido correctamente')
     } catch (err: any) { showToast('Error: '+err.message) }
     finally { setUploadingVideo(false) }
   }
@@ -59,7 +59,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
       setEditCoverUrl(json.url)
       setActiveItem((prev: any) => ({...prev, cover_url: json.url}))
       data.updateAgenda && data.updateAgenda(activeItem.id, { cover_url: json.url }).catch(()=>{})
-      showToast('Portada subida correctamente')
+      showToast(json.warning || 'Portada subida correctamente')
     } catch (err: any) { showToast('Error: '+err.message) }
     finally { setUploadingCover(false) }
   }

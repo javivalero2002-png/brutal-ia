@@ -21,12 +21,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: `El vídeo supera el límite de 50 MB (${(file.size / 1024 / 1024).toFixed(0)} MB). Súbelo a YouTube/Drive y pega el enlace.` }, { status: 413 })
   }
 
-  // Ensure bucket exists (si falla la creación, lo reportamos en vez de dar "Bucket not found")
-  const { data: buckets } = await admin.storage.listBuckets()
-  if (!buckets?.find(b => b.name === BUCKET)) {
-    const { error: bucketError } = await admin.storage.createBucket(BUCKET, { public: true, fileSizeLimit: MAX_BYTES })
-    if (bucketError) return NextResponse.json({ error: 'No se pudo preparar el almacenamiento de vídeos: ' + bucketError.message }, { status: 500 })
-  }
+  // Asegurar bucket (idempotente: si ya existe, ignoramos el error y seguimos)
+  await admin.storage.createBucket(BUCKET, { public: true, fileSizeLimit: MAX_BYTES }).then(()=>{}, ()=>{})
 
   const ext = file.name.split('.').pop()?.toLowerCase() || 'mp4'
   const path = `${id}/${Date.now()}.${ext}`
@@ -36,10 +32,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     contentType: file.type || 'video/mp4',
     upsert: true,
   })
-  if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 })
+  if (uploadError) return NextResponse.json({ error: `No se pudo subir a la nube (${uploadError.message}). Crea el bucket "${BUCKET}" en Supabase → Storage.` }, { status: 500 })
 
   const { data: { publicUrl } } = admin.storage.from(BUCKET).getPublicUrl(path)
 
+  // El archivo ya está en la nube. Si falla guardar la columna (migración pendiente), devolvemos la URL igual.
   const { data, error } = await admin
     .from('content_agenda')
     .update({ video_url: publicUrl })
@@ -47,9 +44,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .select('*, client:clients(id,name,initials,color)')
     .single()
 
-  if (error && /video_url/.test(error.message)) {
-    return NextResponse.json({ error: 'Falta ejecutar la migración de vídeo (supabase/migration_content_video.sql) en el SQL Editor de Supabase.' }, { status: 500 })
-  }
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ url: publicUrl, item: null, warning: /video_url|column/i.test(error.message) ? 'Vídeo subido a la nube, pero no persiste: falta la columna video_url (ejecuta migration_content_video.sql en Supabase).' : error.message })
   return NextResponse.json({ url: publicUrl, item: data })
 }

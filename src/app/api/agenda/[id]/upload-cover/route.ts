@@ -20,11 +20,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: `La imagen supera el límite de 10 MB (${(file.size / 1024 / 1024).toFixed(0)} MB).` }, { status: 413 })
   }
 
-  const { data: buckets } = await admin.storage.listBuckets()
-  if (!buckets?.find(b => b.name === BUCKET)) {
-    const { error: bucketError } = await admin.storage.createBucket(BUCKET, { public: true, fileSizeLimit: MAX_BYTES })
-    if (bucketError) return NextResponse.json({ error: 'No se pudo preparar el almacenamiento: ' + bucketError.message }, { status: 500 })
-  }
+  // Asegurar bucket (idempotente: si ya existe, ignoramos el error y seguimos)
+  await admin.storage.createBucket(BUCKET, { public: true, fileSizeLimit: MAX_BYTES }).then(()=>{}, ()=>{})
 
   const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
   const path = `${id}/${Date.now()}.${ext}`
@@ -34,10 +31,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     contentType: file.type || 'image/jpeg',
     upsert: true,
   })
-  if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 })
+  if (uploadError) return NextResponse.json({ error: `No se pudo subir a la nube (${uploadError.message}). Crea el bucket "${BUCKET}" en Supabase → Storage.` }, { status: 500 })
 
   const { data: { publicUrl } } = admin.storage.from(BUCKET).getPublicUrl(path)
 
+  // El archivo ya está en la nube. Si falla guardar la columna (migración pendiente), devolvemos la URL igual (se ve, aunque no persista al recargar).
   const { data, error } = await admin
     .from('content_agenda')
     .update({ cover_url: publicUrl })
@@ -45,9 +43,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .select('*, client:clients(id,name,initials,color)')
     .single()
 
-  if (error && /cover_url/.test(error.message)) {
-    return NextResponse.json({ error: 'Falta la columna cover_url. Ejecuta: ALTER TABLE content_agenda ADD COLUMN cover_url TEXT;' }, { status: 500 })
-  }
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ url: publicUrl, item: null, warning: /cover_url|column/i.test(error.message) ? 'Imagen subida a la nube, pero no persiste: falta la columna cover_url (ejecuta migration_content_cover.sql en Supabase).' : error.message })
   return NextResponse.json({ url: publicUrl, item: data })
 }
