@@ -21,6 +21,43 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   selectedProjectRef.current = selectedProject
   const progressInputRef = useRef<HTMLInputElement>(null)
 
+  // ── Documento IA (subir PDF + análisis + chat) ──
+  const [pdfDoc, setPdfDoc] = useState<{name:string; b64:string}|null>(null)
+  const [pdfAnalysis, setPdfAnalysis] = useState<any>(null)
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const [pdfChat, setPdfChat] = useState<{role:'user'|'ai'; content:string}[]>([])
+  const [pdfQ, setPdfQ] = useState('')
+  const [pdfChatBusy, setPdfChatBusy] = useState(false)
+  const pdfInputRef = useRef<HTMLInputElement>(null)
+  useEffect(()=>{ setPdfDoc(null); setPdfAnalysis(null); setPdfChat([]); setPdfQ('') }, [selectedId])
+  const analyzePdf = async (b64: string) => {
+    setPdfBusy(true)
+    try {
+      const res = await fetch('/api/projects/analyze-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdf:b64,projectName:selectedProjectRef.current?.name}),signal:AbortSignal.timeout(60000)})
+      const j = await res.json().catch(()=>({}))
+      if (!res.ok) { showToast(j.error||'Error al analizar'); return }
+      setPdfAnalysis(j.analysis)
+    } catch { showToast('Error al analizar el PDF') }
+    finally { setPdfBusy(false) }
+  }
+  const onPickPdf = (file: File) => {
+    if (file.type !== 'application/pdf') { showToast('Solo archivos PDF'); return }
+    if (file.size > 3_300_000) { showToast('PDF muy grande (máx. ~3MB)'); return }
+    const reader = new FileReader()
+    reader.onload = () => { const b64 = String(reader.result); setPdfDoc({name:file.name, b64}); setPdfAnalysis(null); setPdfChat([]); analyzePdf(b64) }
+    reader.readAsDataURL(file)
+  }
+  const askPdf = async () => {
+    const q = pdfQ.trim(); if (!q || !pdfDoc || pdfChatBusy) return
+    setPdfQ(''); setPdfChat(c=>[...c,{role:'user',content:q}]); setPdfChatBusy(true)
+    try {
+      const res = await fetch('/api/projects/analyze-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdf:pdfDoc.b64,question:q}),signal:AbortSignal.timeout(60000)})
+      const j = await res.json().catch(()=>({}))
+      setPdfChat(c=>[...c,{role:'ai',content: res.ok ? (j.answer||'—') : (j.error||'Error al responder')}])
+    } catch { setPdfChat(c=>[...c,{role:'ai',content:'Error de conexión'}]) }
+    finally { setPdfChatBusy(false) }
+  }
+
   useEffect(() => { setEditProgress(null); setConfirmDeleteDetail(false); setQuickProjTask('') }, [selectedId])
 
   useEffect(()=>{
@@ -383,6 +420,85 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               </div>
             )
           })()}
+
+          {/* ── DOCUMENTO · ANÁLISIS IA ── */}
+          <div className="mt-5 pt-5" style={{borderTop:`1px solid ${BORDER}`}}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>DOCUMENTO · ANÁLISIS IA</div>
+              {pdfDoc && <span className="font-syne text-[7.5px] truncate ml-3" style={{color:'rgba(255,255,255,0.3)',maxWidth:'180px'}}>{pdfDoc.name}</span>}
+            </div>
+            <input ref={pdfInputRef} type="file" accept="application/pdf" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f) onPickPdf(f); e.target.value=''}}/>
+            {!pdfDoc ? (
+              <button onClick={()=>pdfInputRef.current?.click()} className="w-full flex flex-col items-center gap-2 py-6 rounded-2xl transition-all hover:bg-white/[0.02]" style={{background:'rgba(255,255,255,0.02)',border:`1px dashed ${BORDER}`}}>
+                <LucideIcon name="upload" size={18} color={BLU}/>
+                <span className="font-figtree text-[12px]" style={{color:'rgba(255,255,255,0.5)'}}>Sube un PDF y la IA lo analiza</span>
+                <span className="font-syne text-[7px] tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>RESUMEN · PUNTOS · ACCIONES · DATOS · CHAT</span>
+              </button>
+            ) : (
+              <div className="space-y-3">
+                {pdfBusy && !pdfAnalysis && (
+                  <div className="flex items-center gap-2 py-5 justify-center">
+                    <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{borderColor:'rgba(255,255,255,0.15)',borderTopColor:BLU}}/>
+                    <span className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.4)'}}>ANALIZANDO DOCUMENTO…</span>
+                  </div>
+                )}
+                {pdfAnalysis && (<>
+                  {pdfAnalysis.summary && (
+                    <div className="rounded-2xl p-4" style={{background:'rgba(27,95,250,0.05)',border:`1px solid rgba(27,95,250,0.15)`}}>
+                      <div className="flex items-center gap-2 mb-2"><LucideIcon name="sparkles" size={12} color={BLU}/><span className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(120,155,255,0.85)'}}>RESUMEN EJECUTIVO</span></div>
+                      <p className="font-figtree text-[12.5px] leading-relaxed" style={{color:'rgba(255,255,255,0.72)'}}>{pdfAnalysis.summary}</p>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    {pdfAnalysis.keyPoints?.length>0 && (
+                      <div className="rounded-2xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${BORDER}`}}>
+                        <div className="font-syne text-[7.5px] font-black tracking-widest mb-2.5" style={{color:'rgba(255,255,255,0.25)'}}>PUNTOS CLAVE</div>
+                        <div className="space-y-1.5">{pdfAnalysis.keyPoints.slice(0,6).map((k:string,i:number)=><div key={i} className="flex items-start gap-2"><div className="rounded-full flex-shrink-0" style={{width:5,height:5,marginTop:6,background:BLU}}/><span className="font-figtree text-[11.5px] leading-snug" style={{color:'rgba(255,255,255,0.6)'}}>{k}</span></div>)}</div>
+                      </div>
+                    )}
+                    {pdfAnalysis.actions?.length>0 && (
+                      <div className="rounded-2xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${BORDER}`}}>
+                        <div className="font-syne text-[7.5px] font-black tracking-widest mb-2.5" style={{color:'rgba(34,197,94,0.6)'}}>ACCIONES · toca para crear tarea</div>
+                        <div className="space-y-1.5">{pdfAnalysis.actions.slice(0,6).map((a:string,i:number)=>(
+                          <button key={i} onClick={async()=>{try{await data.createTask({text:a,level:'normal',project_id:selectedProject.id,client_id:selectedProject.client_id||undefined,source:'ai'});showToast('Tarea creada')}catch{showToast('Error')}}} className="w-full text-left flex items-start gap-2 transition-opacity hover:opacity-70">
+                            <LucideIcon name="plus-circle" size={12} color="rgba(34,197,94,0.6)"/><span className="font-figtree text-[11.5px] leading-snug flex-1" style={{color:'rgba(255,255,255,0.6)'}}>{a}</span></button>
+                        ))}</div>
+                      </div>
+                    )}
+                  </div>
+                  {pdfAnalysis.data && (pdfAnalysis.data.client||pdfAnalysis.data.budget||pdfAnalysis.data.dates||pdfAnalysis.data.deliverables?.length>0) && (
+                    <div className="rounded-2xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${BORDER}`}}>
+                      <div className="font-syne text-[7.5px] font-black tracking-widest mb-2.5" style={{color:'rgba(255,255,255,0.25)'}}>DATOS DEL PROYECTO</div>
+                      <div className="flex flex-wrap gap-2">
+                        {pdfAnalysis.data.client && <span className="font-syne text-[9px] px-2.5 py-1 rounded-lg" style={{background:`${BLU}12`,color:`${BLU}dd`}}>Cliente: {pdfAnalysis.data.client}</span>}
+                        {pdfAnalysis.data.budget && <span className="font-syne text-[9px] px-2.5 py-1 rounded-lg" style={{background:'rgba(34,197,94,0.1)',color:'rgba(34,197,94,0.85)'}}>Presupuesto: {pdfAnalysis.data.budget}</span>}
+                        {pdfAnalysis.data.dates && <span className="font-syne text-[9px] px-2.5 py-1 rounded-lg" style={{background:'rgba(167,139,250,0.1)',color:'rgba(167,139,250,0.85)'}}>Fechas: {pdfAnalysis.data.dates}</span>}
+                        {Array.isArray(pdfAnalysis.data.deliverables)&&pdfAnalysis.data.deliverables.map((d:string,i:number)=><span key={i} className="font-syne text-[9px] px-2.5 py-1 rounded-lg" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.5)'}}>{d}</span>)}
+                      </div>
+                    </div>
+                  )}
+                  <div className="rounded-2xl overflow-hidden" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${BORDER}`}}>
+                    <div className="px-4 py-2.5 font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.25)',borderBottom:`1px solid ${BORDER}`}}>PREGUNTA AL DOCUMENTO</div>
+                    {pdfChat.length>0 && (
+                      <div className="px-4 py-3 space-y-2.5 overflow-y-auto" style={{maxHeight:'220px'}}>
+                        {pdfChat.map((m,i)=>(
+                          <div key={i} className={m.role==='user'?'flex justify-end':'flex justify-start'}>
+                            <div className="px-3 py-2 rounded-xl font-figtree text-[12px] leading-relaxed whitespace-pre-wrap" style={m.role==='user'?{maxWidth:'85%',background:`${BLU}18`,color:'rgba(255,255,255,0.85)'}:{maxWidth:'85%',background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.7)'}}>{m.content}</div>
+                          </div>
+                        ))}
+                        {pdfChatBusy && <div className="flex gap-1.5 px-1 py-1">{[0,1,2].map(i=><div key={i} className="w-1.5 h-1.5 rounded-full" style={{background:BLU,animation:`pulse ${0.6+i*0.1}s ease-in-out ${i*0.1}s infinite alternate`}}/>)}</div>}
+                      </div>
+                    )}
+                    <form onSubmit={e=>{e.preventDefault();askPdf()}} className="flex items-center gap-2 px-3 py-2.5" style={{borderTop:pdfChat.length>0?`1px solid ${BORDER}`:'none'}}>
+                      <input value={pdfQ} onChange={e=>setPdfQ(e.target.value)} disabled={pdfChatBusy} placeholder="¿Cuál es el presupuesto? ¿Qué plazos hay?…" className="flex-1 bg-transparent outline-none font-figtree text-[12.5px] disabled:opacity-40" style={{color:'rgba(255,255,255,0.75)',caretColor:BLU}}/>
+                      <button type="submit" disabled={pdfChatBusy||!pdfQ.trim()} className="w-8 h-8 rounded-lg flex items-center justify-center disabled:opacity-30" style={{background:BLU}}><LucideIcon name="arrow-right" size={14} color="white"/></button>
+                    </form>
+                  </div>
+                  <button onClick={()=>{setPdfDoc(null);setPdfAnalysis(null);setPdfChat([])}} className="w-full py-2 font-syne text-[8px] font-black tracking-widest transition-opacity hover:opacity-60" style={{color:'rgba(255,255,255,0.2)'}}>QUITAR DOCUMENTO</button>
+                </>)}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
