@@ -363,7 +363,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
           <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>GESTIÓN</div>
           <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Clientes</h1>
         </div>
-        {isOwner && <button onClick={()=>onOpenModal('cliente')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVO CLIENTE</button>}
+        <button onClick={()=>onOpenModal('cliente')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVO CLIENTE</button>
       </div>
       {totalMRR > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -418,7 +418,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
       {data.clients.length === 0 ? (
         <div className="py-24 text-center">
           <div className="font-syne text-[11px] font-black tracking-widest mb-4" style={{color:'rgba(255,255,255,0.15)'}}>SIN CLIENTES</div>
-          {isOwner && <button onClick={()=>onOpenModal('cliente')} className="font-syne text-[10px] font-black px-5 py-3 rounded-2xl" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>CREAR PRIMER CLIENTE</button>}
+          <button onClick={()=>onOpenModal('cliente')} className="font-syne text-[10px] font-black px-5 py-3 rounded-2xl" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>CREAR PRIMER CLIENTE</button>
         </div>
       ) : visibleClients.length === 0 ? (
         <div className="py-16 text-center">

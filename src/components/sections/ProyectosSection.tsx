@@ -142,7 +142,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               </button>
             ))}
           </div>
-          {isOwner && <button onClick={()=>onOpenModal('proyecto')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ PROYECTO</button>}
+          <button onClick={()=>onOpenModal('proyecto')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ PROYECTO</button>
         </div>
       </div>
       <div className="flex items-center gap-3 mb-6 flex-wrap">
