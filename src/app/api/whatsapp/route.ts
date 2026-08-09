@@ -27,12 +27,19 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const rawBody = await request.text()
 
-  if (APP_SECRET) {
-    const sig = request.headers.get('x-hub-signature-256')
-    if (!sig) return NextResponse.json({ error: 'Missing signature' }, { status: 401 })
-    const expected = 'sha256=' + createHmac('sha256', APP_SECRET).update(rawBody).digest('hex')
-    if (sig !== expected) return NextResponse.json({ error: 'Invalid signature' }, { status: 403 })
+  // Fail-closed: sin APP_SECRET no hay forma de distinguir un webhook real de
+  // Meta de uno falso. Antes esto era `if (APP_SECRET) {...}`, así que al faltar
+  // la variable el control se saltaba entero y el endpoint aceptaba cualquier
+  // payload sin firma — verificado en producción (HTTP 400 en vez de 401).
+  // Cada mensaje aceptado dispara una llamada a Claude y escribe en inbox_messages,
+  // y esta ruta no tiene rate limit.
+  if (!APP_SECRET) {
+    return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 })
   }
+  const sig = request.headers.get('x-hub-signature-256')
+  if (!sig) return NextResponse.json({ error: 'Missing signature' }, { status: 401 })
+  const expected = 'sha256=' + createHmac('sha256', APP_SECRET).update(rawBody).digest('hex')
+  if (sig !== expected) return NextResponse.json({ error: 'Invalid signature' }, { status: 403 })
 
   let body: any
   try { body = JSON.parse(rawBody) } catch {
