@@ -164,9 +164,15 @@ export default function NexusDashboard({ profile }: Props) {
 
   useEffect(() => {
     const fetchNotifs = () => fetch('/api/notifications').then(r=>r.ok?r.json():null).then(d=>{if(d)setNotifData(d)}).catch(()=>{})
-    fetchNotifs()
-    const iv = setInterval(fetchNotifs, 30000)
-    return () => clearInterval(iv)
+    // No sondear con la pestaña en segundo plano: eran 2.880 invocaciones diarias
+    // por pestaña abierta, la mayoría con nadie mirando. Al volver se refresca
+    // inmediatamente, así que no se pierde nada.
+    const tick = () => { if (document.visibilityState === 'visible') fetchNotifs() }
+    tick()
+    const iv = setInterval(tick, 30000)
+    const onVis = () => { if (document.visibilityState === 'visible') fetchNotifs() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVis) }
   }, [])
 
   useEffect(() => {
@@ -207,6 +213,19 @@ export default function NexusDashboard({ profile }: Props) {
   const searchRef = useRef<HTMLInputElement>(null)
   const sr = useRef<any[]>([])
   const showShortcutsRef = useRef(false)
+  // Refs porque el handler de teclado se registra una sola vez (deps vacías) y
+  // leería valores obsoletos del closure.
+  const modalRef = useRef<string|null>(null)
+  const mfRef = useRef<Record<string,string>>({})
+
+  // Abrir un modal SIEMPRE limpia los campos. Antes solo lo hacía el menú rápido:
+  // las secciones reciben `setModal` tal cual como `onOpenModal`, así que abrir
+  // "Cliente" tras haber escrito en "Proyecto" arrastraba los campos del anterior
+  // y el guardado reventaba con un error crudo de Postgres (columna inexistente).
+  const openModal = useCallback((type: string | null) => {
+    setMf({})
+    setModal(type)
+  }, [])
   const sectionRef = useRef<Section>('hoy')
   const supabaseRef = useRef(createClient())
   const supabase = supabaseRef.current
@@ -255,7 +274,19 @@ export default function NexusDashboard({ profile }: Props) {
     const NAV: Record<string, Section> = { h:'hoy', t:'tareas', i:'inbox', c:'clientes', p:'proyectos', k:'contenido', a:'calendario', m:'memoria', e:'equipo', r:'reportes', s:'ajustes', v:'automatizaciones', n:'chat', y:'harvey' }
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(true); setSearchQuery(''); setSearchIdx(-1); return }
-      if (e.key === 'Escape') { if (showShortcutsRef.current) { setShowShortcuts(false); return } setSearchOpen(false); setModal(null); return }
+      if (e.key === 'Escape') {
+        if (showShortcutsRef.current) { setShowShortcuts(false); return }
+        setSearchOpen(false)
+        // Escape ya no descarta un formulario con datos escritos: pedía cerrar y
+        // se perdía todo sin aviso. Con campos vacíos cierra como siempre.
+        if (modalRef.current && Object.values(mfRef.current).some(v => (v || '').trim())) {
+          setToast('Tienes cambios sin guardar — usa Cancelar para descartarlos')
+          setTimeout(() => setToast(null), 3000)
+          return
+        }
+        setModal(null)
+        return
+      }
       const tag = (e.target as HTMLElement)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       if (e.key === '?' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); setShowShortcuts(s => !s); return }
@@ -426,6 +457,8 @@ export default function NexusDashboard({ profile }: Props) {
 
   const dragRef = useRef<string|null>(null)
   showShortcutsRef.current = showShortcuts
+  modalRef.current = modal
+  mfRef.current = mf
   sectionRef.current = section
 
   const NAV_SC: Partial<Record<Section,string>> = { hoy:'H', tareas:'T', inbox:'I', clientes:'C', proyectos:'P', contenido:'K', calendario:'A', memoria:'M', equipo:'E', reportes:'R', ajustes:'S', automatizaciones:'V', chat:'N', harvey:'Y' }
@@ -711,20 +744,20 @@ export default function NexusDashboard({ profile }: Props) {
           </div>
         )}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          {section === 'hoy' && <SectionErrorBoundary section="hoy"><HoySection profile={profile} data={data} urgentCount={urgentCount} unreadCount={unreadCount} onOpenModal={setModal} showToast={showToast} isOwner={isOwner} onNavigate={setSection} /></SectionErrorBoundary>}
+          {section === 'hoy' && <SectionErrorBoundary section="hoy"><HoySection profile={profile} data={data} urgentCount={urgentCount} unreadCount={unreadCount} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} onNavigate={setSection} /></SectionErrorBoundary>}
           {section === 'inbox' && <SectionErrorBoundary section="inbox"><InboxSection data={data} showToast={showToast} profile={profile} onNavigate={setSection} onSelectClient={setSelectedClient} onAskHarvey={(msg: string)=>{ setHarveyPreload(msg); setSection('harvey') }} /></SectionErrorBoundary>}
-          {section === 'tareas' && <SectionErrorBoundary section="tareas"><TareasSection data={data} onOpenModal={setModal} showToast={showToast} isOwner={isOwner} profile={profile} onNavigate={setSection} onSelectProject={setSelectedProject} onSelectClient={setSelectedClient} /></SectionErrorBoundary>}
+          {section === 'tareas' && <SectionErrorBoundary section="tareas"><TareasSection data={data} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} profile={profile} onNavigate={setSection} onSelectProject={setSelectedProject} onSelectClient={setSelectedClient} /></SectionErrorBoundary>}
           {section === 'equipo' && <SectionErrorBoundary section="equipo"><EquipoSection data={data} profile={profile} showToast={showToast} /></SectionErrorBoundary>}
           {section === 'reportes' && <SectionErrorBoundary section="reportes">{isOwner ? <ReportesSection data={data} onNavigate={setSection} /> : <div className="h-full flex items-center justify-center"><div className="text-center"><div className="font-syne text-[10px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>SECCIÓN RESTRINGIDA</div><div className="text-[12px]" style={{color:'rgba(255,255,255,0.3)'}}>Solo disponible para propietarios</div></div></div>}</SectionErrorBoundary>}
-          {section === 'clientes' && <SectionErrorBoundary section="clientes"><ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={setModal} onSetMf={setMf} showToast={showToast} isOwner={isOwner} onNavigate={setSection} onSelectProject={setSelectedProject} /></SectionErrorBoundary>}
-          {section === 'proyectos' && <SectionErrorBoundary section="proyectos"><ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={setModal} onSetMf={setMf} showToast={showToast} isOwner={isOwner} onNavigate={setSection} onSelectClient={setSelectedClient} justCreatedId={justCreatedProjId} onJustCreatedScrolled={()=>setJustCreatedProjId(null)} /></SectionErrorBoundary>}
-          {section === 'contenido' && <SectionErrorBoundary section="contenido"><ContenidoSection data={data} onOpenModal={setModal} showToast={showToast} onNavigate={setSection} onSelectClient={setSelectedClient} profile={profile} /></SectionErrorBoundary>}
-          {section === 'calendario' && <SectionErrorBoundary section="calendario"><CalendarioSection data={data} profile={profile} showToast={showToast} onOpenModal={setModal} onSetMf={setMf} /></SectionErrorBoundary>}
-          {section === 'memoria' && <SectionErrorBoundary section="memoria"><MemoriaSection data={data} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={setModal} showToast={showToast} /></SectionErrorBoundary>}
-          {section === 'automatizaciones' && <SectionErrorBoundary section="automatizaciones"><AutomatizacionesSection data={data} onOpenModal={setModal} showToast={showToast} isOwner={isOwner} /></SectionErrorBoundary>}
+          {section === 'clientes' && <SectionErrorBoundary section="clientes"><ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={openModal} onSetMf={setMf} showToast={showToast} isOwner={isOwner} onNavigate={setSection} onSelectProject={setSelectedProject} /></SectionErrorBoundary>}
+          {section === 'proyectos' && <SectionErrorBoundary section="proyectos"><ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={openModal} onSetMf={setMf} showToast={showToast} isOwner={isOwner} onNavigate={setSection} onSelectClient={setSelectedClient} justCreatedId={justCreatedProjId} onJustCreatedScrolled={()=>setJustCreatedProjId(null)} /></SectionErrorBoundary>}
+          {section === 'contenido' && <SectionErrorBoundary section="contenido"><ContenidoSection data={data} onOpenModal={openModal} showToast={showToast} onNavigate={setSection} onSelectClient={setSelectedClient} profile={profile} /></SectionErrorBoundary>}
+          {section === 'calendario' && <SectionErrorBoundary section="calendario"><CalendarioSection data={data} profile={profile} showToast={showToast} onOpenModal={openModal} onSetMf={setMf} /></SectionErrorBoundary>}
+          {section === 'memoria' && <SectionErrorBoundary section="memoria"><MemoriaSection data={data} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={openModal} showToast={showToast} /></SectionErrorBoundary>}
+          {section === 'automatizaciones' && <SectionErrorBoundary section="automatizaciones"><AutomatizacionesSection data={data} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} /></SectionErrorBoundary>}
           {section === 'chat' && <SectionErrorBoundary section="chat"><ChatSection profile={profile} data={data} chatInput={chatInput} setChatInput={setChatInput} chatLoading={chatLoading} setChatLoading={setChatLoading} showToast={showToast} onNavigate={setSection} /></SectionErrorBoundary>}
           {section === 'harvey' && <SectionErrorBoundary section="harvey"><HarveySection data={data} profile={profile} showToast={showToast} onNavigate={setSection} preloadMessage={harveyPreload} onClearPreload={()=>setHarveyPreload(null)} /></SectionErrorBoundary>}
-          {section === 'ajustes' && <SectionErrorBoundary section="ajustes"><AjustesSection profile={profile} data={data} showToast={showToast} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={setModal} isOwner={isOwner} /></SectionErrorBoundary>}
+          {section === 'ajustes' && <SectionErrorBoundary section="ajustes"><AjustesSection profile={profile} data={data} showToast={showToast} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={openModal} isOwner={isOwner} /></SectionErrorBoundary>}
         </div>
 
         {/* Tab bar inferior móvil */}

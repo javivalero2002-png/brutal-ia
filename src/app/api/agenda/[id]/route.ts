@@ -22,14 +22,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   // El fallback debe cubrir también las columnas nuevas: si cover_url no existe
   // en la BD (upload-cover ya contempla ese caso), sin esto el guardado entero
   // reventaría con un 500 y se llevaría por delante notas, fechas y plataforma.
+  // El reintento descarta columnas y la respuesta seguía siendo un 200 limpio:
+  // la UI decía "Guardado" mientras esos cuatro campos se perdían en silencio.
+  // Ahora se devuelve `dropped` para que el cliente pueda avisar.
+  let dropped: string[] = []
   if (error && /account_name|video_url|feedback|cover_url/.test(error.message)) {
+    dropped = ['account_name','video_url','feedback','cover_url'].filter(k => k in payload)
+    console.error('[agenda] columnas ausentes en la BD, guardado parcial:', dropped.join(', '), '—', error.message)
     delete payload.account_name; delete payload.video_url
     delete payload.feedback; delete payload.cover_url
     ;({ data, error } = await admin.from('content_agenda').update(payload).eq('id', id).select('*, client:clients(id,name,initials,color)').single())
   }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(dropped.length ? { ...data, __dropped: dropped } : data)
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

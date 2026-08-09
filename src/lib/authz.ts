@@ -21,7 +21,15 @@ export async function getAuthCtx(): Promise<AuthCtx | null> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
   const admin = await createAdminClient()
-  const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).single()
+  const { data: profile, error } = await admin.from('profiles').select('role').eq('id', user.id).single()
+  // Si la consulta FALLA no se puede saber el rol. Antes se degradaba en silencio
+  // a 'member', así que un owner empezaba a recibir 403 en acciones que sí puede
+  // hacer, sin ninguna pista de por qué. Devolver null (→ 401) es honesto y hace
+  // el fallo diagnosticable; sigue siendo fail-closed.
+  if (error) {
+    console.error('[authz] no se pudo leer el rol de', user.id, '—', error.message)
+    return null
+  }
   return { userId: user.id, role: (profile?.role === 'owner' ? 'owner' : 'member'), admin }
 }
 

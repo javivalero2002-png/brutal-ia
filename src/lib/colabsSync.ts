@@ -101,7 +101,13 @@ export async function syncColabsInbox(
       attachments: email.attachments?.length ? email.attachments : [],
     })
 
-    if (!insertError) {
+    if (insertError) {
+      // Visible a propósito: el análisis con Claude ocurre ANTES del insert, así
+      // que si el insert falla el gmail_id no se guarda y el siguiente cron
+      // vuelve a analizar el mismo email. Cada hora. Para siempre. Sin este log
+      // el bucle es invisible y solo se nota en la factura.
+      console.error('[sync] insert falló para gmail_id', email.gmail_id, '—', insertError.message)
+    } else {
       newCount++
       // Email con enlace de reunión → tarea con fecha (aparece en el Calendario)
       const meetingText = `${email.subject || ''} ${email.body_preview || ''}`

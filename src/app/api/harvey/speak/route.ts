@@ -1,4 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { checkAiRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const maxDuration = 60
@@ -14,6 +15,18 @@ export async function POST(request: NextRequest) {
 
   const { text } = await request.json()
   if (!text?.trim()) return NextResponse.json({ error: 'Sin texto' }, { status: 400 })
+
+  // Fish Audio se factura por carácter. Sin tope, un cliente manipulado (o un
+  // bucle accidental) podía quemar el saldo con una sola petición: esta ruta era
+  // de las pocas que gastan dinero y no tenían ni límite de longitud ni de tasa.
+  const MAX_CHARS = 4000
+  if (text.length > MAX_CHARS) {
+    return NextResponse.json({ error: `Texto demasiado largo (máx. ${MAX_CHARS} caracteres)` }, { status: 413 })
+  }
+  const admin = await createAdminClient()
+  if (await checkAiRateLimit(admin, user.id, 'tts')) {
+    return NextResponse.json({ error: 'Demasiadas solicitudes. Espera un momento.' }, { status: 429 })
+  }
 
   try {
     const res = await fetch('https://api.fish.audio/v1/tts', {

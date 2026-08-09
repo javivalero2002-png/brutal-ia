@@ -170,10 +170,22 @@ export async function createCalendarEvent(refreshToken: string, opts: {
 
   let start: any, end: any
   if (opts.time) {
-    const startDT = new Date(`${opts.date}T${opts.time}:00`)
-    const endDT = new Date(startDT.getTime() + (opts.durationMinutes ?? 60) * 60000)
-    start = { dateTime: startDT.toISOString(), timeZone: 'Europe/Madrid' }
-    end   = { dateTime: endDT.toISOString(),   timeZone: 'Europe/Madrid' }
+    // Formato SIN zona ("2026-08-10T14:00:00") para que mande `timeZone`.
+    // Antes se usaba toISOString(), que añade la 'Z': Google respeta el offset
+    // explícito e IGNORA timeZone, así que un evento a las 14:00 se creaba a las
+    // 14:00 UTC = 16:00 en Madrid. Dos horas tarde en verano, una en invierno.
+    // Además `new Date('...T14:00')` se interpretaba en la zona del SERVIDOR
+    // (UTC en Vercel), no en la de Madrid: doble error en el mismo cálculo.
+    const [h, m] = opts.time.split(':').map(Number)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const startMin = h * 60 + m
+    const endMin = startMin + (opts.durationMinutes ?? 60)
+    // El fin puede caer al día siguiente (p. ej. 23:30 + 60 min).
+    const dayShift = Math.floor(endMin / 1440)
+    const endDay = new Date(`${opts.date}T00:00:00Z`)
+    endDay.setUTCDate(endDay.getUTCDate() + dayShift)
+    start = { dateTime: `${opts.date}T${pad(h)}:${pad(m)}:00`, timeZone: 'Europe/Madrid' }
+    end   = { dateTime: `${endDay.toISOString().slice(0, 10)}T${pad(Math.floor((endMin % 1440) / 60))}:${pad(endMin % 60)}:00`, timeZone: 'Europe/Madrid' }
   } else {
     const nextDay = new Date(opts.date + 'T00:00:00')
     nextDay.setDate(nextDay.getDate() + 1)

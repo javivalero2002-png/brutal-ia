@@ -65,8 +65,18 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
     finally { setUploadingFile(false) }
   }
 
+  // Dos toques: un contrato o un briefing se borraba con un solo toque, y el
+  // objetivo táctil en móvil es diminuto. El segundo toque confirma.
+  const [confirmDeleteFile, setConfirmDeleteFile] = useState<string|null>(null)
   const deleteFile = async (path: string) => {
     if (!selected) return
+    if (confirmDeleteFile !== path) {
+      setConfirmDeleteFile(path)
+      setTimeout(() => setConfirmDeleteFile(c => c === path ? null : c), 4000)
+      showToast('Toca otra vez para borrar el archivo')
+      return
+    }
+    setConfirmDeleteFile(null)
     try {
       await fetch(`/api/clients/${selected.id}/files`, { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path }) })
       setClientFiles(prev => (prev||[]).filter(f => f.path !== path))
@@ -186,7 +196,17 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
             {isOwner && (
               confirmDeleteClient
                 ? <div className="flex items-center gap-1">
-                    <button onClick={()=>data.deleteClient(selected.id).then(()=>{handleBack();showToast('Cliente eliminado')}).catch(()=>showToast('Error al eliminar'))} className="px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
+                    {/* La FK projects.client_id es ON DELETE CASCADE: borrar el
+                        cliente destruye TAMBIÉN sus proyectos, notas e hitos.
+                        Antes el botón solo decía "¿BORRAR?" — nadie podía saberlo. */}
+                    {(() => {
+                      const n = (data.projects || []).filter((p: any) => p.client_id === selected.id).length
+                      return (
+                        <button onClick={()=>data.deleteClient(selected.id).then(()=>{handleBack();showToast('Cliente eliminado')}).catch(()=>showToast('Error al eliminar'))} className="px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}} title={n ? `Se borrarán también ${n} proyecto${n>1?'s':''} con sus notas e hitos` : undefined}>
+                          {n ? `¿BORRAR + ${n} PROYECTO${n>1?'S':''}?` : '¿BORRAR?'}
+                        </button>
+                      )
+                    })()}
                     <button onClick={()=>setConfirmDeleteClient(false)} className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={12} color="rgba(255,255,255,0.3)"/></button>
                   </div>
                 : <button onClick={()=>setConfirmDeleteClient(true)} className="px-3 py-2 rounded-xl text-[11px] transition-all hover:bg-red-900/10" style={{color:'rgba(229,29,42,0.45)',border:'1px solid rgba(229,29,42,0.12)'}}>Eliminar</button>

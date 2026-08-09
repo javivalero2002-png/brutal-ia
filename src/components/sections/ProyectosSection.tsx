@@ -559,7 +559,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                     <div className="font-syne text-[9px] font-black tracking-widest mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>SIN PROYECTOS</div>
                     <div className="text-[12px]" style={{color:'rgba(255,255,255,0.22)'}}>Crea tu primer proyecto para empezar a organizar el trabajo</div>
                   </div>
-                  <button onClick={()=>onOpenModal?.('new-project')} className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-syne text-[8.5px] font-black tracking-widest text-white transition-all hover:opacity-80" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
+                  <button onClick={()=>onOpenModal?.('proyecto')} className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-syne text-[8.5px] font-black tracking-widest text-white transition-all hover:opacity-80" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
                     <LucideIcon name="plus" size={12} color="white"/>NUEVO PROYECTO
                   </button>
                 </div>
