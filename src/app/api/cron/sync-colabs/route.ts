@@ -69,6 +69,39 @@ export async function GET(request: NextRequest) {
     automations = { error: err?.message || 'error' }
   }
 
+  // Retención de datos, una vez al día (a las 04:00 UTC de las 24 ejecuciones).
+  // Va aquí y no en un borrado manual porque manual = se hace una vez y nunca
+  // más. Ninguna de estas tablas tenía borrado en ningún sitio: los límites del
+  // código son solo de LECTURA (.limit(100)), así que crecen sin que se note.
+  // Para un estudio en la UE, además, guardar correspondencia de clientes sin
+  // plazo es exposición de RGPD (art. 5.1.e).
+  // Los emails SIN LEER no se tocan nunca.
+  let retention: Record<string, number> | { error: string } | null = null
+  if (new Date().getUTCHours() === 4) {
+    try {
+      const purge = async (table: string, col: string, days: number) => {
+        const cutoff = new Date(Date.now() - days * 86400000).toISOString()
+        // El count va como opción del delete(), no en un .select() posterior.
+        let q = admin.from(table).delete({ count: 'exact' }).lt(col, cutoff)
+        if (table === 'inbox_messages') q = q.eq('is_read', true)
+        const { error, count } = await q
+        if (error) throw new Error(`${table}: ${error.message}`)
+        return count || 0
+      }
+      retention = {
+        inbox_messages: await purge('inbox_messages', 'received_at', 180),
+        notification_log: await purge('notification_log', 'created_at', 30),
+        chat_messages: await purge('chat_messages', 'created_at', 90),
+        rate_limits: await purge('rate_limits', 'window_start', 1),
+        push_rate_limits: await purge('push_rate_limits', 'last_sent', 1),
+      }
+    } catch (err: any) {
+      // No tumba el cron: el sync de emails es más importante que la poda.
+      console.error('[cron] retención falló:', err?.message)
+      retention = { error: err?.message || 'error' }
+    }
+  }
+
   const failures = outcomes.filter(o => !o.ok)
   const attempted = outcomes.length
   // Devolver 500 hace que Vercel marque la ejecución como fallida en el panel.
@@ -96,5 +129,6 @@ export async function GET(request: NextRequest) {
     synced: outcomes.filter(o => o.ok).reduce((n, o) => n + (o.synced || 0), 0),
     mailboxes: outcomes,
     automations,
+    ...(retention ? { retention } : {}),
   }, { status: failed ? 500 : 200 })
 }
