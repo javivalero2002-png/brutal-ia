@@ -15,19 +15,22 @@
 --
 -- Las dos lecturas más calientes de la app ordenan por received_at y ninguna
 -- tenía índice. A 100 filas da igual; a 10.000 se nota en cada carga.
--- CONCURRENTLY evita bloquear la tabla mientras se crea.
+--
+-- SIN `concurrently` a propósito: el SQL Editor de Supabase envuelve cada
+-- ejecución en una transacción, y CREATE INDEX CONCURRENTLY no puede correr
+-- dentro de una (error 25001). A esta escala el bloqueo dura milisegundos.
 -- ───────────────────────────────────────────────────────────────────────────
 
-create index concurrently if not exists inbox_messages_received_idx
+create index if not exists inbox_messages_received_idx
   on public.inbox_messages (received_at desc);
 
-create index concurrently if not exists inbox_messages_user_received_idx
+create index if not exists inbox_messages_user_received_idx
   on public.inbox_messages (user_id, received_at desc);
 
-create index concurrently if not exists tasks_due_open_idx
+create index if not exists tasks_due_open_idx
   on public.tasks (due_date) where done = false;
 
-create index concurrently if not exists chat_messages_user_created_idx
+create index if not exists chat_messages_user_created_idx
   on public.chat_messages (user_id, created_at desc);
 
 
@@ -106,7 +109,7 @@ alter table public.projects
 alter table public.clients
   add column if not exists archived_at timestamptz;
 
-create index concurrently if not exists clients_archived_idx
+create index if not exists clients_archived_idx
   on public.clients (archived_at) where archived_at is null;
 
 
