@@ -1041,6 +1041,22 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                   <div className="mt-1.5 font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.2)'}}>Toca el avatar para cambiar la foto de la cuenta</div>
                 </div>
 
+                {/* La página pública /review/[token] existía pero su enlace no se
+                    generaba en NINGÚN sitio de la app: era inalcanzable, así que
+                    la función de revisión con cliente estaba muerta. El token es
+                    el propio id de la pieza. */}
+                <button
+                  onClick={()=>{
+                    const url = `${window.location.origin}/review/${activeItem.id}`
+                    navigator.clipboard.writeText(url)
+                      .then(()=>showToast('Enlace de revisión copiado — mándaselo al cliente'))
+                      .catch(()=>showToast(url))
+                  }}
+                  className="w-full py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all flex items-center justify-center gap-2"
+                  style={{color:'rgba(255,255,255,0.5)',border:`1px solid ${BORDER}`,background:'rgba(255,255,255,0.02)'}}
+                >
+                  <LucideIcon name="link" size={11} color="rgba(255,255,255,0.5)"/>COPIAR ENLACE PARA EL CLIENTE
+                </button>
                 <div className="flex gap-2 pt-1">
                   <button onClick={saveNotes} disabled={savingNotes} className="flex-1 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide text-white disabled:opacity-40 transition-opacity" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingNotes?'GUARDANDO…':'GUARDAR'}</button>
                   {confirmDeleteContent

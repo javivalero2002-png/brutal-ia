@@ -221,7 +221,11 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
           const coverUrl = await uploadCoverBlob(coverBlob, selectedProjectRef.current.id)
           if (coverUrl) projUpdates.cover_url = coverUrl
         }
-        data.updateProject(selectedProjectRef.current.id, projUpdates).catch(() => {})
+        // Sin este aviso, el PDF se subía y su enlace no quedaba guardado en el
+        // proyecto: al recargar, el documento y su análisis habían desaparecido y
+        // nadie sabía por qué.
+        data.updateProject(selectedProjectRef.current.id, projUpdates)
+          .catch(() => showToast('El PDF se subió pero no se pudo guardar en el proyecto'))
       }
     } catch { showToast('Error subiendo el PDF') }
     finally { setPdfUploadPct(null) }

@@ -35,6 +35,25 @@ self.addEventListener('activate', e => {
   )
 })
 
+// Poda del caché estático. `activate` solo borra cachés con OTRO nombre, y CACHE
+// es una constante que nadie sube en cada deploy — así que los chunks de todos
+// los despliegues se acumulaban para siempre. Ahora que cada push despliega, eso
+// es mucho más a menudo. Los assets de Next llevan hash inmutable, así que los
+// viejos no dan contenido incorrecto: solo ocupan. Se conservan los más recientes.
+const MAX_STATIC = 260
+let trimming = false
+async function trimStatic(cache) {
+  if (trimming) return
+  trimming = true
+  try {
+    const keys = (await cache.keys()).filter(r => new URL(r.url).pathname.startsWith('/_next/static/'))
+    if (keys.length > MAX_STATIC) {
+      // keys() devuelve en orden de inserción: los primeros son los más antiguos.
+      await Promise.all(keys.slice(0, keys.length - MAX_STATIC).map(r => cache.delete(r)))
+    }
+  } catch {} finally { trimming = false }
+}
+
 // ── Fetch: estrategia por tipo de recurso ────────────────────────────────────
 self.addEventListener('fetch', e => {
   const { request } = e
@@ -62,7 +81,7 @@ self.addEventListener('fetch', e => {
             // de que `return res` haya entregado la respuesta, y para entonces el
             // body puede estar ya consumido → TypeError intermitente sin capturar.
             const copy = res.clone()
-            caches.open(CACHE).then(c => c.put(request, copy)).catch(() => {})
+            caches.open(CACHE).then(c => c.put(request, copy).then(() => trimStatic(c))).catch(() => {})
           }
           return res
         })

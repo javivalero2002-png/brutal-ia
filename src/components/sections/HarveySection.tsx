@@ -385,8 +385,16 @@ ${memLines2||'  sin documentos'}`
   const startMediaRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({audio:true})
-      // 32 kbps: de sobra para voz y la subida al transcriptor es mucho más rápida
-      const mr = new MediaRecorder(stream, {mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':MediaRecorder.isTypeSupported('audio/webm')?'audio/webm':'audio/mp4', audioBitsPerSecond:128000})
+      // Si el constructor de MediaRecorder lanza (mimeType no soportado en este
+      // navegador), el stream ya está abierto: sin este catch el micrófono se
+      // quedaba encendido —con su indicador rojo— hasta recargar la página.
+      let mr: MediaRecorder
+      try {
+        mr = new MediaRecorder(stream, {mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':MediaRecorder.isTypeSupported('audio/webm')?'audio/webm':'audio/mp4', audioBitsPerSecond:128000})
+      } catch (err) {
+        stream.getTracks().forEach(t=>t.stop())
+        throw err
+      }
       audioChunksRef.current = []
       mr.ondataavailable = e => { if(e.data.size>0) audioChunksRef.current.push(e.data) }
       mr.onstop = () => {
