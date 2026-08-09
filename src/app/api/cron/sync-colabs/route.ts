@@ -79,7 +79,11 @@ export async function GET(request: NextRequest) {
   // y transitorio (429/5xx de Gmail en 1 de 7) no debe pintar el cron de rojo:
   // 24 rojos al día enseñan al equipo a ignorar el rojo, y volvemos al punto de partida.
   const terminal = failures.filter(o => o.terminal)
-  const allFailed = attempted > 0 && failures.length === attempted
+  // `attempted >= 2` y no `> 0`: con un solo buzón conectado (lo normal aquí),
+  // "todos fallaron" es lo mismo que "falló uno", así que un 429 puntual de Gmail
+  // pintaría de rojo las 24 ejecuciones del día — justo la fatiga de alarma que
+  // este código quería evitar. Un fallo transitorio queda en el console.error.
+  const allFailed = attempted >= 2 && failures.length === attempted
   const failed = terminal.length > 0 || allFailed
 
   if (failures.length) {

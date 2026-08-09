@@ -219,7 +219,11 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
           {!isEmpty && (
             confirmClear
               ? <div className="flex items-center gap-1">
-                  <button onClick={()=>{data.clearChat?.();setConfirmClear(false)}} className="font-syne text-[8px] font-black px-3 py-1.5 rounded-xl transition-all" style={{background:'rgba(229,29,42,0.12)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
+                  {/* Deshabilitado mientras Claude responde: el DELETE se ejecutaba
+                      antes de que /api/chat persistiera los dos turnos (que inserta
+                      DESPUÉS de la respuesta), así que sobrevivían al borrado y la
+                      conversación reaparecía al recargar. */}
+                  <button disabled={chatLoading} onClick={async()=>{ setConfirmClear(false); const ok = await data.clearChat?.(); if (ok === false) showToast("No se pudo borrar la conversación") }} className="font-syne text-[8px] font-black px-3 py-1.5 rounded-xl transition-all" style={{background:'rgba(229,29,42,0.12)',color:RED,border:`1px solid rgba(229,29,42,0.25)`,opacity:chatLoading?0.4:1,cursor:chatLoading?"not-allowed":"pointer"}}>¿BORRAR?</button>
                   <button onClick={()=>setConfirmClear(false)} className="w-6 h-6 rounded-lg flex items-center justify-center" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={10} color="rgba(255,255,255,0.3)"/></button>
                 </div>
               : <button onClick={()=>setConfirmClear(true)} className="font-syne text-[8px] font-black tracking-widest px-3 py-1.5 rounded-xl transition-all hover:bg-white/5" style={{color:'rgba(255,255,255,0.2)',border:`1px solid ${BORDER}`}}>LIMPIAR</button>

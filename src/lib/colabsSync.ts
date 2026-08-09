@@ -75,13 +75,12 @@ export async function syncColabsInbox(
     let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
     try {
       analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients)
-    } catch {
-      // Fallback a info básica. Contamos los fallos: si la clave de Anthropic
-      // caduca, todos los buzones se llenan de resúmenes degradados y hoy nadie
-      // se entera. No se puede loguear por email (~3.400 iteraciones al día y la
-      // retención de logs en Hobby es corta), así que se agrega al final.
-      aiFailures++
-    }
+    } catch { aiFailures++ }
+    // analyzeEmail NO lanza: captura por dentro y devuelve el fallback básico,
+    // así que el catch de arriba era código muerto y aiFailures siempre 0.
+    // La señal real es `degraded`. No se puede loguear por email (~3.400
+    // iteraciones al día, retención corta en Hobby): se agrega al final.
+    if (analysis.degraded) aiFailures++
 
     const { error: insertError } = await admin.from('inbox_messages').insert({
       user_id: ownerId,
@@ -192,6 +191,7 @@ export async function syncPersonalInbox(
     try {
       analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients)
     } catch { aiFailures++ }
+    if (analysis.degraded) aiFailures++
 
     const { error: insertError } = await admin.from('inbox_messages').insert({
       user_id: profile.id,

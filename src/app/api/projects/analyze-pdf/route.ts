@@ -51,12 +51,16 @@ export async function POST(request: NextRequest) {
   // pregunta reenvía el documento entero (un deck de 30 páginas son decenas de
   // miles de tokens de input). Con el caché, de la 2ª pregunta en adelante se
   // lee de caché en vez de re-facturarse como input nuevo.
+  const isChat = !!body.question?.trim()
+  // El caché solo se aplica en modo chat. Escribir en caché cuesta 1,25×, y en
+  // modo análisis hay UNA sola llamada por PDF: se pagaría el recargo de
+  // escritura sin que nadie llegue a leerla nunca (~25% más caro en la parte del
+  // documento, que en un deck de 30 páginas son decenas de miles de tokens).
   const pdfBlock: any = {
     type: 'document',
     source: { type: 'base64', media_type: 'application/pdf', data: b64 },
-    cache_control: { type: 'ephemeral' },
+    ...(isChat ? { cache_control: { type: 'ephemeral' } } : {}),
   }
-  const isChat = !!body.question?.trim()
 
   // Si ya tenemos URL (subida directa), usarla; si no, subir el PDF a Supabase
   let pdfUrl: string | null = pdfUrlFromBody

@@ -71,6 +71,7 @@ export async function POST() {
   const GMAIL_TASK_LIMIT = 4
 
   let newCount = 0
+  let aiFailures = 0
   const newUnread: { from_name: string; subject: string; urgency: string }[] = []
 
   // Una sola consulta para saber cuáles ya existen (antes: un SELECT por email).
@@ -94,7 +95,11 @@ export async function POST() {
       )
     } catch {
       // AI analysis failed — save email with basic info anyway
+      aiFailures++
     }
+    // analyzeEmail captura por dentro y no lanza: la señal real de degradación
+    // es este flag, no el catch de arriba.
+    if (analysis.degraded) aiFailures++
 
     const { error: insertErr } = await admin.from('inbox_messages').insert({
       user_id: user.id,
@@ -162,5 +167,6 @@ export async function POST() {
     }
   }
 
-  return NextResponse.json({ synced: newCount, total: emails.length, account: gmailAccount, shared: isCompanyAccount })
+  if (aiFailures) console.error(`[sync] analyzeEmail falló en ${aiFailures} de ${emails.length} emails`)
+  return NextResponse.json({ synced: newCount, total: emails.length, account: gmailAccount, shared: isCompanyAccount, aiFailures })
 }

@@ -24,11 +24,11 @@ export async function GET(request: NextRequest) {
   const oauthError = searchParams.get('error')
 
   if (oauthError) {
-    return NextResponse.redirect(`${base}/dashboard?gmail=denied`)
+    return done(`${base}/dashboard?gmail=denied`)
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(`${base}/dashboard?gmail=error`)
+    return done(`${base}/dashboard?gmail=error`)
   }
 
   const [userId, account = 'personal', nonce] = state.split(':')
@@ -41,18 +41,22 @@ export async function GET(request: NextRequest) {
   // El atacante no puede escribir esta cookie httpOnly, así que no puede fabricar
   // un state que case.
   const expected = request.cookies.get(OAUTH_STATE_COOKIE)?.value
-  if (!nonce || !expected || nonce !== expected) {
-    return NextResponse.redirect(`${base}/dashboard?gmail=error`)
+  if (!nonce || nonce !== expected) {
+    // Código propio: si la cookie ya no está, casi siempre es que el usuario tardó
+    // más que su vida útil en la pantalla de consentimiento. Con el mensaje
+    // genérico era indistinguible de un fallo de red y nadie sabía que bastaba
+    // con repetir.
+    return done(`${base}/dashboard?gmail=${expected ? 'error' : 'expired'}`)
   }
 
   const authClient = await createClient()
   const { data: { user } } = await authClient.auth.getUser()
   if (!user || user.id !== userId) {
-    return NextResponse.redirect(`${base}/dashboard?gmail=error`)
+    return done(`${base}/dashboard?gmail=error`)
   }
 
   if (!userId) {
-    return NextResponse.redirect(`${base}/dashboard?gmail=error`)
+    return done(`${base}/dashboard?gmail=error`)
   }
 
   const oauth2Client = getOAuthClient()
@@ -61,11 +65,11 @@ export async function GET(request: NextRequest) {
     const result = await oauth2Client.getToken(code)
     tokens = result.tokens as { refresh_token?: string | null }
   } catch {
-    return NextResponse.redirect(`${base}/dashboard?gmail=error`)
+    return done(`${base}/dashboard?gmail=error`)
   }
 
   if (!tokens.refresh_token) {
-    return NextResponse.redirect(`${base}/dashboard?gmail=no_refresh_token`)
+    return done(`${base}/dashboard?gmail=no_refresh_token`)
   }
 
   // Resolve the authenticated email address and cache it in the profile

@@ -80,14 +80,21 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
         apiFetch('/api/team'),
       ])
       if (!aliveRef.current) return
-      const list = (n: number) => {
+      // `apply` NO pisa lo que ya hay si la consulta falló. Importa porque load()
+      // se expone como reload() y se llama CON datos en pantalla (HoySection,
+      // HarveySection): un 500 transitorio de /api/tasks vaciaba la lista delante
+      // del usuario. Se considera fallo tanto un rechazo como un 200 que no
+      // devuelve un array (p. ej. {error}), que si no se colaba como lista vacía.
+      let failed = 0
+      const apply = <T,>(n: number, setter: (v: T[]) => void) => {
         const r = res[n]
-        return r.status === 'fulfilled' && Array.isArray(r.value) ? r.value : []
+        if (r.status === 'fulfilled' && Array.isArray(r.value)) setter(r.value as T[])
+        else failed++
       }
-      setLoadError(res.some(r => r.status === 'rejected'))
-      setClients(list(0)); setProjects(list(1)); setTasks(list(2)); setInbox(list(3))
-      setMemoria(list(4)); setAgenda(list(5)); setReglas(list(6)); setChatMessages(list(7))
-      setTeam(list(8))
+      apply(0, setClients); apply(1, setProjects); apply(2, setTasks); apply(3, setInbox)
+      apply(4, setMemoria); apply(5, setAgenda); apply(6, setReglas); apply(7, setChatMessages)
+      apply(8, setTeam)
+      setLoadError(failed > 0)
       apiFetch('/api/calendar/events').then((res: any) => {
         if (!aliveRef.current) return
         if (res?.__error === 'no_scope') { setCalendarScopeError(true); setCalendarEvents([]) }
@@ -286,9 +293,15 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
 
   // Borra también en servidor: antes solo vaciaba el estado local, así que el botón
   // "BORRAR" no borraba nada y la conversación reaparecía al recargar.
-  const clearChat = useCallback(async () => {
-    setChatMessages([])
-    try { await apiFetch('/api/chat/history', { method: 'DELETE' }) } catch {}
+  // Devuelve false si el borrado en servidor falló, para que la UI no mienta.
+  // El vaciado local va DESPUÉS del DELETE: si se hace antes y la petición falla,
+  // el usuario cree que borró y la conversación reaparece al recargar.
+  const clearChat = useCallback(async (): Promise<boolean> => {
+    try {
+      await apiFetch('/api/chat/history', { method: 'DELETE' })
+      setChatMessages([])
+      return true
+    } catch { return false }
   }, [])
 
   // ── MEMORIA ────────────────────────────────────────────────
@@ -361,5 +374,9 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     reglas, createRegla, updateRegla, deleteRegla, runAutomations,
     chatMessages, sendChatMessage, clearChat,
     team, calendarEvents, calendarScopeError, reloadCalendar, reload: load,
+    // loadError se calculaba y NO se devolvía: era estado muerto. Sin él, un 500
+    // en /api/tasks dejaba la app con la sección vacía y CERO señal — y el cambio
+    // a allSettled borró el último rastro (antes el rechazo salía en consola).
+    loadError,
   }
 }

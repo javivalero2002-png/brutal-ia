@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax', // 'lax' y no 'strict': el callback llega desde Google
     path: '/',
-    maxAge: 600, // 10 min: el flujo de consentimiento no dura más
+    maxAge: 1200, // 20 min: 4 scopes + selector de cuenta + posible login. Sigue
+    // siendo de un solo uso y atado a la sesión (el callback exige user.id === userId).
   })
   return res
 }

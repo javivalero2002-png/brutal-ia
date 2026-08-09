@@ -120,6 +120,10 @@ export default function PreviewClient() {
 
   const markRead = useCallback(async (id:string)=>{ setInbox(x=>x.map(m=>m.id===id?{...m,is_read:true}:m)) }, [])
   const markUnread = useCallback(async (id:string)=>{ setInbox(x=>x.map(m=>m.id===id?{...m,is_read:false}:m)) }, [])
+  // Faltaba en el stub: el botón "TODO LEÍDO" y el atajo `a` de InboxSection lo
+  // llaman sin optional chaining → TypeError dentro del handler de teclado, que
+  // ningún SectionErrorBoundary captura (solo cubren errores de render).
+  const markManyRead = useCallback(async (ids:string[])=>{ setInbox(x=>x.map(m=>ids.includes(m.id)?{...m,is_read:true}:m)) }, [])
   const noop = useCallback(async ()=>{}, [])
 
   const data:any = {
@@ -128,7 +132,7 @@ export default function PreviewClient() {
     agenda:AGENDA, memoria:[], calendarEvents:CAL_EVENTS, chatMessages:[],
     createTask, updateTask, deleteTask, toggleTask,
     createRegla, updateRegla, deleteRegla, runAutomations,
-    markRead, markUnread,
+    markRead, markUnread, markManyRead,
     createClient:noop, updateClient:noop, deleteClient:noop,
     createProject:noop, updateProject:noop, deleteProject:noop,
     createAgenda:noop, sendInternalMessage:noop, reloadInbox:noop,

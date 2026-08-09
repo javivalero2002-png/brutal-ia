@@ -94,6 +94,11 @@ export interface EmailAnalysis {
   client: string
   urgency: 'urgent' | 'high' | 'normal'
   suggestedTask?: string
+  /** true si el análisis con IA falló y esto es el fallback básico. analyzeEmail
+   *  NO lanza (captura por dentro), así que sin esta señal los llamantes no
+   *  pueden distinguir un resumen real de uno degradado: si la clave de
+   *  Anthropic caduca, los buzones se llenan de fallbacks y nadie se entera. */
+  degraded?: boolean
 }
 
 export interface WhatsAppAnalysis {
@@ -138,15 +143,18 @@ Responde SOLO con JSON válido (sin markdown):
 }`
       }]
     })
-  } catch {
-    return { summary: subject, action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
+  } catch (err: any) {
+    // Distinguir el motivo importa: un 401 se arregla rotando la clave, un 429
+    // se pasa solo. Sin este log, ambos eran silencio idéntico.
+    console.error('[ai] analyzeEmail falló:', err?.status ?? '', err?.message ?? err)
+    return { summary: subject, action: 'Revisar email', client: 'Desconocido', urgency: 'normal', degraded: true }
   }
 
   try {
     const text = msg.content[0].type === 'text' ? msg.content[0].text : '{}'
     return parseJsonLoose(text)
   } catch {
-    return { summary: subject, action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
+    return { summary: subject, action: 'Revisar email', client: 'Desconocido', urgency: 'normal', degraded: true }
   }
 }
 

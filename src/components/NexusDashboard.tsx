@@ -139,6 +139,12 @@ export default function NexusDashboard({ profile }: Props) {
       window.history.replaceState({}, '', '/dashboard')
       setToast('Google bloqueó esta cuenta. Debe estar autorizada en la pantalla de consentimiento de Google Cloud (o usa una cuenta @brutalstudios.es).')
       setTimeout(() => setSection('ajustes'), 400)
+    } else if (gmailStatus === 'expired') {
+      // Caso propio: el nonce anti-CSRF caducó porque el consentimiento tardó
+      // demasiado. Con el mensaje genérico era indistinguible de un fallo de red
+      // y el usuario no sabía que basta con repetirlo.
+      window.history.replaceState({}, '', '/dashboard')
+      setToast('La conexión tardó demasiado y caducó. Vuelve a intentarlo — esta vez completa el permiso de Google sin pausas.')
     } else if (gmailStatus === 'error' || gmailStatus === 'no_refresh_token') {
       window.history.replaceState({}, '', '/dashboard')
       setToast('Error al conectar. Inténtalo de nuevo desde Operativa → Sincronización.')
@@ -692,6 +698,16 @@ export default function NexusDashboard({ profile }: Props) {
           <div className="flex items-center justify-center gap-2 px-4 py-2 flex-shrink-0" style={{background:'rgba(229,29,42,0.12)',borderBottom:'1px solid rgba(229,29,42,0.25)'}}>
             <div className="w-1.5 h-1.5 rounded-full" style={{background:RED}}/>
             <span className="font-syne text-[8px] font-black tracking-widest" style={{color:RED}}>SIN CONEXIÓN — LOS CAMBIOS NO SE GUARDARÁN</span>
+          </div>
+        )}
+        {/* Sin esto, un endpoint caído se ve EXACTAMENTE igual que un estudio vacío:
+            "Todo al día, sin pendientes" mientras la API devuelve 500. El usuario
+            actúa sobre información falsa y no tiene forma de saberlo ni de reintentar. */}
+        {!offline && data.loadError && (
+          <div className="flex items-center justify-center gap-3 px-4 py-2 flex-shrink-0" style={{background:'rgba(255,176,32,0.10)',borderBottom:'1px solid rgba(255,176,32,0.22)'}}>
+            <div className="w-1.5 h-1.5 rounded-full" style={{background:'rgb(255,176,32)'}}/>
+            <span className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,176,32,0.9)'}}>NO SE PUDO CARGAR TODO — LOS DATOS PUEDEN ESTAR INCOMPLETOS</span>
+            <button onClick={()=>data.reload?.()} className="font-syne text-[8px] font-black tracking-widest px-2 py-0.5 rounded-lg" style={{color:'rgb(255,176,32)',border:'1px solid rgba(255,176,32,0.35)'}}>REINTENTAR</button>
           </div>
         )}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
