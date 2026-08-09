@@ -34,8 +34,11 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
     setSyncingCal(true)
     try {
       if (data.reloadCalendar) {
-        await data.reloadCalendar()
-        if (data.calendarScopeError) showToast('Sin permisos de calendario — reconecta Gmail Personal')
+        // Se usa lo que DEVUELVE la llamada, no data.calendarScopeError: ese venía
+        // del closure del render anterior y anunciaba el estado previo.
+        const r = await data.reloadCalendar()
+        if (r?.noScope) showToast('Sin permisos de calendario — reconecta Gmail Personal')
+        else if (r?.ok === false) showToast('No se pudo sincronizar el calendario')
         else showToast('Calendario sincronizado')
       } else {
         const res = await fetch('/api/calendar/events').then(r=>r.json())

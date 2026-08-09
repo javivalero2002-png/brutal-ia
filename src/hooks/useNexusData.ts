@@ -18,7 +18,22 @@ export interface CalendarEvent {
 
 async function apiFetch(url: string, opts?: RequestInit) {
   const res = await fetch(url, opts)
-  if (!res.ok) throw new Error(await res.text())
+  if (!res.ok) {
+    // El cuerpo crudo acababa tal cual en un toast: el usuario llegaba a ver
+    // errores de Postgres ("column ... does not exist") o HTML de una página de
+    // error de Vercel. Se extrae el campo `error` del JSON cuando existe y se
+    // acota la longitud; si no, un mensaje humano según el código.
+    const raw = await res.text()
+    let msg = ''
+    try { msg = JSON.parse(raw)?.error || '' } catch {}
+    if (!msg || msg.length > 160 || /<[a-z]/i.test(msg)) {
+      msg = res.status === 429 ? 'Demasiadas solicitudes. Espera un momento.'
+          : res.status === 401 ? 'Tu sesión ha caducado. Vuelve a entrar.'
+          : res.status >= 500 ? 'El servidor ha fallado. Inténtalo de nuevo.'
+          : 'No se pudo completar la operación.'
+    }
+    throw new Error(msg)
+  }
   return res.json()
 }
 
@@ -159,13 +174,19 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     return newInbox
   }, [])
 
-  const reloadCalendar = useCallback(async () => {
+  // Devuelve el resultado en vez de solo setear estado: el llamante leía
+  // `data.calendarScopeError` justo después del await, pero eso viene del closure
+  // del render anterior — anunciaba SIEMPRE el estado previo, así que el aviso de
+  // "reconecta Gmail" salía tarde o no salía.
+  const reloadCalendar = useCallback(async (): Promise<{ ok: boolean; noScope: boolean }> => {
     try {
       const res = await apiFetch('/api/calendar/events')
-      if (!aliveRef.current) return
-      if (res?.__error === 'no_scope') { setCalendarScopeError(true); setCalendarEvents([]) }
+      if (!aliveRef.current) return { ok: true, noScope: false }
+      const noScope = res?.__error === 'no_scope'
+      if (noScope) { setCalendarScopeError(true); setCalendarEvents([]) }
       else { setCalendarScopeError(false); setCalendarEvents(Array.isArray(res) ? res : []) }
-    } catch {}
+      return { ok: true, noScope }
+    } catch { return { ok: false, noScope: false } }
   }, [])
 
   const syncGmail = useCallback(async (): Promise<{synced:number;total:number}> => {

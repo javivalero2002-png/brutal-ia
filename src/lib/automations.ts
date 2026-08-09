@@ -291,11 +291,15 @@ export async function runAutomations(admin: SupabaseClient): Promise<{ ran: numb
   if (process.env.NEXUS_AUTOMATIONS === 'off') return { ran: 0, results }
 
   // Reglas activas (excluye las filas de suscripción push)
-  const { data: rules } = await admin
+  const { data: rules, error: rulesError } = await admin
     .from('reglas')
     .select('id,name,condition_text,action_text,active,trigger_count,last_triggered_at,created_by')
     .eq('active', true)
     .neq('name', '__push_subscription__')
+
+  // Sin esto, un fallo al leer las reglas se reportaba como "0 automatizaciones
+  // ejecutadas" — indistinguible de no tener ninguna regla activa.
+  if (rulesError) console.error('[automations] no se pudieron leer las reglas:', rulesError.message)
 
   const structured = (rules || [])
     .map(r => ({ r, cfg: parseRuleConfig(r.condition_text) }))
