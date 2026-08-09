@@ -702,7 +702,11 @@ export default function NexusDashboard({ profile }: Props) {
             <span className="font-syne text-[10px] font-black tracking-[0.25em] truncate flex-1" style={{color:'rgba(255,255,255,0.55)'}}>
               {({hoy:'HOY',inbox:'INBOX',calendario:'CALENDARIO',tareas:'TAREAS',clientes:'CLIENTES',proyectos:'PROYECTOS',contenido:'CONTENIDO',chat:'BRUTAL.IA',harvey:'HARVEY',ajustes:'OPERATIVA',memoria:'MEMORIA',equipo:'EQUIPO',reportes:'REPORTES',automatizaciones:'AUTOMATIZACIONES'} as Record<string,string>)[section] || 'BRUTAL.IA'}
             </span>
-            {isOwner && (
+            {/* Sin gate de owner: la API dejó de exigirlo en la CREACIÓN (solo el
+                borrado sigue siendo de dueños), y las secciones ya muestran sus
+                botones de crear a todo el mundo. Ocultarlo solo aquí dejaba a los
+                miembros —que son quienes más usan el móvil— sin acceso rápido. */}
+            {(
               <div className="relative">
                 <button onClick={()=>setQuickCreateOpen(!quickCreateOpen)} className="w-9 h-9 flex items-center justify-center rounded-xl" style={{background:quickCreateOpen?'rgba(27,95,250,0.15)':'rgba(255,255,255,0.03)',border:`1px solid ${quickCreateOpen?'rgba(27,95,250,0.3)':BORDER}`}}>
                   <LucideIcon name="plus" size={16} color={quickCreateOpen?BLU:'rgba(240,240,248,0.55)'}/>

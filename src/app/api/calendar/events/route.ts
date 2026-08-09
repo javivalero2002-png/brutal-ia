@@ -2,6 +2,10 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCalendarEvents, createCalendarEvent } from '@/lib/gmail'
 
+// Consulta a la API de Google por cada calendario conectado: el default de
+// Vercel se queda corto cuando hay varios buzones.
+export const maxDuration = 60
+
 export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

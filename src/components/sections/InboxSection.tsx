@@ -59,6 +59,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
   const isMobile = useIsMobile()
   const [filter, setFilter] = useState('Todos')
   const [selected, setSelected] = useState<any>(null)
+  const [confirmMarkAll, setConfirmMarkAll] = useState(false)
   useBackClosable(!!selected, () => setSelected(null))
   const [creatingTask, setCreatingTask] = useState(false)
   const creatingTaskRef = useRef(false)
@@ -300,8 +301,16 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                   <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.04em'}}>Inbox</h1>
                 </div>
                 <div className="flex items-center gap-2">
+                  {/* Confirmación en dos toques: marcaba 97 mensajes de golpe,
+                      sin deshacer, con un solo clic accidental. */}
                   {unread > 0 && (
-                    <button onClick={()=>{ const u=data.inbox.filter((m:any)=>!m.is_read); data.markManyRead(u.map((m:any)=>m.id)).catch(()=>{}); showToast(`${u.length} mensajes marcados como leídos`) }} className="font-syne text-[8px] font-black px-2.5 py-2 rounded-xl transition-all" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}} onMouseEnter={e=>(e.currentTarget.style.color='rgba(255,255,255,0.6)')} onMouseLeave={e=>(e.currentTarget.style.color='rgba(255,255,255,0.3)')}>TODO LEÍDO · {unread}</button>
+                    <button onClick={()=>{
+                      if (!confirmMarkAll) { setConfirmMarkAll(true); setTimeout(()=>setConfirmMarkAll(false), 4000); return }
+                      setConfirmMarkAll(false)
+                      const u=data.inbox.filter((m:any)=>!m.is_read)
+                      data.markManyRead(u.map((m:any)=>m.id)).catch(()=>showToast('No se pudieron marcar como leídos'))
+                      showToast(`${u.length} mensajes marcados como leídos`)
+                    }} className="font-syne text-[8px] font-black px-2.5 py-2 rounded-xl transition-all" style={{color:confirmMarkAll?RED:'rgba(255,255,255,0.3)',border:`1px solid ${confirmMarkAll?'rgba(229,29,42,0.3)':BORDER}`}}>{confirmMarkAll ? `¿MARCAR ${unread}?` : `TODO LEÍDO · ${unread}`}</button>
                   )}
                 </div>
               </div>

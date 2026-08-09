@@ -21,7 +21,10 @@ export async function GET() {
     .limit(100)
 
   if (error) {
-    // shared column may not exist yet — fall back to own messages only
+    // El fallback existe porque la columna `shared` puede no estar en la BD.
+    // Se registra: si no, la bandeja pasa a mostrar SOLO el correo propio y el
+    // buzón compartido desaparece sin que nadie sepa por qué.
+    console.error('[inbox] consulta con `shared` falló, usando solo correo propio —', error.message)
     const { data: fallback, error: fbErr } = await admin
       .from('inbox_messages')
       .select('*')

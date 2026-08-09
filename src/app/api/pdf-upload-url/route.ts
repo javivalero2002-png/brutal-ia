@@ -27,7 +27,14 @@ export async function POST(request: NextRequest) {
 
   // Path deterministico por nombre+tamaño para reutilizar si ya existe
   const slug = createHash('md5').update(`${filename}-${size || 0}-${user.id}`).digest('hex').slice(0, 16)
-  const ext  = filename.endsWith('.pdf') ? '' : '.pdf'
+  // La extensión sale del propio fichero, no se fuerza a .pdf. Antes, cualquier
+  // subida que no acabara en .pdf recibía ese sufijo: las portadas de proyecto
+  // (`project-covers`, que son JPEG/PNG) se guardaban como `<md5>.jpg.pdf`, con
+  // el tipo equivocado. Allowlist para que el nombre del cliente no decida la
+  // extensión del objeto almacenado.
+  const ALLOWED = new Set(['pdf', 'jpg', 'jpeg', 'png', 'webp', 'gif', 'mp4', 'mov', 'webm'])
+  const raw = (filename.split('.').pop() || '').toLowerCase()
+  const ext = ALLOWED.has(raw) ? `.${raw}` : '.pdf'
   const path = `${prefix}/${slug}${ext}`
 
   const { data, error } = await admin.storage.from(BUCKET).createSignedUploadUrl(path, { upsert: true })

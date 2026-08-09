@@ -21,7 +21,10 @@ export interface SearchResult {
 
 export async function webSearch(query: string): Promise<SearchResult[]> {
   const key = process.env.TAVILY_API_KEY
-  if (!key) return []
+  // Sin log, una clave ausente o caducada es indistinguible de "no hubo
+  // resultados": el chat sigue respondiendo con conocimiento de entrenamiento
+  // como si nada, y nadie se entera de que la búsqueda web lleva días muerta.
+  if (!key) { console.error('[ai] TAVILY_API_KEY ausente — búsqueda web desactivada'); return [] }
   try {
     const res = await fetch('https://api.tavily.com/search', {
       method: 'POST',
@@ -34,14 +37,14 @@ export async function webSearch(query: string): Promise<SearchResult[]> {
         include_answer: false,
       }),
     })
-    if (!res.ok) return []
+    if (!res.ok) { console.error('[ai] Tavily respondió', res.status); return [] }
     const data = await res.json()
     return (data.results || []).slice(0, 7).map((r: any) => ({
       title: r.title || '',
       content: (r.content || '').slice(0, 400),
       url: r.url || '',
     }))
-  } catch { return [] }
+  } catch (err: any) { console.error('[ai] búsqueda web falló:', err?.message ?? err); return [] }
 }
 
 // Formats search results as a clean context block for Claude (Chat IA — markdown OK)
