@@ -110,11 +110,16 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
       apply(4, setMemoria); apply(5, setAgenda); apply(6, setReglas); apply(7, setChatMessages)
       apply(8, setTeam)
       setLoadError(failed > 0)
+      // El calendario va fuera del lote a propósito: es la consulta más lenta
+      // (una llamada a Google por calendario conectado) y no debe retrasar el
+      // resto del dashboard. Pero su fallo sí cuenta como carga parcial: antes
+      // el .catch() lo tragaba y la franja ámbar nunca aparecía, así que un
+      // calendario caído era indistinguible de una agenda vacía.
       apiFetch('/api/calendar/events').then((res: any) => {
         if (!aliveRef.current) return
         if (res?.__error === 'no_scope') { setCalendarScopeError(true); setCalendarEvents([]) }
         else { setCalendarScopeError(false); setCalendarEvents(Array.isArray(res) ? res : []) }
-      }).catch(()=>{})
+      }).catch(() => { if (aliveRef.current) setLoadError(true) })
     } finally {
       if (aliveRef.current) setLoading(false)
     }

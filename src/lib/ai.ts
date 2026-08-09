@@ -302,7 +302,7 @@ Responde siempre en español. Sé directo, concreto y profesional. Formato markd
   ]
 
   const msg = await anthropic.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-sonnet-5',
     max_tokens: 1200,
     system: systemPrompt,
     messages,

@@ -33,22 +33,21 @@ export async function getAuthCtx(): Promise<AuthCtx | null> {
   return { userId: user.id, role: (profile?.role === 'owner' ? 'owner' : 'member'), admin }
 }
 
-// ¿Puede este usuario ver/editar esta tarea? Refleja la misma lógica que el GET
-// de /api/tasks: el owner todo; el miembro solo las suyas, asignadas o sin asignar.
+// ¿Puede este usuario ver/editar esta tarea?
+//
+// Las tareas son un recurso de EQUIPO, igual que los proyectos: el GET de
+// /api/tasks devuelve todas a todo el mundo, y la UI ofrece completar, editar y
+// adjuntar en cualquiera de ellas (TareasSection: `canComplete`; CalendarioSection:
+// "MARCAR COMO HECHA", ninguno con guardia de rol).
+//
+// Antes esto restringía a los miembros a sus propias tareas, así que la interfaz
+// prometía una acción que la API rechazaba con 403 — y como toggleTask hace update
+// optimista y el llamante remata con .catch(()=>{}), el usuario veía la tarea
+// marcarse y desmarcarse sola, sin ningún mensaje. Solo comprobamos que la tarea
+// exista, para no hacer PATCH a ciegas.
 export async function canAccessTask(ctx: AuthCtx, taskId: string): Promise<boolean> {
-  if (ctx.role === 'owner') return true
-  const { data } = await ctx.admin
-    .from('tasks')
-    .select('assigned_to, co_assigned_to, created_by')
-    .eq('id', taskId)
-    .single()
-  if (!data) return false
-  return (
-    data.assigned_to === ctx.userId ||
-    data.co_assigned_to === ctx.userId ||
-    data.created_by === ctx.userId ||
-    data.assigned_to === null
-  )
+  const { data } = await ctx.admin.from('tasks').select('id').eq('id', taskId).single()
+  return !!data
 }
 
 // Los proyectos son recursos de equipo: cualquier miembro autenticado colabora

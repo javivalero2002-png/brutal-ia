@@ -39,7 +39,7 @@ ${tasks?.slice(0,5).map((t: any) => `  - ${t.text} [${t.level}]`).join('\n') || 
   let msg: Awaited<ReturnType<typeof anthropic.messages.create>>
   try {
     msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5',
       max_tokens: 800,
       messages: [{
         role: 'user',

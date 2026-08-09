@@ -241,7 +241,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
               <span style={{color:'rgba(255,255,255,0.75)'}}>{c.n}</span> {c.l}
             </span>
           ))}
-          <span className="font-syne text-[7px] font-black tracking-widest px-2 py-1 rounded-lg" style={{background:'rgba(27,95,250,0.08)',color:BLU}}>SONNET 4.6</span>
+          <span className="font-syne text-[7px] font-black tracking-widest px-2 py-1 rounded-lg" style={{background:'rgba(27,95,250,0.08)',color:BLU}}>SONNET 5</span>
         </div>
       </div>
 

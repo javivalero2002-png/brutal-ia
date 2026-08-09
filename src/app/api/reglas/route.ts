@@ -1,14 +1,14 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { PUSH_ROW } from '@/lib/push'
+import { NON_RULE_ROWS_FILTER } from '@/lib/reglaRows'
 
 export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const admin = await createAdminClient()
-  // Las filas PUSH_ROW son suscripciones de notificaciones, no reglas de negocio
-  const { data, error } = await admin.from('reglas').select('*').neq('name', PUSH_ROW).order('created_at', { ascending: false })
+  // La tabla guarda también suscripciones push y logos de cuenta: no son reglas.
+  const { data, error } = await admin.from('reglas').select('*').not('name', 'in', NON_RULE_ROWS_FILTER).order('created_at', { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
