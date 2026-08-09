@@ -1,5 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { getOAuthClient } from '@/lib/gmail'
+import { getOAuthClient, OAUTH_STATE_COOKIE } from '@/lib/gmail'
 import { google } from 'googleapis'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -11,6 +11,13 @@ const appOrigin = (request: NextRequest): string =>
 
 export async function GET(request: NextRequest) {
   const base = appOrigin(request)
+  // El nonce es de un solo uso: se borra en cuanto se consume, para que un
+  // callback capturado no pueda reproducirse dentro de la ventana de 10 min.
+  const done = (to: string) => {
+    const r = NextResponse.redirect(to)
+    r.cookies.delete(OAUTH_STATE_COOKIE)
+    return r
+  }
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
   const state = searchParams.get('state') || ''
@@ -24,7 +31,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${base}/dashboard?gmail=error`)
   }
 
-  const [userId, account = 'personal'] = state.split(':')
+  const [userId, account = 'personal', nonce] = state.split(':')
+
+  // Anti-CSRF. La comprobación de sesión de abajo impide inyectar en la cuenta de
+  // OTRO, pero sin esto seguía siendo posible engañar a alguien ya logueado para
+  // que abriese un callback preparado con el `code` del atacante: el resultado era
+  // el Gmail del atacante conectado a la cuenta de la víctima, y con
+  // account=colabs, convertido en el buzón compartido de la empresa.
+  // El atacante no puede escribir esta cookie httpOnly, así que no puede fabricar
+  // un state que case.
+  const expected = request.cookies.get(OAUTH_STATE_COOKIE)?.value
+  if (!nonce || !expected || nonce !== expected) {
+    return NextResponse.redirect(`${base}/dashboard?gmail=error`)
+  }
 
   const authClient = await createClient()
   const { data: { user } } = await authClient.auth.getUser()
@@ -69,7 +88,7 @@ export async function GET(request: NextRequest) {
         gmail_colabs_account: email,
       })
       .eq('id', userId)
-    return NextResponse.redirect(`${base}/dashboard?gmail=colabs_connected`)
+    return done(`${base}/dashboard?gmail=colabs_connected`)
   }
 
   await supabase
@@ -81,5 +100,5 @@ export async function GET(request: NextRequest) {
     })
     .eq('id', userId)
 
-  return NextResponse.redirect(`${base}/dashboard?gmail=connected`)
+  return done(`${base}/dashboard?gmail=connected`)
 }

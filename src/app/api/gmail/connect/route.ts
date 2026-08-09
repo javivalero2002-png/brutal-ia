@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
-import { getAuthUrl } from '@/lib/gmail'
+import { getAuthUrl, OAUTH_STATE_COOKIE } from '@/lib/gmail'
 import { NextRequest, NextResponse } from 'next/server'
+import { randomBytes } from 'crypto'
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
@@ -8,6 +9,19 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const account = request.nextUrl.searchParams.get('account') === 'colabs' ? 'colabs' : 'personal'
-  const url = getAuthUrl(user.id, account)
-  return NextResponse.redirect(url)
+
+  // Nonce anti-CSRF: viaja en el `state` de OAuth Y en una cookie httpOnly. El
+  // callback exige que coincidan, así que un tercero no puede fabricar un enlace
+  // de callback válido — no puede escribir esta cookie.
+  const nonce = randomBytes(32).toString('hex')
+
+  const res = NextResponse.redirect(getAuthUrl(user.id, account, nonce))
+  res.cookies.set(OAUTH_STATE_COOKIE, nonce, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax', // 'lax' y no 'strict': el callback llega desde Google
+    path: '/',
+    maxAge: 600, // 10 min: el flujo de consentimiento no dura más
+  })
+  return res
 }

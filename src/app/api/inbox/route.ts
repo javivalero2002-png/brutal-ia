@@ -40,14 +40,22 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { to_user_id, subject, body, from_name } = await request.json()
+  const { to_user_id, subject, body } = await request.json()
   if (!to_user_id || !body?.trim()) return NextResponse.json({ error: 'Faltan campos' }, { status: 400 })
 
   const admin = await createAdminClient()
+
+  // El remitente sale de la sesión, NUNCA del body. Antes `from_name` llegaba del
+  // cliente sin comprobarse contra el usuario autenticado: cualquiera podía mandar
+  // un DM que apareciera como de otra persona, con su push nativo "Mensaje de
+  // Pablo" incluido. Suplantación dentro del equipo con dos líneas de curl.
+  const { data: sender } = await admin.from('profiles').select('name').eq('id', user.id).single()
+  const fromName = sender?.name || 'Equipo'
+
   const { data, error } = await admin.from('inbox_messages').insert({
     user_id: to_user_id,
     source: 'internal',
-    from_name: from_name || 'Equipo',
+    from_name: fromName,
     subject: subject || '(sin asunto)',
     body_preview: body.slice(0, 500),
     ai_urgency: 'normal',
@@ -60,7 +68,7 @@ export async function POST(request: NextRequest) {
 
   // Notificación push al destinatario del mensaje interno
   sendPushToUser(admin, to_user_id, {
-    title: `Mensaje de ${from_name || 'Equipo'}`,
+    title: `Mensaje de ${fromName}`,
     body: (subject && subject !== '(sin asunto)' ? subject + ' — ' : '') + body.slice(0, 100),
     url: '/dashboard',
     tag: `dm-${data?.id || ''}`,

@@ -8,7 +8,7 @@ export function getOAuthClient() {
   return new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI)
 }
 
-export function getAuthUrl(userId: string, account: 'personal' | 'colabs' = 'personal') {
+export function getAuthUrl(userId: string, account: 'personal' | 'colabs' = 'personal', nonce: string) {
   const oauth2Client = getOAuthClient()
   const scopes = [
     'https://www.googleapis.com/auth/gmail.readonly',
@@ -20,9 +20,18 @@ export function getAuthUrl(userId: string, account: 'personal' | 'colabs' = 'per
     access_type: 'offline',
     prompt: 'consent',
     scope: scopes,
-    state: `${userId}:${account}`,
+    // El nonce es lo que hace este `state` un anti-CSRF real. Antes era solo
+    // `${userId}:${account}`, es decir, adivinable: bastaba con que la víctima
+    // (ya logueada) abriese un callback preparado con el `code` del atacante para
+    // que el refresh token del ATACANTE quedara guardado en su perfil. Con
+    // account=colabs eso convierte el buzón del atacante en el buzón compartido
+    // de la empresa. El nonce viaja también en una cookie httpOnly y el callback
+    // exige que coincidan.
+    state: `${userId}:${account}:${nonce}`,
   })
 }
+
+export const OAUTH_STATE_COOKIE = 'gmail_oauth_nonce'
 
 export async function getGmailAccountEmail(refreshToken: string): Promise<string> {
   const oauth2Client = getOAuthClient()
