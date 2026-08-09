@@ -35,3 +35,6 @@ next-env.d.ts
 
 # generado por el prebuild — no versionar (ensucia git status)
 public/pdf.worker.min.mjs
+
+# El PDF se genera con scripts/gen-manual.py — no versionar el binario
+Manual-BRUTAL-IA.pdf
