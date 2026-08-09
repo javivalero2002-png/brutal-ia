@@ -16,6 +16,13 @@ const securityHeaders = [
       "font-src 'self' data:",
       "connect-src 'self' https://*.supabase.co https://api.anthropic.com https://www.googleapis.com wss://*.supabase.co",
       "media-src 'self' blob: https://*.supabase.co",
+      // Sin `frame-src`, el `default-src 'self'` de arriba bloqueaba TODOS los
+      // iframes. Estaban rotos en producción: el vídeo de la página pública de
+      // review (que es su único contenido, así que el cliente veía una página
+      // vacía), los previews de Contenido y el visor de PDF de Proyectos.
+      // `frame-src` = qué puede incrustar ESTA página; `frame-ancestors` = quién
+      // puede incrustarnos a nosotros. Son directivas distintas e independientes.
+      "frame-src 'self' blob: https://*.supabase.co https://www.youtube.com https://player.vimeo.com",
       "frame-ancestors 'none'",
     ].join('; '),
   },
