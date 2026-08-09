@@ -2,6 +2,9 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { syncColabsInbox } from '@/lib/colabsSync'
 import { NextResponse } from 'next/server'
 
+// Sincroniza el buzon compartido analizando con IA: el default de Vercel se queda corto.
+export const maxDuration = 60
+
 export async function POST() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

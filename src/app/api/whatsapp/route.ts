@@ -7,6 +7,9 @@ import { createHmac } from 'crypto'
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN
 const APP_SECRET = process.env.WHATSAPP_APP_SECRET
 
+// Analiza el mensaje entrante con IA antes de responder: el default de Vercel se queda corto.
+export const maxDuration = 60
+
 // Webhook verification
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)

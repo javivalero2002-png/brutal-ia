@@ -4,6 +4,9 @@ import { analyzeEmail, EmailAnalysis } from '@/lib/ai'
 import { NextResponse } from 'next/server'
 import { sendPushToUser, sendPushToAll, canSendPush } from '@/lib/push'
 
+// Hasta 20 analisis de email con Claude en secuencia: el default de Vercel se queda corto.
+export const maxDuration = 60
+
 const MEETING_RE = /meet\.google\.com\/[a-z-]+|zoom\.us\/j\/\d+|teams\.microsoft\.com\/l\/meetup/i
 
 const COMPANY_EMAIL = 'colaboraciones@brutalstudios.es'

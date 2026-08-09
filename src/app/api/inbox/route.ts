@@ -2,6 +2,9 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendPushToUser } from '@/lib/push'
 import { NextRequest, NextResponse } from 'next/server'
 
+// Lecturas grandes de bandeja + envio de push: el default de Vercel se queda corto.
+export const maxDuration = 60
+
 export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

@@ -5,6 +5,9 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
+// Redaccion de borrador con Claude: el default de Vercel se queda corto.
+export const maxDuration = 60
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

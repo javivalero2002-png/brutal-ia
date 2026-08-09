@@ -672,7 +672,9 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
           </div>
           {/* Related tasks + quick add */}
           {(()=>{
-            const projTasks = data.tasks.filter((t: Task) => !t.done && (t.project_id === selectedProject.id || t.client_id === selectedProject.client_id))
+            // El guard de client_id es necesario: si el proyecto no tiene cliente,
+            // `null === null` haría match con todas las tareas sueltas del estudio.
+            const projTasks = data.tasks.filter((t: Task) => !t.done && (t.project_id === selectedProject.id || (!!selectedProject.client_id && t.client_id === selectedProject.client_id)))
             return (
               <div className="mt-5 pt-5" style={{borderTop:`1px solid ${BORDER}`}}>
                 <div className="font-syne text-[8px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.2)'}}>TAREAS ACTIVAS</div>

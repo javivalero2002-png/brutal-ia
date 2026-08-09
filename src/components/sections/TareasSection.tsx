@@ -1017,11 +1017,11 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
               <div>
                 <label className="block font-syne text-[9px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.25)'}}>PROYECTO</label>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={()=>setEditing(x=>({...x,project_id:undefined}))}
+                  <button onClick={()=>setEditing(x=>({...x,project_id:null}))}
                     className="px-3 py-2 rounded-2xl font-syne text-[9px] font-black tracking-wide transition-all"
                     style={{background:!editing.project_id?BLU+'18':SURF2,border:`1.5px solid ${!editing.project_id?BLU+'60':BORDER}`,color:!editing.project_id?BLU:'rgba(255,255,255,0.3)'}}>—</button>
                   {data.projects.filter((p:Project)=>p.status!=='completado').slice(0,8).map((p:Project)=>(
-                    <button key={p.id} onClick={()=>setEditing(x=>({...x,project_id:x.project_id===p.id?undefined:p.id}))}
+                    <button key={p.id} onClick={()=>setEditing(x=>({...x,project_id:x.project_id===p.id?null:p.id}))}
                       className="px-3 py-2 rounded-2xl font-syne text-[9px] font-black tracking-wide transition-all max-w-[160px] truncate"
                       style={{background:editing.project_id===p.id?(p.color||BLU)+'18':SURF2,border:`1.5px solid ${editing.project_id===p.id?(p.color||BLU)+'60':BORDER}`,color:editing.project_id===p.id?(p.color||BLU):'rgba(255,255,255,0.3)'}}>
                       {p.name}
@@ -1032,7 +1032,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
             )}
             <div>
               <label className="block font-syne text-[9px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.25)'}}>FECHA LÍMITE</label>
-              <input ref={dueDateRef} type="date" value={editing.due_date||''} onChange={e=>setEditing(x=>({...x,due_date:e.target.value||undefined}))}
+              <input ref={dueDateRef} type="date" value={editing.due_date||''} onChange={e=>setEditing(x=>({...x,due_date:e.target.value||null}))}
                 className="w-full px-5 py-3 rounded-2xl text-[13px] text-white outline-none"
                 style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,colorScheme:'dark'}}
                 onFocus={e=>e.target.style.borderColor='rgba(27,95,250,0.4)'} onBlur={e=>e.target.style.borderColor=BORDER}/>
@@ -1041,7 +1041,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
               <label className="block font-syne text-[9px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.25)'}}>NOTAS</label>
               <textarea
                 value={editing.notes||''}
-                onChange={e=>setEditing(x=>({...x,notes:e.target.value||undefined}))}
+                onChange={e=>setEditing(x=>({...x,notes:e.target.value||null}))}
                 placeholder="Añade notas, contexto o comentarios…"
                 rows={3}
                 className="w-full px-5 py-3.5 rounded-2xl text-[13px] text-white outline-none resize-none"

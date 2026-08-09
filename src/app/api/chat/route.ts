@@ -3,6 +3,9 @@ import { chat } from '@/lib/ai'
 import { checkChatRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 
+// Chat con contexto completo del estudio + busqueda web: el default de Vercel se queda corto.
+export const maxDuration = 60
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -32,7 +35,9 @@ export async function POST(request: NextRequest) {
       .limit(20),
     // Fetch history BEFORE saving current message so it doesn't appear twice in the messages array
     admin.from('chat_messages').select('role, content').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20),
-    admin.from('agenda').select('id', { count: 'exact', head: true }).eq('user_id', user.id).neq('status', 'publicado'),
+    // Tabla `content_agenda` (no `agenda`), y sin filtro de usuario: el pipeline
+    // de contenido es del estudio entero, no de quien pregunta.
+    admin.from('content_agenda').select('id', { count: 'exact', head: true }).neq('status', 'publicado'),
   ])
 
   // Save user message after fetching history

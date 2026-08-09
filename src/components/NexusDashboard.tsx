@@ -272,10 +272,23 @@ export default function NexusDashboard({ profile }: Props) {
   }, [])
 
   useEffect(() => {
-    if (profile.gmail_connected) data.syncGmail().catch(()=>{})
-    const interval = setInterval(() => {
-      if (profile.gmail_connected) data.syncGmail().catch(()=>{})
-    }, 15 * 60 * 1000)
+    const LS_GMAIL = 'gmail_auto_sync_at'
+    const SYNC_MS = 15 * 60 * 1000
+    // Mismo guard que el sync de colabs: sin él, cada recarga de página disparaba
+    // un sync completo (hasta 20 llamadas a Claude secuenciales). Con varias
+    // pestañas o refrescos seguidos, eso multiplicaba el gasto de IA sin traer
+    // nada nuevo — el cron horario ya hace el trabajo de fondo.
+    const sync = () => {
+      if (!profile.gmail_connected) return
+      try {
+        const last = Number(localStorage.getItem(LS_GMAIL) || 0)
+        if (Date.now() - last < SYNC_MS) return
+        localStorage.setItem(LS_GMAIL, String(Date.now()))
+      } catch {}
+      data.syncGmail().catch(()=>{})
+    }
+    sync()
+    const interval = setInterval(sync, SYNC_MS)
     return () => clearInterval(interval)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile.gmail_connected])

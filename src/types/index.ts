@@ -42,8 +42,11 @@ export interface Project {
 
 export interface Task {
   id: string
-  project_id?: string
-  client_id?: string
+  // Nullable en Postgres. El tipo debe admitir null explícito: JSON.stringify
+  // elimina las claves undefined, así que "limpiar" un campo solo persiste si
+  // viaja como null en el PATCH.
+  project_id?: string | null
+  client_id?: string | null
   created_by?: string
   assigned_to?: string | null
   co_assigned_to?: string | null
@@ -51,7 +54,7 @@ export interface Task {
   text: string
   level: 'urgent' | 'high' | 'normal'
   done: boolean
-  due_date?: string
+  due_date?: string | null
   source: 'manual' | 'gmail' | 'whatsapp' | 'ai'
   created_at: string
   updated_at?: string

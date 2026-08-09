@@ -45,7 +45,15 @@ export async function POST(request: NextRequest) {
     if (b64.length > 4_400_000) return NextResponse.json({ error: 'PDF demasiado grande (máx. ~3MB) — sube el archivo primero' }, { status: 413 })
   }
 
-  const pdfBlock: any = { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } }
+  // cache_control marca el PDF como prefijo cacheable: en el modo chat cada
+  // pregunta reenvía el documento entero (un deck de 30 páginas son decenas de
+  // miles de tokens de input). Con el caché, de la 2ª pregunta en adelante se
+  // lee de caché en vez de re-facturarse como input nuevo.
+  const pdfBlock: any = {
+    type: 'document',
+    source: { type: 'base64', media_type: 'application/pdf', data: b64 },
+    cache_control: { type: 'ephemeral' },
+  }
   const isChat = !!body.question?.trim()
 
   // Si ya tenemos URL (subida directa), usarla; si no, subir el PDF a Supabase
