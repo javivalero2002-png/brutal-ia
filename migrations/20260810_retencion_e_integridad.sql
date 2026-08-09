@@ -53,7 +53,7 @@ select 'mensajes de chat > 90 días',
        count(*) from public.chat_messages where created_at < now() - interval '90 days'
 union all
 select 'rate_limits > 1 día',
-       count(*) from public.rate_limits where created_at < now() - interval '1 day';
+       count(*) from public.rate_limits where window_start < now() - interval '1 day';
 
 
 -- ───────────────────────────────────────────────────────────────────────────
@@ -80,8 +80,13 @@ delete from public.notification_log
 delete from public.chat_messages
  where created_at < now() - interval '90 days';
 
+-- OJO: rate_limits NO tiene created_at; su columna de fecha es window_start
+-- (migrations/20260809_audit_fixes.sql). push_rate_limits usa last_sent.
 delete from public.rate_limits
- where created_at < now() - interval '1 day';
+ where window_start < now() - interval '1 day';
+
+delete from public.push_rate_limits
+ where last_sent < now() - interval '1 day';
 
 commit;
 
