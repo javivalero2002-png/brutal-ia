@@ -3,18 +3,25 @@ import { getOAuthClient } from '@/lib/gmail'
 import { google } from 'googleapis'
 import { NextRequest, NextResponse } from 'next/server'
 
+// `NEXT_PUBLIC_APP_URL || ''` producía `NextResponse.redirect('/dashboard?...')`,
+// que lanza ERR_INVALID_URL: un 500 en blanco justo en medio del flujo de
+// conexión de Gmail. El origen de la propia petición es un fallback siempre válido.
+const appOrigin = (request: NextRequest): string =>
+  process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin
+
 export async function GET(request: NextRequest) {
+  const base = appOrigin(request)
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
   const state = searchParams.get('state') || ''
   const oauthError = searchParams.get('error')
 
   if (oauthError) {
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL || ''}/dashboard?gmail=denied`)
+    return NextResponse.redirect(`${base}/dashboard?gmail=denied`)
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL || ''}/dashboard?gmail=error`)
+    return NextResponse.redirect(`${base}/dashboard?gmail=error`)
   }
 
   const [userId, account = 'personal'] = state.split(':')
@@ -22,11 +29,11 @@ export async function GET(request: NextRequest) {
   const authClient = await createClient()
   const { data: { user } } = await authClient.auth.getUser()
   if (!user || user.id !== userId) {
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL || ''}/dashboard?gmail=error`)
+    return NextResponse.redirect(`${base}/dashboard?gmail=error`)
   }
 
   if (!userId) {
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL || ''}/dashboard?gmail=error`)
+    return NextResponse.redirect(`${base}/dashboard?gmail=error`)
   }
 
   const oauth2Client = getOAuthClient()
@@ -35,11 +42,11 @@ export async function GET(request: NextRequest) {
     const result = await oauth2Client.getToken(code)
     tokens = result.tokens as { refresh_token?: string | null }
   } catch {
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL || ''}/dashboard?gmail=error`)
+    return NextResponse.redirect(`${base}/dashboard?gmail=error`)
   }
 
   if (!tokens.refresh_token) {
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL || ''}/dashboard?gmail=no_refresh_token`)
+    return NextResponse.redirect(`${base}/dashboard?gmail=no_refresh_token`)
   }
 
   // Resolve the authenticated email address and cache it in the profile
@@ -62,7 +69,7 @@ export async function GET(request: NextRequest) {
         gmail_colabs_account: email,
       })
       .eq('id', userId)
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL || ''}/dashboard?gmail=colabs_connected`)
+    return NextResponse.redirect(`${base}/dashboard?gmail=colabs_connected`)
   }
 
   await supabase
@@ -74,5 +81,5 @@ export async function GET(request: NextRequest) {
     })
     .eq('id', userId)
 
-  return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL || ''}/dashboard?gmail=connected`)
+  return NextResponse.redirect(`${base}/dashboard?gmail=connected`)
 }

@@ -3,6 +3,7 @@ import { checkAiRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'crypto'
+import { isOwnStorageUrl } from '@/lib/safeFetch'
 
 export const maxDuration = 60
 
@@ -31,6 +32,9 @@ export async function POST(request: NextRequest) {
     // Opción A: cliente ya subió a Supabase, nos manda la URL pública
     const { url, name } = await request.json().catch(() => ({}))
     if (!url) return NextResponse.json({ error: 'Falta la URL del documento' }, { status: 400 })
+    // Solo el Storage propio: esta ruta devuelve el resumen que Claude hace del
+    // contenido descargado, así que una URL arbitraria sería lectura con salida.
+    if (!isOwnStorageUrl(url)) return NextResponse.json({ error: 'URL de documento no permitida' }, { status: 400 })
     filename = name || 'documento.pdf'
     publicUrl = url
     // Descargar para generar el resumen con Claude

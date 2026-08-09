@@ -3,6 +3,7 @@ import { checkAiRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'crypto'
+import { isOwnStorageUrl } from '@/lib/safeFetch'
 
 export const maxDuration = 60
 
@@ -30,6 +31,7 @@ export async function POST(request: NextRequest) {
 
   if (body.pdfUrl) {
     // Opción A: el cliente subió el PDF directamente a Supabase; lo descargamos aquí
+    if (!isOwnStorageUrl(body.pdfUrl)) return NextResponse.json({ error: 'URL de PDF no permitida' }, { status: 400 })
     try {
       const resp = await fetch(body.pdfUrl, { signal: AbortSignal.timeout(30_000) })
       if (!resp.ok) return NextResponse.json({ error: 'No se pudo descargar el PDF' }, { status: 502 })
