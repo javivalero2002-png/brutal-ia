@@ -56,12 +56,17 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   if (!att) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Extract storage path from the public URL and delete from bucket
+  // Borrar el fichero del Storage. Antes se partía por '/object/public/pdfs/' y
+  // se borraba del bucket 'pdfs', pero las subidas van a 'content-videos'
+  // (pdf-upload-url/route.ts:5). pathParts[1] era SIEMPRE undefined: la fila se
+  // borraba y el fichero quedaba público para siempre. Ahora el bucket y la ruta
+  // se derivan de la propia URL, así que funciona con cualquier bucket.
   try {
-    const urlObj = new URL(att.url)
-    const pathParts = urlObj.pathname.split('/object/public/pdfs/')
-    if (pathParts[1]) {
-      await ctx.admin.storage.from('pdfs').remove([pathParts[1]])
+    const { pathname } = new URL(att.url)
+    const m = pathname.match(/\/object\/(?:public|sign)\/([^/]+)\/(.+)$/)
+    if (m) {
+      const [, bucket, path] = m
+      await ctx.admin.storage.from(bucket).remove([decodeURIComponent(path)])
     }
   } catch { /* best-effort storage deletion */ }
 

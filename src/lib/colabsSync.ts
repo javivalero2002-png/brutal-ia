@@ -6,7 +6,7 @@ import { sendPushToAll, sendPushToUser, canSendPush } from '@/lib/push'
 const MEETING_RE = /meet\.google\.com\/[a-z-]+|zoom\.us\/j\/\d+|teams\.microsoft\.com\/l\/meetup/i
 
 type SyncResult =
-  | { ok: true; synced: number; total: number; account: string }
+  | { ok: true; synced: number; total: number; account: string; aiFailures?: number }
   | { ok: false; error: string; code?: number; details?: unknown }
 
 /**
@@ -58,6 +58,7 @@ export async function syncColabsInbox(
   }
 
   let newCount = 0
+  let aiFailures = 0
   const newUnread: { from_name: string; subject: string; urgent?: boolean }[] = []
 
   // Una sola consulta para saber cuáles ya existen (antes: un SELECT por email).
@@ -75,7 +76,11 @@ export async function syncColabsInbox(
     try {
       analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients)
     } catch {
-      // fallback a info básica
+      // Fallback a info básica. Contamos los fallos: si la clave de Anthropic
+      // caduca, todos los buzones se llenan de resúmenes degradados y hoy nadie
+      // se entera. No se puede loguear por email (~3.400 iteraciones al día y la
+      // retención de logs en Hobby es corta), así que se agrega al final.
+      aiFailures++
     }
 
     const { error: insertError } = await admin.from('inbox_messages').insert({
@@ -131,7 +136,8 @@ export async function syncColabsInbox(
     }
   }
 
-  return { ok: true, synced: newCount, total: emails.length, account: gmailAccount }
+  if (aiFailures) console.error(`[sync] analyzeEmail falló en ${aiFailures} de ${emails.length} emails`)
+  return { ok: true, synced: newCount, total: emails.length, account: gmailAccount, aiFailures }
 }
 
 /**
@@ -168,6 +174,7 @@ export async function syncPersonalInbox(
   }
 
   let newCount = 0
+  let aiFailures = 0
   const newUnread: { from_name: string; subject: string; urgent?: boolean }[] = []
 
   // Una sola consulta para saber cuáles ya existen (antes: un SELECT por email).
@@ -184,7 +191,7 @@ export async function syncPersonalInbox(
     let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
     try {
       analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients)
-    } catch {}
+    } catch { aiFailures++ }
 
     const { error: insertError } = await admin.from('inbox_messages').insert({
       user_id: profile.id,
@@ -225,5 +232,6 @@ export async function syncPersonalInbox(
     }
   }
 
-  return { ok: true, synced: newCount, total: emails.length, account: gmailAccount }
+  if (aiFailures) console.error(`[sync] analyzeEmail falló en ${aiFailures} de ${emails.length} emails`)
+  return { ok: true, synced: newCount, total: emails.length, account: gmailAccount, aiFailures }
 }
