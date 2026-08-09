@@ -6,6 +6,12 @@ import { NextRequest, NextResponse } from 'next/server'
 // Analizar varios buzones con IA puede superar los 10s por defecto
 export const maxDuration = 60
 
+// ⚠️ NO colapsar los 24 crons de vercel.json en un solo `0 * * * *`.
+// Esta cuenta es plan Hobby, donde cada cron job debe ser como máximo DIARIO.
+// Las 24 entradas (`0 0 * * *` … `0 23 * * *`) son un apaño deliberado: cada una
+// es legalmente diaria, y juntas dan cobertura horaria. Un único `0 * * * *`
+// hace que el deploy falle con "Hobby accounts are limited to daily cron jobs".
+//
 // Cron de Vercel (horario, ver vercel.json): sincroniza el buzón compartido de
 // colaboraciones Y el Gmail personal de cada perfil conectado, sin sesión de
 // usuario — los pushes de emails llegan aunque nadie tenga la app abierta.
