@@ -14,7 +14,12 @@ function ensureConfigured() {
   if (configured) return true
   const pub = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
   const priv = process.env.VAPID_PRIVATE_KEY
-  if (!pub || !priv) return false
+  if (!pub || !priv) {
+    // Sin este log, todo el sistema de notificaciones puede estar apagado y no
+    // hay forma de saberlo: todos los llamantes rematan con `.catch(() => {})`.
+    console.error('[push] faltan las claves VAPID — las notificaciones están desactivadas')
+    return false
+  }
   webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:pablo@brutalstudios.es', pub, priv)
   configured = true
   return true
@@ -66,6 +71,10 @@ async function sendToRows(admin: SupabaseClient, rows: { id: string; condition_t
       // Suscripción caducada o revocada: eliminarla
       if (err?.statusCode === 404 || err?.statusCode === 410) {
         await admin.from('reglas').delete().eq('id', row.id)
+      } else {
+        // Cualquier otro fallo (p. ej. 403 por VAPID mal firmada) se tragaba
+        // entero, así que un push roto era indistinguible de "nadie suscrito".
+        console.error('[push] envío fallido:', err?.statusCode, err?.message)
       }
     }
   }))

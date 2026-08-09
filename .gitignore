@@ -24,8 +24,8 @@ yarn-error.log*
 *.pem
 .vercel
 
-# deploy helper (contains secrets — local only)
-deploy.sh
+# deploy.sh SÍ se versiona: no contiene secretos (las env vars viven en el
+# dashboard de Vercel) y su versión retirada debe estar en el repo.
 
 # typescript
 *.tsbuildinfo

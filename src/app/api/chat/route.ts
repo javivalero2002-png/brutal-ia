@@ -1,6 +1,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { chat } from '@/lib/ai'
 import { checkChatRateLimit } from '@/lib/rate-limit'
+import { logQueryErrors } from '@/lib/queryLog'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Chat con contexto completo del estudio + busqueda web: el default de Vercel se queda corto.
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
 
   const admin = await createAdminClient()
 
-  const [{ data: profile }, { data: clients }, { data: projects }, { data: tasks }, { data: team }, { data: inbox }, { data: history }, { count: contentPipelineCount }] = await Promise.all([
+  const q = await Promise.all([
     admin.from('profiles').select('name').eq('id', user.id).single(),
     admin.from('clients').select('name'),
     admin.from('projects').select('name,status,deadline'),
@@ -39,6 +40,14 @@ export async function POST(request: NextRequest) {
     // de contenido es del estudio entero, no de quien pregunta.
     admin.from('content_agenda').select('id', { count: 'exact', head: true }).neq('status', 'publicado'),
   ])
+
+  // Aquí murió el bug de la tabla `agenda` durante semanas: supabase-js no lanza,
+  // devuelve { data:null, error }, y al desestructurar solo `data` el fallo era
+  // indistinguible de "no hay filas". Un contexto parcial sigue siendo útil, así
+  // que esto registra sin romper la respuesta.
+  logQueryErrors('chat', q)
+
+  const [{ data: profile }, { data: clients }, { data: projects }, { data: tasks }, { data: team }, { data: inbox }, { data: history }, { count: contentPipelineCount }] = q
 
   const emailsList = (inbox || []).map((e: any) => ({
     from: e.from_name || '',

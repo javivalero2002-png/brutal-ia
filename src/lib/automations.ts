@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendPushToAll, sendPushToUser, canSendPush } from '@/lib/push'
 import { todayKey, localDayKey } from '@/components/shared/helpers'
+import { logQueryErrors } from '@/lib/queryLog'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTOR DE AUTOMATIZACIONES (determinista)
@@ -306,12 +307,16 @@ export async function runAutomations(admin: SupabaseClient): Promise<{ ran: numb
   if (structured.length === 0) return { ran: 0, results }
 
   // Snapshot de datos (una sola vez)
-  const [{ data: inbox }, { data: tasks }, { data: projects }, { data: clients }] = await Promise.all([
+  const snapshot = await Promise.all([
     admin.from('inbox_messages').select('id,subject,from_name,from_email,ai_client,ai_urgency,is_read,received_at').order('received_at', { ascending: false }).limit(200),
     admin.from('tasks').select('id,text,done,due_date,project_id,client_id,notes'),
     admin.from('projects').select('id,name,status,deadline,client_id'),
     admin.from('clients').select('id,name'),
   ])
+  // Si una consulta falla, su lista queda vacía y el motor decide sobre datos
+  // incompletos — p. ej. "0 tareas vencidas" cuando en realidad no pudo leerlas.
+  logQueryErrors('automations', snapshot)
+  const [{ data: inbox }, { data: tasks }, { data: projects }, { data: clients }] = snapshot
   const ctx = { inbox: inbox || [], tasks: tasks || [], projects: projects || [], clients: clients || [] }
 
   // Marcas de dedup ya existentes en tareas creadas por el motor
