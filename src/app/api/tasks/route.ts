@@ -33,11 +33,20 @@ export async function POST(request: NextRequest) {
   const admin = await createAdminClient()
   const body = await request.json()
 
-  const { data, error } = await admin
-    .from('tasks')
-    .insert({ ...pick(body, ['text','level','done','due_date','project_id','client_id','assigned_to','co_assigned_to','source','notes']), created_by: user.id })
-    .select('*, assignee:profiles!assigned_to(id,name,initials,avatar_color), co_assignee:profiles!co_assigned_to(id,name,initials,avatar_color), client:clients(id,name,initials,color)')
-    .single()
+  const fields: any = { ...pick(body, ['text','level','done','due_date','project_id','client_id','assigned_to','co_assigned_to','source','notes']), created_by: user.id }
+  // Crear una tarea ya marcada como hecha debe sellar completed_at igual que lo
+  // hace el PATCH; si no, la tarea nunca aparece en los reportes de tendencia.
+  if (fields.done === true) fields.completed_at = new Date().toISOString()
+
+  const SELECT = '*, assignee:profiles!assigned_to(id,name,initials,avatar_color), co_assignee:profiles!co_assigned_to(id,name,initials,avatar_color), client:clients(id,name,initials,color)'
+
+  let { data, error } = await admin.from('tasks').insert(fields).select(SELECT).single()
+
+  // Mismo fallback que el PATCH: si la columna completed_at aún no existe, reintenta sin ella.
+  if (error && /completed_at/i.test(error.message || '')) {
+    const { completed_at: _omit, ...rest } = fields
+    ;({ data, error } = await admin.from('tasks').insert(rest).select(SELECT).single())
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

@@ -40,9 +40,6 @@ export async function POST(request: NextRequest) {
     admin.from('content_agenda').select('id', { count: 'exact', head: true }).neq('status', 'publicado'),
   ])
 
-  // Save user message after fetching history
-  await admin.from('chat_messages').insert({ user_id: user.id, role: 'user', content: message })
-
   const emailsList = (inbox || []).map((e: any) => ({
     from: e.from_name || '',
     subject: e.subject || '(sin asunto)',
@@ -76,6 +73,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Error al procesar el mensaje' }, { status: 502 })
   }
 
+  // Ambos turnos se persisten SOLO si Claude respondió. Antes el turno del usuario
+  // se insertaba antes de la llamada: si fallaba, quedaba una fila `user` huérfana,
+  // el cliente borraba su copia optimista y el mensaje reaparecía sin respuesta al
+  // recargar. Peor: history.slice(-10) podía empezar en un `ai`, y la API de
+  // Anthropic exige que el primer mensaje sea `user` → 502 → otra huérfana.
+  // Dos inserts secuenciales (no uno con dos filas) para que created_at difiera y
+  // el orden de la conversación quede determinado.
+  await admin.from('chat_messages').insert({ user_id: user.id, role: 'user', content: message })
   await admin.from('chat_messages').insert({ user_id: user.id, role: 'ai', content: reply })
 
   return NextResponse.json({ reply, searched })

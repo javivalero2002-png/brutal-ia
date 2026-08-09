@@ -119,7 +119,9 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
         e.preventDefault()
         const unreadMsgs = allInboxRef.current.filter((m: any) => !m.is_read)
         if (unreadMsgs.length > 0) {
-          Promise.all(unreadMsgs.map((m: any) => data.markRead(m.id))).catch(()=>{})
+          // Endpoint bulk (el mismo que usan los botones de pantalla): con 97 sin
+          // leer, el Promise.all anterior disparaba 97 invocaciones de Vercel.
+          data.markManyRead(unreadMsgs.map((m: any) => m.id)).catch(()=>{})
           showToast(`${unreadMsgs.length} mensajes marcados como leídos`)
         }
       }

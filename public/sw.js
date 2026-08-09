@@ -58,7 +58,11 @@ self.addEventListener('fetch', e => {
         if (cached) return cached
         return fetch(request).then(res => {
           if (res.ok) {
-            caches.open(CACHE).then(c => c.put(request, res.clone()))
+            // Clonar SÍNCRONAMENTE: el .then() de caches.open se ejecuta después
+            // de que `return res` haya entregado la respuesta, y para entonces el
+            // body puede estar ya consumido → TypeError intermitente sin capturar.
+            const copy = res.clone()
+            caches.open(CACHE).then(c => c.put(request, copy)).catch(() => {})
           }
           return res
         })
@@ -72,7 +76,8 @@ self.addEventListener('fetch', e => {
     fetch(request)
       .then(res => {
         if (res.ok) {
-          caches.open(CACHE).then(c => c.put(request, res.clone()))
+          const copy = res.clone()
+          caches.open(CACHE).then(c => c.put(request, copy)).catch(() => {})
         }
         return res
       })

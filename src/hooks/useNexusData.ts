@@ -37,13 +37,17 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
   const [calendarScopeError, setCalendarScopeError] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<{ ok: boolean; message: string } | null>(null)
   const supabaseRef = useRef(createClient())
   const supabase = supabaseRef.current
 
   const aliveRef = useRef(true)
-  useEffect(() => () => { aliveRef.current = false }, [])
+  // Re-armar en el setup, no solo apagar en el cleanup: en StrictMode el ciclo
+  // setup→cleanup→setup dejaba aliveRef en false para siempre, y a partir de ahí
+  // load() nunca commiteaba resultados.
+  useEffect(() => { aliveRef.current = true; return () => { aliveRef.current = false } }, [])
 
   // IDs de mensajes ya notificados: evita que el dueño de la cuenta colabs reciba el
   // aviso dos veces cuando un email compartido dispara ambas suscripciones realtime
@@ -58,7 +62,13 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
   const load = useCallback(async () => {
     if (!profile) return
     try {
-      const [c, p, t, i, m, a, r, ch] = await Promise.all([
+      // allSettled en vez de all: antes, un solo endpoint devolviendo 500 rechazaba
+      // el Promise.all, no se seteaba NADA, el finally apagaba loading y el usuario
+      // veía un dashboard vacío indistinguible de una cuenta nueva. Ahora cada
+      // sección falla por separado y loadError permite avisar.
+      // /api/team va dentro del lote: estaba después del await, así que añadía una
+      // etapa serial entera al arranque solo para traer 5 perfiles.
+      const res = await Promise.allSettled([
         apiFetch('/api/clients'),
         apiFetch('/api/projects'),
         apiFetch('/api/tasks'),
@@ -67,13 +77,17 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
         apiFetch('/api/agenda'),
         apiFetch('/api/reglas'),
         apiFetch('/api/chat/history'),
+        apiFetch('/api/team'),
       ])
       if (!aliveRef.current) return
-      setClients(c); setProjects(p); setTasks(t); setInbox(i)
-      setMemoria(m); setAgenda(a); setReglas(r); setChatMessages(ch)
-      const teamData = await apiFetch('/api/team')
-      if (!aliveRef.current) return
-      setTeam(teamData)
+      const list = (n: number) => {
+        const r = res[n]
+        return r.status === 'fulfilled' && Array.isArray(r.value) ? r.value : []
+      }
+      setLoadError(res.some(r => r.status === 'rejected'))
+      setClients(list(0)); setProjects(list(1)); setTasks(list(2)); setInbox(list(3))
+      setMemoria(list(4)); setAgenda(list(5)); setReglas(list(6)); setChatMessages(list(7))
+      setTeam(list(8))
       apiFetch('/api/calendar/events').then((res: any) => {
         if (!aliveRef.current) return
         if (res?.__error === 'no_scope') { setCalendarScopeError(true); setCalendarEvents([]) }
@@ -270,7 +284,12 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     }
   }, [])
 
-  const clearChat = useCallback(() => setChatMessages([]), [])
+  // Borra también en servidor: antes solo vaciaba el estado local, así que el botón
+  // "BORRAR" no borraba nada y la conversación reaparecía al recargar.
+  const clearChat = useCallback(async () => {
+    setChatMessages([])
+    try { await apiFetch('/api/chat/history', { method: 'DELETE' }) } catch {}
+  }, [])
 
   // ── MEMORIA ────────────────────────────────────────────────
   const createMemoria = useCallback(async (entry: Partial<MemoriaEntry>) => {
