@@ -1,10 +1,11 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { BLU, RED, GRN, SURFACE, SURF2, BORDER } from '@/components/shared/design-tokens'
+import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, todayKey } from '@/components/shared'
 import LucideIcon from '@/components/shared/LucideIcon'
 import type { Client } from '@/types'
 
 export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any) {
+  const isMobile = useIsMobile()
   const [memSearch, setMemSearch] = useState('')
   const [expanded, setExpanded] = useState<string|null>(null)
   const [editing, setEditing] = useState<string|null>(null)
@@ -20,13 +21,24 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
   const docInputRef = useRef<HTMLInputElement>(null)
   const uploadDoc = async (file: File) => {
     if (file.type !== 'application/pdf') { showToast('Solo se admiten PDF'); return }
+    if (file.size > 50 * 1024 * 1024) { showToast('PDF muy grande (máx. 50 MB)'); return }
     setUploadingDoc(true)
     try {
-      const fd = new FormData(); fd.append('file', file)
-      const res = await fetch('/api/documents', { method: 'POST', body: fd })
+      // 1. Obtener URL firmada para subir directamente a Supabase
+      const urlRes = await fetch('/api/pdf-upload-url', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ filename: file.name, size: file.size, prefix: 'docs' }) })
+      const urlJ = await urlRes.json().catch(()=>({}))
+      if (!urlRes.ok) { showToast(urlJ.error || 'Error preparando subida'); return }
+      // 2. Subir directo a Supabase — FormData matching Supabase SDK protocol
+      const fd = new FormData()
+      fd.append('cacheControl', '3600')
+      fd.append('', file)
+      const upRes = await fetch(urlJ.signedUrl, { method: 'PUT', body: fd })
+      if (!upRes.ok) { showToast('Error subiendo el PDF'); return }
+      // 3. Analizar en el servidor con la URL pública (sin base64 por la API)
+      const res = await fetch('/api/documents', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ url: urlJ.publicUrl, name: file.name }) })
       const j = await res.json().catch(()=>({}))
-      if (!res.ok) { showToast(j.error || 'Error al subir'); return }
-      await data.createMemoria({ title: (j.name||file.name).replace(/\.pdf$/i,''), category: 'Documento', content: `${j.summary||''}\n\n📎 Documento: ${j.url}` })
+      if (!res.ok) { showToast(j.error || 'Error al analizar'); return }
+      await data.createMemoria({ title: (j.name||file.name).replace(/\.pdf$/i,''), category: 'Documento', content: `${j.summary||''}\n\n📎 Documento: ${j.url||urlJ.publicUrl}` })
       showToast('Documento guardado en la memoria')
     } catch { showToast('Error al subir el documento') }
     finally { setUploadingDoc(false) }
@@ -83,7 +95,7 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
       return new Date(b.created_at||0).getTime() - new Date(a.created_at||0).getTime()
     })
   return (
-    <div className="p-8 max-w-[900px] mx-auto">
+    <div className={`${isMobile?'p-4':'p-8'} max-w-[900px] mx-auto`}>
       <div className="flex items-end justify-between mb-6 flex-wrap gap-3">
         <div>
           <div className="flex items-center gap-2 mb-2">
@@ -112,22 +124,22 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
               </button>
             ))}
           </div>
-          <button onClick={()=>{
+          {!isMobile && <button onClick={()=>{
             const md = data.memoria.map((m: any)=>`# ${m.title}\n**Categoría:** ${m.category}\n**Fecha:** ${m.created_at?.slice(0,10)||''}\n\n${m.content}`).join('\n\n---\n\n')
             const blob = new Blob([md], {type:'text/markdown'})
             const a = document.createElement('a')
             a.href = URL.createObjectURL(blob)
-            a.download = `memoria-${new Date().toISOString().slice(0,10)}.md`
+            a.download = `memoria-${todayKey()}.md`
             a.click()
             URL.revokeObjectURL(a.href)
             showToast(`${data.memoria.length} entradas exportadas`)
           }} className="flex items-center gap-2 px-4 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.35)'}} title="Exportar como Markdown">
             <LucideIcon name="download" size={13} color="rgba(255,255,255,0.35)"/>
             <span>MD</span>
-          </button>
+          </button>}
           <input ref={docInputRef} type="file" accept="application/pdf" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f) uploadDoc(f); e.target.value=''}}/>
           <button onClick={()=>docInputRef.current?.click()} disabled={uploadingDoc} className="flex items-center gap-2 px-4 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest disabled:opacity-50" style={{background:'rgba(27,95,250,0.08)',border:`1px solid rgba(27,95,250,0.2)`,color:BLU}} title="Sube un PDF: la IA lo resume y lo guarda en la memoria">
-            {uploadingDoc ? <><div className="w-3.5 h-3.5 border-2 rounded-full animate-spin" style={{borderColor:'rgba(27,95,250,0.3)',borderTopColor:BLU}}/><span>SUBIENDO…</span></> : <><LucideIcon name="upload" size={13} color={BLU}/><span>+ DOCUMENTO</span></>}
+            {uploadingDoc ? <><div className="w-3.5 h-3.5 border-2 rounded-full animate-spin" style={{borderColor:'rgba(27,95,250,0.3)',borderTopColor:BLU}}/>{!isMobile && <span>SUBIENDO…</span>}</> : <><LucideIcon name="upload" size={13} color={BLU}/>{!isMobile && <span>+ DOCUMENTO</span>}</>}
           </button>
           <button onClick={()=>onOpenModal('memoria')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ ENTRADA</button>
         </div>
@@ -137,7 +149,7 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
         <input ref={memSearchInputRef} value={memSearch} onChange={e=>setMemSearch(e.target.value)} placeholder="Busca en la memoria…" className="flex-1 bg-transparent text-[13px] outline-none" style={{caretColor:BLU,color:'rgba(255,255,255,0.8)'}}/>
         {memSearch && <button onClick={()=>setMemSearch('')} className="flex-shrink-0"><LucideIcon name="x" size={12} color="rgba(255,255,255,0.2)"/></button>}
       </div>
-      <div className="flex gap-1 mb-3 p-1 rounded-2xl w-fit" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+      <div className="nx-tabs-scroll flex gap-1 mb-3 p-1 rounded-2xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
         {cats.map(c=>{
           const cnt = c==='Todos' ? data.memoria.length : data.memoria.filter((m:any)=>m.category===c).length
           return (
@@ -185,15 +197,15 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {isLong && <LucideIcon name={isExp?'chevron-up':'chevron-down'} size={13} color="rgba(255,255,255,0.2)"/>}
-                <button onClick={e=>{e.stopPropagation();togglePin(m.id)}} className={`transition-opacity ${pinnedIds.has(m.id)?'opacity-60':'opacity-0 group-hover:opacity-30 hover:!opacity-60'}`} title={pinnedIds.has(m.id)?'Desfijar':'Fijar arriba'}><LucideIcon name="pin" size={12} color={pinnedIds.has(m.id)?'rgba(255,176,32,0.9)':'rgba(255,255,255,0.6)'}/></button>
-                <button onClick={e=>{e.stopPropagation();navigator.clipboard.writeText(`# ${m.title}\n\n${m.content||''}`).then(()=>{setCopiedId(m.id);setTimeout(()=>setCopiedId(null),2000)}).catch(()=>{})}} className="opacity-0 group-hover:opacity-30 hover:!opacity-60 transition-opacity"><LucideIcon name={copiedId===m.id?'check':'copy'} size={12} color={copiedId===m.id?GRN:BLU}/></button>
-                <button onClick={e=>{e.stopPropagation();if(editing===m.id){setEditing(null)}else{setEditing(m.id);setEditTitle(m.title);setEditContent(m.content||'');setEditCategory(m.category||'General');setExpanded(m.id)}}} className="opacity-0 group-hover:opacity-30 hover:!opacity-60 transition-opacity"><LucideIcon name="pencil" size={13} color={BLU}/></button>
+                <button onClick={e=>{e.stopPropagation();togglePin(m.id)}} className={`transition-opacity ${pinnedIds.has(m.id)?'opacity-60':isMobile?'opacity-25 hover:!opacity-60':'opacity-0 group-hover:opacity-30 hover:!opacity-60'}`} title={pinnedIds.has(m.id)?'Desfijar':'Fijar arriba'}><LucideIcon name="pin" size={12} color={pinnedIds.has(m.id)?'rgba(255,176,32,0.9)':'rgba(255,255,255,0.6)'}/></button>
+                <button onClick={e=>{e.stopPropagation();navigator.clipboard.writeText(`# ${m.title}\n\n${m.content||''}`).then(()=>{setCopiedId(m.id);setTimeout(()=>setCopiedId(null),2000)}).catch(()=>{})}} className={`transition-opacity ${isMobile?'opacity-25 hover:!opacity-60':'opacity-0 group-hover:opacity-30 hover:!opacity-60'}`}><LucideIcon name={copiedId===m.id?'check':'copy'} size={12} color={copiedId===m.id?GRN:BLU}/></button>
+                <button onClick={e=>{e.stopPropagation();if(editing===m.id){setEditing(null)}else{setEditing(m.id);setEditTitle(m.title);setEditContent(m.content||'');setEditCategory(m.category||'General');setExpanded(m.id)}}} className={`transition-opacity ${isMobile?'opacity-25 hover:!opacity-60':'opacity-0 group-hover:opacity-30 hover:!opacity-60'}`}><LucideIcon name="pencil" size={13} color={BLU}/></button>
                 {confirmDeleteMemId === m.id
                   ? <div className="flex items-center gap-1" onClick={e=>e.stopPropagation()}>
                       <button onClick={e=>{e.stopPropagation();data.deleteMemoria(m.id).then(()=>showToast('Eliminado')).catch(()=>showToast('Error al eliminar'));setConfirmDeleteMemId(null)}} className="px-2 py-1 rounded-lg font-syne text-[7.5px] font-black transition-all" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
                       <button onClick={e=>{e.stopPropagation();setConfirmDeleteMemId(null)}} className="w-6 h-6 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={10} color="rgba(255,255,255,0.3)"/></button>
                     </div>
-                  : <button onClick={e=>{e.stopPropagation();setConfirmDeleteMemId(m.id)}} className="opacity-0 group-hover:opacity-30 hover:!opacity-60 transition-opacity"><LucideIcon name="trash" size={14} color={RED}/></button>
+                  : <button onClick={e=>{e.stopPropagation();setConfirmDeleteMemId(m.id)}} className={`transition-opacity ${isMobile?'opacity-25 hover:!opacity-60':'opacity-0 group-hover:opacity-30 hover:!opacity-60'}`}><LucideIcon name="trash" size={14} color={RED}/></button>
                 }
               </div>
             </div>

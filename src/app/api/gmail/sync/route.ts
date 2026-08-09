@@ -2,7 +2,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
 import { analyzeEmail, EmailAnalysis } from '@/lib/ai'
 import { NextResponse } from 'next/server'
-import { sendPushToUser, sendPushToAll } from '@/lib/push'
+import { sendPushToUser, sendPushToAll, canSendPush } from '@/lib/push'
 
 const MEETING_RE = /meet\.google\.com\/[a-z-]+|zoom\.us\/j\/\d+|teams\.microsoft\.com\/l\/meetup/i
 
@@ -57,17 +57,29 @@ export async function POST() {
   // Messages from the company email are visible to the whole team
   const isCompanyAccount = gmailAccount === COMPANY_EMAIL
 
+  // Count existing undone gmail-sourced tasks for this user
+  const { count: existingGmailTasks } = await admin
+    .from('tasks')
+    .select('id', { count: 'exact', head: true })
+    .eq('created_by', user.id)
+    .eq('source', 'gmail')
+    .eq('done', false)
+  let gmailTasksCreated = existingGmailTasks || 0
+  const GMAIL_TASK_LIMIT = 4
+
   let newCount = 0
   const newUnread: { from_name: string; subject: string; urgency: string }[] = []
 
-  for (const email of emails) {
-    const { data: existing } = await admin
-      .from('inbox_messages')
-      .select('id')
-      .eq('gmail_id', email.gmail_id)
-      .single()
+  // Una sola consulta para saber cuáles ya existen (antes: un SELECT por email).
+  const gmailIds = emails.map(e => e.gmail_id).filter(Boolean)
+  const { data: existingRows } = await admin
+    .from('inbox_messages')
+    .select('gmail_id')
+    .in('gmail_id', gmailIds)
+  const known = new Set((existingRows || []).map((r: { gmail_id: string }) => r.gmail_id))
 
-    if (existing) continue
+  for (const email of emails) {
+    if (known.has(email.gmail_id)) continue
 
     let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
     try {
@@ -102,13 +114,15 @@ export async function POST() {
 
     if (insertErr) continue
 
-    if (analysis.suggestedTask) {
-      await admin.from('tasks').insert({
+    // Solo el correo de colaboraciones genera tareas — cuentas personales no
+    if (isCompanyAccount && analysis.suggestedTask && analysis.urgency !== 'normal' && gmailTasksCreated < GMAIL_TASK_LIMIT) {
+      const { error: taskErr } = await admin.from('tasks').insert({
         created_by: user.id,
         text: analysis.suggestedTask,
         level: analysis.urgency === 'urgent' ? 'urgent' : 'high',
         source: 'gmail',
       })
+      if (!taskErr) gmailTasksCreated++
     }
 
     // Email con enlace de reunión → tarea con fecha (aparece en el Calendario)
@@ -129,7 +143,7 @@ export async function POST() {
     newCount++
   }
 
-  // Notificación push por los emails nuevos sin leer
+  // Notificación push por los emails nuevos sin leer (con rate-limit de 90s para evitar duplicados)
   if (newUnread.length > 0) {
     const first = newUnread[0]
     const payload = {
@@ -138,8 +152,11 @@ export async function POST() {
       url: '/dashboard',
       tag: 'gmail-sync',
     }
-    if (isCompanyAccount) sendPushToAll(admin, payload).catch(() => {})
-    else sendPushToUser(admin, user.id, payload).catch(() => {})
+    const lockKey = isCompanyAccount ? 'company' : user.id
+    if (await canSendPush(admin, lockKey)) {
+      if (isCompanyAccount) sendPushToAll(admin, payload).catch(() => {})
+      else sendPushToUser(admin, user.id, payload).catch(() => {})
+    }
   }
 
   return NextResponse.json({ synced: newCount, total: emails.length, account: gmailAccount, shared: isCompanyAccount })

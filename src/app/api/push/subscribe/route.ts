@@ -8,16 +8,38 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { subscription } = await request.json()
+  const { subscription, userAgent } = await request.json()
   if (!subscription?.endpoint) return NextResponse.json({ error: 'Suscripción inválida' }, { status: 400 })
 
   const admin = await createAdminClient()
-  // Upsert por endpoint: elimina duplicados previos de este endpoint
-  await admin.from('reglas').delete().eq('name', PUSH_ROW).eq('description', subscription.endpoint)
+
+  // Dedup POR DISPOSITIVO (no por usuario): un usuario puede tener varios dispositivos
+  // (móvil + portátil) y cada uno debe recibir notificaciones. Pero el MISMO dispositivo
+  // no debe acumular varias suscripciones (re-suscripción tras actualizar el SW genera
+  // un endpoint nuevo y deja el viejo → notificación duplicada).
+  // Eliminamos las filas previas de este usuario cuyo endpoint coincida O cuyo userAgent
+  // coincida (mismo dispositivo). Distinto userAgent = distinto dispositivo → se conserva.
+  const { data: existing } = await admin
+    .from('reglas').select('id,description,condition_text')
+    .eq('name', PUSH_ROW).eq('created_by', user.id)
+
+  const toDelete = (existing || []).filter(row => {
+    if (row.description === subscription.endpoint) return true
+    if (userAgent) {
+      try { return JSON.parse(row.condition_text || '{}').ua === userAgent } catch { return false }
+    }
+    return false
+  }).map(r => r.id)
+
+  if (toDelete.length > 0) {
+    await admin.from('reglas').delete().in('id', toDelete)
+  }
+
   const { error } = await admin.from('reglas').insert({
     name: PUSH_ROW,
     description: subscription.endpoint,
-    condition_text: JSON.stringify(subscription),
+    // Guardamos el userAgent junto a la suscripción para deduplicar por dispositivo
+    condition_text: JSON.stringify({ ...subscription, ua: userAgent || null }),
     action_text: 'push',
     active: true,
     created_by: user.id,

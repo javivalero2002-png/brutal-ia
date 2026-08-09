@@ -1,8 +1,9 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER } from '@/components/shared/design-tokens'
-import { useIsMobile } from '@/components/shared/hooks'
-import { dlDate, dlLabel, strColor, relTime } from '@/components/shared/helpers'
+import { useIsMobile, useBackClosable } from '@/components/shared/hooks'
+import { dlDate, dlLabel, strColor, relTime, todayKey } from '@/components/shared/helpers'
+import { fetchWithTimeout } from '@/lib/fetch-timeout'
 import { ProgressRing } from '@/components/shared/ui'
 import LucideIcon from '@/components/shared/LucideIcon'
 import { PlatformLogo } from '@/components/PlatformLogo'
@@ -10,6 +11,7 @@ import type { Client, Project, Task } from '@/types'
 
 export default function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast,isOwner,onNavigate,onSelectProject}: any) {
   const isMobile = useIsMobile()
+  useBackClosable(!!selectedId, () => onSelect(null))
   const [aiAdvice, setAiAdvice] = useState<any[]|null>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [expandedProject, setExpandedProject] = useState<string|null>(null)
@@ -26,10 +28,69 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
   const [clientSearch, setClientSearch] = useState('')
   const [clientStatusFilter, setClientStatusFilter] = useState('Todos')
   const [clientSort, setClientSort] = useState<'default'|'revenue'|'tareas'|'proyectos'>('default')
+  const [clientFiles, setClientFiles] = useState<any[]|null>(null)
+  const [filesLoading, setFilesLoading] = useState(false)
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const selected = selectedId ? data.clients.find((c: Client)=>c.id===selectedId) : null
 
-  useEffect(() => { setClientEditOpen(false); setConfirmDeleteClient(false) }, [selectedId])
+  useEffect(() => {
+    setClientEditOpen(false)
+    setConfirmDeleteClient(false)
+    setClientFiles(null)
+  }, [selectedId])
+
+  const loadFiles = async (id: string) => {
+    setFilesLoading(true)
+    try {
+      const r = await fetchWithTimeout(`/api/clients/${id}/files`)
+      if (!r.ok) { showToast('Error al cargar archivos'); setClientFiles([]); return }
+      setClientFiles(await r.json())
+    } catch { showToast('Error al cargar archivos'); setClientFiles([]) }
+    finally { setFilesLoading(false) }
+  }
+
+  const uploadFile = async (file: File) => {
+    if (!selected) return
+    setUploadingFile(true)
+    try {
+      const fd = new FormData(); fd.append('file', file)
+      const r = await fetch(`/api/clients/${selected.id}/files`, { method: 'POST', body: fd })
+      const result = await r.json()
+      if (!r.ok) { showToast(result.error || 'Error al subir'); return }
+      setClientFiles(prev => [result, ...(prev||[])])
+      showToast('Archivo subido')
+    } catch { showToast('Error al subir el archivo') }
+    finally { setUploadingFile(false) }
+  }
+
+  const deleteFile = async (path: string) => {
+    if (!selected) return
+    try {
+      await fetch(`/api/clients/${selected.id}/files`, { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path }) })
+      setClientFiles(prev => (prev||[]).filter(f => f.path !== path))
+      showToast('Archivo eliminado')
+    } catch { showToast('Error al eliminar') }
+  }
+
+  const fmtSize = (bytes: number) => {
+    if (!bytes) return ''
+    if (bytes < 1024) return `${bytes}B`
+    if (bytes < 1024*1024) return `${(bytes/1024).toFixed(0)}KB`
+    return `${(bytes/(1024*1024)).toFixed(1)}MB`
+  }
+
+  const fileIcon = (type: string, name: string) => {
+    const ext = name.split('.').pop()?.toLowerCase() || ''
+    if (type.startsWith('image/')) return 'image'
+    if (type === 'application/pdf' || ext === 'pdf') return 'file-text'
+    if (['mp4','mov','avi','webm'].includes(ext)) return 'video'
+    if (['xlsx','xls','csv'].includes(ext)) return 'table'
+    if (['doc','docx'].includes(ext)) return 'file-pen'
+    if (['zip','rar','7z'].includes(ext)) return 'archive'
+    return 'file'
+  }
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
@@ -45,9 +106,10 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
   const loadComments = async (id: string) => {
     setCommentsLoading(true)
     try {
-      const r = await fetch(`/api/clients/${id}/comments`)
+      const r = await fetchWithTimeout(`/api/clients/${id}/comments`)
+      if (!r.ok) { showToast('Error al cargar comentarios'); setComments([]); return }
       setComments(await r.json())
-    } catch { setComments([]) }
+    } catch { showToast('Error al cargar comentarios'); setComments([]) }
     finally { setCommentsLoading(false) }
   }
 
@@ -86,7 +148,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
     const clientContent = data.agenda.filter((a: any)=>a.client?.id===selected.id||a.client_id===selected.id)
 
     return (
-      <div className="p-8 max-w-[1100px] mx-auto">
+      <div className={`${isMobile?'p-4':'p-8'} max-w-[1100px] mx-auto`}>
         <button onClick={handleBack} className="flex items-center gap-2 text-[12px] mb-8 transition-colors hover:text-white/70" style={{color:'rgba(255,255,255,0.35)'}}>
           <LucideIcon name="arrow-left" size={14}/> Todos los clientes
         </button>
@@ -201,6 +263,35 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
             <p className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{color:'rgba(255,255,255,0.5)'}}>{selected.notes}</p>
           </div>
         )}
+
+        {(()=>{
+          const name = selected.name.toLowerCase()
+          const firstWord = name.split(' ')[0]
+          const clientEmails = ((data.inbox||[]) as any[]).filter((m:any)=>{
+            if (!m.ai_client||m.ai_client==='Desconocido') return false
+            const ai = m.ai_client.toLowerCase()
+            return name.includes(ai)||ai.includes(firstWord)
+          }).slice(0,5)
+          if (clientEmails.length===0) return null
+          return (
+            <div className="mb-6 rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+              <div className="flex items-center justify-between px-6 py-4" style={{borderBottom:`1px solid ${BORDER}`}}>
+                <div className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.25)'}}>CORREOS RECIENTES</div>
+                <span className="font-syne text-[9px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{clientEmails.length}</span>
+              </div>
+              {clientEmails.map((m:any)=>(
+                <div key={m.id} className="flex items-start gap-3 px-6 py-3.5" style={{borderBottom:`1px solid rgba(255,255,255,0.04)`}}>
+                  <div className="flex-shrink-0 mt-1.5 w-2 h-2 rounded-full" style={{background:m.ai_urgency==='urgent'?RED:m.ai_urgency==='high'?'rgba(255,176,32,0.8)':BLU}}/>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-figtree text-[13px] font-semibold truncate" style={{color:m.is_read?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.88)'}}>{m.subject||'Sin asunto'}</div>
+                    <div className="text-[11px] mt-0.5" style={{color:'rgba(255,255,255,0.28)'}}>{m.from_name} · {relTime(m.received_at)}</div>
+                  </div>
+                  {!m.is_read && <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{background:BLU}}/>}
+                </div>
+              ))}
+            </div>
+          )
+        })()}
         <div className="grid gap-5 mb-6" style={{gridTemplateColumns:isMobile?'1fr':'1fr 320px'}}>
           <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
             <div className="flex items-center justify-between px-6 py-4" style={{borderBottom:`1px solid ${BORDER}`}}>
@@ -230,14 +321,14 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
                     <div className="flex items-center gap-2">
                       {projTasks.length > 0 && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.3)'}}>{projTasks.length} tareas</span>}
                       <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-lg" style={{background:p.status==='urgente'?'rgba(229,29,42,0.1)':'rgba(27,95,250,0.07)',color:p.status==='urgente'?RED:BLU}}>{p.progress}%</span>
-                      {onNavigate && onSelectProject && <button onClick={e=>{e.stopPropagation();onSelectProject(p.id);onNavigate('proyectos')}} className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center w-7 h-7 rounded-xl" style={{background:'rgba(27,95,250,0.1)',color:BLU}} title="Ver en Proyectos"><LucideIcon name="arrow-right" size={11} color={BLU}/></button>}
+                      {onNavigate && onSelectProject && <button onClick={e=>{e.stopPropagation();onSelectProject(p.id);onNavigate('proyectos')}} className={`transition-opacity flex items-center justify-center w-7 h-7 rounded-xl ${isMobile?'opacity-40':'opacity-0 group-hover:opacity-100'}`} style={{background:'rgba(27,95,250,0.1)',color:BLU}} title="Ver en Proyectos"><LucideIcon name="arrow-right" size={11} color={BLU}/></button>}
                       <LucideIcon name={isOpen?'chevron-up':'chevron-down'} size={13} color="rgba(255,255,255,0.25)"/>
                     </div>
                   </div>
                   {isOpen && projTasks.length > 0 && (
                     <div className="px-6 pb-3" style={{borderTop:`1px solid ${BORDER}`}}>
                       {projTasks.slice(0,6).map((t: Task,ti: number)=>{
-                        const cTodayStr = new Date().toISOString().split('T')[0]
+                        const cTodayStr = todayKey()
                         const cIsToday = t.due_date && t.due_date.slice(0,10)===cTodayStr
                         const cOver = t.due_date && !cIsToday && new Date(t.due_date+'T23:59:59')<new Date()
                         return (
@@ -270,7 +361,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
                   <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.7)':BLU}}/>
                   <span className="font-figtree text-[12px] font-medium flex-1 truncate" style={{color:'rgba(255,255,255,0.6)'}}>{t.text}</span>
                   {t.due_date && (()=>{
-                    const todayStr = new Date().toISOString().split('T')[0]
+                    const todayStr = todayKey()
                     const isToday = t.due_date.slice(0,10)===todayStr
                     const over = !isToday && new Date(t.due_date+'T23:59:59')<new Date()
                     return <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:isToday?'rgba(255,176,32,0.15)':over?`${RED}15`:'rgba(255,255,255,0.04)',color:isToday?'rgba(255,176,32,0.9)':over?RED:'rgba(255,255,255,0.25)'}}>{isToday?'HOY':new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>
@@ -300,6 +391,55 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
               </div>
             )}
           </div>
+        </div>
+
+        {/* ARCHIVOS */}
+        <div className="rounded-2xl overflow-hidden mb-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+          <div className="flex items-center justify-between px-6 py-4" style={{borderBottom:`1px solid ${BORDER}`}}>
+            <div className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.25)'}}>ARCHIVOS</div>
+            <div className="flex items-center gap-2">
+              {clientFiles===null && (
+                <button onClick={()=>loadFiles(selected.id)} className="font-syne text-[8px] font-black px-3 py-1.5 rounded-xl transition-all" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>VER ARCHIVOS</button>
+              )}
+              <input ref={fileInputRef} type="file" className="hidden" onChange={e=>{const f=e.target.files?.[0];if(f){uploadFile(f);e.target.value=''}}}/>
+              <button onClick={async()=>{if(clientFiles===null){await loadFiles(selected.id)};fileInputRef.current?.click()}} disabled={uploadingFile}
+                className="flex items-center gap-1.5 font-syne text-[8px] font-black px-3 py-1.5 rounded-xl transition-all disabled:opacity-40"
+                style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.45)'}}>
+                <LucideIcon name="upload" size={11} color="rgba(255,255,255,0.45)"/>
+                {uploadingFile ? 'Subiendo…' : 'Subir archivo'}
+              </button>
+            </div>
+          </div>
+          {filesLoading && <div className="px-6 py-6 text-center text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Cargando…</div>}
+          {clientFiles!==null && !filesLoading && (
+            clientFiles.length===0
+              ? <div className="px-6 py-8 text-center">
+                  <LucideIcon name="paperclip" size={20} color="rgba(255,255,255,0.1)"/>
+                  <div className="mt-2 text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin archivos — sube contratos, briefings o referencias</div>
+                </div>
+              : <div>
+                  {clientFiles.map((f:any, i:number)=>(
+                    <div key={f.path} className="flex items-center gap-3 px-5 py-3 group" style={{borderBottom:i<clientFiles.length-1?`1px solid ${BORDER}`:'none'}}>
+                      <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:'rgba(27,95,250,0.08)'}}>
+                        <LucideIcon name={fileIcon(f.type,f.name) as any} size={15} color={BLU}/>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <a href={f.url} target="_blank" rel="noopener noreferrer" className="font-figtree text-[13px] font-medium truncate block transition-colors hover:text-blue-400" style={{color:'rgba(255,255,255,0.75)'}}>{f.name}</a>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {f.size>0&&<span className="font-syne text-[8px] font-black" style={{color:'rgba(255,255,255,0.2)'}}>{fmtSize(f.size)}</span>}
+                          {f.created_at&&<span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.15)'}}>{new Date(f.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})}</span>}
+                        </div>
+                      </div>
+                      <a href={f.url} target="_blank" rel="noopener noreferrer" className={`w-7 h-7 flex items-center justify-center rounded-lg transition-opacity ${isMobile?'opacity-50':'opacity-0 group-hover:opacity-100'}`} style={{background:'rgba(27,95,250,0.1)',color:BLU}} title="Descargar">
+                        <LucideIcon name="download" size={12} color={BLU}/>
+                      </a>
+                      {isOwner && <button onClick={()=>deleteFile(f.path)} className={`w-7 h-7 flex items-center justify-center rounded-lg transition-opacity ${isMobile?'opacity-50':'opacity-0 group-hover:opacity-100'}`} style={{color:'rgba(229,29,42,0.5)'}} title="Eliminar">
+                        <LucideIcon name="trash-2" size={12} color="rgba(229,29,42,0.5)"/>
+                      </button>}
+                    </div>
+                  ))}
+                </div>
+          )}
         </div>
 
         <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
@@ -357,7 +497,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
     : visibleClients
 
   return (
-    <div className="p-8 max-w-[1200px] mx-auto">
+    <div className={`${isMobile?'p-4':'p-8'} max-w-[1200px] mx-auto`}>
       <div className="flex items-end justify-between mb-6 flex-wrap gap-3">
         <div>
           <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>GESTIÓN</div>
@@ -465,7 +605,14 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
                   </div>
 
                   {(() => {
-                    const clientMsgs = data.inbox.filter((m: any)=>m.ai_client&&(m.ai_client.toLowerCase().includes(c.name.toLowerCase().split(' ')[0])||c.name.toLowerCase().includes(m.ai_client.toLowerCase().split(' ')[0])))
+                    const clientMsgs = data.inbox.filter((m: any)=>{
+                      if (!m.ai_client || m.ai_client === 'Desconocido') return false
+                      const ai = m.ai_client.toLowerCase(); const nm = c.name.toLowerCase()
+                      if (ai.includes(nm) || nm.includes(ai)) return true
+                      const nmW = nm.split(' ')[0]; const aiW = ai.split(' ')[0]
+                      // Primera palabra solo como match parcial si es distintiva (≥4 car.)
+                      return (nmW.length>=4 && ai.includes(nmW)) || (aiW.length>=4 && nm.includes(aiW))
+                    })
                     const lm = clientMsgs.sort((a: any,b: any)=>new Date(b.received_at).getTime()-new Date(a.received_at).getTime())[0]
                     const unreadN = clientMsgs.filter((m: any)=>!m.is_read).length
                     if (!lm) return null

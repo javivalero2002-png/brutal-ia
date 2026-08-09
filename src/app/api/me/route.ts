@@ -19,7 +19,10 @@ export async function GET(request: NextRequest) {
 
   if (profile) return NextResponse.json(profile)
 
-  // 2. If not found by ID, check if email already exists (Google sign-in for existing account)
+  // 2. If not found by ID, check if email already exists (Google sign-in for existing account).
+  //    NOTA: el vínculo se hace por email verificado por el proveedor (Google/Supabase)
+  //    y el alta de cuentas está restringida al owner, así que no hay auto-registro.
+  //    No se filtra por dominio a propósito: el equipo usa también cuentas Gmail.
   if (user.email) {
     const { data: existingByEmail } = await admin
       .from('profiles')

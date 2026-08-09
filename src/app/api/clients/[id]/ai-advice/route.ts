@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { checkAiRateLimit } from '@/lib/rate-limit'
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 
@@ -9,6 +10,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = await createAdminClient()
+  if (await checkAiRateLimit(admin, user.id, 'advice')) {
+    return NextResponse.json({ error: 'Demasiadas solicitudes. Espera un momento.' }, { status: 429 })
+  }
   const [{ data: client }, { data: projects }, { data: tasks }] = await Promise.all([
     admin.from('clients').select('*').eq('id', id).single(),
     admin.from('projects').select('*').eq('client_id', id),

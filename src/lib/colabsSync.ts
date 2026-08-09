@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
 import { analyzeEmail, EmailAnalysis } from '@/lib/ai'
-import { sendPushToAll, sendPushToUser } from '@/lib/push'
+import { sendPushToAll, sendPushToUser, canSendPush } from '@/lib/push'
 
 const MEETING_RE = /meet\.google\.com\/[a-z-]+|zoom\.us\/j\/\d+|teams\.microsoft\.com\/l\/meetup/i
 
@@ -60,14 +60,16 @@ export async function syncColabsInbox(
   let newCount = 0
   const newUnread: { from_name: string; subject: string; urgent?: boolean }[] = []
 
-  for (const email of emails) {
-    const { data: existing } = await admin
-      .from('inbox_messages')
-      .select('id')
-      .eq('gmail_id', email.gmail_id)
-      .single()
+  // Una sola consulta para saber cuáles ya existen (antes: un SELECT por email).
+  const colabsIds = emails.map(e => e.gmail_id).filter(Boolean)
+  const { data: colabsExisting } = await admin
+    .from('inbox_messages')
+    .select('gmail_id')
+    .in('gmail_id', colabsIds)
+  const colabsKnown = new Set((colabsExisting || []).map((r: { gmail_id: string }) => r.gmail_id))
 
-    if (existing) continue
+  for (const email of emails) {
+    if (colabsKnown.has(email.gmail_id)) continue
 
     let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
     try {
@@ -113,18 +115,20 @@ export async function syncColabsInbox(
     }
   }
 
-  // Los emails de colaboraciones son de todo el equipo: push a todos los suscritos
+  // Los emails de colaboraciones son de todo el equipo: push a todos los suscritos (rate-limit 90s)
   if (newUnread.length > 0) {
     const first = newUnread[0]
     const anyUrgent = newUnread.some(m => m.urgent)
-    sendPushToAll(admin, {
-      title: anyUrgent ? `🔴 URGENTE · Colabs · ${first.from_name}`
-        : newUnread.length === 1 ? `📩 Colabs · ${first.from_name}` : `📩 Colabs · ${newUnread.length} emails nuevos`,
-      body: newUnread.length === 1 ? first.subject : `${first.from_name}: ${first.subject} y ${newUnread.length - 1} más`,
-      url: '/dashboard',
-      tag: 'colabs-sync',
-      urgent: anyUrgent,
-    }).catch(() => {})
+    if (await canSendPush(admin, 'company')) {
+      sendPushToAll(admin, {
+        title: anyUrgent ? `🔴 URGENTE · Colabs · ${first.from_name}`
+          : newUnread.length === 1 ? `📩 Colabs · ${first.from_name}` : `📩 Colabs · ${newUnread.length} emails nuevos`,
+        body: newUnread.length === 1 ? first.subject : `${first.from_name}: ${first.subject} y ${newUnread.length - 1} más`,
+        url: '/dashboard',
+        tag: 'colabs-sync',
+        urgent: anyUrgent,
+      }).catch(() => {})
+    }
   }
 
   return { ok: true, synced: newCount, total: emails.length, account: gmailAccount }
@@ -166,13 +170,16 @@ export async function syncPersonalInbox(
   let newCount = 0
   const newUnread: { from_name: string; subject: string; urgent?: boolean }[] = []
 
+  // Una sola consulta para saber cuáles ya existen (antes: un SELECT por email).
+  const personalIds = emails.map(e => e.gmail_id).filter(Boolean)
+  const { data: personalExisting } = await admin
+    .from('inbox_messages')
+    .select('gmail_id')
+    .in('gmail_id', personalIds)
+  const personalKnown = new Set((personalExisting || []).map((r: { gmail_id: string }) => r.gmail_id))
+
   for (const email of emails) {
-    const { data: existing } = await admin
-      .from('inbox_messages')
-      .select('id')
-      .eq('gmail_id', email.gmail_id)
-      .single()
-    if (existing) continue
+    if (personalKnown.has(email.gmail_id)) continue
 
     let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
     try {
@@ -206,14 +213,16 @@ export async function syncPersonalInbox(
   if (newUnread.length > 0) {
     const first = newUnread[0]
     const anyUrgent = newUnread.some(m => m.urgent)
-    sendPushToUser(admin, profile.id, {
-      title: anyUrgent ? `🔴 URGENTE · ${first.from_name}`
-        : newUnread.length === 1 ? `📩 ${first.from_name}` : `📩 ${newUnread.length} emails nuevos`,
-      body: newUnread.length === 1 ? first.subject : `${first.from_name}: ${first.subject} y ${newUnread.length - 1} más`,
-      url: '/dashboard',
-      tag: 'gmail-personal',
-      urgent: anyUrgent,
-    }).catch(() => {})
+    if (await canSendPush(admin, profile.id)) {
+      sendPushToUser(admin, profile.id, {
+        title: anyUrgent ? `🔴 URGENTE · ${first.from_name}`
+          : newUnread.length === 1 ? `📩 ${first.from_name}` : `📩 ${newUnread.length} emails nuevos`,
+        body: newUnread.length === 1 ? first.subject : `${first.from_name}: ${first.subject} y ${newUnread.length - 1} más`,
+        url: '/dashboard',
+        tag: 'gmail-personal',
+        urgent: anyUrgent,
+      }).catch(() => {})
+    }
   }
 
   return { ok: true, synced: newCount, total: emails.length, account: gmailAccount }

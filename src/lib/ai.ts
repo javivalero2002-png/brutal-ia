@@ -2,6 +2,17 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
+// El modelo a veces envuelve el JSON en fences markdown (```json ... ```) pese a
+// pedirle "sin markdown". Limpiamos antes de JSON.parse para no caer al fallback básico.
+function parseJsonLoose(text: string): any {
+  const clean = text
+    .replace(/^\s*```json\s*/i, '')
+    .replace(/^\s*```\s*/i, '')
+    .replace(/\s*```\s*$/i, '')
+    .trim()
+  return JSON.parse(clean)
+}
+
 export interface SearchResult {
   title: string
   content: string
@@ -49,9 +60,27 @@ export function formatSearchContextVoice(results: SearchResult[]): string {
   ).join('\n\n')}\n</web_search_results>`
 }
 
-// Returns true when the query likely benefits from real-time web data
+// Returns true when the query likely benefits from real-time web data.
+// Se excluyen primero las consultas sobre datos INTERNOS (tareas, proyectos,
+// clientes, inbox…): esas ya las responde el contexto del sistema y buscar en
+// internet solo añadiría latencia y ruido.
 export function needsWebSearch(query: string): boolean {
-  return /busca|encuentra|consigue|influencer|instagram|tiktok|youtube|precio|tendencia|trend|noticias|actualidad|últim|listado|lista de|quién es|qué es|estadística|hashtag|seguidores|marca|agencia|competencia|referente|ejemplo de|casos de|cómo se hace|qué plataforma|cuánto cuesta|cuánto cobra/i.test(query)
+  const q = query.toLowerCase()
+
+  // 1) Datos internos o acciones → nunca buscar
+  const internal = /\b(mis?|mi)\b|tarea|proyecto|cliente|inbox|correo|email|equipo|briefing|agenda|calendario|reunión|pipeline|crea|añade|apunta|recuérdame|asigna|marca|termina|completa/i
+  if (internal.test(q)) return false
+
+  // 2) Señales explícitas de búsqueda o de dato externo
+  const explicit = /busca|encuentra|consigue|invest[ií]ga|influencer|instagram|tiktok|youtube|linkedin|precio|tarifa|presupuesto de mercado|tendencia|trend|noticias|actualidad|últim|novedad|estad[ií]stica|hashtag|seguidores|competencia|referente|ejemplo de|casos de|benchmark|qué plataforma|cu[áa]nto cuesta|cu[áa]nto cobra|cu[áa]nto vale|cu[áa]nto gana/i
+  if (explicit.test(q)) return true
+
+  // 3) Preguntas de conocimiento general sobre entidades externas
+  //    ("¿quién es el CEO de Nike?", "¿qué es el SEO técnico?")
+  const knowledge = /^(¿\s*)?(qui[ée]n|qu[ée]|cu[áa]l|d[óo]nde|cu[áa]ndo|c[óo]mo)\s/i
+  if (knowledge.test(q.trim())) return true
+
+  return false
 }
 
 // Remove null bytes and control chars that break the Anthropic API
@@ -115,7 +144,7 @@ Responde SOLO con JSON válido (sin markdown):
 
   try {
     const text = msg.content[0].type === 'text' ? msg.content[0].text : '{}'
-    return JSON.parse(text)
+    return parseJsonLoose(text)
   } catch {
     return { summary: subject, action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
   }
@@ -180,7 +209,7 @@ Responde SOLO con JSON válido:
 
   try {
     const text = msg.content[0].type === 'text' ? msg.content[0].text : '{}'
-    return JSON.parse(text)
+    return parseJsonLoose(text)
   } catch {
     return {
       extractedInfo: message,
@@ -196,12 +225,14 @@ export async function chat(
   history: Array<{role: 'user' | 'ai'; content: string}>,
   context: {
     clients: string[]
-    projects: Array<{name: string; status: string}>
+    projects: Array<{name: string; status: string; deadline?: string}>
     tasks: Array<{text: string; level: string; assignee?: string}>
     unreadInbox: number
     emails: Array<{from: string; subject: string; summary: string; urgency: string; shared: boolean; received_at: string}>
     teamSize: number
     userName: string
+    todayDate: string
+    contentPipeline: number
   }
 ): Promise<{ reply: string; searched: boolean }> {
   const urgentTasks = context.tasks.filter(t => t.level === 'urgent')
@@ -219,13 +250,20 @@ export async function chat(
       }`
     : `\n\n- Mensajes sin leer en inbox: ${context.unreadInbox}`
 
+  const overdueProjects = context.projects.filter(p => {
+    if (!p.deadline || p.deadline === 'TBD') return false
+    const d = new Date(p.deadline)
+    return !isNaN(d.getTime()) && d < new Date() && p.status !== 'completado'
+  })
+
   const systemPrompt = `Eres Brutal.IA, la inteligencia artificial de Brutal Studios, una agencia creativa española especializada en marketing digital, contenido y estrategia de marca.
 
-CONTEXTO DEL NEGOCIO:
+CONTEXTO DEL NEGOCIO (actualizado al ${context.todayDate}):
 - Usuario: ${context.userName}
 - Equipo: ${context.teamSize} personas
 - Clientes: ${context.clients.join(', ') || 'ninguno'}
-- Proyectos activos: ${activeProjects.map(p => p.name).join(', ') || 'ninguno'} (${context.projects.length} en total)
+- Proyectos activos: ${activeProjects.map(p => p.name).join(', ') || 'ninguno'} (${context.projects.length} en total${overdueProjects.length > 0 ? `, ${overdueProjects.length} VENCIDO${overdueProjects.length > 1 ? 'S' : ''}` : ''})
+- Pipeline de contenido: ${context.contentPipeline} pieza${context.contentPipeline !== 1 ? 's' : ''} programada${context.contentPipeline !== 1 ? 's' : ''}
 - Tareas urgentes: ${urgentTasks.map(t => t.text).join(', ') || 'ninguna'}
 - Tareas de alta prioridad: ${highTasks.map(t => t.text).join(', ') || 'ninguna'}
 - Tareas totales pendientes: ${context.tasks.length}${emailsBlock}${urgentEmails.length > 0 ? `\n- ⚠️ EMAILS URGENTES: ${urgentEmails.map(e => `"${e.subject}" de ${e.from}`).join(', ')}` : ''}

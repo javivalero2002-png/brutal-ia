@@ -31,6 +31,18 @@ export function AjCard({ title, defaultOpen=true, children }: { title:string; de
   )
 }
 
+// Imagen que se auto-oculta si la URL está rota (p.ej. cover_url corrupto apuntando a un PDF).
+// Evita el icono de "imagen rota" del navegador. Lazy-load por defecto.
+export function SafeImg({ src, alt='', className, style, onErrorHide }: { src?:string|null; alt?:string; className?:string; style?:React.CSSProperties; onErrorHide?:()=>void }) {
+  const [failed, setFailed] = useState(false)
+  if (!src || failed) return null
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt={alt} className={className} style={style} loading="lazy" decoding="async"
+      onError={()=>{ setFailed(true); onErrorHide?.() }}/>
+  )
+}
+
 export function ProgressRing({ pct, size=52, stroke=3, color=BLU }: { pct:number, size?:number, stroke?:number, color?:string }) {
   const r = (size - stroke * 2) / 2
   const c = 2 * Math.PI * r

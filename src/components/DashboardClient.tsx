@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import NexusDashboard from '@/components/NexusDashboard'
+import NexusBootScreen from '@/components/NexusBootScreen'
 import type { Profile } from '@/types'
 
 export default function DashboardClient() {
@@ -38,20 +39,7 @@ export default function DashboardClient() {
   }, [])
 
   if (loading) {
-    // Misma pantalla EXACTA que la de carga de datos de NexusDashboard,
-    // para que el paso de una a otra sea imperceptible (sin parpadeo al abrir).
-    return (
-      <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#030308' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div className="font-syne" style={{ fontSize: '10px', fontWeight: 900, letterSpacing: '0.3em', marginBottom: '24px', color: 'rgba(27,95,250,0.5)' }}>BRUTAL.IA</div>
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-            <div className="w-1.5 h-1.5 rounded-full animate-dot1" style={{ background: '#1B5FFA' }} />
-            <div className="w-1.5 h-1.5 rounded-full animate-dot2" style={{ background: '#1B5FFA' }} />
-            <div className="w-1.5 h-1.5 rounded-full animate-dot3" style={{ background: '#1B5FFA' }} />
-          </div>
-        </div>
-      </div>
-    )
+    return <NexusBootScreen />
   }
 
   if (!profile) return null

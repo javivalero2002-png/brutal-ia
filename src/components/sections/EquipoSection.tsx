@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import type { Profile, Task } from '@/types'
-import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, BORDER, LucideIcon, ProgressRing, relTime } from '@/components/shared'
+import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, BORDER, LucideIcon, ProgressRing, relTime, todayKey } from '@/components/shared'
+import { fetchWithTimeout } from '@/lib/fetch-timeout'
 
 function EquipoSection({data, profile, showToast}: any) {
   const isMobile = useIsMobile()
@@ -59,9 +60,11 @@ function EquipoSection({data, profile, showToast}: any) {
     setSelected(member)
     setLoadingThread(true)
     try {
-      const msgs = await fetch(`/api/inbox/thread?withUserId=${member.id}&withName=${encodeURIComponent(member.name)}`).then(r=>r.json())
+      const r = await fetchWithTimeout(`/api/inbox/thread?withUserId=${member.id}&withName=${encodeURIComponent(member.name)}`)
+      if (!r.ok) { setThread([]); return }
+      const msgs = await r.json()
       setThread(Array.isArray(msgs) ? msgs : [])
-    } catch { setThread([]) }
+    } catch { showToast('Error al cargar conversación'); setThread([]) }
     finally { setLoadingThread(false) }
   }
 
@@ -82,10 +85,11 @@ function EquipoSection({data, profile, showToast}: any) {
     if (!newMemberName.trim() || !newMemberEmail.trim()) return
     setAddingLoading(true)
     try {
-      const res = await fetch('/api/admin/team', {
+      const res = await fetchWithTimeout('/api/admin/team', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newMemberName.trim(), email: newMemberEmail.trim().toLowerCase(), role: newMemberRole }),
+        timeoutMs: 15_000,
       })
       const json = await res.json()
       if (!res.ok) { showToast(json.error || 'Error al crear cuenta'); return }
@@ -135,7 +139,7 @@ function EquipoSection({data, profile, showToast}: any) {
       <div className="flex flex-col overflow-hidden" style={isMobile
         ? {width:'100%',flexShrink:0,display:(invitePanel||addingMember||selected)?'none':'flex'}
         : {width:'360px',flexShrink:0,borderRight:`1px solid ${BORDER}`}}>
-        <div className="px-6 pt-6 pb-4 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
+        <div className={`${isMobile?'px-4':'px-6'} pt-6 pb-4 flex-shrink-0`} style={{borderBottom:`1px solid ${BORDER}`}}>
           <div className="flex items-center justify-between mb-1">
             <div className="font-syne text-[9px] font-black tracking-[0.25em]" style={{color:'rgba(255,255,255,0.18)'}}>BRUTAL STUDIOS</div>
             {isOwner && (
@@ -200,7 +204,7 @@ function EquipoSection({data, profile, showToast}: any) {
             const urgent = pending.filter((t: Task) => t.level === 'urgent')
             const high = pending.filter((t: Task) => t.level === 'high')
             const mOverdue = pending.filter((t: Task) => t.due_date && new Date(t.due_date+'T23:59:59') < new Date())
-            const mDueToday = pending.filter((t: Task) => t.due_date && t.due_date.slice(0,10) === new Date().toISOString().slice(0,10))
+            const mDueToday = pending.filter((t: Task) => t.due_date && t.due_date.slice(0,10) === todayKey())
             const workload = urgent.length*3 + high.length*2 + (pending.length-urgent.length-high.length)
             const sel = selected?.id === member.id
             const gmailOk = !!(member as any).gmail_connected
@@ -236,14 +240,14 @@ function EquipoSection({data, profile, showToast}: any) {
                       {!isOwner && !isMe(member) && <LucideIcon name="message-square" size={13} color={sel?member.avatar_color:'rgba(255,255,255,0.15)'}/>}
                       {/* Owner actions — visible on hover */}
                       {isOwner && !isMe(member) && !isConfirmDelete && (
-                        <div className="flex items-center gap-1.5 opacity-0 group-hover/mc:opacity-100 transition-opacity">
+                        <div className={`flex items-center gap-1.5 transition-opacity ${isMobile?'opacity-50':'opacity-0 group-hover/mc:opacity-100'}`}>
                           <button onClick={e=>{ e.stopPropagation(); openInvitePanel(member.email||'', member.name) }}
-                            className="w-6 h-6 rounded-lg flex items-center justify-center transition-all hover:opacity-70" title="Generar enlace de acceso"
+                            className={`${isMobile?'w-9 h-9':'w-6 h-6'} rounded-lg flex items-center justify-center transition-all hover:opacity-70`} title="Generar enlace de acceso"
                             style={{background:`rgba(27,95,250,0.12)`,border:`1px solid rgba(27,95,250,0.25)`}}>
                             <LucideIcon name="link-2" size={10} color={BLU}/>
                           </button>
                           <button onClick={e=>{ e.stopPropagation(); setConfirmDeleteEmail(member.email||'') }}
-                            className="w-6 h-6 rounded-lg flex items-center justify-center transition-all hover:opacity-70" title="Eliminar miembro"
+                            className={`${isMobile?'w-9 h-9':'w-6 h-6'} rounded-lg flex items-center justify-center transition-all hover:opacity-70`} title="Eliminar miembro"
                             style={{background:`rgba(229,29,42,0.08)`,border:`1px solid rgba(229,29,42,0.2)`}}>
                             <LucideIcon name="trash-2" size={10} color={RED}/>
                           </button>
@@ -281,7 +285,7 @@ function EquipoSection({data, profile, showToast}: any) {
       {/* Right: Invite panel / Add member / DM panel / empty */}
       {invitePanel ? (
         <div className="flex-1 flex flex-col overflow-hidden" style={{background:'#050510'}}>
-          <div className="flex items-center gap-4 px-6 py-5 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`,background:`linear-gradient(135deg,rgba(27,95,250,0.06),transparent)`}}>
+          <div className={`flex items-center gap-4 ${isMobile?'px-4':'px-6'} py-5 flex-shrink-0`} style={{borderBottom:`1px solid ${BORDER}`,background:`linear-gradient(135deg,rgba(27,95,250,0.06),transparent)`}}>
             <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0" style={{background:'rgba(27,95,250,0.12)',border:`1px solid rgba(27,95,250,0.25)`}}>
               <LucideIcon name="key" size={16} color={BLU}/>
             </div>
@@ -291,7 +295,7 @@ function EquipoSection({data, profile, showToast}: any) {
             </div>
             <button onClick={()=>setInvitePanel(null)} className="w-8 h-8 rounded-xl flex items-center justify-center" style={{background:'rgba(255,255,255,0.05)'}}><LucideIcon name="x" size={13} color="rgba(240,240,248,0.4)"/></button>
           </div>
-          <div className="flex-1 flex flex-col justify-center p-8 max-w-[520px]">
+          <div className={`flex-1 flex flex-col justify-center ${isMobile?'p-4':'p-8'} max-w-[520px]`}>
             {invitePanel.loading ? (
               <div className="flex items-center gap-3" style={{color:'rgba(255,255,255,0.3)'}}>
                 <div className="w-4 h-4 rounded-full animate-pulse" style={{background:`${BLU}50`}}/>
@@ -337,7 +341,7 @@ function EquipoSection({data, profile, showToast}: any) {
         </div>
       ) : addingMember ? (
         <div className="flex-1 flex flex-col overflow-hidden" style={{background:'#050510'}}>
-          <div className="flex items-center gap-4 px-6 py-5 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`,background:`linear-gradient(135deg,rgba(27,95,250,0.06),transparent)`}}>
+          <div className={`flex items-center gap-4 ${isMobile?'px-4':'px-6'} py-5 flex-shrink-0`} style={{borderBottom:`1px solid ${BORDER}`,background:`linear-gradient(135deg,rgba(27,95,250,0.06),transparent)`}}>
             <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0" style={{background:'rgba(27,95,250,0.12)',border:`1px solid rgba(27,95,250,0.25)`}}>
               <LucideIcon name="user-plus" size={16} color={BLU}/>
             </div>
@@ -348,7 +352,7 @@ function EquipoSection({data, profile, showToast}: any) {
             <button onClick={()=>{setAddingMember(false);setInviteResult(null)}} className="w-8 h-8 rounded-xl flex items-center justify-center" style={{background:'rgba(255,255,255,0.05)'}}><LucideIcon name="x" size={13} color="rgba(240,240,248,0.4)"/></button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className={`flex-1 overflow-y-auto ${isMobile?'p-4':'p-6'}`}>
             {inviteResult ? (
               <div className="max-w-[480px]">
                 {/* Success state */}
@@ -435,14 +439,14 @@ function EquipoSection({data, profile, showToast}: any) {
       ) : selected ? (
         <div className="flex-1 flex flex-col overflow-hidden" style={{background:'#050510'}}>
           {/* Header */}
-          <div className="flex items-center gap-4 px-6 py-5 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`,background:`linear-gradient(135deg,${selected.avatar_color}0C,transparent)`}}>
+          <div className={`flex items-center gap-4 ${isMobile?'px-4':'px-6'} py-5 flex-shrink-0`} style={{borderBottom:`1px solid ${BORDER}`,background:`linear-gradient(135deg,${selected.avatar_color}0C,transparent)`}}>
             <div className="relative flex-shrink-0">
               <ProgressRing pct={Math.round((data.tasks.filter((t:Task)=>t.assignee?.name===selected.name&&t.done).length/Math.max(1,data.tasks.filter((t:Task)=>t.assignee?.name===selected.name).length))*100)} size={40} stroke={2} color={selected.avatar_color}/>
               <div className="absolute inset-0 flex items-center justify-center font-syne text-[9px] font-black" style={{color:selected.avatar_color}}>{selected.initials}</div>
             </div>
-            <div className="flex-1">
-              <div className="font-figtree text-[17px] font-semibold text-white">{selected.name}</div>
-              <div className="text-[11px]" style={{color:'rgba(255,255,255,0.3)'}}>{selected.email} · {selected.role==='owner'?'Propietario':'Equipo'}</div>
+            <div className="flex-1 min-w-0">
+              <div className="font-figtree text-[17px] font-semibold text-white truncate">{selected.name}</div>
+              <div className="text-[11px] truncate" style={{color:'rgba(255,255,255,0.3)'}}>{selected.email} · {selected.role==='owner'?'Propietario':'Equipo'}</div>
             </div>
             <div className="flex items-center gap-3">
               {(() => {
@@ -461,7 +465,7 @@ function EquipoSection({data, profile, showToast}: any) {
           </div>
 
           {/* Tasks */}
-          <div className="flex-shrink-0 px-6 py-4" style={{borderBottom:`1px solid ${BORDER}`}}>
+          <div className={`flex-shrink-0 ${isMobile?'px-4':'px-6'} py-4`} style={{borderBottom:`1px solid ${BORDER}`}}>
             <div className="font-syne text-[8.5px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.2)'}}>TAREAS ASIGNADAS</div>
             <div className="flex gap-2 flex-wrap">
               {data.tasks.filter((t:Task)=>t.assignee?.name===selected.name&&!t.done).slice(0,4).map((t:Task)=>(
@@ -469,7 +473,7 @@ function EquipoSection({data, profile, showToast}: any) {
                   <div className="w-1 h-1 rounded-full flex-shrink-0" style={{background:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.8)':BLU}}/>
                   <span className="text-[11px] truncate max-w-[180px]" style={{color:'rgba(255,255,255,0.5)'}}>{t.text}</span>
                   {t.due_date && (()=>{
-                    const todayStr = new Date().toISOString().split('T')[0]
+                    const todayStr = todayKey()
                     const isToday = t.due_date.slice(0,10)===todayStr
                     const over = !isToday && new Date(t.due_date+'T23:59:59')<new Date()
                     return <span className="font-syne text-[7px] font-black px-1 py-0.5 rounded flex-shrink-0" style={{background:isToday?'rgba(255,176,32,0.15)':over?`${RED}15`:'rgba(255,255,255,0.04)',color:isToday?'rgba(255,176,32,0.9)':over?RED:'rgba(255,255,255,0.2)'}}>{isToday?'HOY':new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>
@@ -483,7 +487,7 @@ function EquipoSection({data, profile, showToast}: any) {
           </div>
 
           {/* Thread */}
-          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+          <div className={`flex-1 overflow-y-auto ${isMobile?'px-4':'px-6'} py-4 space-y-3`}>
             <div className="font-syne text-[8.5px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.18)'}}>CONVERSACION</div>
             {loadingThread && <div className="text-center py-8 text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Cargando mensajes…</div>}
             {!loadingThread && thread.length===0 && (
@@ -527,9 +531,7 @@ function EquipoSection({data, profile, showToast}: any) {
               />
               <button onClick={sendMessage} disabled={sending||!msgBody.trim()}
                 className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 disabled:opacity-30 transition-all"
-                style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
-                <LucideIcon name="send" size={14} color="white"/>
-              </button>
+                style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}} aria-label="Enviar"><LucideIcon name="send" size={14} color="white"/></button>
             </div>
             <div className="text-center text-[9px] mt-2" style={{color:'rgba(255,255,255,0.15)'}}>⌘↵ para enviar</div>
           </div>

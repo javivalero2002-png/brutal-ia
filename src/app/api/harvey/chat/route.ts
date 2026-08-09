@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { webSearch, needsWebSearch, formatSearchContextVoice } from '@/lib/ai'
+import { checkHarveyRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Chat + búsqueda web + reintentos de modelo pueden superar los 10s por defecto
@@ -88,9 +89,16 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const { createAdminClient } = await import('@/lib/supabase/server')
+  const admin = await createAdminClient()
+  if (await checkHarveyRateLimit(admin, user.id)) {
+    return NextResponse.json({ error: 'Demasiadas solicitudes. Espera un momento.' }, { status: 429 })
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY
   const { message, context, history, stream } = await request.json()
   if (!message?.trim()) return NextResponse.json({ error: 'Empty message' }, { status: 400 })
+  if (message.length > 4000) return NextResponse.json({ error: 'Message too long' }, { status: 400 })
 
   // Web search — run in parallel before calling Anthropic
   const needsSearch = needsWebSearch(String(message))
@@ -143,11 +151,9 @@ SUGERENCIAS PROACTIVAS DESDE EL INBOX:
 
 ${context ? `CONTEXTO ACTUAL DEL SISTEMA:\n${context}` : ''}`
 
-    const models = [
-      'claude-haiku-4-5-20251001',
-      'claude-3-5-haiku-20241022',
-      'claude-3-haiku-20240307',
-    ]
+    // Un único modelo vigente. Los antiguos (claude-3-haiku) están fuera de
+    // soporte y solo servían de fallback histórico; ya no se usan.
+    const models = ['claude-haiku-4-5-20251001']
 
     for (const model of models) {
       try {

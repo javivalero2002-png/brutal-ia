@@ -22,6 +22,38 @@ function ensureConfigured() {
 
 export type PushPayload = { title: string; body?: string; url?: string; tag?: string; urgent?: boolean }
 
+// Throttle de notificaciones por ámbito ('company' o un user_id). Usa la tabla
+// dedicada `push_rate_limits`; si aún no existe (migración pendiente), permite
+// el envío en lugar de bloquearlo. Devuelve true si SE PUEDE enviar.
+export async function canSendPush(admin: SupabaseClient, scope: string, windowMs = 90_000): Promise<boolean> {
+  try {
+    const { data, error } = await admin
+      .from('push_rate_limits')
+      .select('last_sent')
+      .eq('scope', scope)
+      .maybeSingle()
+    if (error) return true // tabla ausente → no bloquear
+    const last = data ? new Date(data.last_sent).getTime() : 0
+    if (Date.now() - last <= windowMs) return false
+    await admin.from('push_rate_limits').upsert({ scope, last_sent: new Date().toISOString() })
+    return true
+  } catch {
+    return true
+  }
+}
+
+// Registra el aviso en el historial (best-effort). Si la tabla notification_log
+// aún no existe (migración pendiente), el fallo se ignora silenciosamente.
+async function logNotifications(admin: SupabaseClient, userIds: string[], payload: PushPayload) {
+  const ids = [...new Set(userIds.filter(Boolean))]
+  if (ids.length === 0) return
+  try {
+    await admin.from('notification_log').insert(
+      ids.map(user_id => ({ user_id, title: payload.title, body: payload.body || null, url: payload.url || null, tag: payload.tag || null }))
+    )
+  } catch { /* tabla ausente o error transitorio: no bloquear el envío */ }
+}
+
 async function sendToRows(admin: SupabaseClient, rows: { id: string; condition_text: string | null }[], payload: PushPayload) {
   if (!ensureConfigured() || rows.length === 0) return 0
   let sent = 0
@@ -42,12 +74,14 @@ async function sendToRows(admin: SupabaseClient, rows: { id: string; condition_t
 
 export async function sendPushToUser(admin: SupabaseClient, userId: string, payload: PushPayload) {
   const { data } = await admin.from('reglas').select('id,condition_text').eq('name', PUSH_ROW).eq('created_by', userId)
+  await logNotifications(admin, [userId], payload)
   return sendToRows(admin, data || [], payload)
 }
 
 export async function sendPushToAll(admin: SupabaseClient, payload: PushPayload, exceptUserId?: string) {
-  let q = admin.from('reglas').select('id,condition_text').eq('name', PUSH_ROW)
+  let q = admin.from('reglas').select('id,condition_text,created_by').eq('name', PUSH_ROW)
   if (exceptUserId) q = q.neq('created_by', exceptUserId)
   const { data } = await q
+  await logNotifications(admin, (data || []).map((r: any) => r.created_by), payload)
   return sendToRows(admin, data || [], payload)
 }

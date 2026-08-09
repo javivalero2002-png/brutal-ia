@@ -13,10 +13,9 @@ export function getAuthUrl(userId: string, account: 'personal' | 'colabs' = 'per
   const scopes = [
     'https://www.googleapis.com/auth/gmail.readonly',
     'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/calendar.readonly',  // list all calendars
+    'https://www.googleapis.com/auth/calendar.events',    // create/edit events
   ]
-  if (account === 'personal') {
-    scopes.push('https://www.googleapis.com/auth/calendar.events')
-  }
   return oauth2Client.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
@@ -92,18 +91,35 @@ export async function getCalendarEvents(refreshToken: string, monthsAhead = 2) {
   const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
 
   const now = new Date()
-  const timeMax = new Date(now.getFullYear(), now.getMonth() + monthsAhead, 1)
+  const timeMin = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const timeMax = new Date(now.getFullYear(), now.getMonth() + monthsAhead, 1).toISOString()
 
-  const { data } = await calendar.events.list({
-    calendarId: 'primary',
-    timeMin: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(),
-    timeMax: timeMax.toISOString(),
-    maxResults: 100,
-    singleEvents: true,
-    orderBy: 'startTime',
-  })
+  // Get all selected calendars — requires calendar.readonly scope.
+  // Falls back to ['primary'] if token only has calendar.events (older tokens).
+  let calendarIds: string[] = []
+  try {
+    const { data: calList } = await calendar.calendarList.list({ minAccessRole: 'reader' })
+    calendarIds = (calList.items || [])
+      .filter((c: any) => c.selected !== false)
+      .map((c: any) => c.id as string)
+  } catch {}
+  if (!calendarIds.length) calendarIds.push('primary')
 
-  return (data.items || []).map((e: any) => ({
+  // Fetch events from all calendars in parallel
+  const results = await Promise.allSettled(
+    calendarIds.map(calId =>
+      calendar.events.list({
+        calendarId: calId,
+        timeMin,
+        timeMax,
+        maxResults: 100,
+        singleEvents: true,
+        orderBy: 'startTime',
+      })
+    )
+  )
+
+  const mapEvent = (e: any) => ({
     id: e.id,
     title: e.summary || '(sin título)',
     start: e.start?.dateTime || e.start?.date || '',
@@ -113,7 +129,22 @@ export async function getCalendarEvents(refreshToken: string, monthsAhead = 2) {
     description: e.description || '',
     colorId: e.colorId || '',
     htmlLink: e.htmlLink || '',
-  }))
+    hangoutLink: e.hangoutLink || e.conferenceData?.entryPoints?.find((ep: any) => ep.entryPointType === 'video')?.uri || '',
+  })
+
+  // Merge, deduplicate and sort
+  const seen = new Set<string>()
+  const allEvents: ReturnType<typeof mapEvent>[] = []
+  for (const result of results) {
+    if (result.status !== 'fulfilled') continue
+    for (const e of result.value.data.items || []) {
+      if (!e.id || seen.has(e.id)) continue
+      seen.add(e.id)
+      allEvents.push(mapEvent(e))
+    }
+  }
+
+  return allEvents.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
 }
 
 export async function createCalendarEvent(refreshToken: string, opts: {
@@ -162,6 +193,48 @@ export async function createCalendarEvent(refreshToken: string, opts: {
   }
 }
 
+export async function deleteCalendarEvent(refreshToken: string, eventId: string) {
+  const oauth2Client = getOAuthClient()
+  oauth2Client.setCredentials({ refresh_token: refreshToken })
+  const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
+  await calendar.events.delete({ calendarId: 'primary', eventId })
+}
+
+export async function updateCalendarEvent(refreshToken: string, eventId: string, opts: {
+  title?: string
+  date?: string
+  time?: string
+}) {
+  const oauth2Client = getOAuthClient()
+  oauth2Client.setCredentials({ refresh_token: refreshToken })
+  const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
+
+  const { data: existing } = await calendar.events.get({ calendarId: 'primary', eventId })
+  const patchBody: any = {}
+  if (opts.title) patchBody.summary = opts.title
+  if (opts.date) {
+    if (opts.time) {
+      const startDT = new Date(`${opts.date}T${opts.time}:00`)
+      const origDuration = existing.end?.dateTime && existing.start?.dateTime
+        ? new Date(existing.end.dateTime).getTime() - new Date(existing.start.dateTime).getTime()
+        : 3600000
+      patchBody.start = { dateTime: startDT.toISOString(), timeZone: 'Europe/Madrid' }
+      patchBody.end = { dateTime: new Date(startDT.getTime() + origDuration).toISOString(), timeZone: 'Europe/Madrid' }
+    } else {
+      const nextDay = new Date(opts.date + 'T00:00:00')
+      nextDay.setDate(nextDay.getDate() + 1)
+      patchBody.start = { date: opts.date }
+      patchBody.end = { date: nextDay.toISOString().slice(0, 10) }
+    }
+  }
+  const { data } = await calendar.events.patch({ calendarId: 'primary', eventId, requestBody: patchBody })
+  return {
+    id: data.id ?? eventId,
+    title: data.summary ?? opts.title ?? '',
+    start: data.start?.dateTime ?? data.start?.date ?? opts.date ?? '',
+  }
+}
+
 function extractAttachments(payload: any): {attachmentId: string; filename: string; mimeType: string; size: number}[] {
   const results: {attachmentId: string; filename: string; mimeType: string; size: number}[] = []
   if (!payload) return results
@@ -187,22 +260,34 @@ function extractAttachments(payload: any): {attachmentId: string; filename: stri
 function extractBody(payload: any): string {
   if (!payload) return ''
 
+  // Direct body data (simple messages)
   if (payload.body?.data) {
-    return Buffer.from(payload.body.data, 'base64').toString('utf-8').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    const raw = Buffer.from(payload.body.data, 'base64').toString('utf-8')
+    const isHtml = (payload.mimeType || '').includes('html')
+    return isHtml ? raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : raw.replace(/\s+/g, ' ').trim()
   }
 
-  if (payload.parts) {
-    for (const part of payload.parts) {
-      if (part.mimeType === 'text/plain' && part.body?.data) {
-        return Buffer.from(part.body.data, 'base64').toString('utf-8').replace(/\s+/g, ' ').trim()
-      }
-    }
-    for (const part of payload.parts) {
-      if (part.mimeType === 'text/html' && part.body?.data) {
-        return Buffer.from(part.body.data, 'base64').toString('utf-8').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-      }
-    }
-  }
+  if (!payload.parts) return ''
+
+  // First pass: prefer text/plain at any depth
+  const plain = findPart(payload.parts, 'text/plain')
+  if (plain) return Buffer.from(plain, 'base64').toString('utf-8').replace(/\s+/g, ' ').trim()
+
+  // Second pass: fall back to text/html at any depth
+  const html = findPart(payload.parts, 'text/html')
+  if (html) return Buffer.from(html, 'base64').toString('utf-8').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
 
   return ''
+}
+
+function findPart(parts: any[], mimeType: string): string | null {
+  for (const part of parts) {
+    if (part.mimeType === mimeType && part.body?.data) return part.body.data
+    // Recurse into multipart/* containers
+    if (part.mimeType?.startsWith('multipart/') && part.parts) {
+      const found = findPart(part.parts, mimeType)
+      if (found) return found
+    }
+  }
+  return null
 }

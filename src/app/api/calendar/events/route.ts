@@ -10,7 +10,7 @@ export async function GET() {
   const admin = await createAdminClient()
   const { data: profile } = await admin
     .from('profiles')
-    .select('gmail_refresh_token, gmail_connected')
+    .select('gmail_refresh_token, gmail_connected, gmail_colabs_refresh_token, gmail_colabs_connected')
     .eq('id', user.id)
     .single()
 
@@ -18,17 +18,45 @@ export async function GET() {
     return NextResponse.json([])
   }
 
-  try {
-    const events = await getCalendarEvents(profile.gmail_refresh_token, 3)
-    return NextResponse.json(events)
-  } catch (err: any) {
-    const code = err?.code ?? err?.status
-    if (code === 403) {
-      // Token has no calendar scope — user must reauth personal Gmail
-      return NextResponse.json({ __error: 'no_scope' })
-    }
-    return NextResponse.json([])
+  const coProfile = profile
+
+  const isNoScope = (err: any) => {
+    const code = Number(err?.status ?? err?.code ?? 0)
+    const reason = err?.errors?.[0]?.reason ?? err?.response?.data?.error?.errors?.[0]?.reason ?? ''
+    return code === 403 || code === 401 || reason === 'insufficientPermissions' || reason === 'forbidden' || reason === 'invalid_grant'
   }
+
+  let personalEvents: any[] = []
+  let personalNoScope = false
+  try {
+    personalEvents = await getCalendarEvents(profile.gmail_refresh_token, 3)
+  } catch (err: any) {
+    if (isNoScope(err)) { personalNoScope = true }
+    else { console.error('Calendar GET personal error:', err?.message) }
+  }
+
+  let colabsEvents: any[] = []
+  if (coProfile?.gmail_colabs_refresh_token && coProfile?.gmail_colabs_connected) {
+    try {
+      colabsEvents = await getCalendarEvents(coProfile.gmail_colabs_refresh_token, 3)
+    } catch (err: any) {
+      if (!isNoScope(err)) { console.error('Calendar GET colabs error:', err?.message) }
+    }
+  }
+
+  if (personalNoScope && colabsEvents.length === 0 && !coProfile?.gmail_colabs_refresh_token) {
+    return NextResponse.json({ __error: 'no_scope' })
+  }
+
+  // Merge and deduplicate by event id
+  const seen = new Set<string>()
+  const merged = [...personalEvents, ...colabsEvents].filter(e => {
+    if (seen.has(e.id)) return false
+    seen.add(e.id)
+    return true
+  }).sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+
+  return NextResponse.json(merged)
 }
 
 export async function POST(request: NextRequest) {
@@ -59,11 +87,12 @@ export async function POST(request: NextRequest) {
     })
     return NextResponse.json(event)
   } catch (err: any) {
-    const status = err?.code ?? err?.status ?? 500
-    if (status === 403) {
+    const code = Number(err?.status ?? err?.code ?? 0)
+    const reason = err?.errors?.[0]?.reason ?? err?.response?.data?.error?.errors?.[0]?.reason ?? ''
+    if (code === 403 || reason === 'insufficientPermissions') {
       return NextResponse.json({ error: 'insufficient_scope' }, { status: 403 })
     }
-    console.error('Calendar create error:', err?.message)
+    console.error('Calendar create error:', err?.message, code)
     return NextResponse.json({ error: 'Error creando evento' }, { status: 500 })
   }
 }

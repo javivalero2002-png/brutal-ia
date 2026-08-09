@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { BLU, RED, SURFACE, SURF2, BORDER, LucideIcon, AjCard } from '@/components/shared'
+import { useIsMobile } from '@/components/shared'
 import SincronizacionSection from './SincronizacionSection'
 import EquipoSection from './EquipoSection'
 import MemoriaSection from './MemoriaSection'
@@ -10,6 +11,7 @@ import ReportesSection from './ReportesSection'
 import NotificacionesTab from './NotificacionesTab'
 
 function AjustesSection({profile,data,showToast,memFilter,setMemFilter,onOpenModal,isOwner}: any) {
+  const isMobile = useIsMobile()
   const [ajTab, setAjTab] = useState<'perfil'|'notificaciones'|'sincronizacion'|'equipo'|'memoria'|'automatizaciones'|'reportes'>('perfil')
   const [editName, setEditName] = useState(profile?.name||'')
   const [editInitials, setEditInitials] = useState(profile?.initials||'')
@@ -63,10 +65,10 @@ function AjustesSection({profile,data,showToast,memFilter,setMemFilter,onOpenMod
   return (
     <div className="h-full flex flex-col">
       {/* Header + tabs */}
-      <div className="px-8 pt-7 pb-0 flex-shrink-0">
+      <div className={`${isMobile?'px-4':'px-8'} pt-7 pb-0 flex-shrink-0`}>
         <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1" style={{color:'rgba(255,255,255,0.18)'}}>CONFIGURACIÓN</div>
         <h1 className="font-figtree text-[26px] font-black text-white leading-none mb-5" style={{letterSpacing:'-0.03em'}}>Operativa</h1>
-        <div className="flex items-center gap-1.5 overflow-x-auto" style={{borderBottom:`1px solid ${BORDER}`,paddingBottom:'0',scrollbarWidth:'none',touchAction:'pan-x',overscrollBehavior:'contain'}}>
+        <div className="flex items-center gap-1.5 overflow-x-auto" style={{borderBottom:`1px solid ${BORDER}`,paddingBottom:'0',scrollbarWidth:'none',touchAction:'pan-x',overscrollBehavior:'contain',overflowY:'hidden',WebkitOverflowScrolling:'touch' as any}}>
           {ajTabs.map(t=>{
             const act = ajTab === t.id
             return (
@@ -96,7 +98,7 @@ function AjustesSection({profile,data,showToast,memFilter,setMemFilter,onOpenMod
         {ajTab === 'reportes' && isOwner && <ReportesSection data={data} onNavigate={()=>{}} />}
 
         {ajTab === 'perfil' && (
-        <div className="p-8 max-w-[680px] mx-auto">
+        <div className={`${isMobile?'p-4':'p-8'} max-w-[680px] mx-auto`}>
       <div className="space-y-4">
 
         {/* Mi perfil */}

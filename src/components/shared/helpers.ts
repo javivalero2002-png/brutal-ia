@@ -18,6 +18,17 @@ export const dlDate = (d?: string|null): Date => {
   return isNaN(t.getTime()) ? DL_FAR_FUTURE : t
 }
 
+// Fecha "hoy" en la zona horaria de España (Europe/Madrid), formato YYYY-MM-DD.
+// NO usar `new Date().toISOString().slice(0,10)`: eso da la fecha en UTC y tras
+// las ~22-23h de Madrid salta al día siguiente, rompiendo "vence hoy",
+// "completadas hoy" y las automatizaciones del día.
+export const todayKey = (): string =>
+  new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' })
+
+// Convierte cualquier fecha/ISO a su día local en España (YYYY-MM-DD).
+export const localDayKey = (d: string | number | Date): string =>
+  new Date(d).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' })
+
 export const dlLabel = (d?: string|null): string => {
   if (!d || d === 'TBD') return ''
   const t = dlDate(d)
@@ -32,7 +43,9 @@ export const strColor = (s: string) => {
 }
 
 export const relTime = (iso: string) => {
-  const m = Math.floor((Date.now()-new Date(iso).getTime())/60000)
+  const ts = new Date(iso).getTime()
+  if (isNaN(ts)) return ''
+  const m = Math.floor((Date.now()-ts)/60000)
   if (m<2) return 'ahora'
   if (m<60) return `${m}m`
   if (m<1440) return `${Math.floor(m/60)}h`

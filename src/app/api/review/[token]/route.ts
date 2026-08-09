@@ -6,9 +6,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const { token } = await params
   const admin = await createAdminClient()
 
+  // Endpoint PÚBLICO: no exponer `notes` (uso interno) ni `client_id`.
   const { data, error } = await admin
     .from('content_agenda')
-    .select('id, title, platform, status, video_url, notes, feedback, publish_date, client_id')
+    .select('id, title, platform, status, video_url, publish_date')
     .eq('id', token)
     .single()
 
@@ -30,9 +31,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   if (feedback.length > 5000) return NextResponse.json({ error: 'Feedback too long' }, { status: 400 })
 
   const admin = await createAdminClient()
+
+  // No sobrescribir el feedback anterior: se anexa con fecha, preservando el historial.
+  const { data: existing } = await admin
+    .from('content_agenda')
+    .select('feedback')
+    .eq('id', token)
+    .single()
+  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const stamp = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  const prev = (existing.feedback || '').trim()
+  const merged = (prev ? `${prev}\n\n` : '') + `[${stamp}] ${feedback.trim()}`
+
   const { error } = await admin
     .from('content_agenda')
-    .update({ feedback: feedback.trim() })
+    .update({ feedback: merged.slice(0, 20000) })
     .eq('id', token)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

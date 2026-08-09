@@ -1,15 +1,35 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { BLU, GRN, SURFACE, BORDER, LucideIcon } from '@/components/shared'
+import { BLU, GRN, SURFACE, BORDER, LucideIcon, useIsMobile, relTime } from '@/components/shared'
+
+interface NotifItem { id: string; title: string; body?: string; url?: string; tag?: string; read: boolean; created_at: string }
 
 function NotificacionesTab({ showToast }: any) {
+  const isMobile = useIsMobile()
   const [supported, setSupported] = useState(true)
   const [needsInstall, setNeedsInstall] = useState(false)
   const [permission, setPermission] = useState<NotificationPermission | 'unknown'>('unknown')
   const [subscribed, setSubscribed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [history, setHistory] = useState<NotifItem[]>([])
+  const [histLoaded, setHistLoaded] = useState(false)
+
+  const loadHistory = async () => {
+    try {
+      const r = await fetch('/api/notifications/history')
+      const d = await r.json()
+      setHistory(Array.isArray(d.items) ? d.items : [])
+    } catch { /* silencioso */ }
+    finally { setHistLoaded(true) }
+  }
+  useEffect(() => { loadHistory() }, [])
+
+  const clearHistory = async () => {
+    setHistory([])
+    try { await fetch('/api/notifications/history', { method: 'DELETE' }) } catch {}
+  }
 
   useEffect(() => {
     const hasApi = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
@@ -35,7 +55,7 @@ function NotificacionesTab({ showToast }: any) {
       const raw = atob(key.replace(/-/g, '+').replace(/_/g, '/'))
       const appKey = new Uint8Array([...raw].map(c => c.charCodeAt(0)))
       const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey })
-      const r = await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub.toJSON() }) })
+      const r = await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub.toJSON(), userAgent: navigator.userAgent }) })
       if (!r.ok) throw new Error('subscribe failed')
       setSubscribed(true)
       showToast('Notificaciones activadas en este dispositivo')
@@ -65,12 +85,13 @@ function NotificacionesTab({ showToast }: any) {
       const r = await fetch('/api/push/test', { method: 'POST' })
       const d = await r.json()
       showToast(d.sent > 0 ? 'Prueba enviada — debería sonar en unos segundos' : 'Sin dispositivos suscritos')
+      setTimeout(loadHistory, 900)
     } catch { showToast('Error al enviar la prueba') }
     finally { setTesting(false) }
   }
 
   return (
-    <div className="p-8 max-w-[680px] mx-auto space-y-4">
+    <div className={`${isMobile?'p-4':'p-8'} max-w-[680px] mx-auto space-y-4`}>
       <div className="p-6" style={{background:SURFACE,border:`1px solid ${BORDER}`,borderRadius:'16px'}}>
         <div className="flex items-center gap-3 mb-1">
           <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0" style={{background:subscribed?'rgba(34,197,94,0.12)':'rgba(27,95,250,0.1)'}}>
@@ -132,6 +153,46 @@ function NotificacionesTab({ showToast }: any) {
           </div>
         )}
       </div>
+      {/* ── HISTORIAL ──────────────────────────────────────────────────────── */}
+      <div className="p-6" style={{background:SURFACE,border:`1px solid ${BORDER}`,borderRadius:'16px'}}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2.5">
+            <LucideIcon name="clock" size={14} color="rgba(255,255,255,0.4)"/>
+            <span className="font-syne text-[10px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.55)'}}>HISTORIAL</span>
+            {history.length>0 && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(27,95,250,0.1)',color:'rgba(100,140,255,0.7)'}}>{history.length}</span>}
+          </div>
+          {history.length>0 && (
+            <button onClick={clearHistory} className="font-syne text-[8px] font-black tracking-wide px-2.5 py-1.5 rounded-lg transition-colors hover:bg-white/5" style={{color:'rgba(255,255,255,0.35)'}}>LIMPIAR</button>
+          )}
+        </div>
+        {!histLoaded ? (
+          <div className="text-center py-8 text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Cargando…</div>
+        ) : history.length === 0 ? (
+          <div className="flex flex-col items-center gap-2.5 py-10">
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center" style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${BORDER}`}}>
+              <LucideIcon name="bell" size={18} color="rgba(255,255,255,0.15)"/>
+            </div>
+            <div className="text-[12.5px]" style={{color:'rgba(255,255,255,0.25)'}}>Aún no hay notificaciones</div>
+            <div className="text-[11px] text-center max-w-[280px]" style={{color:'rgba(255,255,255,0.18)'}}>Aquí aparecerán las tareas asignadas, mensajes del equipo, emails y alertas de tus automatizaciones.</div>
+          </div>
+        ) : (
+          <div className="space-y-1.5 -mx-1">
+            {history.map(n=>(
+              <div key={n.id} className="flex items-start gap-3 px-3 py-2.5 rounded-xl transition-colors" style={{background:n.read?'transparent':'rgba(27,95,250,0.04)'}}>
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{background:n.read?'rgba(255,255,255,0.03)':'rgba(27,95,250,0.1)'}}>
+                  <LucideIcon name={n.title.startsWith('⚡')?'zap':n.tag?.startsWith('task')?'check-square':n.tag?.startsWith('auto')?'zap':'bell'} size={12} color={n.read?'rgba(255,255,255,0.3)':BLU}/>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12.5px] font-medium truncate" style={{color:'rgba(240,240,248,0.85)'}}>{n.title}</div>
+                  {n.body && <div className="text-[11.5px] mt-0.5 line-clamp-2" style={{color:'rgba(255,255,255,0.35)'}}>{n.body}</div>}
+                </div>
+                <span className="font-syne text-[8px] font-black tracking-wide flex-shrink-0 mt-1" style={{color:'rgba(255,255,255,0.22)'}}>{relTime(n.created_at)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="px-5 py-4 rounded-2xl text-[11.5px] leading-relaxed" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.3)'}}>
         Cada persona activa las notificaciones en su propio dispositivo. Se puede activar en varios (móvil y ordenador) a la vez.
       </div>

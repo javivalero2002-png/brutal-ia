@@ -1,10 +1,26 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER } from '@/components/shared'
 import { useIsMobile, useBackClosable } from '@/components/shared'
-import { strColor, relTime } from '@/components/shared'
+import { strColor, relTime, todayKey } from '@/components/shared'
 import { LucideIcon } from '@/components/shared'
+
+// Empareja el "cliente" detectado por la IA con un cliente real.
+// La primera palabra del nombre solo se usa como match parcial si es distintiva
+// (≥4 caracteres) para no asociar por error emails a clientes cuyo nombre empieza
+// por "El", "La", "De", etc. (p. ej. "El Corte" no debe casar con "Manuel").
+function matchClientByName(clients: any[], aiClient?: string | null) {
+  if (!aiClient || aiClient === 'Desconocido') return null
+  const ai = aiClient.toLowerCase()
+  return clients.find((c: any) => {
+    const name = (c.name || '').toLowerCase()
+    if (!name) return false
+    if (name.includes(ai)) return true
+    const firstWord = name.split(' ')[0]
+    return firstWord.length >= 4 && ai.includes(firstWord)
+  }) || null
+}
 
 function EmailBodyBlock({preview, gmailId}: {preview:string; gmailId?:string}) {
   const [expanded, setExpanded] = useState(false)
@@ -46,7 +62,33 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
   useBackClosable(!!selected, () => setSelected(null))
   const [creatingTask, setCreatingTask] = useState(false)
   const creatingTaskRef = useRef(false)
+  // Harvey reply draft
+  const [replyOpen, setReplyOpen] = useState(false)
+  const [replyDraft, setReplyDraft] = useState('')
+  const [replyLoading, setReplyLoading] = useState(false)
+  const [replyCopied, setReplyCopied] = useState(false)
   const [activeSender, setActiveSender] = useState<string|null>(null)
+  const [archivedIds, setArchivedIds] = useState<Set<string>>(()=>{
+    try { return new Set(JSON.parse(localStorage.getItem('nexus_archived_ids')||'[]')) } catch { return new Set() }
+  })
+
+  const archiveMessage = (m: any) => {
+    const next = new Set(archivedIds)
+    next.add(m.id)
+    setArchivedIds(next)
+    try { localStorage.setItem('nexus_archived_ids', JSON.stringify([...next])) } catch {}
+    setSelected(null)
+    showToast('Mensaje archivado')
+  }
+
+  const unarchiveMessage = (m: any) => {
+    const next = new Set(archivedIds)
+    next.delete(m.id)
+    setArchivedIds(next)
+    try { localStorage.setItem('nexus_archived_ids', JSON.stringify([...next])) } catch {}
+    setSelected(null)
+    showToast('Mensaje restaurado')
+  }
   const filteredRef = useRef<any[]>([])
   const allInboxRef = useRef<any[]>([])
 
@@ -86,47 +128,76 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
     return () => window.removeEventListener('keydown', handler)
   }, [selected])
 
-  const allMsgs: any[] = data.inbox
-  allInboxRef.current = allMsgs
-  const unread = allMsgs.filter(m=>!m.is_read).length
-  const urgent = allMsgs.filter(m=>m.ai_urgency==='urgent'&&!m.is_read).length
-  const internal = allMsgs.filter(m=>m.source==='internal'&&!m.is_read).length
-  const fromClients = allMsgs.filter(m=>m.ai_client&&m.ai_client!=='Desconocido'&&!m.is_read).length
+  const allMsgs: any[] = data.inbox as any[]
+  const activeMsgs = allMsgs.filter((m:any)=>!archivedIds.has(m.id))
+  allInboxRef.current = activeMsgs
+  const unread = activeMsgs.filter(m=>!m.is_read).length
+  const urgent = activeMsgs.filter(m=>m.ai_urgency==='urgent'&&!m.is_read).length
+  const internal = activeMsgs.filter(m=>m.source==='internal'&&!m.is_read).length
+  const fromClients = activeMsgs.filter(m=>m.ai_client&&m.ai_client!=='Desconocido'&&!m.is_read).length
 
   const calEvents = ((data.calendarEvents||[]) as any[]).sort((a:any,b:any)=>(a.start||'').localeCompare(b.start||''))
-  const filtered = allMsgs.filter((m: any) => {
-    if (filter==='Calendar') return false
-    if (filter==='Todos') return true
-    if (filter==='Sin leer') return !m.is_read
-    if (filter==='Urgente') return m.ai_urgency==='urgent'
-    if (filter==='Clientes') return m.ai_client&&m.ai_client!=='Desconocido'
-    if (filter==='Interno') return m.source==='internal'
-    if (filter==='Personal') return m.source==='gmail'&&!m.shared
-    if (filter==='Colabs') return m.source==='gmail'&&m.shared
-    if (filter==='Gmail') return m.source==='gmail'
-    if (filter==='WhatsApp') return m.source==='whatsapp'
-    return true
-  })
+  const filtered = filter==='Archivados'
+    ? allMsgs.filter((m:any)=>archivedIds.has(m.id))
+    : activeMsgs.filter((m: any) => {
+        if (filter==='Calendar') return false
+        if (filter==='Todos') return true
+        if (filter==='Sin leer') return !m.is_read
+        if (filter==='Urgente') return m.ai_urgency==='urgent'
+        if (filter==='Clientes') return m.ai_client&&m.ai_client!=='Desconocido'
+        if (filter==='Interno') return m.source==='internal'
+        if (filter==='Personal') return m.source==='gmail'&&!m.shared
+        if (filter==='Colabs') return m.source==='gmail'&&m.shared
+        if (filter==='Gmail') return m.source==='gmail'
+        if (filter==='WhatsApp') return m.source==='whatsapp'
+        return true
+      })
   filteredRef.current = filtered
 
-  const personalGmailCount  = allMsgs.filter((m:any)=>m.source==='gmail'&&!m.shared).length
-  const personalGmailUnread = allMsgs.filter((m:any)=>m.source==='gmail'&&!m.shared&&!m.is_read).length
-  const colabsGmailCount    = allMsgs.filter((m:any)=>m.source==='gmail'&&m.shared).length
-  const colabsGmailUnread   = allMsgs.filter((m:any)=>m.source==='gmail'&&m.shared&&!m.is_read).length
+  const personalGmailCount  = activeMsgs.filter((m:any)=>m.source==='gmail'&&!m.shared).length
+  const personalGmailUnread = activeMsgs.filter((m:any)=>m.source==='gmail'&&!m.shared&&!m.is_read).length
+  const colabsGmailCount    = activeMsgs.filter((m:any)=>m.source==='gmail'&&m.shared).length
+  const colabsGmailUnread   = activeMsgs.filter((m:any)=>m.source==='gmail'&&m.shared&&!m.is_read).length
+  const archivedCount       = archivedIds.size
 
   const handleSelect = (m: any) => {
     setSelected(m)
+    setReplyOpen(false)
+    setReplyDraft('')
+    setReplyCopied(false)
     if (!m.is_read) data.markRead(m.id).catch(()=>{})
   }
+
+  const openHarveyReply = useCallback(async (m: any) => {
+    setReplyOpen(true)
+    setReplyDraft('')
+    setReplyCopied(false)
+    setReplyLoading(true)
+    try {
+      const res = await fetch('/api/inbox/harvey-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fromName: m.from_name,
+          fromEmail: m.from_email,
+          subject: m.subject,
+          summary: m.ai_summary,
+          aiAction: m.ai_action,
+          senderLanguage: 'español',
+        }),
+      })
+      const json = await res.json()
+      setReplyDraft(json.draft || '')
+    } catch { setReplyDraft('Error al generar borrador.') }
+    finally { setReplyLoading(false) }
+  }, [])
 
   const createTaskFromEmail = async (m: any) => {
     if (!m.ai_action || creatingTaskRef.current) return
     creatingTaskRef.current = true
     setCreatingTask(true)
     try {
-      const client = m.ai_client && m.ai_client !== 'Desconocido'
-        ? data.clients.find((c: any) => c.name.toLowerCase().includes(m.ai_client.toLowerCase()) || m.ai_client.toLowerCase().includes(c.name.toLowerCase().split(' ')[0]))
-        : null
+      const client = matchClientByName(data.clients, m.ai_client)
       await data.createTask({ text: m.ai_action, level: m.ai_urgency==='urgent'?'urgent':'high', source:'gmail', client_id: client?.id })
       showToast('Tarea creada' + (client ? ` · ${client.name}` : ''))
     } catch { showToast('Error') }
@@ -150,9 +221,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
   filtered.forEach(m => { const l = getDateLabel(m.received_at); if (!byLabel[l]) byLabel[l] = []; byLabel[l].push(m) })
   ;['HOY','AYER','ESTA SEMANA','ANTERIORES'].forEach(l => { if (byLabel[l]?.length) groups.push({label:l, items:byLabel[l]}) })
 
-  const matchedClient = selected?.ai_client
-    ? data.clients.find((c: any) => c.name.toLowerCase().includes(selected.ai_client.toLowerCase()) || selected.ai_client.toLowerCase().includes(c.name.toLowerCase().split(' ')[0]))
-    : null
+  const matchedClient = matchClientByName(data.clients, selected?.ai_client)
   const relatedTasks = matchedClient ? data.tasks.filter((t: any) => !t.done && t.client_id===matchedClient.id).slice(0, 4) : []
 
   const uc = (u: string) => u==='urgent'?RED:u==='high'?'rgba(255,176,32,0.9)':BLU
@@ -184,11 +253,12 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
               {id:'Calendar', label:'Calendario', n:0, c:'#A78BFA', ic:'calendar'},
             ]
             const carpetas = [
-              {id:'Todos', label:'Bandeja unificada', n:allMsgs.length, c:'rgba(255,255,255,0.5)', ic:'inbox'},
+              {id:'Todos', label:'Bandeja unificada', n:activeMsgs.length, c:'rgba(255,255,255,0.5)', ic:'inbox'},
               {id:'Sin leer', label:'Sin leer', n:unread, c:BLU, ic:'mail'},
               {id:'Urgente', label:'Prioridad', n:urgent, c:'rgba(255,176,32,0.9)', ic:'zap'},
               {id:'Clientes', label:'Clientes', n:fromClients, c:'rgba(255,176,32,0.8)', ic:'user'},
               {id:'Interno', label:'Equipo', n:internal, c:'rgba(167,139,250,0.85)', ic:'users'},
+              {id:'Archivados', label:'Archivados', n:archivedCount, c:'rgba(255,255,255,0.3)', ic:'archive'},
             ]
             const item = (f:any)=>{
               const act = filter===f.id
@@ -219,7 +289,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
         : selected ? {width:'360px',flexShrink:0,borderRight:`1px solid ${BORDER}`,maxWidth:'360px'} : {flex:1,minWidth:0}}>
 
         {/* Header */}
-        <div className="flex-shrink-0 px-6 pt-5 pb-4" style={{borderBottom:`1px solid ${BORDER}`}}>
+        <div className={`flex-shrink-0 ${isMobile?'px-4':'px-6'} pt-5 pb-4`} style={{borderBottom:`1px solid ${BORDER}`}}>
           {filter === 'hub' ? (
             <div>
               <div className="flex items-center justify-between mb-3">
@@ -229,19 +299,19 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                 </div>
                 <div className="flex items-center gap-2">
                   {unread > 0 && (
-                    <button onClick={()=>{ const u=data.inbox.filter((m:any)=>!m.is_read); Promise.all(u.map((m:any)=>data.markRead(m.id))).catch(()=>{}); showToast(`${u.length} mensajes marcados como leídos`) }} className="font-syne text-[8px] font-black px-2.5 py-2 rounded-xl transition-all" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}} onMouseEnter={e=>(e.currentTarget.style.color='rgba(255,255,255,0.6)')} onMouseLeave={e=>(e.currentTarget.style.color='rgba(255,255,255,0.3)')}>TODO LEÍDO · {unread}</button>
+                    <button onClick={()=>{ const u=data.inbox.filter((m:any)=>!m.is_read); data.markManyRead(u.map((m:any)=>m.id)).catch(()=>{}); showToast(`${u.length} mensajes marcados como leídos`) }} className="font-syne text-[8px] font-black px-2.5 py-2 rounded-xl transition-all" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}} onMouseEnter={e=>(e.currentTarget.style.color='rgba(255,255,255,0.6)')} onMouseLeave={e=>(e.currentTarget.style.color='rgba(255,255,255,0.3)')}>TODO LEÍDO · {unread}</button>
                   )}
                 </div>
               </div>
               {/* Live stats strip */}
               <div className="flex items-center gap-0 rounded-xl overflow-hidden" style={{border:`1px solid ${BORDER}`}}>
                 {[
-                  {label:'TOTAL', value:allMsgs.length, color:'rgba(255,255,255,0.4)'},
-                  {label:'SIN LEER', value:unread, color: unread>0?BLU:'rgba(255,255,255,0.2)'},
-                  {label:'URGENTES', value:urgent, color: urgent>0?RED:'rgba(255,255,255,0.2)'},
-                  {label:'PERSONAL', value:personalGmailCount, color:'rgba(234,67,53,0.7)'},
-                  {label:'COLABS', value:colabsGmailCount, color:GRN},
-                ].map((s,i,arr)=>(
+                  {label:'TOTAL', value:allMsgs.length, color:'rgba(255,255,255,0.4)', mobileOnly:false},
+                  {label:'SIN LEER', value:unread, color: unread>0?BLU:'rgba(255,255,255,0.2)', mobileOnly:false},
+                  {label:'URGENTES', value:urgent, color: urgent>0?RED:'rgba(255,255,255,0.2)', mobileOnly:false},
+                  {label:'PERSONAL', value:personalGmailCount, color:'rgba(234,67,53,0.7)', mobileOnly:true},
+                  {label:'COLABS', value:colabsGmailCount, color:GRN, mobileOnly:true},
+                ].filter(s=>!isMobile||!s.mobileOnly).map((s,i,arr)=>(
                   <div key={s.label} className="flex-1 flex flex-col items-center py-2" style={{borderRight:i<arr.length-1?`1px solid ${BORDER}`:'none',background:SURF2}}>
                     <span className="font-figtree text-[14px] font-black leading-none" style={{color:s.color}}>{s.value}</span>
                     <span className="font-syne text-[6.5px] font-black tracking-wide mt-0.5" style={{color:'rgba(255,255,255,0.18)'}}>{s.label}</span>
@@ -275,7 +345,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                 {/* Mark all read for current filter */}
                 {(filter==='Personal'||filter==='Colabs'||filter==='Sin leer') && filtered.filter((m:any)=>!m.is_read).length > 0 && (
                   <button
-                    onClick={()=>{ const u=filtered.filter((m:any)=>!m.is_read); Promise.all(u.map((m:any)=>data.markRead(m.id))).catch(()=>{}); showToast(`${u.length} marcados como leídos`) }}
+                    onClick={()=>{ const u=filtered.filter((m:any)=>!m.is_read); data.markManyRead(u.map((m:any)=>m.id)).catch(()=>{}); showToast(`${u.length} marcados como leídos`) }}
                     className="font-syne text-[7px] font-black px-2 py-1.5 rounded-lg flex-shrink-0 transition-all hover:opacity-80"
                     style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}
                   >TODO LEÍDO</button>
@@ -309,7 +379,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
             const waCount     = allMsgs.filter((m:any)=>m.source==='whatsapp').length
             const teamCount   = allMsgs.filter((m:any)=>m.source==='internal').length
             const teamUnread  = allMsgs.filter((m:any)=>m.source==='internal'&&!m.is_read).length
-            const todayStr    = new Date().toISOString().slice(0,10)
+            const todayStr    = todayKey()
             const todayEvents = calEvents.filter((e:any)=>e.start?.slice(0,10)===todayStr).length
             const GmailSvg = ({opacity=1}:{opacity?:number}) => (
               <svg viewBox="0 0 24 24" width={36} height={36} style={{opacity}}>
@@ -377,7 +447,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                       <div className="font-figtree text-[15px] font-black leading-none mb-1" style={{color:'rgba(255,255,255,0.9)',letterSpacing:'-0.02em'}}>{card.label}</div>
                       <div className="font-syne text-[8px] font-bold tracking-wide mb-0.5" style={{color: card.active ? `${card.color}cc` : 'rgba(255,255,255,0.18)'}}>{(card.sub as string).toUpperCase()}</div>
                       {'hint' in card && <div className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.15)'}}>{(card as any).hint}</div>}
-                      <div className="absolute bottom-3.5 right-3.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className={`absolute bottom-3.5 right-3.5 transition-opacity ${isMobile?'opacity-60':'opacity-0 group-hover:opacity-100'}`}>
                         <LucideIcon name="arrow-right" size={13} color={card.color}/>
                       </div>
                     </button>
@@ -413,7 +483,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                       const emailSummary = unreadList.length > 0
                         ? unreadList.map((m:any)=>`• ${m.from_name||'?'}: "${m.subject||'sin asunto'}"${m.ai_summary?` → ${m.ai_summary}`:''}`).join('\n')
                         : 'ningún email sin leer'
-                      const todayEvts = calEvents.filter((e:any)=>e.start?.slice(0,10)===new Date().toISOString().slice(0,10))
+                      const todayEvts = calEvents.filter((e:any)=>e.start?.slice(0,10)===todayKey())
                       const evtSummary = todayEvts.length > 0 ? todayEvts.map((e:any)=>e.title).join(', ') : 'sin eventos hoy'
                       onAskHarvey(`Dame un briefing rápido de mi inbox y calendario de hoy.\n\nEmails sin leer (${unreadList.length}):\n${emailSummary}\n\nEventos de hoy: ${evtSummary}\n\n¿Cuáles son las prioridades más urgentes y qué debería atender primero?`)
                     }}
@@ -429,7 +499,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                       <div className="font-syne text-[8px] font-black tracking-widest mb-0.5" style={{color:`${BLU}aa`}}>BRIEFING CON HARVEY</div>
                       <div className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.2)'}}>Resumen de emails + calendario hablado por Harvey</div>
                     </div>
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className={`transition-opacity ${isMobile?'opacity-60':'opacity-0 group-hover:opacity-100'}`}>
                       <LucideIcon name="arrow-right" size={13} color={BLU}/>
                     </div>
                   </button>
@@ -454,7 +524,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                 </div>
               </div>
             )
-            const todayStr2 = new Date().toISOString().slice(0,10)
+            const todayStr2 = todayKey()
             const calGroups = [
               ...(calEvents.filter((e:any)=>e.start?.slice(0,10)===todayStr2).length ? [{label:'HOY', items:calEvents.filter((e:any)=>e.start?.slice(0,10)===todayStr2)}] : []),
               ...(calEvents.filter((e:any)=>e.start?.slice(0,10)>todayStr2).length ? [{label:'PRÓXIMOS', items:calEvents.filter((e:any)=>e.start?.slice(0,10)>todayStr2)}] : []),
@@ -634,7 +704,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                   </div>
                 )
               })()}
-              {selected && displayMsgs.length>1 && (
+              {selected && displayMsgs.length>1 && !isMobile && (
                 <div className="flex items-center justify-center gap-3 py-2 sticky top-0 z-20" style={{background:'rgba(5,5,16,0.9)',backdropFilter:'blur(8px)',borderBottom:`1px solid ${BORDER}`}}>
                   <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.12)'}}>
                     <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.06)',fontFamily:'inherit'}}>J</kbd> siguiente · <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.06)',fontFamily:'inherit'}}>K</kbd> anterior
@@ -696,24 +766,36 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
         <div className="flex-1 overflow-y-auto min-w-0" style={{background:'#050510'}}>
 
           {/* Sticky top bar */}
-          <div className="flex items-center justify-between px-6 py-3.5 sticky top-0 z-10" style={{background:'rgba(5,5,16,0.96)',backdropFilter:'blur(12px)',borderBottom:`1px solid ${BORDER}`}}>
+          <div className={`flex items-center justify-between ${isMobile?'px-4':'px-6'} py-3.5 sticky top-0 z-10`} style={{background:'rgba(5,5,16,0.96)',backdropFilter:'blur(12px)',borderBottom:`1px solid ${BORDER}`}}>
             <button onClick={()=>setSelected(null)} className="flex items-center gap-1.5 transition-opacity hover:opacity-60" style={{color:'rgba(255,255,255,0.35)'}}>
               <LucideIcon name="chevron-left" size={14} color="rgba(255,255,255,0.35)"/>
               <span className="font-syne text-[9px] font-black tracking-wide">VOLVER</span>
             </button>
             <div className="flex items-center gap-2">
-              {selected.source==='internal' && (
+              {selected.source==='internal' && !isMobile && (
                 <span className="font-syne text-[7.5px] font-black px-2.5 py-1 rounded-full" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.75)',border:'1px solid rgba(255,176,32,0.15)'}}>MENSAJE INTERNO</span>
               )}
               {selected.is_read && (
-                <button onClick={()=>{ data.markUnread(selected.id).catch(()=>{}); setSelected((s: any)=>({...s,is_read:false})) }} className="font-syne text-[7.5px] font-black px-3 py-1.5 rounded-xl transition-all hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>
-                  NO LEÍDO
+                <button onClick={()=>{ data.markUnread(selected.id).catch(()=>{}); setSelected((s: any)=>({...s,is_read:false})) }} className="flex items-center gap-1.5 font-syne text-[7.5px] font-black px-2.5 py-1.5 rounded-xl transition-all hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>
+                  <LucideIcon name="mail" size={11} color="rgba(255,255,255,0.3)"/>
+                  {!isMobile && 'NO LEÍDO'}
+                </button>
+              )}
+              {filter==='Archivados' ? (
+                <button onClick={()=>unarchiveMessage(selected)} className="flex items-center gap-1.5 font-syne text-[7.5px] font-black px-2.5 py-1.5 rounded-xl transition-all hover:bg-white/5" style={{color:BLU,border:`1px solid rgba(27,95,250,0.25)`}}>
+                  <LucideIcon name="archive-restore" size={11} color={BLU}/>
+                  {!isMobile && 'RESTAURAR'}
+                </button>
+              ) : (
+                <button onClick={()=>archiveMessage(selected)} className="flex items-center gap-1.5 font-syne text-[7.5px] font-black px-2.5 py-1.5 rounded-xl transition-all hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>
+                  <LucideIcon name="archive" size={11} color="rgba(255,255,255,0.3)"/>
+                  {!isMobile && 'ARCHIVAR'}
                 </button>
               )}
               {selected.from_email && selected.source==='gmail' && (
-                <a href={`mailto:${selected.from_email}?subject=${encodeURIComponent('Re: '+(selected.subject||''))}`} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all hover:opacity-80" style={{color:'rgba(255,255,255,0.45)',border:`1px solid ${BORDER}`}}>
-                  <LucideIcon name="corner-up-left" size={10} color="rgba(255,255,255,0.45)"/>RESPONDER
-                </a>
+                <button onClick={()=>replyOpen?setReplyOpen(false):openHarveyReply(selected)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all hover:opacity-80" style={{color:replyOpen?BLU:'rgba(255,255,255,0.45)',border:`1px solid ${replyOpen?BLU+'50':BORDER}`,background:replyOpen?`${BLU}12`:'transparent'}}>
+                  <LucideIcon name="corner-up-left" size={10} color={replyOpen?BLU:'rgba(255,255,255,0.45)'}/>RESPONDER
+                </button>
               )}
               {selected.ai_action&&selected.ai_action!=='Ninguna acción requerida' && (
                 <button onClick={()=>createTaskFromEmail(selected)} disabled={creatingTask} className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest text-white disabled:opacity-40 transition-opacity" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
@@ -779,17 +861,18 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                         </div>
                         <LucideIcon name={creatingTask?'loader':'plus'} size={14} color={`${BLU}80`}/>
                       </button>
-                      {/* Secondary: reply */}
+                      {/* Secondary: Harvey reply draft */}
                       {selected.from_email && selected.source==='gmail' && (
-                        <a href={`mailto:${selected.from_email}?subject=${encodeURIComponent('Re: '+(selected.subject||''))}`} target="_blank" rel="noreferrer" className="w-full flex items-center gap-3 rounded-xl px-4 py-3 transition-all hover:opacity-80 no-underline" style={{background:'rgba(255,255,255,0.04)',border:`1px solid rgba(255,255,255,0.07)`}}>
-                          <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:'rgba(255,255,255,0.06)'}}>
-                            <LucideIcon name="corner-up-left" size={13} color="rgba(255,255,255,0.45)"/>
+                        <button onClick={()=>replyOpen?setReplyOpen(false):openHarveyReply(selected)} className="w-full flex items-center gap-3 rounded-xl px-4 py-3 transition-all hover:opacity-80" style={{background:replyOpen?`${BLU}10`:'rgba(255,255,255,0.04)',border:`1px solid ${replyOpen?BLU+'30':'rgba(255,255,255,0.07)'}`}}>
+                          <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:replyOpen?`${BLU}20`:'rgba(255,255,255,0.06)'}}>
+                            <LucideIcon name="sparkles" size={13} color={replyOpen?BLU:'rgba(255,255,255,0.45)'}/>
                           </div>
-                          <div className="flex-1">
-                            <div className="font-syne text-[7.5px] font-black tracking-wide mb-0.5" style={{color:'rgba(255,255,255,0.35)'}}>RESPONDER</div>
-                            <div className="text-[11.5px]" style={{color:'rgba(255,255,255,0.45)'}}>{selected.from_email}</div>
+                          <div className="flex-1 text-left">
+                            <div className="font-syne text-[7.5px] font-black tracking-wide mb-0.5" style={{color:replyOpen?BLU:'rgba(255,255,255,0.35)'}}>BORRADOR IA</div>
+                            <div className="text-[11.5px]" style={{color:'rgba(255,255,255,0.45)'}}>Harvey redacta la respuesta</div>
                           </div>
-                        </a>
+                          <LucideIcon name={replyLoading?'loader':'corner-up-left'} size={13} color={replyOpen?BLU:'rgba(255,255,255,0.25)'}/>
+                        </button>
                       )}
                       {/* Tertiary: ask Harvey */}
                       {onAskHarvey && (
@@ -894,6 +977,63 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                     </a>
                   )
                 })}
+              </div>
+            )}
+
+            {/* ── HARVEY REPLY DRAFT ── */}
+            {replyOpen && selected.from_email && selected.source==='gmail' && (
+              <div className="rounded-2xl overflow-hidden" style={{border:`1px solid ${BLU}30`,background:`${BLU}06`}}>
+                <div className="flex items-center gap-2.5 px-5 py-3" style={{borderBottom:`1px solid ${BLU}18`,background:`${BLU}10`}}>
+                  <div className="w-5 h-5 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:`${BLU}28`}}>
+                    <LucideIcon name="sparkles" size={11} color={BLU}/>
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-syne text-[8px] font-black tracking-widest" style={{color:`rgba(120,155,255,0.9)`}}>BORRADOR IA — Para: {selected.from_email}</div>
+                    <div className="font-syne text-[7px] tracking-wide mt-0.5" style={{color:'rgba(255,255,255,0.25)'}}>Re: {selected.subject}</div>
+                  </div>
+                  <button onClick={()=>setReplyOpen(false)} className="w-6 h-6 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5">
+                    <LucideIcon name="x" size={11} color="rgba(255,255,255,0.3)"/>
+                  </button>
+                </div>
+                <div className="p-4">
+                  {replyLoading ? (
+                    <div className="flex items-center gap-2 py-6 justify-center">
+                      <div className="w-3.5 h-3.5 border-2 rounded-full animate-spin" style={{borderColor:`${BLU}30`,borderTopColor:BLU}}/>
+                      <span className="font-syne text-[9px] font-black tracking-widest" style={{color:`rgba(120,155,255,0.7)`}}>HARVEY REDACTANDO…</span>
+                    </div>
+                  ) : (
+                    <>
+                      <textarea
+                        value={replyDraft}
+                        onChange={e=>setReplyDraft(e.target.value)}
+                        rows={6}
+                        className="w-full text-[13px] leading-relaxed resize-none outline-none rounded-xl px-4 py-3"
+                        style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BLU}20`,color:'rgba(255,255,255,0.8)',caretColor:BLU}}
+                      />
+                      <div className="flex items-center gap-2 mt-3">
+                        <button
+                          onClick={()=>{ navigator.clipboard.writeText(replyDraft).then(()=>{ setReplyCopied(true); setTimeout(()=>setReplyCopied(false),2000) }) }}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all"
+                          style={{background:replyCopied?`${GRN}14`:`${BLU}14`,color:replyCopied?GRN:BLU,border:`1px solid ${replyCopied?GRN:BLU}30`}}>
+                          <LucideIcon name={replyCopied?'check':'copy'} size={11} color={replyCopied?GRN:BLU}/>
+                          {replyCopied?'COPIADO':'COPIAR'}
+                        </button>
+                        <a
+                          href={`mailto:${selected.from_email}?subject=${encodeURIComponent('Re: '+(selected.subject||''))}&body=${encodeURIComponent(replyDraft)}`}
+                          target="_blank" rel="noreferrer"
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all no-underline"
+                          style={{background:'rgba(234,67,53,0.1)',color:'rgba(234,67,53,0.85)',border:'1px solid rgba(234,67,53,0.2)'}}>
+                          <LucideIcon name="external-link" size={11} color="rgba(234,67,53,0.85)"/>
+                          ABRIR EN GMAIL
+                        </a>
+                        <button onClick={()=>openHarveyReply(selected)} disabled={replyLoading} className="ml-auto flex items-center gap-1.5 px-2.5 py-2 rounded-xl transition-all" style={{color:'rgba(255,255,255,0.25)',border:`1px solid ${BORDER}`}}>
+                          <LucideIcon name="refresh-cw" size={10} color="rgba(255,255,255,0.25)"/>
+                          <span className="font-syne text-[7.5px] font-black">REGENERAR</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             )}
 

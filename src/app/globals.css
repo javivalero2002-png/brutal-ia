@@ -5,6 +5,9 @@
 @tailwind utilities;
 
 @keyframes fadeUp { from { opacity: 0; transform: translateY(5px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes bootFadeIn { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes scanLoop { 0% { transform:translateX(-100%) } 100% { transform:translateX(500%) } }
+@keyframes logoPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(27,95,250,0), 0 8px 40px rgba(27,95,250,0.18) } 50% { box-shadow: 0 0 40px 10px rgba(27,95,250,0.1), 0 8px 40px rgba(27,95,250,0.32) } }
 @keyframes ticker { from { transform: translateX(0) } to { transform: translateX(-50%) } }
 @keyframes pls { 0%, 100% { opacity: 1 } 50% { opacity: .15 } }
 @keyframes glowPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(27,95,250,0) } 50% { box-shadow: 0 0 28px 6px rgba(27,95,250,0.22) } }
@@ -31,8 +34,12 @@
 @keyframes haloPulse { 0%,100% { transform: scale(1); opacity:.8 } 50% { transform: scale(1.08); opacity:1 } }
 @keyframes orbDrift3 { 0% { transform: translate(0,6%) scale(.9) } 50% { transform: translate(-8%,-8%) scale(1.15) } 100% { transform: translate(0,6%) scale(.9) } }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; overflow: hidden; background: #040409; }
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow: hidden; background: #040409; overscroll-behavior: none; }
+button, a[role="button"], [role="button"] { user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+@media (hover: none) and (pointer: coarse) {
+  button:not(:disabled):active { transform: scale(0.97); opacity: 0.85; transition: transform 0.08s, opacity 0.08s; }
+}
 
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 2px; }
@@ -67,11 +74,19 @@ html, body { height: 100%; overflow: hidden; background: #040409; }
 
 /* ── Móvil ─────────────────────────────────────────────────── */
 @media (max-width: 767px) {
-  /* Los wrappers de sección usan p-8/p-6: compactar en pantallas pequeñas */
+  /* Los wrappers de sección usan p-8/p-6/px-8: compactar en pantallas pequeñas */
   .p-8 { padding: 1.1rem !important; }
   .p-6 { padding: 1rem !important; }
+  .p-7 { padding: 1rem !important; }
   .px-6 { padding-left: 1rem !important; padding-right: 1rem !important; }
   .px-7 { padding-left: 1.1rem !important; padding-right: 1.1rem !important; }
+  .px-8 { padding-left: 1.1rem !important; padding-right: 1.1rem !important; }
+  .pt-8 { padding-top: 1.25rem !important; }
+  .pt-6 { padding-top: 1rem !important; }
+  .pb-8 { padding-bottom: 1.1rem !important; }
+
+  /* Grid de 4 columnas → 2 columnas en móvil */
+  .nx-grid-stats { grid-template-columns: repeat(2,minmax(0,1fr)) !important; }
 
   /* Evitar zoom automático de iOS al enfocar inputs (necesita >=16px) */
   input, select, textarea { font-size: 16px !important; }
@@ -81,17 +96,25 @@ html, body { height: 100%; overflow: hidden; background: #040409; }
 
   /* Scroll táctil suave en contenedores horizontales */
   .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+
+  /* Títulos de sección más pequeños en móvil */
+  .nx-section-title { font-size: 24px !important; }
+
+  /* Tabs scrollables horizontalmente en móvil */
+  .nx-tabs-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .nx-tabs-scroll::-webkit-scrollbar { display: none; }
+
+  /* Contención de overscroll en contenedores de scroll verticales */
+  .overflow-y-auto, .overflow-y-scroll { overscroll-behavior-y: contain; }
 }
 
 /* ── Modo claro ────────────────────────────────────────────── */
-/* La UI está pintada en oscuro con estilos inline; el modo claro invierte
-   perceptualmente toda la app y re-invierte las imágenes/vídeos para que
-   se vean normales. hue-rotate(180deg) devuelve los colores de marca
-   (azul BRUTAL, rojo, verde) a su tono original.
-   contrast(1.15) compensa los grises que genera la inversión sobre
-   texto rgba(255,255,255,α) con alfa baja. */
+/* Inversión perceptual: invierte la imagen oscura a clara, hue-rotate(180deg)
+   devuelve azul/rojo/verde de marca a sus tonos originales.
+   contrast(1.06) — más suave que el anterior 1.15 para no endurecer los grises.
+   brightness(1.04) recupera la luminosidad que se pierde con el contraste. */
 html.theme-light body {
-  filter: invert(1) hue-rotate(180deg) contrast(1.15);
+  filter: invert(1) hue-rotate(180deg) contrast(1.06) brightness(1.04);
   background: #0b0b12;
 }
 html.theme-light body img,
@@ -99,8 +122,32 @@ html.theme-light body video,
 html.theme-light body iframe,
 html.theme-light body canvas,
 html.theme-light body .nx-noinvert {
-  filter: invert(1) hue-rotate(180deg) contrast(0.87);
+  filter: invert(1) hue-rotate(180deg) contrast(0.94) brightness(0.97);
 }
-html.theme-light { background: #f4f4ed; color-scheme: light; }
+html.theme-light { background: #f0f0e8; color-scheme: light; }
 html.theme-light body img[src*="brutal-logo-white"] { filter: none; }
 html.theme-light ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); }
+
+/* Elevación de tarjetas: las cards pierden contraste al invertir porque
+   SURFACE (#0A0A14) y el fondo (#f0f0e8) son blancos similares.
+   Un shadow sutil restituye la profundidad. */
+html.theme-light .rounded-2xl {
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08), 0 2px 14px rgba(0,0,0,0.04);
+}
+html.theme-light .rounded-xl {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+/* El aside (sidebar) ya tiene border-right, pero en claro pierde visibilidad */
+html.theme-light aside {
+  box-shadow: 2px 0 12px rgba(0,0,0,0.06);
+}
+/* Separadores / bordes de tabla — en oscuro son rgba(white,0.06), invertidos
+   quedan rgba(black,0.06) que es casi invisible sobre blanco. Reforzamos. */
+html.theme-light [style*="border:1px solid rgba(255,255,255,0.06)"],
+html.theme-light [style*="border: 1px solid rgba(255,255,255,0.06)"] {
+  border-color: rgba(0,0,0,0.10) !important;
+}
+/* Fondo del body ligeramente cálido para que el contraste no sea tan crudo */
+html.theme-light body { background: #0b0b12; }
+/* Scrollbar en claro */
+html.theme-light ::-webkit-scrollbar-track { background: rgba(0,0,0,0.03); }

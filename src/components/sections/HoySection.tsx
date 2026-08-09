@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { BLU, RED, GRN, BORDER } from '@/components/shared/design-tokens'
 import { useIsMobile } from '@/components/shared/hooks'
-import { dlDate } from '@/components/shared/helpers'
+import { dlDate, todayKey, localDayKey } from '@/components/shared/helpers'
 import { getSharedAudio, playAck, isIOSDevice, matchTeamMember, splitForTTS, stopAllVoices, isSRBroken, markSRBroken } from '@/components/shared/audio'
 import LucideIcon from '@/components/shared/LucideIcon'
 import type { Task, Project, Client } from '@/types'
@@ -74,7 +74,7 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
   }, [])
   const now = new Date()
   const hour = now.getHours()
-  const todayStr = now.toISOString().slice(0,10)
+  const todayStr = todayKey()
   const firstName = profile?.name?.split(' ')?.[0] || 'Jefe'
   const dateStr = now.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'})
 
@@ -84,7 +84,14 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
   const activeClients = data.clients.filter((c:Client)=>c.status==='Activo').length
   const pipeline = (data.agenda||[]).filter((a:any)=>a.status!=='publicado').length
   const overdueP = data.projects.filter((p:Project)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<new Date()).length
-  const completedToday = data.tasks.filter((t:Task)=>t.done&&(t.updated_at||t.created_at).slice(0,10)===todayStr).length
+  const completedToday = data.tasks.filter((t:Task)=>t.done&&localDayKey(t.completed_at||t.updated_at||t.created_at)===todayStr).length
+  // Refuerzo del resumen ejecutivo: vencen hoy, deadlines de la semana, automatizaciones de hoy
+  const weekEnd = new Date(Date.now()+7*86400000)
+  const dueTodayTasks = data.tasks.filter((t:Task)=>!t.done&&!!t.due_date&&t.due_date.slice(0,10)===todayStr)
+  const upcomingDeadlines = data.projects
+    .filter((p:Project)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)>=new Date()&&dlDate(p.deadline)<=weekEnd)
+    .sort((a:Project,b:Project)=>dlDate(a.deadline).getTime()-dlDate(b.deadline).getTime())
+  const autosToday = ((data.reglas||[]) as any[]).filter((r:any)=>r.last_triggered_at&&(Date.now()-new Date(r.last_triggered_at).getTime())<86400000)
 
   const stopAudio = () => {
     voiceRunRef.current++
@@ -158,7 +165,12 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
     const projLines = active.slice(0,8).map((p:Project)=>`${p.name} ${p.progress}%${overdue.find(o=>o.id===p.id)?' [ATRASADO]':''}`).join(' | ')
 
     const inboxAll: any[] = data.inbox || []
-    const unreadEmails = inboxAll.filter((m:any)=>!m.is_read).slice(0, 10)
+    // No leídos + urgentes/altos de HOY aunque ya se hayan abierto: leer un email
+    // importante no debe borrarlo del contexto de Harvey.
+    const todayForInbox = todayKey()
+    const unreadEmails = inboxAll.filter((m:any)=>
+      !m.is_read || ((m.ai_urgency==='urgent'||m.ai_urgency==='high') && (m.received_at||'').slice(0,10)===todayForInbox)
+    ).slice(0, 10)
     const emailLines = unreadEmails.map((m:any) => {
       const urg = m.ai_urgency==='urgent'?'[URGENTE]':m.ai_urgency==='high'?'[ALTA]':'[NORMAL]'
       const colabs = m.shared ? '[COLABS]' : '[PERSONAL]'
@@ -167,7 +179,7 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
       return `  • De: ${m.from_name||'?'} | Asunto: "${m.subject||'Sin asunto'}" ${urg}${colabs}${summary}${action}`
     }).join('\n')
 
-    const todayStr = now.toISOString().slice(0,10)
+    const todayStr = todayKey()
     const calEvents = (data.calendarEvents||[]) as any[]
     const nextEvents = calEvents.filter((e:any)=>e.start>=todayStr).slice(0,5)
     const eventLines = nextEvents.map((e:any) => {
@@ -268,7 +280,9 @@ ${memLines||'  sin documentos'}`
       if (pendingAction.type === 'tarea') {
         const member = pendingAction.assigneeName ? matchTeamMember((data.team||[]) as any[], pendingAction.assigneeName) : null
         await data.createTask({ text: pendingAction.text, level: pendingAction.level as any || 'high', source: 'ai', ...(member ? { assigned_to: member.id } : {}) })
-        showToast(member ? `Tarea creada y asignada a ${member.name}` : 'Tarea creada por Harvey')
+        showToast(member ? `Tarea creada y asignada a ${member.name}`
+          : pendingAction.assigneeName ? `Tarea creada (sin asignar: no encontré a "${pendingAction.assigneeName}")`
+          : 'Tarea creada por Harvey')
 
       } else if (pendingAction.type === 'proyecto') {
         const client = pendingAction.clientName
@@ -471,7 +485,7 @@ ${memLines||'  sin documentos'}`
   const glowC = _rec ? 'rgba(255,90,60,0.32)' : _thk ? 'rgba(150,110,255,0.3)' : 'rgba(40,90,255,0.32)'
 
   return (
-    <div className={isMobile ? 'h-full flex flex-col overflow-y-auto' : 'h-full flex overflow-hidden'} style={{background:'#030308'}}>
+    <div className={isMobile ? 'h-full flex flex-col overflow-y-auto overflow-x-hidden' : 'h-full flex overflow-hidden'} style={{background:'#030308'}}>
 
       {/* ══ HARVEY ══ */}
       <div className={`flex flex-col relative ${isMobile?'':'flex-1 overflow-hidden'}`} style={isMobile?{minHeight:'78vh',flexShrink:0}:undefined}>
@@ -495,8 +509,8 @@ ${memLines||'  sin documentos'}`
           <div className="relative flex items-center justify-center flex-shrink-0" style={{width:isMobile?'300px':'400px',height:isMobile?'300px':'400px'}}>
 
             {/* Órbitas elípticas */}
-            <div className="absolute pointer-events-none" style={{width:isMobile?'440px':'580px',height:isMobile?'270px':'350px',borderRadius:'50%',border:'1px dashed rgba(120,150,255,0.05)',transform:'rotate(-20deg)'}}/>
-            <div className="absolute pointer-events-none" style={{width:isMobile?'410px':'540px',height:isMobile?'250px':'325px',borderRadius:'50%',border:'1px solid rgba(120,150,255,0.10)',transform:'rotate(-20deg)',animation:'orbSpin 44s linear infinite'}}>
+            <div className="absolute pointer-events-none" style={{width:isMobile?'320px':'580px',height:isMobile?'200px':'350px',borderRadius:'50%',border:'1px dashed rgba(120,150,255,0.05)',transform:'rotate(-20deg)'}}/>
+            <div className="absolute pointer-events-none" style={{width:isMobile?'295px':'540px',height:isMobile?'185px':'325px',borderRadius:'50%',border:'1px solid rgba(120,150,255,0.10)',transform:'rotate(-20deg)',animation:'orbSpin 44s linear infinite'}}>
               <div className="absolute rounded-full" style={{top:'50%',left:0,width:'5px',height:'5px',background:'#5b8bff',boxShadow:'0 0 8px #5b8bff,0 0 18px #5b8bff',transform:'translate(-50%,-50%)'}}/>
             </div>
 
@@ -566,12 +580,15 @@ ${memLines||'  sin documentos'}`
               const items: BItem[] = []
               if (focusEmail) items.push({icon:'mail',color:'rgba(255,176,32,0.95)',text:`Responde a ${focusEmail.from_name||'un contacto'}${focusEmail.ai_client&&focusEmail.ai_client!=='Desconocido'?' ('+focusEmail.ai_client+')':''}: ${focusEmail.subject||'propuesta'}`,nav:'inbox'})
               if (urgentTasks.length>0) items.push({icon:'alert-triangle',color:RED,text:`${urgentTasks.length} tarea${urgentTasks.length>1?'s':''} urgente${urgentTasks.length>1?'s':''} por cerrar: ${urgentTasks[0].text}`,nav:'tareas'})
+              if (dueTodayTasks.length>0) items.push({icon:'clock',color:'rgba(255,176,32,0.95)',text:`${dueTodayTasks.length} tarea${dueTodayTasks.length>1?'s':''} vence${dueTodayTasks.length>1?'n':''} hoy: ${dueTodayTasks[0].text}`,nav:'tareas'})
               if (importante>0 && !focusEmail) items.push({icon:'mail',color:'rgba(255,176,32,0.95)',text:`${importante} correo${importante>1?'s':''} importante${importante>1?'s':''} esperan respuesta`,nav:'inbox'})
               if (todayEvts.length>0) items.push({icon:'calendar',color:'rgba(167,139,250,0.9)',text:`${todayEvts.length} evento${todayEvts.length>1?'s':''} hoy: ${todayEvts.slice(0,2).map((e:any)=>e.title).join(', ')}`,nav:'calendario'})
               if (overdueP>0) items.push({icon:'folder',color:RED,text:`${overdueP} proyecto${overdueP>1?'s':''} atrasado${overdueP>1?'s':''} por recuperar`,nav:'proyectos'})
+              if (upcomingDeadlines.length>0) { const p0=upcomingDeadlines[0]; const dLeft=Math.max(0,Math.round((dlDate(p0.deadline).getTime()-Date.now())/86400000)); items.push({icon:'folder-open',color:'rgba(255,176,32,0.95)',text:`Deadline cercano: ${p0.name} vence ${dLeft===0?'hoy':`en ${dLeft}d`}${upcomingDeadlines.length>1?` (+${upcomingDeadlines.length-1})`:''}`,nav:'proyectos'}) }
               if (pipeline>0) items.push({icon:'film',color:'rgba(193,53,132,0.9)',text:`${pipeline} pieza${pipeline>1?'s':''} de contenido en el pipeline`,nav:'contenido'})
+              if (autosToday.length>0) items.push({icon:'zap',color:GRN,text:`El motor ejecutó ${autosToday.length} automatización${autosToday.length>1?'es':''} hoy`,nav:'automatizaciones'})
               if (unread.length>0 && importante===0 && !focusEmail) items.push({icon:'mail',color:BLU,text:`Revisa ${unread.length} correo${unread.length>1?'s':''} sin leer`,nav:'inbox'})
-              const shown = items.slice(0,4)
+              const shown = items.slice(0,5)
               const greeting = hour<13?'Buenos días':hour<20?'Buenas tardes':'Buenas noches'
               const urgMsg = urgentTasks.length>0?`Hay ${urgentTasks.length} tarea(s) urgente(s): ${urgentTasks.slice(0,2).map((t:Task)=>t.text).join(' y ')}.`:'Sin urgencias.'
               const inboxMsg = unreadCount>0?`${unreadCount} email(s) sin leer en el inbox.`:'Inbox al día.'
@@ -601,9 +618,37 @@ ${memLines||'  sin documentos'}`
                       ))}
                     </div>
                   ) : (
-                    <div className="flex items-center gap-3 py-3">
-                      <LucideIcon name="check-circle" size={16} color={GRN}/>
-                      <span className="font-figtree" style={{fontSize:'14px',color:'rgba(255,255,255,0.5)'}}>Todo al día. Sin pendientes ahora mismo.</span>
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-3 py-3">
+                        <LucideIcon name="check-circle" size={16} color={GRN}/>
+                        <span className="font-figtree" style={{fontSize:'14px',color:'rgba(255,255,255,0.5)'}}>Todo al día. Sin pendientes ahora mismo.</span>
+                      </div>
+                      {(()=>{
+                        const d3 = new Date(); d3.setDate(d3.getDate()+3)
+                        const d3str = localDayKey(d3)
+                        const upcoming3 = ((data.tasks||[]) as any[]).filter((t:any)=>!t.done&&t.due_date&&t.due_date.slice(0,10)>todayStr&&t.due_date.slice(0,10)<=d3str).sort((a:any,b:any)=>a.due_date.localeCompare(b.due_date)).slice(0,3)
+                        const nextEvts = ((data.calendarEvents||[]) as any[]).filter((e:any)=>e.start&&e.start.slice(0,10)>todayStr).sort((a:any,b:any)=>a.start.localeCompare(b.start)).slice(0,2)
+                        if (upcoming3.length===0 && nextEvts.length===0) return null
+                        return (
+                          <div style={{borderTop:'1px solid rgba(255,255,255,0.06)'}}>
+                            <div className="font-syne text-[7px] font-black tracking-widest pt-2 pb-0.5" style={{color:'rgba(255,255,255,0.18)'}}>PRÓXIMOS DÍAS</div>
+                            {upcoming3.map((t:any)=>(
+                              <button key={t.id} onClick={()=>onNavigate?.('tareas')} className="flex items-center gap-3 py-2 w-full text-left transition-all hover:opacity-80">
+                                <LucideIcon name="circle-check" size={14} color={t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.9)':BLU}/>
+                                <span className="font-figtree flex-1 truncate" style={{fontSize:'13px',color:'rgba(255,255,255,0.48)'}}>{t.text}</span>
+                                <span className="font-syne text-[8px] font-black flex-shrink-0" style={{color:'rgba(255,255,255,0.22)'}}>{new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</span>
+                              </button>
+                            ))}
+                            {nextEvts.map((e:any)=>(
+                              <button key={e.id} onClick={()=>onNavigate?.('calendario')} className="flex items-center gap-3 py-2 w-full text-left transition-all hover:opacity-80">
+                                <LucideIcon name="calendar" size={14} color="rgba(167,139,250,0.85)"/>
+                                <span className="font-figtree flex-1 truncate" style={{fontSize:'13px',color:'rgba(255,255,255,0.48)'}}>{e.title}</span>
+                                <span className="font-syne text-[8px] font-black flex-shrink-0" style={{color:'rgba(255,255,255,0.22)'}}>{new Date(e.start).toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )
+                      })()}
                     </div>
                   )}
                 </div>

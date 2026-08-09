@@ -1,8 +1,16 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, videoEmbed } from '@/components/shared'
+import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, todayKey } from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
+import BocetoPanel from '@/components/BocetoPanel'
+
+function normContentType(raw: string|null|undefined): 'publicacion'|'reel'|'story' {
+  const v = (raw||'').toLowerCase()
+  if (v === 'reel' || v.includes('reel')) return 'reel'
+  if (v === 'story' || v.includes('stor')) return 'story'
+  return 'publicacion'
+}
 
 function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,profile}: any) {
   const isMobile = useIsMobile()
@@ -17,7 +25,10 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
   const [pendingNote, setPendingNote] = useState('')
   const [savingOpinion, setSavingOpinion] = useState(false)
   const [accountFilter, setAccountFilter] = useState('Todas')
-  const [clientFilter, setClientFilter] = useState('Todos')
+  const [platformFilter, setPlatformFilter] = useState('Todas')
+  const [accountLogoUrl, setAccountLogoUrl] = useState<string>('')
+  const [allAccountLogos, setAllAccountLogos] = useState<Record<string,string>>({})
+  const logoFileInputRef = useRef<HTMLInputElement>(null)
   const [contentSearch, setContentSearch] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
   const [confirmDeleteContent, setConfirmDeleteContent] = useState(false)
@@ -26,7 +37,31 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
   const [editCoverUrl, setEditCoverUrl] = useState('')
   const [bocetoPlatform, setBocetoPlatform] = useState<'instagram'|'linkedin'|null>(null)
   const [bocetoCaption, setBocetoCaption] = useState<string|null>(null)
-  useEffect(()=>{ setBocetoPlatform(null); setBocetoCaption(null) }, [activeItem?.id])
+  const [editContentType, setEditContentType] = useState<'publicacion'|'reel'|'story'>('publicacion')
+  const [mobileTab, setMobileTab] = useState<'boceto'|'editar'>('boceto')
+  useEffect(()=>{
+    const plat = activeItem?.platform
+    setBocetoPlatform(plat==='Instagram'?'instagram':plat==='LinkedIn'?'linkedin':null)
+    setBocetoCaption(activeItem?.notes||null)
+    setEditContentType(normContentType(activeItem?.content_type))
+    setMobileTab('boceto')
+  }, [activeItem?.id])
+  // Load all account logos from Supabase on mount (persists across devices)
+  useEffect(()=>{
+    fetch('/api/account-logos').then(r=>r.ok?r.json():null).then(logos=>{
+      if (logos && typeof logos === 'object') {
+        setAllAccountLogos(logos)
+        // Backfill localStorage for kanban cards that read from it inline
+        for (const [k,v] of Object.entries(logos)) { try { localStorage.setItem(`account-logo-${k}`, v as string) } catch {} }
+      }
+    }).catch(()=>{})
+  }, [])
+  useEffect(()=>{
+    const key = editAccountName.trim() || 'Brutal Studios'
+    const fromServer = allAccountLogos[key]
+    if (fromServer) { setAccountLogoUrl(fromServer); return }
+    try { setAccountLogoUrl(localStorage.getItem(`account-logo-${key}`) || '') } catch { setAccountLogoUrl('') }
+  }, [editAccountName, allAccountLogos])
   const coverFileInputRef = useRef<HTMLInputElement>(null)
   const filteredAgendaRef = useRef<any[]>([])
   const contentSearchInputRef = useRef<HTMLInputElement>(null)
@@ -52,16 +87,70 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
     if (!activeItem) return
     setUploadingCover(true)
     try {
-      const fd = new FormData(); fd.append('file', file)
-      const res = await fetch(`/api/agenda/${activeItem.id}/upload-cover`, { method:'POST', body:fd })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error||'Error')
+      // Comprimir a máx 1080px JPEG 0.72 — portadas de pipeline no necesitan resolución completa
+      // Una foto de 6MB del iPad queda en ~80-120KB, muy por debajo del límite de 4.5MB de Vercel
+      const compressed = await new Promise<Blob>((resolve, reject) => {
+        const img = new Image()
+        const objUrl = URL.createObjectURL(file)
+        img.onload = () => {
+          URL.revokeObjectURL(objUrl)
+          const MAX = 1080
+          let w = img.width, h = img.height
+          if (w > MAX || h > MAX) {
+            if (w > h) { h = Math.round(h * MAX / w); w = MAX }
+            else { w = Math.round(w * MAX / h); h = MAX }
+          }
+          const canvas = document.createElement('canvas')
+          canvas.width = w; canvas.height = h
+          const ctx2d = canvas.getContext('2d'); if (!ctx2d) { reject(new Error('Canvas no disponible')); return }; ctx2d.drawImage(img, 0, 0, w, h)
+          canvas.toBlob(b => b ? resolve(b) : reject(new Error('No se pudo comprimir la imagen')), 'image/jpeg', 0.72)
+        }
+        img.onerror = () => { URL.revokeObjectURL(objUrl); reject(new Error('No se pudo leer la imagen')) }
+        img.src = objUrl
+      })
+      const fd = new FormData()
+      fd.append('file', new File([compressed], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }))
+      const res = await fetch(`/api/agenda/${activeItem.id}/upload-cover`, { method: 'POST', body: fd })
+      const text = await res.text()
+      let json: any = {}
+      try { json = JSON.parse(text) } catch { throw new Error('Error del servidor al subir') }
+      if (!res.ok) throw new Error(json.error || 'Error')
       setEditCoverUrl(json.url)
       setActiveItem((prev: any) => ({...prev, cover_url: json.url}))
       data.updateAgenda && data.updateAgenda(activeItem.id, { cover_url: json.url }).catch(()=>{})
       showToast(json.warning || 'Portada subida correctamente')
-    } catch (err: any) { showToast('Error: '+err.message) }
+    } catch (err: any) { showToast('Error: ' + err.message) }
     finally { setUploadingCover(false) }
+  }
+
+  // Guarda el logo de una cuenta en localStorage (base64 para evitar dependencia de servidor)
+  const uploadAccountLogo = async (file: File) => {
+    if (!file.type.startsWith('image/')) { showToast('Solo imágenes (JPG, PNG, WebP)'); return }
+    try {
+      const url = await new Promise<string>((resolve, reject) => {
+        const img = new Image()
+        const objUrl = URL.createObjectURL(file)
+        img.onload = () => {
+          URL.revokeObjectURL(objUrl)
+          const SIZE = 200
+          const canvas = document.createElement('canvas')
+          canvas.width = SIZE; canvas.height = SIZE
+          const ctx = canvas.getContext('2d'); if (!ctx) { reject(new Error('Canvas no disponible')); return }
+          const s = Math.min(img.width, img.height)
+          ctx.drawImage(img, (img.width-s)/2, (img.height-s)/2, s, s, 0, 0, SIZE, SIZE)
+          resolve(canvas.toDataURL('image/jpeg', 0.82))
+        }
+        img.onerror = () => { URL.revokeObjectURL(objUrl); reject(new Error('No se pudo leer la imagen')) }
+        img.src = objUrl
+      })
+      const key = (editAccountName.trim() || 'Brutal Studios')
+      try { localStorage.setItem(`account-logo-${key}`, url) } catch {}
+      setAccountLogoUrl(url)
+      setAllAccountLogos(prev => ({ ...prev, [key]: url }))
+      // Persist to Supabase so it survives across devices/browser clears
+      fetch('/api/account-logos', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({account:key,logo:url}) }).catch(()=>{})
+      showToast('Logo de cuenta actualizado')
+    } catch (err: any) { showToast('Error: ' + err.message) }
   }
 
   useEffect(()=>{
@@ -113,6 +202,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
     setEditAccountName(item.account_name||'')
     setEditPublishDate(item.publish_date||'')
     setEditPublishTime(item.publish_time||'')
+    setEditContentType(normContentType(item.content_type))
     setConfirmDeleteContent(false)
     const ops = (() => { try { const p = JSON.parse(item.feedback||'[]'); return Array.isArray(p) ? p : [] } catch { return [] } })()
     const myOp = ops.find((o: any) => o.userId === profile?.id)
@@ -141,7 +231,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
     if (!activeItem) return
     setSavingNotes(true)
     try {
-      const updates: any = { notes: editNotes, video_url: editVideoUrl, cover_url: editCoverUrl || null, account_name: editAccountName, publish_date: editPublishDate || null, publish_time: editPublishTime || null }
+      const updates: any = { notes: editNotes, video_url: editVideoUrl, cover_url: editCoverUrl || null, account_name: editAccountName, publish_date: editPublishDate || null, publish_time: editPublishTime || null, content_type: editContentType }
       await data.updateAgenda(activeItem.id, updates)
       showToast('Guardado')
       setActiveItem((prev: any) => ({...prev, ...updates}))
@@ -149,18 +239,16 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
     finally { setSavingNotes(false) }
   }
 
-  const PREDEFINED_ACCOUNTS = ['Brutal Studios','Julio','Pablo']
-  // Dedup insensible a mayúsculas/espacios (evita "Brutal Studios" duplicado por variantes en la BD)
-  const _accSeen = new Map<string,string>()
-  for (const raw of [...PREDEFINED_ACCOUNTS, ...data.agenda.filter((a: any)=>a.account_name).map((a: any)=>String(a.account_name).trim())]) {
-    const key = raw.toLowerCase()
-    if (raw && !_accSeen.has(key)) _accSeen.set(key, raw)
-  }
-  const allAccounts: string[] = ['Todas', ..._accSeen.values()]
-  const allContentClients: string[] = ['Todos', ...Array.from(new Set<string>(data.agenda.filter((a: any)=>a.client?.name||a.client_id).map((a: any)=>a.client?.name||(data.clients.find((c: any)=>c.id===a.client_id)?.name)||'').filter(Boolean)))]
-  const filteredByClient = clientFilter === 'Todos' ? data.agenda : data.agenda.filter((a: any) => (a.client?.name||data.clients.find((c: any)=>c.id===a.client_id)?.name) === clientFilter)
-  const filteredByAccount = accountFilter === 'Todas' ? filteredByClient : filteredByClient.filter((a: any)=>String(a.account_name||'').trim().toLowerCase()===accountFilter.trim().toLowerCase())
-  const filteredAgenda = !contentSearch.trim() ? filteredByAccount : filteredByAccount.filter((a: any)=>a.title?.toLowerCase().includes(contentSearch.toLowerCase()))
+  const FIXED_ACCOUNTS = ['Brutal Studios', 'Julio', 'Pablo']
+  const _normalizeAcc = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g,'')
+  const allAccounts: string[] = ['Todas', ...FIXED_ACCOUNTS]
+  // Filter by account first, then platform
+  const filteredByAccount = accountFilter === 'Todas' ? data.agenda : data.agenda.filter((a: any)=>_normalizeAcc(String(a.account_name||''))===_normalizeAcc(accountFilter))
+  // Platforms available for the current account selection
+  const activePlatforms = [...new Set(filteredByAccount.filter((a: any)=>a.platform).map((a: any)=>String(a.platform).trim()))].filter(Boolean).sort() as string[]
+  const allPlatforms: string[] = ['Todas', ...activePlatforms]
+  const filteredByPlatform = platformFilter === 'Todas' ? filteredByAccount : filteredByAccount.filter((a: any)=>String(a.platform||'').trim()===platformFilter)
+  const filteredAgenda = !contentSearch.trim() ? filteredByPlatform : filteredByPlatform.filter((a: any)=>a.title?.toLowerCase().includes(contentSearch.toLowerCase()))
   filteredAgendaRef.current = filteredAgenda
 
   const changeStatus = async (item: any, newStatus: string) => {
@@ -180,7 +268,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
       <div className="flex flex-col h-full overflow-hidden">
 
         {/* Header */}
-        <div className="px-8 pt-6 pb-5 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
+        <div className={`${isMobile?'px-4':'px-8'} pt-6 pb-5 flex-shrink-0`} style={{borderBottom:`1px solid ${BORDER}`}}>
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
             <div className="min-w-0">
               <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>PRODUCCIÓN</div>
@@ -231,45 +319,56 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
             <input ref={contentSearchInputRef} value={contentSearch} onChange={e=>setContentSearch(e.target.value)} placeholder="Busca por título…" className="flex-1 bg-transparent text-[12px] outline-none" style={{caretColor:BLU,color:'rgba(255,255,255,0.75)'}}/>
             {contentSearch && <button onClick={()=>setContentSearch('')}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.2)"/></button>}
           </div>
-          {/* Client filter */}
-          {allContentClients.length > 1 && (
-            <div className="flex gap-1.5 flex-wrap mb-2">
-              {allContentClients.map((cl: string)=>{
-                const isAll = cl === 'Todos'
-                const isActive = clientFilter === cl
-                const client = data.clients.find((c: any)=>c.name===cl)
-                const clColor = client?.color || BLU
+          {/* Platform filter — fila primaria */}
+          {allPlatforms.length > 1 && (
+            <div className="flex gap-1.5 flex-wrap mb-2 items-center">
+              <span className="font-syne text-[7px] font-black tracking-widest mr-0.5" style={{color:'rgba(255,255,255,0.12)'}}>PLATAFORMA</span>
+              {allPlatforms.map((pl: string)=>{
+                const isAll = pl === 'Todas'
+                const isActive = platformFilter === pl
+                const platColors: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
+                const plColor = platColors[pl] || BLU
                 return (
-                  <button key={cl} onClick={()=>setClientFilter(cl)} className="font-syne text-[8.5px] font-black px-3 py-1.5 rounded-xl transition-all" style={{
-                    background: isActive ? (isAll ? 'rgba(27,95,250,0.15)' : clColor+'18') : 'rgba(255,255,255,0.04)',
-                    color: isActive ? (isAll ? BLU : clColor) : 'rgba(255,255,255,0.3)',
-                    border: isActive ? `1px solid ${isAll ? 'rgba(27,95,250,0.3)' : clColor+'35'}` : '1px solid transparent',
-                  }}>{cl}</button>
-                )
-              })}
-            </div>
-          )}
-          {/* Account filter with platform icons */}
-          {allAccounts.length > 0 && (
-            <div className="flex gap-1.5 flex-wrap">
-              {allAccounts.map((acc: string)=>{
-                const isAll = acc === 'Todas'
-                const isActive = accountFilter === acc
-                const firstItem = data.agenda.find((a: any)=>String(a.account_name||'').trim().toLowerCase()===acc.toLowerCase())
-                const accColor = firstItem ? (platColor[firstItem.platform]||BLU) : BLU
-                return (
-                  <button key={acc} onClick={()=>setAccountFilter(acc)} className="flex items-center gap-1.5 font-syne text-[8.5px] font-black px-3 py-1.5 rounded-xl transition-all" style={{
-                    background: isActive ? (isAll ? 'rgba(27,95,250,0.15)' : accColor+'18') : 'rgba(255,255,255,0.04)',
-                    color: isActive ? (isAll ? BLU : accColor) : 'rgba(255,255,255,0.3)',
-                    border: isActive ? `1px solid ${isAll ? 'rgba(27,95,250,0.3)' : accColor+'35'}` : '1px solid transparent',
+                  <button key={pl} onClick={()=>setPlatformFilter(pl)} className="flex items-center gap-1.5 font-syne text-[8.5px] font-black px-3 py-1.5 rounded-xl transition-all" style={{
+                    background: isActive ? (isAll ? 'rgba(27,95,250,0.15)' : plColor+'18') : 'rgba(255,255,255,0.04)',
+                    color: isActive ? (isAll ? BLU : plColor) : 'rgba(255,255,255,0.3)',
+                    border: isActive ? `1px solid ${isAll ? 'rgba(27,95,250,0.3)' : plColor+'35'}` : '1px solid transparent',
                   }}>
-                    {!isAll && firstItem && <PlatformLogo platform={firstItem.platform} size={10} />}
-                    {acc}
+                    {!isAll && <PlatformLogo platform={pl} size={10}/>}
+                    {pl}
                   </button>
                 )
               })}
             </div>
           )}
+          {/* Account filter — fila secundaria, sólo cuentas con contenido */}
+          {(()=>{
+            // Show accounts that have content overall (not filtered by current platform)
+            const visibleAccounts = allAccounts.filter(acc => {
+              if (acc === 'Todas') return true
+              if (FIXED_ACCOUNTS.includes(acc)) return true
+              return data.agenda.some((a: any) => _normalizeAcc(String(a.account_name||'')) === _normalizeAcc(acc))
+            })
+            if (visibleAccounts.length <= 1) return null
+            return (
+              <div className="flex gap-1.5 flex-wrap items-center">
+                <span className="font-syne text-[7px] font-black tracking-widest mr-0.5" style={{color:'rgba(255,255,255,0.12)'}}>CUENTA</span>
+                {visibleAccounts.map((acc: string)=>{
+                  const isAll = acc === 'Todas'
+                  const isActive = accountFilter === acc
+                  return (
+                    <button key={acc} onClick={()=>{ setAccountFilter(acc); setPlatformFilter('Todas') }} className="flex items-center gap-1.5 font-syne text-[8.5px] font-black px-3 py-1.5 rounded-xl transition-all" style={{
+                      background: isActive ? (isAll ? 'rgba(27,95,250,0.15)' : 'rgba(255,255,255,0.08)') : 'rgba(255,255,255,0.04)',
+                      color: isActive ? (isAll ? BLU : 'rgba(255,255,255,0.9)') : 'rgba(255,255,255,0.3)',
+                      border: isActive ? `1px solid ${isAll ? 'rgba(27,95,250,0.3)' : 'rgba(255,255,255,0.15)'}` : '1px solid transparent',
+                    }}>
+                      {acc}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })()}
         </div>
 
         {/* Empty state */}
@@ -287,6 +386,61 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
               <div className="text-[13px] mb-8 leading-relaxed" style={{color:'rgba(255,255,255,0.28)'}}>Añade tu primera pieza para empezar el pipeline de producción</div>
               <button onClick={()=>onOpenModal('contenido')} className="font-syne text-[10px] font-black px-7 py-3.5 rounded-2xl text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVA PIEZA</button>
             </div>
+          </div>
+        ) : isMobile ? (
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+            {cols.map(col=>{
+              const items = filteredAgenda.filter((a: any)=>a.status===col.key)
+              if (items.length===0) return null
+              return (
+                <div key={col.key}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:col.color}}/>
+                    <span className="font-syne text-[8px] font-black tracking-widest uppercase" style={{color:'rgba(255,255,255,0.35)'}}>{col.label}</span>
+                    <span className="font-syne text-[9px] font-black px-1.5 py-0.5 rounded-full" style={{background:col.color+'15',color:col.color+'90'}}>{items.length}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {items.map((item: any)=>{
+                      const ipc = platColor[item.platform]||BLU
+                      const isActive = activeItem?.id===item.id
+                      return (
+                        <div key={item.id} onClick={()=>openItem(item)}
+                          className="rounded-2xl overflow-hidden cursor-pointer"
+                          style={{background:isActive?'rgba(255,255,255,0.05)':'rgba(255,255,255,0.035)',border:`1px solid ${isActive?ipc+'40':'rgba(255,255,255,0.08)'}`}}>
+                          {/* Cover image banner — shown when cover_url exists */}
+                          {item.cover_url && (
+                            <div className="relative overflow-hidden" style={{height:'90px'}}>
+                              <SafeImg src={item.cover_url} className="w-full h-full object-cover" style={{opacity:0.82}}/>
+                              <div className="absolute inset-0" style={{background:'linear-gradient(to bottom,rgba(0,0,0,0.1) 0%,rgba(0,0,0,0.65) 100%)'}}/>
+                              <div className="absolute bottom-0 left-0 right-0 px-3 pb-2 flex items-end justify-between">
+                                <p className="font-figtree text-[12px] font-semibold text-white leading-tight line-clamp-2 flex-1 mr-2">{item.title}</p>
+                                <PlatformLogo platform={item.platform} size={13}/>
+                              </div>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2 px-3.5 py-2.5" style={{background:`linear-gradient(90deg,${ipc}1A,${ipc}08)`,borderBottom:`1px solid ${ipc}16`}}>
+                            <PlatformLogo platform={item.platform} size={13}/>
+                            <span className="font-syne text-[8px] font-black tracking-widest" style={{color:ipc}}>{item.platform.toUpperCase()}</span>
+                            {item.account_name && <span className="font-syne text-[7.5px] truncate flex-1" style={{color:`${ipc}65`}}>@{item.account_name}</span>}
+                          </div>
+                          {!item.cover_url && (
+                            <div className="px-3.5 py-2.5">
+                              <p className="font-figtree text-[13px] font-semibold leading-snug text-white/80 line-clamp-2">{item.title}</p>
+                              {item.publish_date && <p className="font-syne text-[8px] mt-1" style={{color:'rgba(255,255,255,0.3)'}}>{item.publish_date}</p>}
+                            </div>
+                          )}
+                          {item.cover_url && item.publish_date && (
+                            <div className="px-3.5 pt-1.5 pb-2.5">
+                              <p className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.3)'}}>{item.publish_date}</p>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         ) : (
           <div className="flex-1 overflow-x-auto overflow-y-hidden">
@@ -343,6 +497,111 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                                 {item.notes && <div className="w-1.5 h-1.5 rounded-full" style={{background:'rgba(255,255,255,0.22)'}}/>}
                               </div>
                             </div>
+                            {/* Mini boceto preview — IG/LinkedIn */}
+                            {(item.platform==='Instagram'||item.platform==='LinkedIn') && (()=>{
+                              const isIG = item.platform==='Instagram'
+                              const coverUrl = item.cover_url || null
+                              const acc = item.account_name || 'Brutal Studios'
+                              const initial = (acc.trim().charAt(0)||'B').toUpperCase()
+                              const ctype = normContentType(item.content_type)
+                              if (isIG) {
+                                // Reel — formato vertical 9:16
+                                if (ctype==='reel') return (
+                                  <div className="relative overflow-hidden flex-shrink-0 mx-auto mt-2 rounded-xl" style={{aspectRatio:'9/16',width:'72px',background:coverUrl?'#000':'linear-gradient(180deg,#1a0030,#000)',border:'1px solid rgba(195,53,132,0.25)'}}>
+                                    {coverUrl && <SafeImg src={coverUrl} className="absolute inset-0 w-full h-full object-cover" style={{opacity:0.8}}/>}
+                                    {/* Overlay top */}
+                                    <div className="absolute top-1.5 left-1.5 right-1.5 flex items-center gap-1">
+                                      <div className="w-4 h-4 rounded-full overflow-hidden flex-shrink-0" style={{background:'linear-gradient(45deg,#f09433,#dc2743,#bc1888)',padding:'1px'}}><div className="w-full h-full rounded-full bg-black"/></div>
+                                      <span className="font-figtree text-[5.5px] font-bold text-white truncate">{acc}</span>
+                                    </div>
+                                    {/* Right actions */}
+                                    <div className="absolute right-1 bottom-8 flex flex-col items-center gap-2">
+                                      {['❤️','💬','↗️'].map(e=><span key={e} style={{fontSize:'11px'}}>{e}</span>)}
+                                      <div className="w-4 h-4 rounded-sm border border-white/50" style={{background:'#C13584'}}/>
+                                    </div>
+                                    {/* Bottom */}
+                                    <div className="absolute bottom-0 left-0 right-0 px-1.5 pb-1.5" style={{background:'linear-gradient(to top,rgba(0,0,0,0.8),transparent)'}}>
+                                      <p className="font-figtree text-[5.5px] font-bold text-white truncate">@{acc}</p>
+                                      <p className="font-figtree text-[5px] text-white/70 line-clamp-2 leading-tight mt-0.5">{item.title}</p>
+                                      <div className="flex items-center gap-0.5 mt-0.5"><span style={{fontSize:'6px'}}>🎵</span><span className="font-figtree text-[5px] text-white/50 truncate">Audio original</span></div>
+                                    </div>
+                                    {/* Reel badge */}
+                                    <div className="absolute top-1.5 right-1.5"><span className="font-syne text-[4.5px] font-black px-1 py-0.5 rounded" style={{background:'rgba(195,53,132,0.8)',color:'white'}}>REEL</span></div>
+                                  </div>
+                                )
+                                // Story — formato vertical 9:16
+                                if (ctype==='story') return (
+                                  <div className="relative overflow-hidden flex-shrink-0 mx-auto mt-2 rounded-xl" style={{aspectRatio:'9/16',width:'72px',background:coverUrl?'#000':'linear-gradient(135deg,#6B21A8,#C13584)',border:'1px solid rgba(195,53,132,0.3)'}}>
+                                    {coverUrl && <SafeImg src={coverUrl} className="absolute inset-0 w-full h-full object-cover" style={{opacity:0.85}}/>}
+                                    {/* Story bars */}
+                                    <div className="absolute top-1 left-1 right-1 flex gap-0.5">
+                                      {[1,2,3,4,5].map((b,i)=><div key={b} className="flex-1 h-0.5 rounded-full" style={{background:i===0?'white':'rgba(255,255,255,0.38)'}}/>)}
+                                    </div>
+                                    {/* Account */}
+                                    <div className="absolute top-3 left-1.5 flex items-center gap-1">
+                                      <div className="w-4 h-4 rounded-full" style={{background:'linear-gradient(45deg,#f09433,#dc2743,#bc1888)',padding:'1px'}}><div className="w-full h-full rounded-full bg-black"/></div>
+                                      <span className="font-figtree text-[5px] font-bold text-white">{acc}</span>
+                                    </div>
+                                    {/* Story content if no image */}
+                                    {!coverUrl && <div className="absolute inset-0 flex items-center justify-center p-2"><p className="font-figtree text-[6px] text-white/80 text-center leading-tight line-clamp-4">{item.title}</p></div>}
+                                    {/* Bottom message bar */}
+                                    <div className="absolute bottom-1.5 left-1 right-1">
+                                      <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.18)',border:'1px solid rgba(255,255,255,0.3)'}}>
+                                        <span className="font-figtree text-[4.5px] text-white/60 flex-1">Envía mensaje</span>
+                                        <span style={{fontSize:'7px'}}>❤️</span>
+                                      </div>
+                                    </div>
+                                    {/* Story badge */}
+                                    <div className="absolute top-1.5 right-1"><span className="font-syne text-[4.5px] font-black px-1 py-0.5 rounded" style={{background:'rgba(107,33,168,0.85)',color:'white'}}>STORY</span></div>
+                                  </div>
+                                )
+                                // Post — imagen cuadrada (default)
+                                const cardLogoUrl = allAccountLogos[acc] || (() => { try { return localStorage.getItem(`account-logo-${acc}`) || '' } catch { return '' } })()
+                                const cardInitial = (acc.trim().charAt(0)||'B').toUpperCase()
+                                return (
+                                  <div className="relative overflow-hidden flex-shrink-0 mx-2 mt-2 rounded-xl"
+                                    style={{aspectRatio:'1/1',maxHeight:'108px',background:coverUrl?'#000':`linear-gradient(135deg,#1a0a1e,#0f0520)`,border:`1px solid rgba(195,53,132,0.2)`}}>
+                                    {coverUrl
+                                      ? <SafeImg src={coverUrl} className="w-full h-full object-cover" style={{opacity:0.88}}/>
+                                      : <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 p-3">
+                                          {cardLogoUrl ? <img src={cardLogoUrl} alt={cardInitial} className="w-8 h-8 rounded-full object-cover"/> : <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.1)'}}><span className="font-figtree font-black text-white text-[14px]">{cardInitial}</span></div>}
+                                          <p className="font-figtree text-[7.5px] text-center leading-tight line-clamp-3" style={{color:'rgba(255,255,255,0.5)'}}>{item.title}</p>
+                                        </div>
+                                    }
+                                    {coverUrl && (
+                                      <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5" style={{background:'linear-gradient(to top,rgba(0,0,0,0.78) 0%,transparent 100%)'}}>
+                                        <p className="font-figtree text-[7.5px] leading-tight line-clamp-2" style={{color:'rgba(255,255,255,0.9)'}}><span className="font-semibold">{acc}</span> {item.title}</p>
+                                      </div>
+                                    )}
+                                    <div className="absolute top-1.5 left-1.5 w-5 h-5 rounded-full overflow-hidden border border-white/20 flex items-center justify-center" style={{background:'#111'}}>
+                                      {cardLogoUrl ? <img src={cardLogoUrl} alt="" className="w-full h-full object-cover"/> : <span className="font-figtree font-black text-white text-[8px]">{cardInitial}</span>}
+                                    </div>
+                                    <div className="absolute top-1.5 right-1.5"><span className="font-syne text-[4.5px] font-black px-1 py-0.5 rounded" style={{background:'rgba(0,0,0,0.65)',color:'white'}}>POST</span></div>
+                                  </div>
+                                )
+                              } else {
+                                // LinkedIn — texto primero, imagen opcional abajo
+                                return (
+                                  <div className="flex-shrink-0 mx-2 mt-2 rounded-xl overflow-hidden" style={{background:'#1b1f23',border:'1px solid rgba(10,102,194,0.25)'}}>
+                                    <div className="flex items-center gap-1.5 px-2.5 pt-2 pb-1">
+                                      <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 font-figtree text-[8px] font-bold text-white" style={{background:'#0a66c2'}}>{initial}</div>
+                                      <div className="min-w-0">
+                                        <p className="font-figtree text-[8px] font-semibold text-white truncate">{acc}</p>
+                                        <p className="font-figtree text-[6.5px]" style={{color:'rgba(255,255,255,0.35)'}}>Agencia · Ahora · 🌐</p>
+                                      </div>
+                                    </div>
+                                    <div className="px-2.5 pb-1.5">
+                                      <p className="font-figtree text-[8px] leading-snug line-clamp-3" style={{color:'rgba(255,255,255,0.8)'}}>{item.title}</p>
+                                    </div>
+                                    {coverUrl && <SafeImg src={coverUrl} className="w-full" style={{maxHeight:'52px',objectFit:'cover'}}/>}
+                                    <div className="flex items-center gap-1 px-2.5 py-1" style={{borderTop:'1px solid rgba(255,255,255,0.06)'}}>
+                                      <span className="text-[8px]">👍</span><span className="text-[8px] -ml-1">❤️</span>
+                                      <span className="font-figtree text-[7px] ml-0.5" style={{color:'rgba(255,255,255,0.3)'}}>Recomendar · Comentar</span>
+                                    </div>
+                                  </div>
+                                )
+                              }
+                            })()}
                             {/* Video thumbnail — publicado with video_url */}
                             {col.key==='publicado' && item.video_url && (()=>{
                               const ytId = item.video_url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/)?.[1]
@@ -368,7 +627,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                               <div className="flex items-center gap-2">
                                 {(() => { const ic = item.client || (item.client_id ? data.clients.find((c: any)=>c.id===item.client_id) : null); return ic ? <button onClick={e=>{e.stopPropagation();onSelectClient?.(ic.id);onNavigate?.('clientes')}} className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full truncate max-w-[100px] transition-all hover:opacity-75" style={{background:(ic.color||BLU)+'15',color:(ic.color||BLU)+'cc'}}>{ic.name}</button> : null })()}
                                 {item.publish_date && item.status!=='publicado' && (()=>{
-                                  const todayStr2 = new Date().toISOString().split('T')[0]
+                                  const todayStr2 = todayKey()
                                   const isToday2 = item.publish_date.slice(0,10)===todayStr2
                                   const dOver = !isToday2 && new Date(item.publish_date+'T23:59:59')<new Date()
                                   const dSoon = !dOver && !isToday2 && new Date(item.publish_date+'T23:59:59')<new Date(Date.now()+3*24*3600*1000)
@@ -389,7 +648,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                                   const nextLabel: Record<string,string> = {pendiente:'En prod.',listo:'Listo',publicado:'Publicado'}
                                   if (!nextStatus) return null
                                   return (
-                                    <button onClick={e=>{e.stopPropagation();changeStatus(item, nextStatus)}} className="ml-auto flex-shrink-0 opacity-0 group-hover:opacity-100 font-syne text-[7px] font-black px-2 py-1 rounded-lg transition-all" style={{background:col.color+'18',color:col.color+'cc',border:`1px solid ${col.color}30`}}>
+                                    <button onClick={e=>{e.stopPropagation();changeStatus(item, nextStatus)}} className={`ml-auto flex-shrink-0 font-syne text-[7px] font-black px-2 py-1 rounded-lg transition-all ${isMobile?'opacity-50':'opacity-0 group-hover:opacity-100'}`} style={{background:col.color+'18',color:col.color+'cc',border:`1px solid ${col.color}30`}}>
                                       → {nextLabel[nextStatus]}
                                     </button>
                                   )
@@ -416,42 +675,270 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
       </div>
 
       {/* ── CONTENT MODAL OVERLAY ─────────────────────────────────── */}
-      {activeItem && (
+      {activeItem && isMobile && (
+        /* ── MOBILE MODAL: full-screen with BOCETO / EDITAR tabs ── */
+        <div className="fixed inset-0 z-50 flex flex-col" style={{background:'linear-gradient(160deg,#0E0E20 0%,#07070F 100%)',border:`1px solid ${pc}20`}}>
+          {/* Ambient glow */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 pointer-events-none" style={{width:'90%',height:'120px',background:`radial-gradient(ellipse,${pc}18 0%,transparent 70%)`,filter:'blur(40px)',zIndex:0}}/>
+
+          {/* Header */}
+          <div className="flex-shrink-0 relative z-10" style={{paddingTop:'env(safe-area-inset-top)'}}>
+            <div className="flex items-center gap-3 px-4 pt-4 pb-2.5">
+              <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0" style={{background:`${pc}15`,border:`1px solid ${pc}30`}}>
+                <PlatformLogo platform={activeItem.platform} size={22}/>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-syne text-[7.5px] font-black tracking-widest" style={{color:`${pc}90`}}>
+                  {activeItem.platform.toUpperCase()}{activeItem.account_name ? ` · @${activeItem.account_name}` : ''}
+                </div>
+                <div className="font-figtree text-[15px] font-bold text-white leading-tight line-clamp-1" style={{letterSpacing:'-0.02em'}}>{activeItem.title}</div>
+              </div>
+              <button onClick={()=>setActiveItem(null)} className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:'rgba(255,255,255,0.06)',border:`1px solid rgba(255,255,255,0.08)`}}>
+                <LucideIcon name="x" size={14} color="rgba(255,255,255,0.4)"/>
+              </button>
+            </div>
+            {/* Status pills */}
+            <div className="flex gap-1.5 px-4 pb-3 overflow-x-auto" style={{scrollbarWidth:'none',overflowY:'hidden',touchAction:'pan-x'}}>
+              {cols.map(col=>(
+                <button key={col.key} onClick={()=>changeStatus(activeItem, col.key)}
+                  className="flex items-center gap-1.5 py-1.5 px-3 rounded-xl font-syne text-[7px] font-black tracking-wide transition-all flex-shrink-0 active:opacity-70"
+                  style={{
+                    background: activeItem.status===col.key ? col.color+'18' : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${activeItem.status===col.key ? col.color+'45' : 'rgba(255,255,255,0.06)'}`,
+                    color: activeItem.status===col.key ? col.color : 'rgba(255,255,255,0.25)',
+                  }}>
+                  <div className="w-1 h-1 rounded-full flex-shrink-0" style={{background:activeItem.status===col.key ? col.color : 'rgba(255,255,255,0.15)'}}/>
+                  {col.label.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            {/* Tab bar */}
+            <div className="flex px-4" style={{borderBottom:`1px solid rgba(255,255,255,0.07)`}}>
+              {(['boceto','editar'] as const).map(tab=>(
+                <button key={tab} onClick={()=>setMobileTab(tab)}
+                  className="flex-1 py-2.5 font-syne text-[8.5px] font-black tracking-widest transition-all"
+                  style={{
+                    color: mobileTab===tab ? pc : 'rgba(255,255,255,0.22)',
+                    borderBottom: mobileTab===tab ? `2px solid ${pc}` : '2px solid transparent',
+                    marginBottom:'-1px',
+                  }}>
+                  {tab === 'boceto' ? 'BOCETO' : 'EDITAR'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Scrollable content */}
+          <div className="flex-1 overflow-y-auto relative z-10" style={{paddingBottom:'env(safe-area-inset-bottom)'}}>
+
+            {/* BOCETO TAB */}
+            {mobileTab === 'boceto' && (
+              <BocetoPanel
+                activeItem={activeItem}
+                editCoverUrl={editCoverUrl}
+                editAccountName={editAccountName}
+                accountLogoUrl={accountLogoUrl}
+                bocetoCaption={bocetoCaption}
+                setBocetoCaption={setBocetoCaption}
+                bocetoPlatform={bocetoPlatform}
+                setBocetoPlatform={setBocetoPlatform}
+                editContentType={editContentType}
+                setEditContentType={setEditContentType}
+                onSaveCopy={async (caption) => {
+                  try {
+                    await data.updateAgenda(activeItem.id, { title: caption.trim() })
+                    setActiveItem((a: any) => a ? { ...a, title: caption.trim() } : a)
+                    setBocetoCaption(null)
+                    showToast('Copy guardado')
+                  } catch { showToast('Error al guardar') }
+                }}
+              />
+            )}
+
+            {/* EDITAR TAB */}
+            {mobileTab === 'editar' && (
+              <div className="px-4 py-5 space-y-5" onKeyDown={e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'&&!savingNotes){e.preventDefault();saveNotes()}}}>
+
+                {/* Formato — solo Instagram */}
+                {String(activeItem.platform||'').toLowerCase().includes('instagram') && (
+                  <div>
+                    <div className="font-syne text-[7px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>FORMATO</div>
+                    <div className="flex gap-1.5">
+                      {([['publicacion','📷','POST'],['reel','🎬','REEL'],['story','⭕','STORY']] as const).map(([t,icon,label])=>{
+                        const on = editContentType===t
+                        const c = 'rgba(195,53,132,0.9)'
+                        return (
+                          <button key={t} onClick={()=>setEditContentType(t)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-syne text-[7px] font-black tracking-wide transition-all active:opacity-70"
+                            style={{background:on?c+'18':'rgba(255,255,255,0.03)',border:`1.5px solid ${on?c+'55':'rgba(255,255,255,0.06)'}`,color:on?c:'rgba(255,255,255,0.35)'}}>
+                            <span style={{fontSize:'13px'}}>{icon}</span><span>{label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Portada */}
+                <input id={`cover-mob-${activeItem.id}`} ref={coverFileInputRef} type="file" accept="image/*" className="hidden" onChange={e=>{ const f=e.target.files?.[0]; if(f) uploadCover(f); e.target.value='' }}/>
+                <div>
+                  <div className="font-syne text-[7px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>PORTADA</div>
+                  <div className="flex gap-2 mb-2">
+                    <input value={editCoverUrl} onChange={e=>setEditCoverUrl(e.target.value)} placeholder="URL de portada…" className="flex-1 px-3 py-2.5 rounded-xl text-[11px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU,minWidth:0}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+                    <label htmlFor={`cover-mob-${activeItem.id}`} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[7.5px] font-black tracking-wide flex-shrink-0 cursor-pointer transition-all active:opacity-60${uploadingCover?' pointer-events-none opacity-50':''}`} style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.45)',border:`1px solid rgba(255,255,255,0.07)`}}>
+                      {uploadingCover ? <div className="w-3 h-3 border-2 rounded-full animate-spin flex-shrink-0" style={{borderColor:'rgba(27,95,250,0.3)',borderTopColor:BLU}}/> : <LucideIcon name="image" size={11} color="rgba(255,255,255,0.4)"/>}
+                      <span>{uploadingCover?'…':'SUBIR'}</span>
+                    </label>
+                  </div>
+                  {(editCoverUrl || activeItem.cover_url) && (
+                    <div className="rounded-xl overflow-hidden" style={{maxHeight:'130px'}}>
+                      <SafeImg src={editCoverUrl || activeItem.cover_url} className="w-full" style={{maxHeight:'130px',objectFit:'cover'}}/>
+                    </div>
+                  )}
+                </div>
+
+                {/* Vídeo */}
+                <div>
+                  <div className="font-syne text-[7px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>VÍDEO</div>
+                  <input value={editVideoUrl} onChange={e=>setEditVideoUrl(e.target.value)} placeholder="YouTube · Vimeo · Drive…" className="w-full px-3 py-2.5 rounded-xl text-[11px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+                  {(editVideoUrl || activeItem.video_url) && (
+                    <div className="rounded-xl overflow-hidden mt-2">
+                      {videoEmbed(editVideoUrl||activeItem.video_url)
+                        ? <div style={{aspectRatio:'16/9'}}><iframe src={videoEmbed(editVideoUrl||activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>
+                        : <video src={editVideoUrl||activeItem.video_url} controls className="w-full" style={{maxHeight:'180px',objectFit:'contain',background:'#000'}} preload="metadata"/>
+                      }
+                    </div>
+                  )}
+                </div>
+
+                {/* Fecha + Hora */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="font-syne text-[7px] font-black tracking-widest mb-1.5" style={{color:'rgba(255,255,255,0.2)'}}>FECHA</div>
+                    <input type="date" value={editPublishDate} onChange={e=>setEditPublishDate(e.target.value)} className="w-full px-3 py-2.5 rounded-xl text-[11px] text-white outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU,colorScheme:'dark'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+                  </div>
+                  <div>
+                    <div className="font-syne text-[7px] font-black tracking-widest mb-1.5" style={{color:'rgba(255,255,255,0.2)'}}>HORA</div>
+                    <input type="time" value={editPublishTime} onChange={e=>setEditPublishTime(e.target.value)} className="w-full px-3 py-2.5 rounded-xl text-[11px] text-white outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU,colorScheme:'dark'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+                  </div>
+                </div>
+
+                {/* Cuenta */}
+                <input id={`logo-mob-${activeItem.id}`} ref={logoFileInputRef} type="file" accept="image/*" className="hidden" onChange={e=>{ const f=e.target.files?.[0]; if(f) uploadAccountLogo(f); e.target.value='' }}/>
+                <div>
+                  <div className="font-syne text-[7px] font-black tracking-widest mb-1.5" style={{color:'rgba(255,255,255,0.2)'}}>CUENTA</div>
+                  <div className="flex gap-2 items-center">
+                    <label htmlFor={`logo-mob-${activeItem.id}`} className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden relative cursor-pointer active:opacity-70" style={{background:'linear-gradient(45deg,#f09433,#dc2743,#bc1888)',padding:'2px'}}>
+                      <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center" style={{background:'#111'}}>
+                        {accountLogoUrl ? <img src={accountLogoUrl} alt="" className="w-full h-full object-cover rounded-full"/> : <span className="font-figtree font-black text-white text-[13px]">{(editAccountName.trim().charAt(0)||'B').toUpperCase()}</span>}
+                      </div>
+                      <div className="absolute inset-0 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.45)'}}>
+                        <LucideIcon name="camera" size={12} color="white"/>
+                      </div>
+                    </label>
+                    <select value={editAccountName} onChange={e=>setEditAccountName(e.target.value)} className="flex-1 px-3 py-2.5 rounded-xl text-[11px] text-white outline-none appearance-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,colorScheme:'dark'}}>
+                      <option value="">Sin asignar</option>
+                      {FIXED_ACCOUNTS.map((acc: string)=><option key={acc} value={acc}>{acc}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Save + Delete */}
+                <div className="flex gap-2">
+                  <button onClick={saveNotes} disabled={savingNotes} className="flex-1 py-3 rounded-xl font-syne text-[9px] font-black tracking-wide text-white disabled:opacity-40 transition-opacity active:opacity-70" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingNotes?'GUARDANDO…':'GUARDAR'}</button>
+                  {confirmDeleteContent
+                    ? <div className="flex items-center gap-1.5">
+                        <button onClick={async()=>{try{await data.deleteAgenda(activeItem.id);setActiveItem(null);showToast('Pieza eliminada')}catch{showToast('Error al eliminar')}}} className="px-3 py-3 rounded-xl font-syne text-[8px] font-black" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
+                        <button onClick={()=>setConfirmDeleteContent(false)} className="w-10 h-10 rounded-xl flex items-center justify-center" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={12} color="rgba(255,255,255,0.3)"/></button>
+                      </div>
+                    : <button onClick={()=>setConfirmDeleteContent(true)} className="w-12 py-3 rounded-xl flex items-center justify-center" style={{color:'rgba(229,29,42,0.4)',border:`1px solid rgba(229,29,42,0.1)`}}>
+                        <LucideIcon name="trash" size={14} color="rgba(229,29,42,0.4)"/>
+                      </button>
+                  }
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <div className="font-syne text-[7px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>NOTAS DE PRODUCCIÓN</div>
+                  <textarea value={editNotes} onChange={e=>setEditNotes(e.target.value)} placeholder="Brief, referencias, instrucciones de producción…" rows={4} className="w-full px-3.5 py-3 rounded-xl text-[11px] text-white placeholder-white/20 outline-none resize-none" style={{background:'rgba(255,255,255,0.03)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU,lineHeight:'1.65'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+                </div>
+
+                {/* Team opinions */}
+                <div className="space-y-3 pb-8">
+                  <div className="flex items-center justify-between">
+                    <div className="font-syne text-[7px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>EQUIPO</div>
+                    {(()=>{ try { const ops=JSON.parse(activeItem.feedback||'[]'); return Array.isArray(ops)&&ops.length>0?<span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:`${BLU}15`,color:`${BLU}bb`}}>{ops.length}</span>:null } catch { return null } })()}
+                  </div>
+                  {(()=>{ try { const ops=JSON.parse(activeItem.feedback||'[]'); return Array.isArray(ops)&&ops.length>0?(
+                    <div className="space-y-2">
+                      {(ops as any[]).map((op:any,i:number)=>(
+                        <div key={i} className="flex items-start gap-2.5 p-3 rounded-xl" style={{background:'rgba(255,255,255,0.03)',border:`1px solid rgba(255,255,255,0.06)`}}>
+                          <div className="w-7 h-7 rounded-lg flex items-center justify-center font-syne text-[8px] font-black flex-shrink-0" style={{background:`${op.color||BLU}18`,color:op.color||BLU}}>{op.initials}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-0.5"><span className="font-figtree text-[11px] font-bold" style={{color:'rgba(255,255,255,0.8)'}}>{op.name}</span>{op.emoji&&<span className="text-[14px] leading-none">{op.emoji}</span>}</div>
+                            {op.note&&<p className="font-syne text-[9px] leading-relaxed" style={{color:'rgba(255,255,255,0.4)'}}>{op.note}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ):null } catch { return null } })()}
+                  {(()=>{
+                    const existing=(() => { try { const p=JSON.parse(activeItem.feedback||'[]'); return Array.isArray(p)?p:[] } catch { return [] } })()
+                    const myOp=existing.find((o:any)=>o.userId===profile?.id)
+                    return (
+                      <div className="rounded-xl overflow-hidden" style={{background:'rgba(255,255,255,0.02)',border:`1px solid rgba(255,255,255,0.07)`}}>
+                        <div className="p-3.5">
+                          <div className="font-syne text-[7px] font-black tracking-widest mb-2.5" style={{color:'rgba(255,255,255,0.18)'}}>{myOp?'TU OPINIÓN — EDITAR':'AÑADE TU OPINIÓN'}</div>
+                          <div className="flex gap-2 mb-3 flex-wrap">
+                            {([['🔥','Love'],['👍','Bien'],['🤔','Dudas'],['✏️','Cambios'],['❌','No']] as const).map(([em,label])=>(
+                              <button key={em} onClick={()=>setPendingEmoji(em===pendingEmoji?'':em)} className="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg transition-all active:opacity-70" style={{background:pendingEmoji===em?'rgba(255,255,255,0.1)':'rgba(255,255,255,0.03)',border:`1px solid ${pendingEmoji===em?'rgba(255,255,255,0.2)':'rgba(255,255,255,0.06)'}`,transform:pendingEmoji===em?'scale(1.08)':'scale(1)'}}>
+                                <span className="text-[14px] leading-none">{em}</span>
+                                <span className="font-syne text-[6px] font-black tracking-wide mt-0.5" style={{color:pendingEmoji===em?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.22)'}}>{label}</span>
+                              </button>
+                            ))}
+                          </div>
+                          <textarea value={pendingNote} onChange={e=>setPendingNote(e.target.value)} placeholder="Tu opinión sobre el contenido…" rows={2} className="w-full px-3 py-2.5 rounded-xl text-[11px] text-white placeholder-white/20 outline-none resize-none" style={{background:'rgba(255,255,255,0.03)',border:`1px solid rgba(255,255,255,0.07)`,caretColor:BLU,lineHeight:'1.6'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+                        </div>
+                        <button onClick={saveOpinion} disabled={savingOpinion||(!pendingEmoji&&!pendingNote.trim())} className="w-full py-2.5 font-syne text-[8px] font-black tracking-widest transition-all disabled:opacity-30 active:opacity-70" style={{background:`rgba(27,95,250,0.08)`,color:BLU,borderTop:`1px solid rgba(27,95,250,0.12)`}}>
+                          {savingOpinion?'GUARDANDO…':myOp?'ACTUALIZAR':'PUBLICAR'}
+                        </button>
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeItem && !isMobile && (
+        /* ── DESKTOP MODAL: two-column layout ── */
         <div
-          className={isMobile ? "fixed inset-0 z-50 flex" : "fixed inset-0 z-50 flex items-center justify-center p-6"}
+          className="fixed inset-0 z-50 flex items-center justify-center p-6"
           style={{background:'rgba(0,0,0,0.72)',backdropFilter:'blur(14px)'}}
           onClick={()=>setActiveItem(null)}
         >
           <div
-            className={isMobile ? "relative w-full flex flex-col overflow-y-auto" : "relative w-full flex overflow-hidden"}
-            style={{
-              maxWidth: isMobile ? '100%' : '940px',
-              maxHeight: isMobile ? '100dvh' : 'calc(100vh - 48px)',
-              borderRadius: isMobile ? '0px' : '28px',
-              paddingTop: isMobile ? 'env(safe-area-inset-top)' : undefined,
-              paddingBottom: isMobile ? 'env(safe-area-inset-bottom)' : undefined,
-              background:'linear-gradient(160deg,#0E0E20 0%,#07070F 100%)',
-              border:`1px solid ${pc}22`,
-              boxShadow:`0 60px 120px rgba(0,0,0,0.85),0 0 0 1px rgba(255,255,255,0.04),inset 0 1px 0 rgba(255,255,255,0.05)`,
-            }}
+            className="relative w-full flex overflow-hidden"
+            style={{maxWidth:'940px',maxHeight:'calc(100vh - 48px)',borderRadius:'28px',background:'linear-gradient(160deg,#0E0E20 0%,#07070F 100%)',border:`1px solid ${pc}22`,boxShadow:`0 60px 120px rgba(0,0,0,0.85),0 0 0 1px rgba(255,255,255,0.04),inset 0 1px 0 rgba(255,255,255,0.05)`}}
             onClick={e=>e.stopPropagation()}
           >
             {/* Ambient glow */}
             <div className="absolute top-0 left-1/2 -translate-x-1/2 pointer-events-none" style={{width:'60%',height:'180px',background:`radial-gradient(ellipse,${pc}1A 0%,transparent 70%)`,filter:'blur(50px)'}}/>
 
-            {/* ── LEFT COLUMN: Video + Info ── */}
-            <div className={isMobile ? "relative flex flex-col flex-shrink-0" : "relative flex flex-col flex-shrink-0 overflow-y-auto"} style={isMobile?{width:'100%',borderBottom:`1px solid rgba(255,255,255,0.06)`}:{width:'52%',borderRight:`1px solid rgba(255,255,255,0.06)`}}>
-              {/* Header */}
+            {/* ── LEFT COLUMN ── */}
+            <div className="relative flex flex-col flex-shrink-0 overflow-y-auto" style={{width:'52%',borderRight:`1px solid rgba(255,255,255,0.06)`}}>
               <div className="flex-shrink-0 px-7 pt-7 pb-5" style={{borderBottom:`1px solid rgba(255,255,255,0.06)`}}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                    <div className="w-13 h-13 rounded-2xl flex items-center justify-center flex-shrink-0" style={{background:`${pc}15`,border:`1px solid ${pc}25`,width:48,height:48}}>
-                      <PlatformLogo platform={activeItem.platform} size={26} />
+                    <div className="rounded-2xl flex items-center justify-center flex-shrink-0" style={{background:`${pc}15`,border:`1px solid ${pc}25`,width:48,height:48}}>
+                      <PlatformLogo platform={activeItem.platform} size={26}/>
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="font-syne text-[9px] font-black tracking-widest" style={{color:pc}}>{activeItem.platform.toUpperCase()}</span>
-                        {activeItem.account_name && <span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.25)'}} >@{activeItem.account_name}</span>}
+                        {activeItem.account_name && <span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.25)'}}>@{activeItem.account_name}</span>}
                         {activeItem.client && <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full" style={{background:(activeItem.client.color||BLU)+'12',color:(activeItem.client.color||BLU)+'bb'}}>{activeItem.client.name}</span>}
                       </div>
                       <div className="font-figtree text-[16px] font-bold text-white leading-snug" style={{letterSpacing:'-0.02em'}}>{activeItem.title}</div>
@@ -461,59 +948,55 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                     <LucideIcon name="x" size={13} color="rgba(255,255,255,0.35)"/>
                   </button>
                 </div>
-                {/* Status pills */}
                 <div className="flex gap-1.5 mt-4 overflow-x-auto" style={{scrollbarWidth:'none'}}>
                   {cols.map(col=>(
                     <button key={col.key} onClick={()=>changeStatus(activeItem, col.key)}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl font-syne text-[7.5px] font-black tracking-wide transition-all flex-shrink-0 whitespace-nowrap"
-                      style={{
-                        background: activeItem.status===col.key ? col.color+'1A' : 'rgba(255,255,255,0.04)',
-                        border: `1px solid ${activeItem.status===col.key ? col.color+'45' : 'rgba(255,255,255,0.06)'}`,
-                        color: activeItem.status===col.key ? col.color : 'rgba(255,255,255,0.22)',
-                      }}>
-                      <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:activeItem.status===col.key ? col.color : 'rgba(255,255,255,0.12)'}}/>
+                      className="flex-1 flex items-center justify-center gap-1.5 py-3 px-2.5 rounded-xl font-syne text-[7.5px] font-black tracking-wide transition-all flex-shrink-0 whitespace-nowrap"
+                      style={{background:activeItem.status===col.key?col.color+'1A':'rgba(255,255,255,0.04)',border:`1px solid ${activeItem.status===col.key?col.color+'45':'rgba(255,255,255,0.06)'}`,color:activeItem.status===col.key?col.color:'rgba(255,255,255,0.22)'}}>
+                      <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:activeItem.status===col.key?col.color:'rgba(255,255,255,0.12)'}}/>
                       {col.label.toUpperCase()}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Video section */}
               <div className="p-6 space-y-4" onKeyDown={e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'&&!savingNotes){e.preventDefault();saveNotes()}}}>
-                <input ref={videoFileInputRef} type="file" accept="video/*" className="hidden" onChange={e=>{ const f=e.target.files?.[0]; if(f) uploadVideo(f); e.target.value='' }}/>
-                <div>
-                  <div className="font-syne text-[8.5px] font-black tracking-widest mb-2.5" style={{color:'rgba(255,255,255,0.2)'}}>VÍDEO</div>
-                  <div className="flex gap-2 mb-2.5">
-                    <input value={editVideoUrl} onChange={e=>setEditVideoUrl(e.target.value)} placeholder="YouTube / Vimeo URL…" className="flex-1 px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU,minWidth:0}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
-                    <button onClick={()=>videoFileInputRef.current?.click()} disabled={uploadingVideo} className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide flex-shrink-0 disabled:opacity-40 transition-all hover:opacity-80" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.45)',border:`1px solid rgba(255,255,255,0.07)`}}>
-                      {uploadingVideo ? <><div className="w-3 h-3 border-2 rounded-full animate-spin flex-shrink-0" style={{borderColor:'rgba(255,255,255,0.3)',borderTopColor:'white'}}/><span>SUBIENDO…</span></> : <><LucideIcon name="upload" size={11} color="rgba(255,255,255,0.4)"/><span>SUBIR</span></>}
-                    </button>
+                {String(activeItem.platform||'').toLowerCase().includes('instagram') && (
+                  <div>
+                    <div className="font-syne text-[8.5px] font-black tracking-widest mb-2.5" style={{color:'rgba(255,255,255,0.2)'}}>TIPO DE CONTENIDO</div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([['publicacion','📷','Publicación','Imagen fija en el feed'],['reel','🎬','Reel','Vídeo vertical 9:16'],['story','⭕','Story','Desaparece en 24h']] as const).map(([t,icon,label,desc])=>{
+                        const on=editContentType===t
+                        const colors: Record<string,string>={publicacion:'rgba(195,53,132,0.85)',reel:'rgba(195,53,132,0.85)',story:'rgba(107,33,168,0.85)'}
+                        const c=colors[t]
+                        return (
+                          <button key={t} onClick={()=>setEditContentType(t)} className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl transition-all" style={{background:on?c+'18':'rgba(255,255,255,0.03)',border:`1.5px solid ${on?c+'55':'rgba(255,255,255,0.06)'}`}}>
+                            <span style={{fontSize:'20px'}}>{icon}</span>
+                            <span className="font-syne text-[9px] font-black tracking-wide" style={{color:on?c:'rgba(255,255,255,0.4)'}}>{label.toUpperCase()}</span>
+                            <span className="font-figtree text-[9px] text-center leading-tight" style={{color:'rgba(255,255,255,0.25)'}}>{desc}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
-                  {videoEmbed(editVideoUrl) && (
-                    <div className="rounded-2xl overflow-hidden" style={{aspectRatio:'16/9',background:'#000'}}>
-                      <iframe src={videoEmbed(editVideoUrl)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/>
-                    </div>
-                  )}
-                  {!videoEmbed(editVideoUrl) && editVideoUrl && (
-                    <div className="rounded-2xl overflow-hidden" style={{background:'#000'}}>
-                      <video src={editVideoUrl} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/>
-                    </div>
-                  )}
-                  {!editVideoUrl && activeItem.video_url && (
-                    <div className="rounded-2xl overflow-hidden" style={{background:'#000'}}>
-                      {videoEmbed(activeItem.video_url)
-                        ? <div style={{aspectRatio:'16/9'}}><iframe src={videoEmbed(activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>
-                        : <video src={activeItem.video_url} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/>
-                      }
-                    </div>
-                  )}
-                  {!editVideoUrl && !activeItem.video_url && (
-                    <div className="flex items-center gap-2 rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px dashed rgba(255,255,255,0.07)`}}>
-                      <LucideIcon name="film" size={14} color="rgba(255,255,255,0.12)"/>
-                      <span className="font-syne text-[9px]" style={{color:'rgba(255,255,255,0.18)'}}>Sin vídeo — pega una URL o sube un archivo</span>
-                    </div>
-                  )}
+                )}
+
+                <div>
+                  <div className="flex items-center justify-between mb-2.5">
+                    <div className="font-syne text-[8.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>VÍDEO</div>
+                    <span className="font-syne text-[7px] font-black tracking-wide px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.2)',border:'1px solid rgba(255,255,255,0.07)'}}>YouTube · Vimeo · Drive</span>
+                  </div>
+                  <div className="flex gap-2 mb-2.5">
+                    <input value={editVideoUrl} onChange={e=>setEditVideoUrl(e.target.value)} placeholder="Pega el enlace del vídeo…" className="flex-1 px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU,minWidth:0}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+                  </div>
+                  {videoEmbed(editVideoUrl)&&<div className="rounded-2xl overflow-hidden" style={{aspectRatio:'16/9',background:'#000'}}><iframe src={videoEmbed(editVideoUrl)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>}
+                  {!videoEmbed(editVideoUrl)&&editVideoUrl&&<div className="rounded-2xl overflow-hidden" style={{background:'#000'}}><video src={editVideoUrl} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/></div>}
+                  {!editVideoUrl&&activeItem.video_url&&<div className="rounded-2xl overflow-hidden" style={{background:'#000'}}>{videoEmbed(activeItem.video_url)?<div style={{aspectRatio:'16/9'}}><iframe src={videoEmbed(activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>:<video src={activeItem.video_url} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/>}</div>}
+                  {!editVideoUrl&&!activeItem.video_url&&<div className="flex items-center gap-2 rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px dashed rgba(255,255,255,0.07)`}}><LucideIcon name="film" size={14} color="rgba(255,255,255,0.12)"/><span className="font-syne text-[9px]" style={{color:'rgba(255,255,255,0.18)'}}>Pega un enlace de YouTube, Vimeo, Instagram o Drive</span></div>}
                 </div>
+
+                {/* Logo de cuenta */}
+                <input ref={logoFileInputRef} type="file" accept="image/*" className="hidden" onChange={e=>{ const f=e.target.files?.[0]; if(f) uploadAccountLogo(f); e.target.value='' }}/>
 
                 {/* Cover / Portada */}
                 <div>
@@ -522,23 +1005,13 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                   <div className="flex gap-2 mb-2.5">
                     <input value={editCoverUrl} onChange={e=>setEditCoverUrl(e.target.value)} placeholder="URL de portada…" className="flex-1 px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU,minWidth:0}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
                     <button onClick={()=>coverFileInputRef.current?.click()} disabled={uploadingCover} className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide flex-shrink-0 disabled:opacity-40 transition-all hover:opacity-80" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.45)',border:`1px solid rgba(255,255,255,0.07)`}}>
-                      {uploadingCover ? <><div className="w-3 h-3 border-2 rounded-full animate-spin flex-shrink-0" style={{borderColor:'rgba(255,255,255,0.3)',borderTopColor:'white'}}/><span>SUBIENDO…</span></> : <><LucideIcon name="image" size={11} color="rgba(255,255,255,0.4)"/><span>SUBIR</span></>}
+                      {uploadingCover?<><div className="w-3 h-3 border-2 rounded-full animate-spin flex-shrink-0" style={{borderColor:'rgba(255,255,255,0.3)',borderTopColor:'white'}}/><span>SUBIENDO…</span></>:<><LucideIcon name="image" size={11} color="rgba(255,255,255,0.4)"/><span>SUBIR</span></>}
                     </button>
                   </div>
-                  {(editCoverUrl || activeItem.cover_url) && (
-                    <div className="rounded-2xl overflow-hidden" style={{background:'#000'}}>
-                      <img src={editCoverUrl || activeItem.cover_url} alt="cover" className="w-full rounded-2xl" style={{maxHeight:'200px',objectFit:'cover'}}/>
-                    </div>
-                  )}
-                  {!editCoverUrl && !activeItem.cover_url && (
-                    <div className="flex items-center gap-2 rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px dashed rgba(255,255,255,0.07)`}}>
-                      <LucideIcon name="image" size={14} color="rgba(255,255,255,0.12)"/>
-                      <span className="font-syne text-[9px]" style={{color:'rgba(255,255,255,0.18)'}}>Sin portada — pega una URL o sube una imagen</span>
-                    </div>
-                  )}
+                  {(editCoverUrl||activeItem.cover_url)&&<div className="rounded-2xl overflow-hidden" style={{background:'#000'}}><SafeImg src={editCoverUrl||activeItem.cover_url} className="w-full rounded-2xl" style={{maxHeight:'200px',objectFit:'cover'}}/></div>}
+                  {!editCoverUrl&&!activeItem.cover_url&&<div className="flex items-center gap-2 rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px dashed rgba(255,255,255,0.07)`}}><LucideIcon name="image" size={14} color="rgba(255,255,255,0.12)"/><span className="font-syne text-[9px]" style={{color:'rgba(255,255,255,0.18)'}}>Sin portada — pega una URL o sube una imagen</span></div>}
                 </div>
 
-                {/* Date + Account */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <div className="font-syne text-[8.5px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>FECHA</div>
@@ -551,13 +1024,23 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                 </div>
                 <div>
                   <div className="font-syne text-[8.5px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>CUENTA / PERFIL</div>
-                  <select value={editAccountName} onChange={e=>setEditAccountName(e.target.value)} className="w-full px-3 py-2.5 rounded-xl text-[12px] text-white outline-none appearance-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,colorScheme:'dark'}}>
-                    <option value="">Sin asignar</option>
-                    {PREDEFINED_ACCOUNTS.map(acc=><option key={acc} value={acc}>{acc}</option>)}
-                  </select>
+                  <div className="flex gap-2 items-start">
+                    <button onClick={()=>logoFileInputRef.current?.click()} className="flex-shrink-0 w-10 h-10 rounded-full overflow-hidden flex items-center justify-center transition-opacity hover:opacity-80 relative group" style={{background:'linear-gradient(45deg,#f09433,#dc2743,#bc1888)',padding:'2px'}}>
+                      <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center" style={{background:'#111'}}>
+                        {accountLogoUrl?<img src={accountLogoUrl} alt="" className="w-full h-full object-cover rounded-full"/>:<span className="font-figtree font-black text-white text-[14px]">{(editAccountName.trim().charAt(0)||'B').toUpperCase()}</span>}
+                      </div>
+                      <div className="absolute inset-0 rounded-full flex items-center justify-center transition-opacity opacity-0 group-hover:opacity-100" style={{background:'rgba(0,0,0,0.55)'}}>
+                        <LucideIcon name="camera" size={13} color="white"/>
+                      </div>
+                    </button>
+                    <select value={editAccountName} onChange={e=>setEditAccountName(e.target.value)} className="flex-1 px-3 py-2.5 rounded-xl text-[12px] text-white outline-none appearance-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,colorScheme:'dark'}}>
+                      <option value="">Sin asignar</option>
+                      {FIXED_ACCOUNTS.map((acc: string)=><option key={acc} value={acc}>{acc}</option>)}
+                    </select>
+                  </div>
+                  <div className="mt-1.5 font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.2)'}}>Toca el avatar para cambiar la foto de la cuenta</div>
                 </div>
 
-                {/* Save + Delete */}
                 <div className="flex gap-2 pt-1">
                   <button onClick={saveNotes} disabled={savingNotes} className="flex-1 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide text-white disabled:opacity-40 transition-opacity" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingNotes?'GUARDANDO…':'GUARDAR'}</button>
                   {confirmDeleteContent
@@ -565,9 +1048,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                         <button onClick={async()=>{try{await data.deleteAgenda(activeItem.id);setActiveItem(null);showToast('Pieza eliminada')}catch{showToast('Error al eliminar')}}} className="px-3 py-2.5 rounded-xl font-syne text-[8px] font-black" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
                         <button onClick={()=>setConfirmDeleteContent(false)} className="w-8 h-8 rounded-xl flex items-center justify-center" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={12} color="rgba(255,255,255,0.3)"/></button>
                       </div>
-                    : <button onClick={()=>setConfirmDeleteContent(true)} className="px-4 py-2.5 rounded-xl font-syne text-[9px] font-black transition-all" style={{color:'rgba(229,29,42,0.4)',border:`1px solid rgba(229,29,42,0.1)`}}>
-                        <LucideIcon name="trash" size={12} color="rgba(229,29,42,0.4)"/>
-                      </button>
+                    : <button onClick={()=>setConfirmDeleteContent(true)} className="px-4 py-2.5 rounded-xl font-syne text-[9px] font-black transition-all" style={{color:'rgba(229,29,42,0.4)',border:`1px solid rgba(229,29,42,0.1)`}}><LucideIcon name="trash" size={12} color="rgba(229,29,42,0.4)"/></button>
                   }
                 </div>
                 <div className="nx-kbd-hints flex items-center justify-center gap-2 pb-1">
@@ -576,128 +1057,59 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
               </div>
             </div>
 
-            {/* ── RIGHT COLUMN: Notes + Team Opinions ── */}
-            <div className={isMobile ? "flex-1 flex flex-col" : "flex-1 flex flex-col overflow-y-auto"}>
-              {/* Boceto / Vista previa del post — interactivo */}
-              {(()=>{
-                const plat = String(activeItem.platform||'').toLowerCase()
-                const isLinkedin = bocetoPlatform ? bocetoPlatform==='linkedin' : plat.includes('linkedin')
-                const account = editAccountName || activeItem.account_name || 'Brutal Studios'
-                const initial = (account.trim().charAt(0)||'B').toUpperCase()
-                const media = editCoverUrl || activeItem.cover_url || ''
-                const caption = bocetoCaption ?? (activeItem.title || '')
-                const dirty = bocetoCaption!==null && bocetoCaption.trim() && bocetoCaption.trim()!==(activeItem.title||'')
-                const igIcon = (d:string)=><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
-                return (
-                  <div className="px-7 pt-7 pb-5 flex-shrink-0" style={{borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="font-syne text-[8.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>BOCETO EN VIVO</div>
-                      <div className="flex items-center gap-1 p-0.5 rounded-lg" style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.06)'}}>
-                        {(['instagram','linkedin'] as const).map(p=>{
-                          const on = isLinkedin ? p==='linkedin' : p==='instagram'
-                          return <button key={p} onClick={()=>setBocetoPlatform(p)} className="px-2.5 py-1 rounded-md font-syne text-[7.5px] font-black tracking-wide transition-all" style={{background:on?(p==='linkedin'?'#0a66c2':'#dc2743')+'22':'transparent',color:on?(p==='linkedin'?'#4a9fe0':'#ff6ba0'):'rgba(255,255,255,0.3)'}}>{p==='linkedin'?'LINKEDIN':'INSTAGRAM'}</button>
-                        })}
-                      </div>
-                    </div>
-                    <div className="flex justify-center">
-                    {isLinkedin ? (
-                      <div className="w-full rounded-xl overflow-hidden" style={{maxWidth:'340px',background:'#1b1f23',border:'1px solid rgba(255,255,255,0.1)'}}>
-                        <div className="flex items-center gap-2.5 px-3 pt-3 pb-2">
-                          <div className="w-9 h-9 rounded-full flex items-center justify-center font-figtree text-[13px] font-bold text-white flex-shrink-0" style={{background:'#0a66c2'}}>{initial}</div>
-                          <div className="flex-1 min-w-0"><div className="text-white text-[12.5px] font-semibold leading-tight truncate">{account}</div><div className="text-[10px] leading-tight" style={{color:'rgba(255,255,255,0.4)'}}>Agencia creativa · Ahora · 🌐</div></div>
-                          <span style={{color:'rgba(255,255,255,0.4)'}}>···</span>
-                        </div>
-                        <div className="px-3 pb-2.5 text-[12.5px] leading-relaxed whitespace-pre-wrap" style={{color:'rgba(255,255,255,0.85)'}}>{caption}</div>
-                        {media
-                          ? <img src={media} alt="" className="w-full" style={{maxHeight:'220px',objectFit:'cover'}}/>
-                          : <div style={{height:'160px',background:'linear-gradient(135deg,#243b55,#141e30)'}} className="flex items-center justify-center"><PlatformLogo platform={activeItem.platform} size={30}/></div>}
-                        <div className="flex items-center gap-1.5 px-3 py-2" style={{borderTop:'1px solid rgba(255,255,255,0.08)'}}>
-                          <span className="text-[13px]">👍</span><span className="text-[13px] -ml-1.5">❤️</span><span className="text-[10px] ml-1" style={{color:'rgba(255,255,255,0.4)'}}>42</span>
-                          <div className="flex-1"/>
-                          {['Recomendar','Comentar','Compartir'].map(l=><span key={l} className="font-figtree text-[10px] px-1.5" style={{color:'rgba(255,255,255,0.45)'}}>{l}</span>)}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="w-full rounded-xl overflow-hidden" style={{maxWidth:'300px',background:'#000',border:'1px solid rgba(255,255,255,0.12)'}}>
-                        <div className="flex items-center gap-2.5 px-3 py-2.5">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{background:'linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)',padding:'2px'}}>
-                            <div className="w-full h-full rounded-full flex items-center justify-center font-figtree text-[11px] font-bold text-white" style={{background:'#000'}}>{initial}</div>
-                          </div>
-                          <span className="flex-1 text-white text-[12px] font-semibold truncate">{account}</span>
-                          <span className="text-white text-[15px] leading-none">···</span>
-                        </div>
-                        {media
-                          ? <img src={media} alt="" style={{aspectRatio:'1/1',width:'100%',objectFit:'cover'}}/>
-                          : <div style={{aspectRatio:'1/1',background:'linear-gradient(135deg,#1a1a2e,#0f1230)'}} className="flex flex-col items-center justify-center gap-3 p-5"><PlatformLogo platform={activeItem.platform} size={34}/><span className="text-center font-figtree text-[13px] font-semibold leading-snug" style={{color:'rgba(255,255,255,0.55)'}}>{caption}</span></div>}
-                        <div className="flex items-center gap-3.5 px-3 pt-2.5">
-                          {igIcon('M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1L12 21l7.7-7.6 1.1-1a5.5 5.5 0 0 0 0-7.8z')}
-                          {igIcon('M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z')}
-                          {igIcon('M22 2 11 13M22 2 15 22 11 13 2 9l20-7z')}
-                          <div className="flex-1"/>
-                          {igIcon('M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z')}
-                        </div>
-                        <div className="px-3 pt-1.5 pb-3">
-                          <div className="text-white text-[11px] font-semibold">128 Me gusta</div>
-                          <div className="text-white text-[12px] leading-snug mt-0.5"><span className="font-semibold">{account}</span> {caption}</div>
-                        </div>
-                      </div>
-                    )}
-                    </div>
-                    {/* Editor de copy en vivo */}
-                    <div className="mt-3">
-                      <textarea value={caption} onChange={e=>setBocetoCaption(e.target.value)} rows={2} placeholder="Escribe el copy del post — se actualiza en el boceto…" className="w-full px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none resize-none" style={{background:'rgba(255,255,255,0.03)',border:'1.5px solid rgba(255,255,255,0.07)',caretColor:BLU,lineHeight:'1.5'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
-                      <div className="flex items-center justify-between mt-1.5">
-                        <span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.15)'}}>{caption.length} caracteres · edita para ver cómo queda</span>
-                        {dirty && <button onClick={async()=>{ try{ await data.updateAgenda(activeItem.id,{title:(bocetoCaption||'').trim()}); setActiveItem((a:any)=>a?{...a,title:(bocetoCaption||'').trim()}:a); setBocetoCaption(null); showToast('Copy guardado') }catch{ showToast('Error al guardar') } }} className="font-syne text-[7.5px] font-black tracking-widest px-2.5 py-1 rounded-lg transition-all hover:opacity-80" style={{background:`${BLU}14`,color:BLU,border:`1px solid ${BLU}28`}}>GUARDAR COPY</button>}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })()}
-
-              {/* Notes */}
+            {/* ── RIGHT COLUMN ── */}
+            <div className="flex-1 flex flex-col overflow-y-auto">
+              <BocetoPanel
+                activeItem={activeItem}
+                editCoverUrl={editCoverUrl}
+                editAccountName={editAccountName}
+                accountLogoUrl={accountLogoUrl}
+                bocetoCaption={bocetoCaption}
+                setBocetoCaption={setBocetoCaption}
+                bocetoPlatform={bocetoPlatform}
+                setBocetoPlatform={setBocetoPlatform}
+                editContentType={editContentType}
+                setEditContentType={setEditContentType}
+                onSaveCopy={async (caption) => {
+                  try {
+                    await data.updateAgenda(activeItem.id, { title: caption.trim() })
+                    setActiveItem((a: any) => a ? { ...a, title: caption.trim() } : a)
+                    setBocetoCaption(null)
+                    showToast('Copy guardado')
+                  } catch { showToast('Error al guardar') }
+                }}
+              />
               <div className="px-7 pt-7 pb-5 flex-shrink-0" style={{borderBottom:`1px solid rgba(255,255,255,0.05)`}}>
                 <div className="font-syne text-[8.5px] font-black tracking-widest mb-2.5" style={{color:'rgba(255,255,255,0.2)'}}>NOTAS DE PRODUCCIÓN</div>
                 <textarea value={editNotes} onChange={e=>setEditNotes(e.target.value)} placeholder="Añade notas del equipo, brief de producción, referencias…" rows={5} className="w-full px-4 py-3 rounded-xl text-[12px] text-white placeholder-white/20 outline-none resize-none" style={{background:'rgba(255,255,255,0.03)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU,lineHeight:'1.65'}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')} onKeyDown={e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'&&!savingNotes){e.preventDefault();saveNotes()}}}/>
               </div>
-
-              {/* Team opinions */}
               <div className="flex-1 px-7 py-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="font-syne text-[8.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>OPINIONES DEL EQUIPO</div>
-                  {(()=>{ try { const ops = JSON.parse(activeItem.feedback||'[]'); return Array.isArray(ops)&&ops.length>0 ? <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:`${BLU}15`,color:`${BLU}bb`}}>{ops.length}</span> : null } catch { return null } })()}
+                  {(()=>{ try { const ops=JSON.parse(activeItem.feedback||'[]'); return Array.isArray(ops)&&ops.length>0?<span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:`${BLU}15`,color:`${BLU}bb`}}>{ops.length}</span>:null } catch { return null } })()}
                 </div>
-
-                {/* Existing opinions */}
-                {(()=>{ try { const ops = JSON.parse(activeItem.feedback||'[]'); return Array.isArray(ops)&&ops.length>0 ? (
+                {(()=>{ try { const ops=JSON.parse(activeItem.feedback||'[]'); return Array.isArray(ops)&&ops.length>0?(
                   <div className="space-y-2">
-                    {(ops as any[]).map((op: any, i: number) => (
+                    {(ops as any[]).map((op:any,i:number)=>(
                       <div key={i} className="flex items-start gap-3 p-3.5 rounded-2xl transition-all" style={{background:'rgba(255,255,255,0.03)',border:`1px solid rgba(255,255,255,0.06)`}}>
                         <div className="w-8 h-8 rounded-xl flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0" style={{background:`${op.color||BLU}18`,color:op.color||BLU}}>{op.initials}</div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className="font-figtree text-[12px] font-bold" style={{color:'rgba(255,255,255,0.8)'}}>{op.name}</span>
-                            {op.emoji && <span className="text-[16px] leading-none">{op.emoji}</span>}
-                            <span className="font-syne text-[7px] ml-auto flex-shrink-0" style={{color:'rgba(255,255,255,0.18)'}}>{op.at?new Date(op.at).toLocaleDateString('es-ES',{day:'numeric',month:'short'}):''}</span>
-                          </div>
-                          {op.note && <p className="font-syne text-[10px] leading-relaxed" style={{color:'rgba(255,255,255,0.42)'}}>{op.note}</p>}
+                          <div className="flex items-center gap-2 mb-1 flex-wrap"><span className="font-figtree text-[12px] font-bold" style={{color:'rgba(255,255,255,0.8)'}}>{op.name}</span>{op.emoji&&<span className="text-[16px] leading-none">{op.emoji}</span>}<span className="font-syne text-[7px] ml-auto flex-shrink-0" style={{color:'rgba(255,255,255,0.18)'}}>{op.at?new Date(op.at).toLocaleDateString('es-ES',{day:'numeric',month:'short'}):''}</span></div>
+                          {op.note&&<p className="font-syne text-[10px] leading-relaxed" style={{color:'rgba(255,255,255,0.42)'}}>{op.note}</p>}
                         </div>
                       </div>
                     ))}
                   </div>
-                ) : null } catch { return null } })()}
-
-                {/* Add / Edit my opinion */}
+                ):null } catch { return null } })()}
                 {(()=>{
-                  const existing = (() => { try { const p = JSON.parse(activeItem.feedback||'[]'); return Array.isArray(p) ? p : [] } catch { return [] } })()
-                  const myOp = existing.find((o: any) => o.userId === profile?.id)
+                  const existing=(() => { try { const p=JSON.parse(activeItem.feedback||'[]'); return Array.isArray(p)?p:[] } catch { return [] } })()
+                  const myOp=existing.find((o:any)=>o.userId===profile?.id)
                   return (
                     <div className="rounded-2xl overflow-hidden" style={{background:'rgba(255,255,255,0.02)',border:`1px solid rgba(255,255,255,0.07)`}}>
                       <div className="p-4">
-                        <div className="font-syne text-[7.5px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.18)'}}>{myOp ? 'TU OPINIÓN — EDITAR' : 'AÑADE TU OPINIÓN'}</div>
-                        {/* Emoji picker */}
+                        <div className="font-syne text-[7.5px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.18)'}}>{myOp?'TU OPINIÓN — EDITAR':'AÑADE TU OPINIÓN'}</div>
                         <div className="flex gap-2 mb-3 flex-wrap">
-                          {([['🔥','Love it'],['👍','Bien'],['🤔','Dudas'],['✏️','Cambios'],['❌','No va']] as const).map(([em, label])=>(
+                          {([['🔥','Love it'],['👍','Bien'],['🤔','Dudas'],['✏️','Cambios'],['❌','No va']] as const).map(([em,label])=>(
                             <button key={em} onClick={()=>setPendingEmoji(em===pendingEmoji?'':em)} className="flex flex-col items-center gap-0.5 px-2.5 py-2 rounded-xl transition-all" style={{background:pendingEmoji===em?'rgba(255,255,255,0.1)':'rgba(255,255,255,0.03)',border:`1px solid ${pendingEmoji===em?'rgba(255,255,255,0.2)':'rgba(255,255,255,0.06)'}`,transform:pendingEmoji===em?'scale(1.1)':'scale(1)'}}>
                               <span className="text-[16px] leading-none">{em}</span>
                               <span className="font-syne text-[6.5px] font-black tracking-wide mt-0.5" style={{color:pendingEmoji===em?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.22)'}}>{label}</span>

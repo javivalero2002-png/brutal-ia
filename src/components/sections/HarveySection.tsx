@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember } from '@/components/shared'
+import { BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey } from '@/components/shared'
 
 function HarveySection({data, profile, showToast, onNavigate, preloadMessage, onClearPreload}: any) {
   const isMobile = useIsMobile()
@@ -16,7 +16,6 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
   const [recSeconds, setRecSeconds] = useState(0)
   const [followUps, setFollowUps] = useState<string[]>([])
   const [isSearching, setIsSearching] = useState(false)
-  const [voiceboxAvailable, setVoiceboxAvailable] = useState<boolean|null>(null)
   const audioRef = useRef<HTMLAudioElement|null>(null)
   const mediaRecorderRef = useRef<MediaRecorder|null>(null)
   const audioChunksRef = useRef<Blob[]>([])
@@ -49,17 +48,6 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
       try { recognitionRef.current?.stop() } catch {}
       recognitionRef.current = null
     }
-  }, [])
-
-  // Detect if Voicebox is running locally
-  useEffect(() => {
-    const check = async () => {
-      try {
-        const res = await fetch('http://127.0.0.1:17493/profiles', { signal: AbortSignal.timeout(2000) })
-        setVoiceboxAvailable(res.ok)
-      } catch { setVoiceboxAvailable(false) }
-    }
-    check()
   }, [])
 
   // Auto-fire when a message is pre-loaded from another section (e.g. "Ask Harvey about this email")
@@ -107,9 +95,13 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
     const activeProjects = projects.filter(p=>p.status!=='completado')
     const activeClients = clients.filter(c=>c.status==='Activo')
     const pipeline = agenda.filter((a:any)=>a.status!=='publicado')
-    const unreadEmails = inbox.filter((m:any)=>!m.is_read).slice(0, 8)
-    const todayStr = new Date().toISOString().slice(0,10)
-    const completedToday = tasks.filter(t=>t.done&&(t.updated_at||t.created_at).slice(0,10)===todayStr).length
+    const todayStr = todayKey()
+    // Incluye los no leídos + los urgentes/altos recibidos HOY aunque ya se hayan
+    // leído: si acabas de abrir un email importante, Harvey debe seguir sabiéndolo.
+    const unreadEmails = inbox.filter((m:any)=>
+      !m.is_read || ((m.ai_urgency==='urgent'||m.ai_urgency==='high') && (m.received_at||'').slice(0,10)===todayStr)
+    ).slice(0, 8)
+    const completedToday = tasks.filter(t=>t.done&&localDayKey(t.completed_at||t.updated_at||t.created_at)===todayStr).length
     const nextEvents = calEvents.filter((e:any)=>e.start>=todayStr).slice(0,5)
     const todayTasks = tasks.filter(t=>!t.done&&t.due_date===todayStr)
 
@@ -316,27 +308,12 @@ ${memLines2||'  sin documentos'}`
     try {
       let text = (preText || '').trim()
 
-      // Try Voicebox Whisper first (local, private)
-      if (!text && blob && voiceboxAvailable) {
-        try {
-          const form = new FormData()
-          form.append('audio', blob, blob.type.includes('mp4')?'rec.mp4':'rec.webm')
-          form.append('model', 'whisper-turbo')
-          const res = await fetch('http://127.0.0.1:17493/transcribe', { method:'POST', body:form, signal: AbortSignal.timeout(20000) })
-          if (res.ok) {
-            const json = await res.json()
-            text = (json.text||json.transcript||'').trim()
-          }
-        } catch {} // HTTPS blocked or Voicebox down — fall through
-      }
-
-      // Groq/Whisper en servidor (solo si venía de grabación, no de reconocimiento del navegador)
+      // Transcripción en servidor (solo si venía de grabación, no de reconocimiento del navegador)
       if (!text && blob) {
         const form = new FormData()
         form.append('audio', blob, blob.type.includes('mp4')?'rec.mp4':'rec.webm')
         const res = await fetch('/api/harvey/transcribe', { method:'POST', body:form, signal:AbortSignal.timeout(30000) })
         if (!aliveRef.current || run !== voiceRunRef.current) return
-        if (res.status === 402) { setMode('idle'); showToast('Transcripción agotada este mes — activa el dictado de iOS en Ajustes → General → Teclado'); return }
         const json = await res.json()
         text = (json.text||'').trim()
       }
@@ -401,7 +378,7 @@ ${memLines2||'  sin documentos'}`
       recognitionRef.current = r
       try { r.start(); return } catch { recognitionRef.current = null }
     }
-    // 2) Fallback: grabar + transcribir con ElevenLabs Scribe
+    // 2) Fallback: grabar + transcribir en servidor (Groq → OpenAI Whisper)
     await startMediaRecording()
   }
 
@@ -467,7 +444,9 @@ ${memLines2||'  sin documentos'}`
       if (pendingAction.type==='tarea') {
         const member = pendingAction.assigneeName ? matchTeamMember((data.team||[]) as any[], pendingAction.assigneeName) : null
         await data.createTask({text:pendingAction.text, level:pendingAction.level||'high', source:'ai', ...(member ? { assigned_to: member.id } : {})})
-        showToast(member ? `Tarea creada y asignada a ${member.name}` : 'Tarea creada por Harvey')
+        showToast(member ? `Tarea creada y asignada a ${member.name}`
+          : pendingAction.assigneeName ? `Tarea creada (sin asignar: no encontré a "${pendingAction.assigneeName}")`
+          : 'Tarea creada por Harvey')
       } else if (pendingAction.type==='proyecto') {
         const client = pendingAction.clientName
           ? (data.clients as any[]).find((c:any)=>c.name.toLowerCase().includes((pendingAction.clientName||'').toLowerCase()))
@@ -513,13 +492,19 @@ ${memLines2||'  sin documentos'}`
     finally { setConfirmingAction(false) }
   }
 
-  // Save conversation to localStorage on every change
+  // Save conversation to localStorage on every change (max 50KB to avoid quota errors)
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
-      const key = 'harvey_conv_' + new Date().toISOString().slice(0,10)
-      if (conversation.length === 0) localStorage.removeItem(key)
-      else localStorage.setItem(key, JSON.stringify(conversation.slice(-60)))
+      const key = 'harvey_conv_' + todayKey()
+      if (conversation.length === 0) { localStorage.removeItem(key); return }
+      let slice = conversation.slice(-60)
+      let serialized = JSON.stringify(slice)
+      while (serialized.length > 50_000 && slice.length > 1) {
+        slice = slice.slice(1)
+        serialized = JSON.stringify(slice)
+      }
+      localStorage.setItem(key, serialized)
     } catch {}
   }, [conversation])
 
@@ -528,7 +513,7 @@ ${memLines2||'  sin documentos'}`
     if (typeof window === 'undefined') return
     // Try to restore today's conversation
     try {
-      const key = 'harvey_conv_' + new Date().toISOString().slice(0,10)
+      const key = 'harvey_conv_' + todayKey()
       const saved = localStorage.getItem(key)
       if (saved) {
         const parsed = JSON.parse(saved)
@@ -539,7 +524,7 @@ ${memLines2||'  sin documentos'}`
       }
     } catch {}
     // No saved conv — show greeting once per day
-    const SK = 'harvey_greeted_' + new Date().toISOString().slice(0,10)
+    const SK = 'harvey_greeted_' + todayKey()
     if (sessionStorage.getItem(SK)) return
     sessionStorage.setItem(SK, '1')
     const nUrgent = (data.tasks||[]).filter((t:any)=>!t.done&&t.level==='urgent').length
@@ -565,7 +550,7 @@ ${memLines2||'  sin documentos'}`
   const unreadEmails = (data.inbox||[]).filter((m:any)=>!m.is_read)
 
   const pipeline = (data.agenda||[]).filter((a:any)=>a.status!=='publicado')
-  const todayStrH = new Date().toISOString().slice(0,10)
+  const todayStrH = todayKey()
   const overdueProjectsH = (data.projects||[]).filter((p:any)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<new Date())
   const todayCalEvtsH = ((data.calendarEvents||[]) as any[]).filter((e:any)=>e.start?.slice(0,10)===todayStrH)
   const urgentUnread = unreadEmails.filter((m:any)=>m.ai_urgency==='urgent')
@@ -617,14 +602,14 @@ ${memLines2||'  sin documentos'}`
               <span className="font-syne text-[6.5px] font-black tracking-widest" style={{color:m.v>0?m.c:'rgba(255,255,255,0.15)'}}>{m.l}</span>
             </div>
           ))}
-          <button onClick={()=>{ stopAudio(); setConversation([]); setPendingAction(null); setFollowUps([]); if(typeof window!=='undefined'){sessionStorage.removeItem('harvey_greeted_'+new Date().toISOString().slice(0,10));try{localStorage.removeItem('harvey_conv_'+new Date().toISOString().slice(0,10))}catch{}} }} className="w-7 h-7 rounded-lg flex items-center justify-center transition-all hover:opacity-60" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`}} title="Reiniciar conversación">
+          <button onClick={()=>{ stopAudio(); setConversation([]); setPendingAction(null); setFollowUps([]); if(typeof window!=='undefined'){sessionStorage.removeItem('harvey_greeted_'+todayKey());try{localStorage.removeItem('harvey_conv_'+todayKey())}catch{}} }} className={`${isMobile?'w-9 h-9':'w-7 h-7'} rounded-lg flex items-center justify-center transition-all hover:opacity-60`} style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`}} title="Reiniciar conversación">
             <LucideIcon name="rotate-ccw" size={12} color="rgba(255,255,255,0.3)"/>
           </button>
         </div>
       </div>
 
       {/* Conversation */}
-      <div className="flex-1 overflow-y-auto px-7 py-4 space-y-3 relative z-10">
+      <div className={`flex-1 overflow-y-auto ${isMobile?'px-4':'px-7'} py-4 space-y-3 relative z-10`}>
         {conversation.map((msg,i)=>(
           <div key={i} className={`flex items-end gap-2.5 group/hconv ${msg.role==='user'?'justify-end':'justify-start'}`}>
             {msg.role==='harvey' && (
@@ -734,8 +719,8 @@ ${memLines2||'  sin documentos'}`
         </div>
       )}
 
-      {/* Orb + input row */}
-      <div className="px-7 pb-6 flex-shrink-0 relative z-10">
+      {/* Orb + input row — pt-6 da espacio al glow del orbe para no ser recortado */}
+      <div className={`${isMobile?'px-4':'px-7'} pt-6 flex-shrink-0 relative z-10`} style={{paddingBottom:'max(env(safe-area-inset-bottom), 24px)'}}>
         {/* Quick actions */}
         <div className="flex gap-2 mb-3 flex-wrap">
           {quickActions.map((a,i)=>(
@@ -801,9 +786,7 @@ ${memLines2||'  sin documentos'}`
               style={{color:'rgba(255,255,255,0.8)',caretColor:BLU}}
             />
             {textInput.trim() && mode==='idle' && (
-              <button type="submit" className="w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 transition-all" style={{background:`${BLU}20`,border:`1px solid ${BLU}40`}}>
-                <LucideIcon name="send" size={11} color={BLU}/>
-              </button>
+              <button type="submit" className={`${isMobile?'w-9 h-9':'w-7 h-7'} rounded-xl flex items-center justify-center flex-shrink-0 transition-all`} style={{background:`${BLU}20`,border:`1px solid ${BLU}40`}} aria-label="Enviar"><LucideIcon name="send" size={11} color={BLU}/></button>
             )}
           </form>
         </div>

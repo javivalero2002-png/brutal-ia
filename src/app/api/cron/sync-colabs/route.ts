@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { syncColabsInbox, syncPersonalInbox } from '@/lib/colabsSync'
+import { runAutomations } from '@/lib/automations'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Analizar varios buzones con IA puede superar los 10s por defecto
@@ -33,9 +34,21 @@ export async function GET(request: NextRequest) {
     personal[p.id] = r.ok ? r.synced : r.error
   }
 
+  // Motor de automatizaciones: tras sincronizar los buzones, evalúa las reglas
+  // activas (crear tareas / avisar) sobre los datos ya frescos. Best-effort:
+  // un fallo aquí no debe tumbar el sync de emails.
+  let automations: { ran: number } | { error: string } = { ran: 0 }
+  try {
+    const { ran } = await runAutomations(admin)
+    automations = { ran }
+  } catch (err: any) {
+    automations = { error: err?.message || 'error' }
+  }
+
   return NextResponse.json({
     ok: true,
     colabs: colabs.ok ? { synced: colabs.synced } : { error: colabs.error },
     personal,
+    automations,
   })
 }

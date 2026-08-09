@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getAuthCtx, projectExists } from '@/lib/authz'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Solo columnas conocidas: campos desconocidos no deben tumbar la petición
@@ -7,15 +8,17 @@ const pick = (obj: any, keys: string[]) => Object.fromEntries(Object.entries(obj
 
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const ctx = await getAuthCtx()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
+  // El proyecto debe existir (evita PATCH a ciegas sobre IDs arbitrarios)
+  if (!(await projectExists(ctx, id))) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
   const body = await request.json()
-  const admin = await createAdminClient()
+  const admin = ctx.admin
   const { data, error } = await admin
-    .from('projects').update({ ...pick(body, ['name','client_id','status','progress','deadline','color']), updated_at: new Date().toISOString() })
+    .from('projects').update({ ...pick(body, ['name','client_id','status','progress','deadline','color','cover_url','pdf_url','pdf_analysis']), updated_at: new Date().toISOString() })
     .eq('id', id).select('*, client:clients(id,name,initials,color)').single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)

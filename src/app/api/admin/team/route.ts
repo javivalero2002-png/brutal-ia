@@ -24,7 +24,9 @@ export async function GET() {
   if (!ctx) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { admin } = ctx
-  const { data: profiles } = await admin.from('profiles').select('*').order('role', { ascending: false })
+  const { data: profiles } = await admin.from('profiles').select('*')
+    .ilike('email', '%@brutalstudios.es')
+    .order('role', { ascending: false })
   return NextResponse.json(profiles || [])
 }
 

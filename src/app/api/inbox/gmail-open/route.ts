@@ -17,14 +17,37 @@ export async function GET(request: NextRequest) {
   }
 
   const admin = await createAdminClient()
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('gmail_refresh_token, gmail_colabs_refresh_token')
-    .eq('id', user.id)
-    .single()
 
-  // Try personal token first, then colabs
-  const token = profile?.gmail_refresh_token || profile?.gmail_colabs_refresh_token
+  // Check if this is a shared (colabs) message to pick the right token
+  const { data: inboxMsg } = await admin
+    .from('inbox_messages')
+    .select('shared')
+    .eq('gmail_id', msgId)
+    .maybeSingle()
+
+  const isShared = !!inboxMsg?.shared
+
+  let token: string | null = null
+
+  if (isShared) {
+    // Colabs messages live in the shared account — use its token regardless of who opened it
+    const { data: colabsOwner } = await admin
+      .from('profiles')
+      .select('gmail_colabs_refresh_token')
+      .not('gmail_colabs_refresh_token', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    token = colabsOwner?.gmail_colabs_refresh_token ?? null
+  } else {
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('gmail_refresh_token')
+      .eq('id', user.id)
+      .single()
+    token = profile?.gmail_refresh_token ?? null
+  }
+
   if (!token) {
     return NextResponse.redirect(`https://mail.google.com/mail/u/0/#all/${msgId}`)
   }
@@ -37,7 +60,6 @@ export async function GET(request: NextRequest) {
     const threadId = msg.data.threadId || msgId
     return NextResponse.redirect(`https://mail.google.com/mail/u/0/#all/${threadId}`)
   } catch {
-    // Fallback: use message ID directly (works for single-message threads)
     return NextResponse.redirect(`https://mail.google.com/mail/u/0/#all/${msgId}`)
   }
 }

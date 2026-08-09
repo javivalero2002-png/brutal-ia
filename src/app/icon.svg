@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Dark background with subtle rounding -->
+  <rect width="100" height="100" rx="18" fill="#030308"/>
+  <!-- Blue accent bar at top — brand color -->
+  <rect x="16" y="0" width="68" height="4" rx="2" fill="#1B5FFA"/>
+  <!-- Bold white B letterform, perfectly centred -->
+  <text x="50" y="73"
+    text-anchor="middle"
+    dominant-baseline="auto"
+    font-family="'Arial Black','Franklin Gothic Heavy','Impact',sans-serif"
+    font-weight="900"
+    font-size="72"
+    letter-spacing="-2"
+    fill="#FFFFFF">B</text>
+</svg>

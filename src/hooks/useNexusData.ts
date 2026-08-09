@@ -13,6 +13,7 @@ export interface CalendarEvent {
   description?: string
   colorId?: string
   htmlLink?: string
+  hangoutLink?: string
 }
 
 async function apiFetch(url: string, opts?: RequestInit) {
@@ -43,6 +44,16 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
 
   const aliveRef = useRef(true)
   useEffect(() => () => { aliveRef.current = false }, [])
+
+  // IDs de mensajes ya notificados: evita que el dueño de la cuenta colabs reciba el
+  // aviso dos veces cuando un email compartido dispara ambas suscripciones realtime
+  // (user_id=own y shared=true) para el mismo mensaje.
+  const notifiedIdsRef = useRef<Set<string>>(new Set())
+  const notifyOnce = useCallback((msg: InboxMessage) => {
+    if (notifiedIdsRef.current.has(msg.id)) return
+    notifiedIdsRef.current.add(msg.id)
+    onNewInboxRef.current?.(msg)
+  }, [])
 
   const load = useCallback(async () => {
     if (!profile) return
@@ -91,7 +102,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
           if (prev.some(m => m.id === msg.id)) return prev
           return [msg, ...prev]
         })
-        onNewInboxRef.current?.(msg)
+        notifyOnce(msg)
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
@@ -114,7 +125,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
           if (prev.some(m => m.id === msg.id)) return prev
           return [msg, ...prev]
         })
-        onNewInboxRef.current?.(msg)
+        notifyOnce(msg)
       })
       .subscribe()
     return () => { supabase.removeChannel(sharedChannel) }
@@ -125,6 +136,15 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     const newInbox = await apiFetch('/api/inbox')
     setInbox(newInbox)
     return newInbox
+  }, [])
+
+  const reloadCalendar = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/calendar/events')
+      if (!aliveRef.current) return
+      if (res?.__error === 'no_scope') { setCalendarScopeError(true); setCalendarEvents([]) }
+      else { setCalendarScopeError(false); setCalendarEvents(Array.isArray(res) ? res : []) }
+    } catch {}
   }, [])
 
   const syncGmail = useCallback(async (): Promise<{synced:number;total:number}> => {
@@ -215,6 +235,18 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     setInbox(prev => prev.map(m => m.id === id ? { ...m, is_read: true, is_unread: false } : m))
   }, [])
 
+  // Marca varios mensajes de una vez (una sola petición, no N)
+  const markManyRead = useCallback(async (ids: string[]) => {
+    if (!ids.length) return
+    setInbox(prev => prev.map(m => ids.includes(m.id) ? { ...m, is_read: true, is_unread: false } : m))
+    try {
+      await apiFetch('/api/inbox', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, is_read: true }) })
+    } catch {
+      // Si falla, recargamos para no dejar el estado local mintiendo
+      try { const fresh = await apiFetch('/api/inbox'); if (aliveRef.current) setInbox(fresh) } catch {}
+    }
+  }, [])
+
   const markUnread = useCallback(async (id: string) => {
     await apiFetch('/api/inbox', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, is_read: false }) })
     setInbox(prev => prev.map(m => m.id === id ? { ...m, is_read: false, is_unread: true } : m))
@@ -288,16 +320,27 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     setReglas(prev => prev.filter(r => r.id !== id))
   }, [])
 
+  // Ejecuta el motor de automatizaciones ahora y refresca lo que pueda haber
+  // cambiado (tareas creadas + contador/última ejecución de las reglas).
+  const runAutomations = useCallback(async (): Promise<{ ran: number; results: Array<{ ruleName: string; action: string; detail: string }> }> => {
+    const res = await apiFetch('/api/automations/run', { method: 'POST' })
+    try {
+      const [t, r] = await Promise.all([apiFetch('/api/tasks'), apiFetch('/api/reglas')])
+      if (aliveRef.current) { setTasks(t); setReglas(r) }
+    } catch {}
+    return res
+  }, [])
+
   return {
     loading, syncing, syncGmail, syncResult,
     clients, createClient: createClientRecord, updateClient: updateClientRecord, deleteClient,
     projects, createProject, updateProject, deleteProject,
     tasks, createTask, updateTask, deleteTask, toggleTask,
-    inbox, markRead, markUnread, sendInternalMessage, reloadInbox,
+    inbox, markRead, markManyRead, markUnread, sendInternalMessage, reloadInbox,
     memoria, createMemoria, updateMemoria, deleteMemoria,
     agenda, createAgenda, updateAgenda, deleteAgenda,
-    reglas, createRegla, updateRegla, deleteRegla,
+    reglas, createRegla, updateRegla, deleteRegla, runAutomations,
     chatMessages, sendChatMessage, clearChat,
-    team, calendarEvents, calendarScopeError, reload: load,
+    team, calendarEvents, calendarScopeError, reloadCalendar, reload: load,
   }
 }

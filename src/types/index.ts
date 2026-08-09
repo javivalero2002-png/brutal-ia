@@ -33,6 +33,9 @@ export interface Project {
   progress: number
   deadline: string
   color: string
+  cover_url?: string | null
+  pdf_url?: string | null
+  pdf_analysis?: string | null
   created_at: string
   client?: Client
 }
@@ -42,7 +45,9 @@ export interface Task {
   project_id?: string
   client_id?: string
   created_by?: string
-  assigned_to?: string
+  assigned_to?: string | null
+  co_assigned_to?: string | null
+  notes?: string | null
   text: string
   level: 'urgent' | 'high' | 'normal'
   done: boolean
@@ -50,7 +55,10 @@ export interface Task {
   source: 'manual' | 'gmail' | 'whatsapp' | 'ai'
   created_at: string
   updated_at?: string
+  /** Momento real de completado. Lo sella la API al marcar done. */
+  completed_at?: string | null
   assignee?: Profile
+  co_assignee?: Profile
   client?: Client
 }
 
@@ -117,6 +125,8 @@ export interface Regla {
   action_text?: string
   active: boolean
   trigger_count: number
+  last_triggered_at?: string
+  created_at?: string
 }
 
 export interface ChatMessage {
@@ -125,4 +135,64 @@ export interface ChatMessage {
   content: string
   created_at: string
   searched?: boolean
+}
+
+// ── Shared section prop types ────────────────────────────────────────────────
+
+export interface NexusData {
+  clients: Client[]
+  projects: Project[]
+  tasks: Task[]
+  inbox: InboxMessage[]
+  team: Profile[]
+  memoria: MemoriaEntry[]
+  agenda: ContentItem[]
+  reglas: Regla[]
+  chatMessages: ChatMessage[]
+  calendarEvents: CalendarEvent[]
+  // Data mutation methods
+  createClient: (data: Partial<Client>) => Promise<Client | null>
+  updateClient: (id: string, data: Partial<Client>) => Promise<void>
+  deleteClient: (id: string) => Promise<void>
+  createProject: (data: Partial<Project>) => Promise<Project | null>
+  updateProject: (id: string, data: Partial<Project>) => Promise<void>
+  deleteProject: (id: string) => Promise<void>
+  createTask: (data: Partial<Task>) => Promise<Task | null>
+  updateTask: (id: string, data: Partial<Task>) => Promise<void>
+  deleteTask: (id: string) => Promise<void>
+  createMemoria: (data: Partial<MemoriaEntry>) => Promise<MemoriaEntry | null>
+  updateMemoria: (id: string, data: Partial<MemoriaEntry>) => Promise<void>
+  deleteMemoria: (id: string) => Promise<void>
+  createAgenda: (data: Partial<ContentItem>) => Promise<ContentItem | null>
+  updateAgenda: (id: string, data: Partial<ContentItem>) => Promise<void>
+  deleteAgenda: (id: string) => Promise<void>
+  createRegla: (data: Partial<Regla>) => Promise<Regla | null>
+  updateRegla: (id: string, data: Partial<Regla>) => Promise<void>
+  deleteRegla: (id: string) => Promise<void>
+  sendInternalMessage: (toId: string, subject: string, body: string, fromName: string) => Promise<void>
+  reloadCalendar?: () => Promise<void>
+  reloadInbox?: () => Promise<any>
+  calendarScopeError: boolean
+  [key: string]: unknown
+}
+
+export interface CalendarEvent {
+  id: string
+  title: string
+  start: string
+  end: string
+  allDay: boolean
+  location?: string
+  description?: string
+  colorId?: string
+  htmlLink?: string
+}
+
+export interface SectionProps {
+  data: NexusData
+  profile: Profile
+  showToast: (msg: string) => void
+  onOpenModal: (type: string) => void
+  onSetMf: (fields: Record<string, string>) => void
+  isOwner: boolean
 }

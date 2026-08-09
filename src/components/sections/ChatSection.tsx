@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useEffect, useRef } from 'react'
 import type { Task, Project } from '@/types'
-import { BLU, RED, GRN, SURFACE, SURF2, BORDER, useIsMobile, dlDate, LucideIcon } from '@/components/shared'
+import { BLU, RED, GRN, SURFACE, SURF2, BORDER, useIsMobile, dlDate, LucideIcon, todayKey } from '@/components/shared'
 
 // ── Markdown renderer (inline) ───────────────────────────────
 function MarkdownMsg({ text }: { text: string }) {
@@ -197,7 +197,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex-shrink-0 px-6 py-5" style={{borderBottom:`1px solid ${BORDER}`}}>
+      <div className={`flex-shrink-0 ${isMobile?'px-4':'px-6'} py-5`} style={{borderBottom:`1px solid ${BORDER}`}}>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden p-1.5" style={{background:'rgba(27,95,250,0.1)',border:'1px solid rgba(27,95,250,0.2)'}}>
@@ -261,7 +261,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
               const urgentTasks = (data.tasks||[]).filter((t:any)=>!t.done&&t.level==='urgent')
               const activeProjects = (data.projects||[]).filter((p:any)=>p.status==='activo')
               const unreadEmails = (data.inbox||[]).filter((m:any)=>!m.is_read)
-              const todayStr = new Date().toISOString().slice(0,10)
+              const todayStr = todayKey()
               const todayEvts = (data.calendarEvents||[]).filter((e:any)=>e.start?.slice(0,10)===todayStr)
               return (
                 <div className="grid grid-cols-2 gap-2">
@@ -398,14 +398,14 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
                     }
                   </div>
                   <div className="flex items-center gap-2 mt-1">
-                    {m.created_at && <span className="opacity-0 group-hover/msg:opacity-100 transition-opacity font-syne text-[7px]" style={{color:'rgba(255,255,255,0.18)'}}>{new Date(m.created_at).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}</span>}
+                    {m.created_at && <span className={`transition-opacity font-syne text-[7px] ${isMobile?'opacity-30':'opacity-0 group-hover/msg:opacity-100'}`} style={{color:'rgba(255,255,255,0.18)'}}>{new Date(m.created_at).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}</span>}
                     {m.role==='ai' && m.searched && (
                       <span className="flex items-center gap-1 px-2 py-0.5 rounded-full font-syne text-[7px] font-black tracking-wide" style={{background:'rgba(34,197,94,0.1)',border:'1px solid rgba(34,197,94,0.2)',color:GRN}}>
                         <LucideIcon name="globe" size={8} color={GRN}/>WEB
                       </span>
                     )}
                     {m.role==='ai' && (
-                      <button onClick={()=>copyMsg(m.id, m.content)} className="opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-1 px-2 py-1 rounded-lg" style={{color:copiedId===m.id?GRN:'rgba(255,255,255,0.25)',background:'transparent'}}>
+                      <button onClick={()=>copyMsg(m.id, m.content)} className={`transition-opacity flex items-center gap-1 px-2 py-1 rounded-lg ${isMobile?'opacity-50':'opacity-0 group-hover/msg:opacity-100'}`} style={{color:copiedId===m.id?GRN:'rgba(255,255,255,0.25)',background:'transparent'}}>
                         <LucideIcon name={copiedId===m.id?'check':'copy'} size={10} color={copiedId===m.id?GRN:'rgba(255,255,255,0.25)'}/>
                         <span className="font-syne text-[7px] font-black tracking-wide">{copiedId===m.id?'COPIADO':'COPIAR'}</span>
                       </button>
@@ -472,9 +472,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
             className="flex-1 bg-transparent text-[13px] outline-none resize-none leading-relaxed"
             style={{caretColor:BLU,color:'rgba(255,255,255,0.88)',maxHeight:'120px'}}
           />
-          <button onClick={send} disabled={!chatInput.trim()||chatLoading} className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 disabled:opacity-25 transition-all" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
-            <LucideIcon name="send" size={13} color="white"/>
-          </button>
+          <button onClick={send} disabled={!chatInput.trim()||chatLoading} className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 disabled:opacity-25 transition-all" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}} aria-label="Enviar"><LucideIcon name="send" size={13} color="white"/></button>
         </div>
         <div className="flex items-center justify-between mt-2 px-0.5">
           <div className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>{isMobile ? '' : 'ENTER enviar · SHIFT+ENTER nueva línea'}</div>

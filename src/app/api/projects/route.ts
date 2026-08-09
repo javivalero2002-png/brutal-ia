@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const { data, error } = await admin
     .from('projects')
-    .insert({ ...pick(body, ['name','client_id','status','progress','deadline','color']), created_by: user.id })
+    .insert({ ...pick(body, ['name','client_id','status','progress','deadline','color','cover_url','pdf_url']), created_by: user.id })
     .select('*, client:clients(id,name,initials,color)')
     .single()
 

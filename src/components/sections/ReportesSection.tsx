@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useMemo } from 'react'
 import type { Task, Project, Client, Profile } from '@/types'
-import { useIsMobile, BLU, RED, GRN, LucideIcon, dlDate, dlLabel } from '@/components/shared'
+import { useIsMobile, BLU, RED, GRN, LucideIcon, dlDate, dlLabel, Donut, Gauge, AreaChart, localDayKey } from '@/components/shared'
 
 function ReportesSection({data, onNavigate}: any) {
   const isMobile = useIsMobile()
@@ -49,7 +49,7 @@ function ReportesSection({data, onNavigate}: any) {
       const urgentCount = memberPending.filter(t=>t.level==='urgent').length
       const highCount = memberPending.filter(t=>t.level==='high').length
       const normalCount = memberPending.length - urgentCount - highCount
-      const doneThisWeek = memberDone.filter(t=>new Date(t.updated_at||t.created_at)>=weekAgoReport).length
+      const doneThisWeek = memberDone.filter(t=>new Date(t.completed_at||t.updated_at||t.created_at)>=weekAgoReport).length
       return {
         name: m.name,
         initials: m.initials,
@@ -94,7 +94,7 @@ function ReportesSection({data, onNavigate}: any) {
           setTimeout(()=>printWin.print(),500)
         }} ref={printBtnRef} className="flex items-center gap-2 px-4 py-2 rounded-xl font-syne text-[10px] font-black tracking-wide transition-colors" style={{background:'rgba(27,95,250,0.1)',color:BLU,border:'1px solid rgba(27,95,250,0.2)'}}>
           <LucideIcon name="download" size={13} color={BLU}/>EXPORTAR PDF
-          <span className="font-syne text-[7px] font-black ml-1 px-1.5 py-0.5 rounded" style={{background:'rgba(27,95,250,0.2)',color:BLU+'bb'}}>P</span>
+          {!isMobile && <span className="font-syne text-[7px] font-black ml-1 px-1.5 py-0.5 rounded" style={{background:'rgba(27,95,250,0.2)',color:BLU+'bb'}}>P</span>}
         </button>
       </div>
 
@@ -102,31 +102,32 @@ function ReportesSection({data, onNavigate}: any) {
       {(()=>{
         const last7 = Array.from({length:7},(_,i)=>{
           const d = new Date(); d.setDate(d.getDate()-(6-i))
-          return {key:d.toISOString().slice(0,10),label:d.toLocaleDateString('es-ES',{weekday:'short'})}
+          return {key:localDayKey(d),label:d.toLocaleDateString('es-ES',{weekday:'short'})}
         })
-        const counts = last7.map(({key})=>tasks.filter(t=>t.done&&(t.updated_at||t.created_at).slice(0,10)===key).length)
+        // completed_at es el momento REAL de completado; updated_at solo es un
+        // apaño para tareas anteriores a la migración.
+        const counts = last7.map(({key})=>tasks.filter(t=>{
+          if (!t.done) return false
+          const when = (t as any).completed_at || t.updated_at || t.created_at
+          return localDayKey(when) === key
+        }).length)
         const mx = Math.max(...counts,1)
         const total7 = counts.reduce((a,b)=>a+b,0)
         if (total7 === 0) return null
         return (
-          <div className="flex items-end gap-4 mb-5 px-1 py-4 rounded-xl" style={{background:'rgba(27,95,250,0.04)',border:'1px solid rgba(27,95,250,0.1)'}}>
-            <div className="flex items-end gap-1.5 flex-1 h-12">
-              {last7.map(({label},i)=>{
-                const pct = Math.max((counts[i]/mx)*100,4)
-                const isToday = i === 6
-                return (
-                  <div key={i} className="flex flex-col items-center gap-1 flex-1" title={`${label}: ${counts[i]} completadas`}>
-                    <div className="w-full flex items-end" style={{height:'32px'}}>
-                      <div className="w-full rounded-sm" style={{height:`${pct}%`,background:isToday?GRN:counts[i]>0?BLU+'60':'rgba(255,255,255,0.04)',transition:'height 0.4s'}}/>
-                    </div>
-                    <span className="font-syne text-[6.5px] font-black" style={{color:isToday?'rgba(255,255,255,0.45)':'rgba(255,255,255,0.18)'}}>{label.slice(0,2).toUpperCase()}</span>
-                  </div>
-                )
-              })}
+          <div className="flex items-stretch gap-4 mb-5 px-4 py-3.5 rounded-xl" style={{background:'rgba(27,95,250,0.04)',border:'1px solid rgba(27,95,250,0.1)'}}>
+            <div className="flex-1 min-w-0 flex flex-col justify-center">
+              <div className="font-syne text-[7px] font-black tracking-widest mb-1" style={{color:'rgba(255,255,255,0.2)'}}>TAREAS COMPLETADAS · ÚLTIMOS 7 DÍAS</div>
+              <AreaChart values={counts} color={GRN} height={52}/>
+              <div className="flex justify-between mt-1">
+                {last7.map(({label},i)=>(
+                  <span key={i} className="font-syne text-[6.5px] font-black flex-1 text-center" style={{color:i===6?'rgba(255,255,255,0.45)':'rgba(255,255,255,0.16)'}}>{label.slice(0,2).toUpperCase()}</span>
+                ))}
+              </div>
             </div>
-            <div className="flex-shrink-0 text-right pr-1">
-              <div className="font-figtree text-[22px] font-black leading-none" style={{color:GRN,letterSpacing:'-0.03em'}}>{total7}</div>
-              <div className="font-syne text-[7px] font-black tracking-widest mt-0.5" style={{color:'rgba(255,255,255,0.2)'}}>EQUIPO · 7D</div>
+            <div className="flex-shrink-0 text-right pr-1 flex flex-col justify-center border-l pl-4" style={{borderColor:'rgba(255,255,255,0.06)'}}>
+              <div className="font-figtree text-[26px] font-black leading-none" style={{color:GRN,letterSpacing:'-0.03em'}}>{total7}</div>
+              <div className="font-syne text-[7px] font-black tracking-widest mt-1" style={{color:'rgba(255,255,255,0.2)'}}>EQUIPO · 7D</div>
             </div>
           </div>
         )
@@ -150,44 +151,50 @@ function ReportesSection({data, onNavigate}: any) {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-[1fr_1fr] gap-2 md:gap-4 mb-4 flex-shrink-0">
-        {/* Task completion bar */}
+        {/* Task completion — radial gauge */}
         <div className="rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
-          <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Estado de tareas</div>
-          <div className="space-y-3">
-            {[
-              {l:'Completadas', v:doneTasks, total:totalTasks, color:'#22c55e'},
-              {l:'Pendientes', v:pendingTasks, total:totalTasks, color:BLU},
-              {l:'Urgentes', v:urgentTasks, total:totalTasks, color:RED},
-            ].map((b,i)=>(
-              <div key={i}>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-white/50">{b.l}</span>
-                  <span className="text-white/70 font-medium">{b.v} / {b.total}</span>
+          <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-3">Estado de tareas</div>
+          <div className="flex items-center gap-4">
+            <div className="flex-shrink-0">
+              <Gauge value={completionRate} size={isMobile?104:120} color={completionRate>60?GRN:BLU} sub="COMPLETADO"/>
+            </div>
+            <div className="flex-1 min-w-0 space-y-2.5">
+              {[
+                {l:'Completadas', v:doneTasks, color:GRN},
+                {l:'Pendientes', v:pendingTasks, color:BLU},
+                {l:'Urgentes', v:urgentTasks, color:RED},
+              ].map((b,i)=>(
+                <div key={i} className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:b.color}}/>
+                  <span className="text-[11px] text-white/45 flex-1 truncate">{b.l}</span>
+                  <span className="font-syne text-[13px] font-black" style={{color:b.color}}>{b.v}</span>
                 </div>
-                <div className="h-2 rounded-full" style={{background:'rgba(255,255,255,0.05)'}}>
-                  <div className="h-full rounded-full transition-all" style={{width:`${b.total>0?(b.v/b.total)*100:0}%`,background:b.color}}/>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Projects by status */}
+        {/* Projects by status — donut */}
         <div className="rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
-          <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Proyectos por estado</div>
-          <div className="space-y-3">
-            {projectsByStatus.map((s,i)=>(
-              <div key={i}>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-white/50">{s.label}</span>
-                  <span className="font-syne font-black" style={{color:s.color}}>{s.count}</span>
-                </div>
-                <div className="h-2 rounded-full" style={{background:'rgba(255,255,255,0.05)'}}>
-                  <div className="h-full rounded-full" style={{width:`${projects.length>0?(s.count/projects.length)*100:0}%`,background:s.color}}/>
-                </div>
+          <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-3">Proyectos por estado</div>
+          {projects.length === 0 ? (
+            <div className="text-center text-white/20 text-sm py-6">Sin proyectos</div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0">
+                <Donut segments={projectsByStatus.filter(s=>s.count>0)} size={isMobile?104:120} centerLabel={String(projects.length)} centerSub="TOTAL"/>
               </div>
-            ))}
-          </div>
+              <div className="flex-1 min-w-0 space-y-1.5">
+                {projectsByStatus.filter(s=>s.count>0).map((s,i)=>(
+                  <div key={i} className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:s.color}}/>
+                    <span className="text-[11px] text-white/45 flex-1 truncate">{s.label}</span>
+                    <span className="font-syne text-[12px] font-black" style={{color:s.color}}>{s.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -223,19 +230,24 @@ function ReportesSection({data, onNavigate}: any) {
         {/* Inbox urgency */}
         <div className="rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
           <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Inbox por urgencia</div>
-          <div className="space-y-3 mb-5">
-            {urgencyBreakdown.map((u,i)=>(
-              <div key={i}>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-white/50">{u.label}</span>
-                  <span className="font-syne font-black" style={{color:u.color}}>{u.count}</span>
-                </div>
-                <div className="h-2 rounded-full" style={{background:'rgba(255,255,255,0.05)'}}>
-                  <div className="h-full rounded-full" style={{width:`${inbox.length>0?(u.count/inbox.length)*100:0}%`,background:u.color}}/>
-                </div>
+          {inbox.length === 0 ? (
+            <div className="text-center text-white/20 text-sm py-4 mb-3">Inbox vacío</div>
+          ) : (
+            <div className="flex items-center gap-4 mb-5">
+              <div className="flex-shrink-0">
+                <Donut segments={urgencyBreakdown.filter(u=>u.count>0)} size={104} thickness={13} centerLabel={String(inbox.length)} centerSub="EMAILS"/>
               </div>
-            ))}
-          </div>
+              <div className="flex-1 min-w-0 space-y-2">
+                {urgencyBreakdown.map((u,i)=>(
+                  <div key={i} className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:u.color}}/>
+                    <span className="text-[11px] text-white/45 flex-1">{u.label}</span>
+                    <span className="font-syne text-[12px] font-black" style={{color:u.color}}>{u.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="pt-4 pb-4 border-t border-white/6">
             <div className="text-xs text-white/25 mb-3">Por fuente</div>
             <div className="flex gap-2 flex-wrap">

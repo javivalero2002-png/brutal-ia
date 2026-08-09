@@ -1,14 +1,68 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import type { Regla } from '@/types'
-import { BLU, RED, SURFACE, BORDER, LucideIcon } from '@/components/shared'
+import { BLU, RED, GRN, SURFACE, BORDER, LucideIcon, useIsMobile } from '@/components/shared'
+
+const isStructured = (r: Regla) => (r.condition_text || '').trim().startsWith('{')
+
+function relTime(iso: string | undefined): string | null {
+  if (!iso) return null
+  const diff = Math.round((Date.now() - new Date(iso).getTime()) / 1000)
+  if (diff < 60)   return 'hace un momento'
+  if (diff < 3600) return `hace ${Math.floor(diff/60)}min`
+  if (diff < 86400) return `hace ${Math.floor(diff/3600)}h`
+  if (diff < 86400*2) return 'ayer'
+  if (diff < 86400*7) return `hace ${Math.floor(diff/86400)}d`
+  return new Date(iso).toLocaleDateString('es-ES',{day:'numeric',month:'short'})
+}
 
 function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
+  const isMobile = useIsMobile()
   const activeCount = data.reglas.filter((r: Regla)=>r.active).length
   const totalFired = data.reglas.reduce((s: number, r: Regla)=>s+(r.trigger_count||0),0)
+  const autoCount = data.reglas.filter((r: Regla)=>r.active && isStructured(r)).length
   const [confirmDeleteId, setConfirmDeleteId] = useState<string|null>(null)
   const [reglaSearch, setReglaSearch] = useState('')
+  const [running, setRunning] = useState(false)
   const [focusedReglaId, setFocusedReglaId] = useState<string|null>(null)
+  const [renamingId, setRenamingId] = useState<string|null>(null)
+  const [renameText, setRenameText] = useState('')
+  const renameInputRef = useRef<HTMLInputElement>(null)
+  const [lastRun, setLastRun] = useState<{ at: number; results: Array<{ruleName:string;action:string;detail:string}> }|null>(null)
+
+  const handleRun = async () => {
+    if (running) return
+    setRunning(true)
+    try {
+      const res = await data.runAutomations()
+      setLastRun({ at: Date.now(), results: res.results || [] })
+      showToast(res.ran > 0 ? `⚡ ${res.ran} ${res.ran===1?'acción ejecutada':'acciones ejecutadas'}` : 'Motor ejecutado · sin acciones pendientes')
+    } catch { showToast('Error al ejecutar el motor') }
+    finally { setRunning(false) }
+  }
+
+  const ACTION_META: Record<string,{icon:string;color:string;label:string}> = {
+    create_task:  { icon:'check-square', color:BLU, label:'Tarea creada' },
+    notify_team:  { icon:'users',        color:'rgba(167,139,250,0.9)', label:'Equipo avisado' },
+    notify_owner: { icon:'bell',         color:GRN, label:'Notificación' },
+  }
+
+  const startRename = (r: Regla) => {
+    setRenamingId(r.id)
+    setRenameText(r.name)
+    setTimeout(()=>renameInputRef.current?.select(), 30)
+  }
+
+  const commitRename = async (id: string) => {
+    const name = renameText.trim()
+    if (name) {
+      try {
+        await data.updateRegla(id, { name })
+        showToast('Nombre actualizado')
+      } catch { showToast('Error al renombrar') }
+    }
+    setRenamingId(null)
+  }
   const visibleReglasRef = useRef<Regla[]>([])
   const visibleReglas = data.reglas.filter((r: Regla)=>!reglaSearch.trim()||r.name.toLowerCase().includes(reglaSearch.toLowerCase())||(r.condition_text||'').toLowerCase().includes(reglaSearch.toLowerCase())||(r.action_text||'').toLowerCase().includes(reglaSearch.toLowerCase()))
   visibleReglasRef.current = visibleReglas
@@ -36,7 +90,7 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
   }, [focusedReglaId, isOwner])
 
   return (
-    <div className="p-8 max-w-[900px] mx-auto">
+    <div className={`${isMobile?'p-4':'p-8'} max-w-[900px] mx-auto`}>
       <div className="flex items-end justify-between mb-8 flex-wrap gap-4">
         <div className="min-w-0">
           <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>SISTEMA</div>
@@ -50,18 +104,28 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
             ))}
           </div>
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center flex-wrap gap-3">
           {totalFired > 0 && (
-            <div className="text-right">
-              <div className="font-figtree text-[28px] font-black leading-none" style={{color:'rgba(167,139,250,0.8)',letterSpacing:'-0.04em'}}>{totalFired}</div>
+            <div className="text-right flex-shrink-0">
+              <div className="font-figtree text-[26px] font-black leading-none" style={{color:'rgba(167,139,250,0.8)',letterSpacing:'-0.04em'}}>{totalFired}</div>
               <div className="font-syne text-[8px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>EJECUCIONES</div>
             </div>
           )}
-          <div className="text-right">
-            <div className="font-figtree text-[28px] font-black leading-none" style={{color:activeCount>0?BLU:'rgba(255,255,255,0.25)',letterSpacing:'-0.04em'}}>{activeCount}</div>
+          <div className="text-right flex-shrink-0">
+            <div className="font-figtree text-[26px] font-black leading-none" style={{color:activeCount>0?BLU:'rgba(255,255,255,0.25)',letterSpacing:'-0.04em'}}>{activeCount}</div>
             <div className="font-syne text-[8px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>DE {data.reglas.length} ACTIVAS</div>
           </div>
-          {isOwner && <button onClick={()=>onOpenModal('regla')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ REGLA</button>}
+          {isOwner && autoCount > 0 && (
+            <button onClick={handleRun} disabled={running} className="flex items-center gap-2 px-4 py-2.5 rounded-2xl font-syne text-[9px] font-black tracking-widest transition-all disabled:opacity-60 flex-shrink-0" style={{background:'rgba(52,211,153,0.1)',border:'1px solid rgba(52,211,153,0.28)',color:GRN}}>
+              <LucideIcon name={running?'clock':'zap'} size={12} color={GRN}/>
+              {running?'EJECUTANDO…':'EJECUTAR AHORA'}
+            </button>
+          )}
+          {isOwner && (
+            <button onClick={()=>onOpenModal('regla')} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white flex-shrink-0" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
+              <LucideIcon name="plus" size={12} color="white"/> REGLA
+            </button>
+          )}
         </div>
       </div>
       {data.reglas.length > 4 && (
@@ -71,6 +135,55 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
           {reglaSearch && <button onClick={()=>setReglaSearch('')}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.2)"/></button>}
         </div>
       )}
+      {/* Estado del motor: activo, se ejecuta cada hora + al pulsar "Ejecutar ahora" */}
+      <div className="flex items-start gap-3 px-4 py-3 rounded-2xl mb-5" style={{background:'rgba(52,211,153,0.05)',border:'1px solid rgba(52,211,153,0.16)'}}>
+        <div className="relative flex-shrink-0 mt-0.5">
+          <div className="w-2 h-2 rounded-full" style={{background:GRN}}/>
+          <div className="absolute inset-0 w-2 h-2 rounded-full animate-ping" style={{background:GRN,opacity:0.5}}/>
+        </div>
+        <div className="min-w-0">
+          <div className="font-syne text-[8.5px] font-black tracking-widest mb-0.5" style={{color:GRN}}>MOTOR ACTIVO</div>
+          <div className="font-figtree text-[12px] leading-relaxed" style={{color:'rgba(255,255,255,0.4)'}}>
+            {autoCount > 0
+              ? <>Evalúa <b style={{color:'rgba(255,255,255,0.7)'}}>{autoCount}</b> {autoCount===1?'regla automática':'reglas automáticas'} cada hora y al sincronizar emails. Puedes forzarlo con <b style={{color:GRN}}>Ejecutar ahora</b>.</>
+              : <>El motor está en marcha. Crea una regla con <b style={{color:'rgba(255,255,255,0.7)'}}>+ REGLA</b> y se ejecutará automáticamente.</>}
+          </div>
+        </div>
+      </div>
+
+      {/* Resultado de la última ejecución manual del motor */}
+      {lastRun && (
+        <div className="rounded-2xl overflow-hidden mb-5" style={{background:SURFACE,border:`1px solid ${lastRun.results.length?'rgba(52,211,153,0.22)':BORDER}`}}>
+          <div className="flex items-center gap-2.5 px-5 py-3" style={{borderBottom:`1px solid ${BORDER}`,background:lastRun.results.length?'rgba(52,211,153,0.04)':'transparent'}}>
+            <LucideIcon name="zap" size={13} color={lastRun.results.length?GRN:'rgba(255,255,255,0.3)'}/>
+            <span className="font-syne text-[9px] font-black tracking-widest flex-1" style={{color:lastRun.results.length?GRN:'rgba(255,255,255,0.4)'}}>
+              ÚLTIMA EJECUCIÓN · {relTime(new Date(lastRun.at).toISOString())}
+            </span>
+            <span className="font-figtree text-[11px] font-semibold" style={{color:'rgba(255,255,255,0.4)'}}>{lastRun.results.length} {lastRun.results.length===1?'acción':'acciones'}</span>
+            <button onClick={()=>setLastRun(null)} className="w-6 h-6 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"><LucideIcon name="x" size={11} color="rgba(255,255,255,0.3)"/></button>
+          </div>
+          {lastRun.results.length===0
+            ? <div className="px-5 py-4 text-[12px]" style={{color:'rgba(255,255,255,0.3)'}}>El motor se ejecutó pero no había nada pendiente que disparar. Todo en orden.</div>
+            : lastRun.results.map((r,i)=>{
+                const meta = ACTION_META[r.action] || {icon:'zap',color:BLU,label:r.action}
+                return (
+                  <div key={i} className="flex items-center gap-3 px-5 py-3" style={{borderBottom:i<lastRun.results.length-1?`1px solid ${BORDER}`:'none'}}>
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:meta.color+'14',border:`1px solid ${meta.color}22`}}>
+                      <LucideIcon name={meta.icon} size={13} color={meta.color}/>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-figtree text-[12.5px] font-semibold truncate" style={{color:'rgba(240,240,248,0.85)'}}>{r.ruleName}</span>
+                        <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded tracking-widest flex-shrink-0" style={{background:meta.color+'14',color:meta.color}}>{meta.label.toUpperCase()}</span>
+                      </div>
+                      {r.detail && <div className="text-[11px] truncate" style={{color:'rgba(255,255,255,0.32)'}}>{r.detail}</div>}
+                    </div>
+                  </div>
+                )
+              })}
+        </div>
+      )}
+
       <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
         {visibleReglas.map((r: Regla, i: number)=>(
           <div key={r.id} onClick={()=>setFocusedReglaId(r.id)} className="group flex items-center gap-4 px-5 py-4 transition-all cursor-pointer" style={{borderBottom:i<visibleReglas.length-1?`1px solid ${BORDER}`:'none',borderLeft:`3px solid ${r.active?BLU+'60':'transparent'}`,opacity:r.active?1:0.45,background:focusedReglaId===r.id?'rgba(255,255,255,0.025)':'transparent'}}>
@@ -79,16 +192,48 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                <span className="font-figtree text-[14px] font-semibold" style={{color:r.active?'rgba(240,240,248,0.9)':'rgba(240,240,248,0.4)'}}>{r.name}</span>
+                {renamingId === r.id ? (
+                  <input
+                    ref={renameInputRef}
+                    value={renameText}
+                    onChange={e=>setRenameText(e.target.value)}
+                    onBlur={()=>commitRename(r.id)}
+                    onKeyDown={e=>{ if(e.key==='Enter') commitRename(r.id); if(e.key==='Escape'){setRenamingId(null)} }}
+                    onClick={e=>e.stopPropagation()}
+                    className="font-figtree text-[14px] font-semibold bg-transparent outline-none border-b"
+                    style={{color:'rgba(240,240,248,0.9)',borderColor:BLU+'60',minWidth:'120px',maxWidth:'240px',caretColor:BLU}}
+                  />
+                ) : (
+                  <span
+                    className="font-figtree text-[14px] font-semibold cursor-text"
+                    title={isOwner ? 'Doble click para renombrar' : undefined}
+                    onDoubleClick={e=>{ if(!isOwner) return; e.stopPropagation(); startRename(r) }}
+                    style={{color:r.active?'rgba(240,240,248,0.9)':'rgba(240,240,248,0.4)'}}>
+                    {r.name}
+                  </span>
+                )}
+                {isStructured(r)
+                  ? <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full tracking-widest" style={{background:'rgba(52,211,153,0.1)',color:GRN,border:'1px solid rgba(52,211,153,0.2)'}}>AUTO</span>
+                  : <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full tracking-widest" style={{background:'rgba(255,176,32,0.08)',color:'rgba(255,176,32,0.7)',border:'1px solid rgba(255,176,32,0.18)'}}>MANUAL</span>}
                 {r.trigger_count > 0 && <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.6)'}}>{r.trigger_count}× ejecutada</span>}
               </div>
-              {(r.condition_text||r.action_text) && (
-                <div className="flex items-center gap-1.5 text-[11px]" style={{color:'rgba(255,255,255,0.28)'}}>
-                  {r.condition_text && <span>{r.condition_text}</span>}
-                  {r.condition_text && r.action_text && <span style={{color:'rgba(255,255,255,0.15)'}}>›</span>}
-                  {r.action_text && <span>{r.action_text}</span>}
-                </div>
-              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                {isStructured(r)
+                  ? (r.action_text && <div className="text-[11px]" style={{color:'rgba(255,255,255,0.28)'}}>{r.action_text}</div>)
+                  : (r.condition_text||r.action_text) && (
+                    <div className="flex items-center gap-1.5 text-[11px]" style={{color:'rgba(255,255,255,0.28)'}}>
+                      {r.condition_text && <span>{r.condition_text}</span>}
+                      {r.condition_text && r.action_text && <span style={{color:'rgba(255,255,255,0.15)'}}>›</span>}
+                      {r.action_text && <span>{r.action_text}</span>}
+                    </div>
+                  )}
+                {r.last_triggered_at && (
+                  <span className="flex items-center gap-1 text-[10px]" style={{color:'rgba(255,255,255,0.2)'}}>
+                    <LucideIcon name="clock" size={9} color="rgba(255,255,255,0.2)"/>
+                    {relTime(r.last_triggered_at)}
+                  </span>
+                )}
+              </div>
             </div>
             {isOwner && (
               <button onClick={()=>data.updateRegla(r.id, {active:!r.active}).then(()=>showToast(r.active?'Regla pausada':'Regla activada')).catch(()=>showToast('Error'))}
@@ -115,20 +260,27 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
             <div className="text-center text-[12px] mb-6" style={{color:'rgba(255,255,255,0.2)'}}>Sin reglas · empieza con una plantilla</div>
             <div className="space-y-2">
               {[
-                {name:'Seguimiento de propuesta',condicion:'Email de cliente sin respuesta en 48h',accion:'Crear tarea urgente de seguimiento al cliente'},
-                {name:'Alerta deadline próximo',condicion:'Proyecto con deadline en menos de 7 días',accion:'Notificar al equipo y crear tarea de revisión final'},
-                {name:'Cliente inactivo',condicion:'Sin contacto con cliente en más de 30 días',accion:'Programar llamada de check-in con el cliente'},
+                {name:'Seguimiento de emails urgentes', cond:'Email urgente sin leer', act:'Crear tarea (alta)',
+                 config:{v:1,trigger:{type:'email_urgent'},action:{type:'create_task',taskText:'Responder a {remitente} sobre {asunto}',level:'high'}}},
+                {name:'Alerta de deadline próximo', cond:'Deadline en < 7 días', act:'Notificar al equipo',
+                 config:{v:1,trigger:{type:'project_deadline',days:7},action:{type:'notify_team',message:'Deadline cercano en {proyecto} ({dias} días)'}}},
+                {name:'Inbox saturado', cond:'15+ emails sin leer', act:'Avisarme a mí',
+                 config:{v:1,trigger:{type:'unread_pileup',threshold:15},action:{type:'notify_owner',message:'Tienes {total} emails sin leer'}}},
+                {name:'Muchas tareas vencidas', cond:'5+ tareas vencidas', act:'Avisarme a mí',
+                 config:{v:1,trigger:{type:'many_overdue',threshold:5},action:{type:'notify_owner',message:'Tienes {total} tareas vencidas pendientes'}}},
+                {name:'Tareas urgentes sin asignar', cond:'Tareas urgentes sin responsable', act:'Notificar al equipo',
+                 config:{v:1,trigger:{type:'high_priority_unassigned'},action:{type:'notify_team',message:'Tarea urgente sin asignar: {tarea}'}}},
               ].map((tpl,i)=>(
                 <div key={i} className="flex items-center gap-4 px-5 py-4 rounded-2xl transition-all" style={{background:'rgba(27,95,250,0.03)',border:'1px solid rgba(27,95,250,0.1)'}}>
                   <div className="flex-1 min-w-0">
                     <div className="font-figtree text-[13px] font-semibold text-white mb-1">{tpl.name}</div>
                     <div className="flex items-center gap-1.5 text-[11px]" style={{color:'rgba(255,255,255,0.28)'}}>
-                      <span>{tpl.condicion}</span>
+                      <span>{tpl.cond}</span>
                       <span style={{color:'rgba(255,255,255,0.12)'}}>›</span>
-                      <span>{tpl.accion}</span>
+                      <span>{tpl.act}</span>
                     </div>
                   </div>
-                  {isOwner && <button onClick={async()=>{try{await data.createRegla({name:tpl.name,condition_text:tpl.condicion,action_text:tpl.accion,active:true});showToast('Regla creada')}catch{showToast('Error')}}} className="flex-shrink-0 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(27,95,250,0.12)',color:BLU,border:'1px solid rgba(27,95,250,0.2)'}}>+ USAR</button>}
+                  {isOwner && <button onClick={async()=>{try{await data.createRegla({name:tpl.name,condition_text:JSON.stringify(tpl.config),action_text:`${tpl.cond} › ${tpl.act}`,active:true});showToast('Regla creada · el motor la ejecutará')}catch{showToast('Error')}}} className="flex-shrink-0 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(27,95,250,0.12)',color:BLU,border:'1px solid rgba(27,95,250,0.2)'}}>+ USAR</button>}
                 </div>
               ))}
             </div>

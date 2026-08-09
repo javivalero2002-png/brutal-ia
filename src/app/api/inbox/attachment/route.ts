@@ -19,18 +19,40 @@ export async function GET(req: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = await createAdminClient()
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('gmail_refresh_token, gmail_connected')
-    .eq('id', user.id)
-    .single()
 
-  if (!profile?.gmail_refresh_token) {
+  // Check if this attachment belongs to a shared (colabs) message
+  const { data: inboxMsg } = await admin
+    .from('inbox_messages')
+    .select('shared')
+    .eq('gmail_id', gmailMessageId)
+    .maybeSingle()
+
+  let token: string | null = null
+
+  if (inboxMsg?.shared) {
+    const { data: colabsOwner } = await admin
+      .from('profiles')
+      .select('gmail_colabs_refresh_token')
+      .not('gmail_colabs_refresh_token', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    token = colabsOwner?.gmail_colabs_refresh_token ?? null
+  } else {
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('gmail_refresh_token')
+      .eq('id', user.id)
+      .single()
+    token = profile?.gmail_refresh_token ?? null
+  }
+
+  if (!token) {
     return NextResponse.json({ error: 'Gmail not connected' }, { status: 400 })
   }
 
   const oauth2Client = getOAuthClient()
-  oauth2Client.setCredentials({ refresh_token: profile.gmail_refresh_token })
+  oauth2Client.setCredentials({ refresh_token: token })
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
 
   let data: string | null | undefined

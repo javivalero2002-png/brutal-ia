@@ -1,0 +1,124 @@
+import { describe, it, expect } from 'vitest'
+import { parseRuleConfig, AUTO_MARK } from '@/lib/automations'
+import { dlDate, todayKey, localDayKey } from '@/components/shared/helpers'
+import { splitForTTS } from '@/components/shared/audio'
+import { needsWebSearch } from '@/lib/ai'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tests de la lógica pura del sistema. Cubren las partes donde una regresión
+// silenciosa haría daño real: fechas (bug de zona horaria), el motor de
+// automatizaciones y el troceado de voz de Harvey.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('fechas — zona horaria España', () => {
+  it('todayKey devuelve formato YYYY-MM-DD', () => {
+    expect(todayKey()).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('localDayKey usa el día de Madrid, no el de UTC', () => {
+    // 23:30 del 9 de agosto en Madrid (UTC+2) = 21:30 UTC del día 9.
+    // A las 00:30 del día 10 en Madrid son las 22:30 UTC del 9: el día local
+    // debe ser el 10, no el 9. Este es exactamente el bug que se corrigió.
+    expect(localDayKey('2026-08-09T22:30:00Z')).toBe('2026-08-10')
+    expect(localDayKey('2026-08-09T12:00:00Z')).toBe('2026-08-09')
+  })
+
+  it('localDayKey es estable para una fecha a mediodía', () => {
+    expect(localDayKey('2026-01-15T12:00:00Z')).toBe('2026-01-15')
+  })
+})
+
+describe('dlDate — parseo de deadlines', () => {
+  it('trata TBD y vacío como futuro lejano', () => {
+    expect(dlDate('TBD').getTime()).toBe(8640000000000000)
+    expect(dlDate(null).getTime()).toBe(8640000000000000)
+    expect(dlDate('').getTime()).toBe(8640000000000000)
+  })
+
+  it('parsea ISO al final del día', () => {
+    const d = dlDate('2026-03-15')
+    expect(d.getFullYear()).toBe(2026)
+    expect(d.getMonth()).toBe(2)
+    expect(d.getDate()).toBe(15)
+    expect(d.getHours()).toBe(23)
+  })
+
+  it('parsea el formato español "mar 2026"', () => {
+    const d = dlDate('mar 2026')
+    expect(d.getFullYear()).toBe(2026)
+    expect(d.getMonth()).toBe(2)
+  })
+
+  it('un deadline pasado es anterior a ahora', () => {
+    expect(dlDate('2020-01-01').getTime()).toBeLessThan(Date.now())
+  })
+})
+
+describe('motor de automatizaciones — parseRuleConfig', () => {
+  it('acepta una regla estructurada válida', () => {
+    const cfg = parseRuleConfig(JSON.stringify({
+      v: 1,
+      trigger: { type: 'email_urgent' },
+      action: { type: 'create_task', taskText: 'Revisar' },
+    }))
+    expect(cfg).not.toBeNull()
+    expect(cfg!.trigger.type).toBe('email_urgent')
+    expect(cfg!.action.type).toBe('create_task')
+  })
+
+  it('rechaza reglas legacy en texto libre (no deben ejecutarse)', () => {
+    expect(parseRuleConfig('Cuando llegue un email urgente, avísame')).toBeNull()
+    expect(parseRuleConfig(null)).toBeNull()
+    expect(parseRuleConfig('')).toBeNull()
+  })
+
+  it('rechaza JSON malformado o incompleto sin lanzar', () => {
+    expect(parseRuleConfig('{roto')).toBeNull()
+    expect(parseRuleConfig('{"v":1}')).toBeNull()
+    expect(parseRuleConfig('{"v":1,"trigger":{"type":"x"}}')).toBeNull()
+  })
+
+  it('la marca de dedup es estable (evita tareas duplicadas)', () => {
+    expect(AUTO_MARK).toBe('⚙ auto:')
+  })
+})
+
+describe('splitForTTS — troceado de la voz de Harvey', () => {
+  it('devuelve vacío si no hay texto', () => {
+    expect(splitForTTS('')).toEqual([])
+    expect(splitForTTS('   ')).toEqual([])
+  })
+
+  it('no pierde contenido al trocear', () => {
+    const text = 'Primera frase. Segunda frase. Tercera frase.'
+    const joined = splitForTTS(text).join(' ').replace(/\s+/g, ' ')
+    expect(joined).toContain('Primera frase')
+    expect(joined).toContain('Tercera frase')
+  })
+
+  it('un texto corto se queda en un solo trozo', () => {
+    expect(splitForTTS('Hola.').length).toBe(1)
+  })
+})
+
+describe('needsWebSearch — cuándo Harvey busca en internet', () => {
+  it('detecta consultas que piden datos actuales', () => {
+    expect(needsWebSearch('busca influencers de moda')).toBe(true)
+    expect(needsWebSearch('¿cuánto cuesta una campaña?')).toBe(true)
+    expect(needsWebSearch('tendencias de TikTok')).toBe(true)
+  })
+
+  it('detecta preguntas de conocimiento externo (antes fallaban)', () => {
+    expect(needsWebSearch('¿quién es el CEO de Nike?')).toBe(true)
+    expect(needsWebSearch('qué es el SEO técnico')).toBe(true)
+    expect(needsWebSearch('¿cuánto cobra un community manager?')).toBe(true)
+  })
+
+  it('NO busca cuando la pregunta es sobre datos internos', () => {
+    expect(needsWebSearch('¿qué tareas tengo hoy?')).toBe(false)
+    expect(needsWebSearch('crea una tarea para Pablo')).toBe(false)
+    expect(needsWebSearch('resume mis emails sin leer')).toBe(false)
+    expect(needsWebSearch('¿cómo va el proyecto de Zara?')).toBe(false)
+    expect(needsWebSearch('dame el briefing')).toBe(false)
+  })
+})

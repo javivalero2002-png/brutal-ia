@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getAuthCtx } from '@/lib/authz'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Solo columnas conocidas: campos desconocidos no deben tumbar la petición
@@ -7,14 +8,17 @@ const pick = (obj: any, keys: string[]) => Object.fromEntries(Object.entries(obj
 
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const ctx = await getAuthCtx()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
   const body = await request.json()
-  const admin = await createAdminClient()
-  const { data, error } = await admin.from('clients').update(pick(body, ['name','industry','status','revenue','notes','color','initials'])).eq('id', id).select().single()
+  // La facturación es un dato sensible: solo el owner puede modificarla.
+  const allowed = ctx.role === 'owner'
+    ? ['name','industry','status','revenue','notes','color','initials']
+    : ['name','industry','status','notes','color','initials']
+  const admin = ctx.admin
+  const { data, error } = await admin.from('clients').update(pick(body, allowed)).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }

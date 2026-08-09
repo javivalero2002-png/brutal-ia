@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { BLU, RED, GRN, SURFACE, SURF2, BORDER, useIsMobile, LucideIcon, AjGroup } from '@/components/shared'
+import { BLU, RED, GRN, SURFACE, SURF2, BORDER, useIsMobile, LucideIcon, AjGroup, todayKey } from '@/components/shared'
 
 const GMAIL_STATUS_LS = 'gmail_status_cache'
 function SincronizacionSection({data, profile, showToast}: any) {
@@ -191,7 +191,7 @@ function SincronizacionSection({data, profile, showToast}: any) {
   const unreadColabs   = (data.inbox||[]).filter((m:any)=>m.source==='gmail'&&m.shared&&!m.is_read).length
   const recentPersonal = (data.inbox||[]).filter((m:any)=>m.source==='gmail'&&!m.shared).slice(0,5)
   const recentColabs   = (data.inbox||[]).filter((m:any)=>m.source==='gmail'&&m.shared).slice(0,5)
-  const nextEvents     = ((data.calendarEvents||[]) as any[]).filter((e:any)=>e.start>=new Date().toISOString().slice(0,10)).slice(0,5)
+  const nextEvents     = ((data.calendarEvents||[]) as any[]).filter((e:any)=>e.start>=todayKey()).slice(0,5)
   const team: any[] = data.team || []
   const WEBHOOK_URL = 'https://brutalstudios-ia.vercel.app/api/whatsapp'
   const personalOk = !loadingGmail && gmailStatus?.connected
@@ -218,7 +218,7 @@ function SincronizacionSection({data, profile, showToast}: any) {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="p-8 space-y-6" style={{maxWidth:'760px',margin:'0 auto'}}>
+      <div className={`${isMobile?'p-4':'p-8'} space-y-6`} style={{maxWidth:'760px',margin:'0 auto'}}>
 
         {/* ── HERO PANEL ── */}
         <div className="relative rounded-3xl overflow-hidden" style={{background:allConnected?'rgba(34,197,94,0.05)':anyConnected?'rgba(27,95,250,0.06)':'rgba(255,255,255,0.03)',border:`1px solid ${allConnected?'rgba(34,197,94,0.2)':anyConnected?'rgba(27,95,250,0.18)':BORDER}`}}>
@@ -299,7 +299,7 @@ function SincronizacionSection({data, profile, showToast}: any) {
                   {v:waCount, l:'WhatsApp', c:'rgba(37,211,102,0.9)', bg:'rgba(37,211,102,0.05)'},
                 ].map((s,i)=>(
                   <div key={i} className="rounded-2xl px-3 py-3 text-center" style={{background:s.bg,border:`1px solid rgba(255,255,255,0.05)`}}>
-                    <div className="font-figtree text-[20px] font-black leading-none mb-1" style={{color:s.c}}>{s.v}</div>
+                    <div className={`font-figtree font-black leading-none mb-1 ${isMobile?'text-[16px]':'text-[20px]'}`} style={{color:s.c}}>{s.v}</div>
                     <div className="font-syne text-[6.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>{s.l.toUpperCase()}</div>
                   </div>
                 ))}
@@ -585,7 +585,7 @@ function SincronizacionSection({data, profile, showToast}: any) {
                 const hasTime = e.start && e.start.includes('T')
                 const dateStr = (e.start||'').slice(5,10)
                 const timeStr = hasTime ? e.start.slice(11,16) : ''
-                const isToday = (e.start||'').slice(0,10) === new Date().toISOString().slice(0,10)
+                const isToday = (e.start||'').slice(0,10) === todayKey()
                 return (
                   <div key={i} className="flex items-center gap-3 px-4 py-2.5" style={{borderTop:`1px solid ${BORDER}`}}>
                     <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:isToday?'rgba(167,139,250,1)':'rgba(167,139,250,0.4)',boxShadow:isToday?'0 0 6px rgba(167,139,250,0.8)':undefined}}/>
@@ -662,14 +662,14 @@ function SincronizacionSection({data, profile, showToast}: any) {
                 {copied==='webhook'?'COPIADO':'COPIAR'}
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className={`grid gap-2 ${isMobile ? 'grid-cols-1' : 'grid-cols-3'}`}>
               {[
                 {n:'01', t:'Meta for Developers → WhatsApp → Config'},
                 {n:'02', t:'Pega URL y token WHATSAPP_VERIFY_TOKEN'},
                 {n:'03', t:'Suscribe a messages · webhook activo'},
               ].map(s=>(
-                <div key={s.n} className="rounded-xl px-3 py-2.5" style={{background:'rgba(0,0,0,0.15)',border:'1px solid rgba(37,211,102,0.06)'}}>
-                  <div className="font-figtree text-[16px] font-black mb-1" style={{color:'rgba(37,211,102,0.15)'}}>{s.n}</div>
+                <div key={s.n} className={`rounded-xl px-3 py-2.5 ${isMobile ? 'flex items-center gap-3' : ''}`} style={{background:'rgba(0,0,0,0.15)',border:'1px solid rgba(37,211,102,0.06)'}}>
+                  <div className={`font-figtree font-black flex-shrink-0 ${isMobile ? 'text-[13px]' : 'text-[16px] mb-1'}`} style={{color:'rgba(37,211,102,0.15)'}}>{s.n}</div>
                   <div className="font-syne text-[8.5px] leading-relaxed" style={{color:'rgba(255,255,255,0.3)'}}>{s.t}</div>
                 </div>
               ))}

@@ -15,17 +15,12 @@ export async function GET() {
   const admin = await createAdminClient()
   const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).single()
 
-  let query = admin
+  // Todos los miembros del equipo ven todas las tareas — la agencia es pequeña
+  // y la visibilidad compartida es esencial para la coordinación diaria.
+  const { data, error } = await admin
     .from('tasks')
-    .select('*, assignee:profiles!assigned_to(id,name,initials,avatar_color), client:clients(id,name,initials,color)')
+    .select('*, assignee:profiles!assigned_to(id,name,initials,avatar_color), co_assignee:profiles!co_assigned_to(id,name,initials,avatar_color), client:clients(id,name,initials,color)')
     .order('created_at', { ascending: false })
-
-  if (profile?.role !== 'owner') {
-    // Members see: tasks assigned to them, tasks they created, or unassigned tasks
-    query = query.or(`assigned_to.eq.${user.id},created_by.eq.${user.id},assigned_to.is.null`)
-  }
-
-  const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
@@ -40,8 +35,8 @@ export async function POST(request: NextRequest) {
 
   const { data, error } = await admin
     .from('tasks')
-    .insert({ ...pick(body, ['text','level','done','due_date','project_id','client_id','assigned_to','source']), created_by: user.id })
-    .select('*, assignee:profiles!assigned_to(id,name,initials,avatar_color), client:clients(id,name,initials,color)')
+    .insert({ ...pick(body, ['text','level','done','due_date','project_id','client_id','assigned_to','co_assigned_to','source','notes']), created_by: user.id })
+    .select('*, assignee:profiles!assigned_to(id,name,initials,avatar_color), co_assignee:profiles!co_assigned_to(id,name,initials,avatar_color), client:clients(id,name,initials,color)')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

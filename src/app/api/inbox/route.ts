@@ -70,8 +70,23 @@ export async function PATCH(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id, is_read } = await request.json()
+  const { id, ids, is_read } = await request.json()
   const admin = await createAdminClient()
+
+  // Modo bulk: marcar varios de una vez ("todo leído") en una sola consulta,
+  // en lugar de un PATCH por mensaje desde el cliente.
+  if (Array.isArray(ids)) {
+    if (ids.length === 0) return NextResponse.json({ ok: true, updated: 0 })
+    const { error: bulkErr } = await admin
+      .from('inbox_messages')
+      .update({ is_read, is_unread: !is_read })
+      .in('id', ids.slice(0, 500))
+      .or(`user_id.eq.${user.id},shared.eq.true`)
+    if (bulkErr) return NextResponse.json({ error: bulkErr.message }, { status: 500 })
+    return NextResponse.json({ ok: true, updated: ids.length })
+  }
+
+  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
   // Allow marking own messages OR shared (colabs) messages as read
   const { error } = await admin
     .from('inbox_messages')

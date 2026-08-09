@@ -9,10 +9,9 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const apiKey = process.env.ELEVENLABS_API_KEY
   const groqKey = process.env.GROQ_API_KEY
   const openaiKey = process.env.OPENAI_API_KEY
-  if (!apiKey && !groqKey && !openaiKey) return NextResponse.json({ error: 'STT not configured' }, { status: 503 })
+  if (!groqKey && !openaiKey) return NextResponse.json({ error: 'STT not configured' }, { status: 503 })
 
   let formData: FormData
   try {
@@ -52,7 +51,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // 2) OpenAI Whisper — barato ($0.006/min), útil si no hay clave de Groq
+  // 2) OpenAI Whisper — fallback barato ($0.006/min) si Groq falla o no está
   if (openaiKey) {
     try {
       const oForm = new FormData()
@@ -76,30 +75,5 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // 3) Fallback: ElevenLabs Scribe
-  if (!apiKey) return NextResponse.json({ error: 'STT failed' }, { status: 502 })
-  const elForm = new FormData()
-  elForm.append('file', audio, ext)
-  elForm.append('model_id', 'scribe_v1')
-  elForm.append('language_code', 'es')
-
-  try {
-    const res = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
-      method: 'POST',
-      headers: { 'xi-api-key': apiKey },
-      body: elForm,
-    })
-
-    if (!res.ok) {
-      const err = await res.text()
-      // Cuota de ElevenLabs agotada — que el cliente pueda avisar con claridad
-      if (err.includes('quota_exceeded')) return NextResponse.json({ error: 'quota' }, { status: 402 })
-      return NextResponse.json({ error: err }, { status: res.status })
-    }
-
-    const data = await res.json()
-    return NextResponse.json({ text: (data.text || '').trim() })
-  } catch {
-    return NextResponse.json({ error: 'Transcription failed' }, { status: 500 })
-  }
+  return NextResponse.json({ error: 'Transcription failed' }, { status: 502 })
 }
