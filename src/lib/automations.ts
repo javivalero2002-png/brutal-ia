@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { sendPushToAll, sendPushToUser } from '@/lib/push'
+import { sendPushToAll, sendPushToUser, canSendPush } from '@/lib/push'
+import { todayKey, localDayKey } from '@/components/shared/helpers'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTOR DE AUTOMATIZACIONES (determinista)
@@ -99,34 +100,70 @@ function fillTemplate(tpl: string, vars: Record<string, string>): string {
 const MESES: Record<string, number> = {
   ene: 0, feb: 1, mar: 2, abr: 3, may: 4, jun: 5, jul: 6, ago: 7, sep: 8, oct: 9, nov: 10, dic: 11,
 }
-function parseDeadline(raw?: string | null): Date | null {
+// Un deadline es un DÍA, no un instante. Comparar timestamps era el origen de un
+// bug real: '2026-08-09' pasaba por Date.parse → 00:00 UTC → 02:00 en Madrid, y
+// a partir de esa hora una tarea que vence HOY se marcaba como vencida, mientras
+// la UI (TareasSection, vía dlDate) decía correctamente que no lo estaba. Con el
+// cron horario eso generaba alertas falsas de "vencida" todos los días.
+// Solución: trabajar siempre con day keys 'YYYY-MM-DD' en Europe/Madrid, la misma
+// convención que ya usa la UI (helpers.ts), en vez de forkear la lógica de fechas.
+const DAY_MS = 86400000
+const dayKeyToUTC = (k: string): number => Date.parse(`${k}T00:00:00Z`)
+
+/** Deadline → día 'YYYY-MM-DD', o null si no se puede interpretar. */
+function deadlineDayKey(raw?: string | null): string | null {
   if (!raw) return null
   const s = raw.trim().toLowerCase()
   if (!s || s === 'tbd' || s === '—' || s === '-') return null
-  if (s === 'hoy') return new Date()
-  if (s === 'mañana') { const d = new Date(); d.setDate(d.getDate() + 1); return d }
+  if (s === 'hoy') return todayKey()
+  if (s === 'mañana') return new Date(dayKeyToUTC(todayKey()) + DAY_MS).toISOString().slice(0, 10)
+  // ISO primero: '2026-08-09' no tiene letras, así que caía al Date.parse de abajo.
+  const iso = s.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (iso) return iso[1]
   // dd mmm yyyy  |  mmm yyyy
   const m = s.match(/(\d{1,2})?\s*([a-záéíóú]{3,})\.?\s*(\d{4})?/)
   if (m) {
     const mesKey = (m[2] || '').slice(0, 3)
     if (mesKey in MESES) {
-      const day = m[1] ? parseInt(m[1], 10) : 1
+      // Día 28 por defecto para "oct 2026", igual que dlDate en helpers.ts. Antes
+      // el motor usaba el día 1 y la UI el 28: dos verdades para el mismo texto.
+      const day = m[1] ? parseInt(m[1], 10) : 28
       const year = m[3] ? parseInt(m[3], 10) : new Date().getFullYear()
-      return new Date(year, MESES[mesKey], day)
+      return `${year}-${String(MESES[mesKey] + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     }
   }
-  const iso = Date.parse(raw)
-  return isNaN(iso) ? null : new Date(iso)
+  const t = Date.parse(raw)
+  return isNaN(t) ? null : localDayKey(t)
 }
 
-function daysUntil(d: Date): number {
-  return Math.floor((d.getTime() - Date.now()) / 86400000)
+/** Días enteros desde hoy (Madrid) hasta ese día. 0 = vence hoy, -1 = ayer. */
+function daysUntilDay(k: string): number {
+  return Math.round((dayKeyToUTC(k) - dayKeyToUTC(todayKey())) / DAY_MS)
+}
+
+/** Una tarea creada por el propio motor lleva la marca oculta en `notes`. */
+const isEngineTask = (tk: any): boolean =>
+  typeof tk?.notes === 'string' && tk.notes.includes(AUTO_MARK)
+
+/**
+ * `high_priority_unassigned` + `create_task` sin responsable y con prioridad
+ * alta/urgente es un bucle: la tarea creada cumple el mismo predicado que la
+ * disparó. La UI permite combinarlos (listas de triggers y acciones sin
+ * validación cruzada), así que el motor se niega explícitamente.
+ */
+export function isSelfFeedingRule(cfg: RuleConfig): boolean {
+  return cfg.trigger.type === 'high_priority_unassigned'
+    && cfg.action.type === 'create_task'
+    && !cfg.action.assignTo
+    && (cfg.action.level === 'urgent' || cfg.action.level === 'high')
 }
 
 interface Match { key: string; vars: Record<string, string>; clientId?: string; projectId?: string }
 
 // ── Evaluación de disparadores ───────────────────────────────────────────────
-function evaluateTrigger(cfg: RuleConfig, ctx: {
+// Exportada para poder testearla: es una función pura (sin Supabase ni red) y es
+// el motor de un cron que crea tareas y notifica al equipo sin humano delante.
+export function evaluateTrigger(cfg: RuleConfig, ctx: {
   inbox: any[]; tasks: any[]; projects: any[]; clients: any[]
 }): Match[] {
   const t = cfg.trigger
@@ -159,12 +196,12 @@ function evaluateTrigger(cfg: RuleConfig, ctx: {
     const within = t.days ?? 7
     for (const p of ctx.projects) {
       if (p.status === 'completado') continue
-      const d = parseDeadline(p.deadline)
+      const d = deadlineDayKey(p.deadline)
       if (!d) continue
-      const du = daysUntil(d)
+      const du = daysUntilDay(d)
       if (du < 0 || du > within) continue
       const cli = ctx.clients.find(c => c.id === p.client_id)
-      out.push({ key: `proj:${p.id}:${d.toISOString().slice(0, 10)}`, projectId: p.id, clientId: p.client_id, vars: {
+      out.push({ key: `proj:${p.id}:${d}`, projectId: p.id, clientId: p.client_id, vars: {
         proyecto: p.name, cliente: cli?.name || '', dias: String(du),
       } })
     }
@@ -172,9 +209,11 @@ function evaluateTrigger(cfg: RuleConfig, ctx: {
     const grace = t.days ?? 0
     for (const tk of ctx.tasks) {
       if (tk.done || !tk.due_date) continue
-      const d = parseDeadline(tk.due_date)
+      const d = deadlineDayKey(tk.due_date)
       if (!d) continue
-      if (daysUntil(d) > -grace - 0.01) continue // ya vencida (con gracia opcional)
+      // Vencida = su DÍA ya pasó. Una tarea que vence hoy no está vencida en
+      // ningún momento del día, igual que en la UI (TareasSection: `atrasadas`).
+      if (daysUntilDay(d) >= -grace) continue
       out.push({ key: `taskdue:${tk.id}`, projectId: tk.project_id, clientId: tk.client_id, vars: {
         tarea: tk.text || '', asunto: tk.text || '',
       } })
@@ -183,21 +222,27 @@ function evaluateTrigger(cfg: RuleConfig, ctx: {
     const threshold = t.threshold ?? 10
     const unread = ctx.inbox.filter(m => !m.is_read).length
     if (unread >= threshold) {
-      out.push({ key: `pileup:${new Date().toISOString().slice(0, 10)}`, vars: { total: String(unread) } })
+      // todayKey() y no toISOString(): la clave UTC saltaba de día a las 22:00 de
+      // Madrid, permitiendo que la regla se disparara dos veces el mismo día español.
+      out.push({ key: `pileup:${todayKey()}`, vars: { total: String(unread) } })
     }
   } else if (t.type === 'many_overdue') {
     const threshold = t.threshold ?? 5
     const overdueList = ctx.tasks.filter(tk => {
       if (tk.done || !tk.due_date) return false
-      const d = parseDeadline(tk.due_date)
-      return d ? daysUntil(d) < 0 : false
+      const d = deadlineDayKey(tk.due_date)
+      return d ? daysUntilDay(d) < 0 : false
     })
     if (overdueList.length >= threshold) {
-      out.push({ key: `many_overdue:${new Date().toISOString().slice(0, 10)}`, vars: { total: String(overdueList.length) } })
+      out.push({ key: `many_overdue:${todayKey()}`, vars: { total: String(overdueList.length) } })
     }
   } else if (t.type === 'high_priority_unassigned') {
     for (const tk of ctx.tasks) {
-      if (tk.done || tk.assigned_to) continue
+      // Excluir las tareas del propio motor: si las contamos, la regla se
+      // autoalimenta. Cada tarea generada es una fuente nueva con un markId que
+      // el dedup nunca ha visto (la marca va con el id de la tarea ORIGEN), así
+      // que cada ejecución producía hasta 8 tareas más — 192/día con el cron.
+      if (tk.done || tk.assigned_to || isEngineTask(tk)) continue
       if (tk.level !== 'urgent' && tk.level !== 'high') continue
       out.push({ key: `unassigned:${tk.id}`, projectId: tk.project_id, clientId: tk.client_id, vars: {
         tarea: tk.text || '', asunto: tk.text || '',
@@ -217,10 +262,14 @@ function evaluateTrigger(cfg: RuleConfig, ctx: {
         const ts = m.received_at ? new Date(m.received_at).getTime() : 0
         return Math.max(mx, ts)
       }, 0)
-      if (mostRecent < cutoff) {
-        const daysSince = mostRecent > 0 ? Math.floor((Date.now() - mostRecent) / 86400000) : days
+      // `mostRecent > 0` es imprescindible: si NINGÚN email casa con el cliente,
+      // el reduce devuelve 0 y `0 < cutoff` es siempre cierto, así que la regla
+      // se disparaba cada día para siempre. Sin emails previos no hay seguimiento
+      // que reclamar — no es un cliente "frío", es un cliente sin histórico.
+      if (mostRecent > 0 && mostRecent < cutoff) {
+        const daysSince = Math.floor((Date.now() - mostRecent) / DAY_MS)
         out.push({
-          key: `followup:${cli.id}:${new Date().toISOString().slice(0, 10)}`,
+          key: `followup:${cli.id}:${todayKey()}`,
           clientId: cli.id,
           vars: { cliente: cli.name, dias: String(daysSince) },
         })
@@ -235,6 +284,11 @@ function evaluateTrigger(cfg: RuleConfig, ctx: {
 export async function runAutomations(admin: SupabaseClient): Promise<{ ran: number; results: AutomationResult[] }> {
   const results: AutomationResult[] = []
 
+  // Interruptor de emergencia. Ojo: cambiar una env var en Vercel requiere
+  // redeploy, así que el corte INSTANTÁNEO sigue siendo poner active=false en la
+  // tabla `reglas` (el motor solo carga reglas activas, justo debajo).
+  if (process.env.NEXUS_AUTOMATIONS === 'off') return { ran: 0, results }
+
   // Reglas activas (excluye las filas de suscripción push)
   const { data: rules } = await admin
     .from('reglas')
@@ -245,6 +299,9 @@ export async function runAutomations(admin: SupabaseClient): Promise<{ ran: numb
   const structured = (rules || [])
     .map(r => ({ r, cfg: parseRuleConfig(r.condition_text) }))
     .filter((x): x is { r: any; cfg: RuleConfig } => !!x.cfg)
+    // Defensa en profundidad: aunque isEngineTask ya rompe el bucle, una regla
+    // que se autoalimenta por diseño no debe ejecutarse nunca.
+    .filter(x => !isSelfFeedingRule(x.cfg))
 
   if (structured.length === 0) return { ran: 0, results }
 
@@ -305,8 +362,13 @@ export async function runAutomations(admin: SupabaseClient): Promise<{ ran: numb
         if (now - last < NOTIFY_THROTTLE_MS) break
         const body = fillTemplate(a.message || '{asunto}', match.vars).slice(0, 160) || r.name
         const payload = { title: `⚡ ${r.name}`, body, url: '/dashboard', tag: `auto-${r.id}`, urgent: cfg.action.level === 'urgent' }
-        if (a.type === 'notify_team') await sendPushToAll(admin, payload)
-        else if (r.created_by) await sendPushToUser(admin, r.created_by, payload)
+        // canSendPush como en colabsSync y gmail/sync. Sin él, el único freno era
+        // `last_triggered_at`, cuyo UPDATE (abajo) no comprueba errores: si esa
+        // escritura fallaba, la regla notificaba a los 7 del equipo 24 veces al día.
+        if (a.type === 'notify_team') {
+          if (!(await canSendPush(admin, `auto-${r.id}`))) break
+          await sendPushToAll(admin, payload)
+        } else if (r.created_by) await sendPushToUser(admin, r.created_by, payload)
         fired = true
         results.push({ ruleId: r.id, ruleName: r.name, action: a.type, detail: body })
         break // un aviso por ejecución basta

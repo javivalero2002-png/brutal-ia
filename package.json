@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "TZ=UTC vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
