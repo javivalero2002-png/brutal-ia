@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { BLU, RED, GRN, BORDER } from '@/components/shared/design-tokens'
 import { useIsMobile } from '@/components/shared/hooks'
-import { dlDate, todayKey, localDayKey } from '@/components/shared/helpers'
+import { dlDate, todayKey, localDayKey, madridHour, madridDateLabel } from '@/components/shared/helpers'
 import { getSharedAudio, playAck, isIOSDevice, matchTeamMember, splitForTTS, stopAllVoices, isSRBroken, markSRBroken } from '@/components/shared/audio'
 import LucideIcon from '@/components/shared/LucideIcon'
 import type { Task, Project, Client } from '@/types'
@@ -73,10 +73,14 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   const now = new Date()
-  const hour = now.getHours()
+  // Madrid explícito, no la zona de quien ejecuta: esta sección es la ÚNICA que
+  // se renderiza en servidor, y allí getHours() da UTC. Entre las 13:00 y las
+  // 15:00 de Madrid el servidor mandaba "Buenos días" y el cliente pintaba
+  // "Buenas tardes" → React descartaba el HTML del servidor y re-renderizaba.
+  const hour = madridHour()
   const todayStr = todayKey()
   const firstName = profile?.name?.split(' ')?.[0] || 'Jefe'
-  const dateStr = now.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'})
+  const dateStr = madridDateLabel()
 
   const urgentTasks = data.tasks.filter((t:Task)=>!t.done&&t.level==='urgent')
   const pendingAll = data.tasks.filter((t:Task)=>!t.done).length
@@ -191,7 +195,7 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
     const memAll = (data.memoria||[]) as any[]
     const memLines = memAll.slice(0,12).map((m:any)=>`  - ${m.title}${m.category?` [${m.category}]`:''}: ${(m.content||'').replace(/\s+/g,' ').slice(0,400)}`).join('\n')
 
-    return `BRUTAL STUDIOS — ${now.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'})}
+    return `BRUTAL STUDIOS — ${madridDateLabel()}
 
 TAREAS: ${pendingAll} pendientes | ${completedToday} completadas hoy
 URGENTES (${urgentTasks.length}): ${urgentLines||'ninguna'}

@@ -3,7 +3,7 @@
 // PREVIEW HARNESS · solo desarrollo. Monta las secciones reales con datos mock
 // para poder revisarlas/capturarlas sin necesidad de login. NO se sirve en prod.
 // ─────────────────────────────────────────────────────────────────────────────
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import type { Task, Project, Client, Profile, Regla, InboxMessage } from '@/types'
 import { SectionErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { BLU } from '@/components/shared/design-tokens'
@@ -13,6 +13,16 @@ import AutomatizacionesSection from '@/components/sections/AutomatizacionesSecti
 import ReportesSection from '@/components/sections/ReportesSection'
 import InboxSection from '@/components/sections/InboxSection'
 import ClientesSection from '@/components/sections/ClientesSection'
+// Las 8 restantes: /preview cubria 6 de 14, asi que media app no se podia mirar
+// sin credenciales — y es la unica via para revisar la UI en una sesion de Claude.
+import CalendarioSection from '@/components/sections/CalendarioSection'
+import ProyectosSection from '@/components/sections/ProyectosSection'
+import ContenidoSection from '@/components/sections/ContenidoSection'
+import MemoriaSection from '@/components/sections/MemoriaSection'
+import EquipoSection from '@/components/sections/EquipoSection'
+import ChatSection from '@/components/sections/ChatSection'
+import HarveySection from '@/components/sections/HarveySection'
+import AjustesSection from '@/components/sections/AjustesSection'
 
 const iso = (dOffsetDays: number) => new Date(Date.now() + dOffsetDays*86400000).toISOString()
 const day = (dOffsetDays: number) => iso(dOffsetDays).slice(0,10)
@@ -93,12 +103,33 @@ export default function PreviewClient() {
   const [reglas, setReglas] = useState<Regla[]>(REGLAS)
   const [inbox, setInbox] = useState<InboxMessage[]>(INBOX)
   const [clients, setClients] = useState<Client[]>(CLIENTS)
-  const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams()
-  const [section, setSection] = useState(params.get('s') || 'tareas')
-  const initialView = params.get('v') || undefined       // 'kanban' | 'lista'
-  const initialFocus = params.get('focus') === '1'
-  const initialGroupBy = (params.get('g') as 'priority'|'project') || undefined
+  // Los parámetros de URL se leen DESPUÉS de montar, no durante el render: en el
+  // servidor no hay `window`, así que el primer render usaba el valor por defecto
+  // y el cliente el de la URL → mismatch de hidratación en los botones del
+  // conmutador. Es solo de desarrollo, pero llenaba la consola de ruido y tapaba
+  // los errores de verdad.
+  const [section, setSection] = useState('tareas')
+  const [urlOpts, setUrlOpts] = useState<{v?:string; focus:boolean; g?:'priority'|'project'}>({ focus:false })
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search)
+    if (p.get('s')) setSection(p.get('s')!)
+    setUrlOpts({
+      v: p.get('v') || undefined,
+      focus: p.get('focus') === '1',
+      g: (p.get('g') as 'priority'|'project') || undefined,
+    })
+  }, [])
+  const initialView = urlOpts.v
+  const initialFocus = urlOpts.focus
+  const initialGroupBy = urlOpts.g
   const [toast, setToast] = useState('')
+  const [projView, setProjView] = useState<'board'|'list'>('board')
+  const [projStatusFilter, setProjStatusFilter] = useState('Todos')
+  const [selectedProject, setSelectedProject] = useState<string|null>(null)
+  const [memFilter, setMemFilter] = useState('Todos')
+  const [chatInput, setChatInput] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const dragRef = useRef<any>(null)
 
   const showToast = useCallback((m:string)=>{ setToast(m); setTimeout(()=>setToast(''), 2200) }, [])
 
@@ -149,6 +180,23 @@ export default function PreviewClient() {
     { id:'inbox', label:'Inbox' },
     { id:'reportes', label:'Reportes' },
     { id:'clientes', label:'Clientes' },
+    { id:'proyectos', label:'Proyectos' },
+    { id:'contenido', label:'Contenido' },
+    { id:'calendario', label:'Calendario' },
+    { id:'memoria', label:'Memoria' },
+    { id:'equipo', label:'Equipo' },
+    { id:'chat', label:'Brutal.IA' },
+    { id:'harvey', label:'Harvey' },
+    { id:'ajustes', label:'Operativa' },
+  ]
+
+  const filteredProjects = projStatusFilter === 'Todos' ? PROJECTS : PROJECTS.filter(p => p.status === projStatusFilter)
+  const kanbanCols = [
+    { title:'Plan.',       color:'rgba(240,240,248,0.25)', status:'plan.',      items:filteredProjects.filter(p=>p.status==='plan.') },
+    { title:'Progreso',    color:BLU,                      status:'activo',     items:filteredProjects.filter(p=>p.status==='activo') },
+    { title:'Urgente',     color:'#E51D2A',                status:'urgente',    items:filteredProjects.filter(p=>p.status==='urgente') },
+    { title:'Revisión',    color:'rgba(255,176,32,0.7)',   status:'revisión',   items:filteredProjects.filter(p=>p.status==='revisión') },
+    { title:'Completado',  color:'#00C48C',                status:'completado', items:filteredProjects.filter(p=>p.status==='completado') },
   ]
 
   return (
@@ -172,6 +220,14 @@ export default function PreviewClient() {
         {section==='inbox' && <SectionErrorBoundary section="inbox"><InboxSection data={data} showToast={showToast} profile={profile} onNavigate={setSection} onSelectClient={()=>{}} onAskHarvey={()=>{}}/></SectionErrorBoundary>}
         {section==='reportes' && <SectionErrorBoundary section="reportes"><ReportesSection data={data} onNavigate={setSection}/></SectionErrorBoundary>}
         {section==='clientes' && <SectionErrorBoundary section="clientes"><ClientesSection data={data} selectedId={null} onSelect={()=>{}} onOpenModal={()=>{}} onSetMf={()=>{}} showToast={showToast} isOwner onNavigate={setSection} onSelectProject={()=>{}}/></SectionErrorBoundary>}
+        {section==='proyectos' && <SectionErrorBoundary section="proyectos"><ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={()=>{}} onSetMf={()=>{}} showToast={showToast} isOwner onNavigate={setSection} onSelectClient={()=>{}} justCreatedId={null} onJustCreatedScrolled={()=>{}}/></SectionErrorBoundary>}
+        {section==='contenido' && <SectionErrorBoundary section="contenido"><ContenidoSection data={data} onOpenModal={()=>{}} showToast={showToast} onNavigate={setSection} onSelectClient={()=>{}} profile={profile}/></SectionErrorBoundary>}
+        {section==='calendario' && <SectionErrorBoundary section="calendario"><CalendarioSection data={data} profile={profile} showToast={showToast} onOpenModal={()=>{}} onSetMf={()=>{}}/></SectionErrorBoundary>}
+        {section==='memoria' && <SectionErrorBoundary section="memoria"><MemoriaSection data={data} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={()=>{}} showToast={showToast}/></SectionErrorBoundary>}
+        {section==='equipo' && <SectionErrorBoundary section="equipo"><EquipoSection data={data} profile={profile} showToast={showToast}/></SectionErrorBoundary>}
+        {section==='chat' && <SectionErrorBoundary section="chat"><ChatSection profile={profile} data={data} chatInput={chatInput} setChatInput={setChatInput} chatLoading={chatLoading} setChatLoading={setChatLoading} showToast={showToast} onNavigate={setSection}/></SectionErrorBoundary>}
+        {section==='harvey' && <SectionErrorBoundary section="harvey"><HarveySection data={data} profile={profile} showToast={showToast} onNavigate={setSection} preloadMessage={null} onClearPreload={()=>{}}/></SectionErrorBoundary>}
+        {section==='ajustes' && <SectionErrorBoundary section="ajustes"><AjustesSection profile={profile} data={data} showToast={showToast} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={()=>{}} isOwner/></SectionErrorBoundary>}
       </div>
 
       {toast && (

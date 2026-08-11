@@ -29,6 +29,18 @@ export const todayKey = (): string =>
 export const localDayKey = (d: string | number | Date): string =>
   new Date(d).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' })
 
+// Hora del día (0-23) en Madrid. `new Date().getHours()` usa la zona de QUIEN
+// ejecuta: en el servidor de Vercel es UTC y en el navegador la del usuario.
+// HoySection es la única sección con render en servidor, así que ese desajuste
+// rompía la hidratación de React entre las 13:00 y las 15:00 de Madrid — el
+// servidor mandaba "Buenos días" y el cliente pintaba "Buenas tardes".
+export const madridHour = (): number =>
+  Number(new Date().toLocaleString('en-US', { timeZone: 'Europe/Madrid', hour: 'numeric', hour12: false }))
+
+// Fecha larga en español, fijada a Madrid para que servidor y cliente coincidan.
+export const madridDateLabel = (opts: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' }): string =>
+  new Date().toLocaleDateString('es-ES', { timeZone: 'Europe/Madrid', ...opts })
+
 export const dlLabel = (d?: string|null): string => {
   if (!d || d === 'TBD') return ''
   const t = dlDate(d)
