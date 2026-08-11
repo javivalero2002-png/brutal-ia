@@ -554,7 +554,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                       <button onClick={()=>{ data.deleteProject(p.id).then(()=>showToast('Proyecto eliminado')).catch(()=>showToast('Error al eliminar')); setConfirmDeleteProjId(null) }} className="px-2 py-1 rounded-lg font-syne text-[7.5px] font-black" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
                       <button onClick={()=>setConfirmDeleteProjId(null)} className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={10} color="rgba(255,255,255,0.3)"/></button>
                     </div>
-                  : <button onClick={e=>{e.stopPropagation();setConfirmDeleteProjId(p.id)}} className={`transition-opacity flex-shrink-0 ${isMobile?'opacity-25':'opacity-0 group-hover:opacity-60'}`}><LucideIcon name="trash" size={13} color={RED}/></button>
+                  : <button onClick={e=>{e.stopPropagation();setConfirmDeleteProjId(p.id)}} title="Eliminar proyecto" aria-label={`Eliminar el proyecto ${p.name}`} className={`transition-opacity flex-shrink-0 ${isMobile?'opacity-25':'opacity-0 group-hover:opacity-60'}`}><LucideIcon name="trash" size={13} color={RED}/></button>
               )}
               </div>{/* end inner flex row */}
             </div>
@@ -635,7 +635,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                       <button onClick={()=>data.deleteProject(selectedProject.id).then(()=>{onSelect(null);showToast('Proyecto eliminado')}).catch(()=>showToast('Error al eliminar'))} className="px-2.5 py-2 rounded-xl font-syne text-[8px] font-black transition-all" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
                       <button onClick={()=>setConfirmDeleteDetail(false)} className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={12} color="rgba(255,255,255,0.3)"/></button>
                     </div>
-                  : <button onClick={()=>setConfirmDeleteDetail(true)} className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors hover:bg-white/5" style={{background:'rgba(229,29,42,0.06)',color:'rgba(229,29,42,0.45)',border:`1px solid rgba(229,29,42,0.12)`}}>
+                  : <button onClick={()=>setConfirmDeleteDetail(true)} title="Eliminar proyecto" aria-label="Eliminar este proyecto" className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors hover:bg-white/5" style={{background:'rgba(229,29,42,0.06)',color:'rgba(229,29,42,0.45)',border:`1px solid rgba(229,29,42,0.12)`}}>
                       <LucideIcon name="trash" size={12} color="rgba(229,29,42,0.45)"/>
                     </button>
               )}
@@ -1010,7 +1010,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                       </div>
                       <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap" style={{color:'rgba(255,255,255,0.65)'}}>{n.content}</p>
                     </div>
-                    <button onClick={()=>deleteNote(n.id)} className="opacity-0 group-hover:opacity-50 transition-opacity flex-shrink-0 mt-0.5">
+                    <button onClick={()=>deleteNote(n.id)} title="Eliminar nota" aria-label="Eliminar esta nota" className="opacity-0 group-hover:opacity-50 transition-opacity flex-shrink-0 mt-0.5">
                       <LucideIcon name="trash" size={11} color={RED}/>
                     </button>
                   </div>

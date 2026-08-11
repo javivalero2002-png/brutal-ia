@@ -253,7 +253,7 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
                     <button onClick={()=>{ data.deleteRegla(r.id).then(()=>showToast('Regla eliminada')).catch(()=>showToast('Error al eliminar')); setConfirmDeleteId(null) }} className="px-2.5 py-1.5 rounded-lg font-syne text-[8px] font-black transition-all" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
                     <button onClick={()=>setConfirmDeleteId(null)} className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5 flex-shrink-0" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.3)"/></button>
                   </div>
-                : <button onClick={()=>setConfirmDeleteId(r.id)} className="opacity-60 md:opacity-0 md:group-hover:opacity-60 transition-opacity flex-shrink-0"><LucideIcon name="trash" size={13} color={RED}/></button>
+                : <button onClick={()=>setConfirmDeleteId(r.id)} title="Eliminar regla" aria-label={`Eliminar la regla ${r.name}`} className="opacity-60 md:opacity-0 md:group-hover:opacity-60 transition-opacity flex-shrink-0"><LucideIcon name="trash" size={13} color={RED}/></button>
             )}
           </div>
         ))}

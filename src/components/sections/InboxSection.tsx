@@ -332,7 +332,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
             </div>
           ) : (
             <div className="flex items-start gap-3">
-              <button onClick={()=>{ setFilter('hub'); setActiveSender(null); setSelected(null) }} className="flex items-center gap-1.5 transition-opacity hover:opacity-60 mt-1" style={{color:'rgba(255,255,255,0.4)'}}>
+              <button onClick={()=>{ setFilter('hub'); setActiveSender(null); setSelected(null) }} title="Volver" aria-label="Volver a la bandeja" className="flex items-center gap-1.5 transition-opacity hover:opacity-60 mt-1" style={{color:'rgba(255,255,255,0.4)'}}>
                 <LucideIcon name="chevron-left" size={16} color="rgba(255,255,255,0.4)"/>
               </button>
               <div className="flex items-center gap-2.5 flex-1 min-w-0">

@@ -793,6 +793,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                 <div className="flex p-0.5 rounded-xl gap-0.5 flex-shrink-0" style={{background:SURF2,border:`1px solid ${BORDER}`}}>
                   {([{id:'lista' as const,icon:'list'},{id:'kanban' as const,icon:'layout-grid'}] as const).map(v=>(
                     <button key={v.id} onClick={()=>setView(v.id)}
+                      title={v.id==='kanban'?'Tablero':'Lista'} aria-label={v.id==='kanban'?'Ver como tablero':'Ver como lista'}
                       className="flex items-center justify-center w-8 h-8 rounded-lg transition-all"
                       style={{background:view===v.id?BLU+'26':'transparent',border:`1px solid ${view===v.id?BLU+'55':'transparent'}`}}>
                       <LucideIcon name={v.icon as any} size={14} color={view===v.id?'#5b8dff':'rgba(255,255,255,0.28)'}/>

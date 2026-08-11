@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, todayKey } from '@/components/shared'
+import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, todayKey, localDayKey } from '@/components/shared'
 import LucideIcon from '@/components/shared/LucideIcon'
 import type { Client } from '@/types'
 
@@ -130,7 +130,7 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
             ))}
           </div>
           {!isMobile && <button onClick={()=>{
-            const md = data.memoria.map((m: any)=>`# ${m.title}\n**Categoría:** ${m.category}\n**Fecha:** ${m.created_at?.slice(0,10)||''}\n\n${m.content}`).join('\n\n---\n\n')
+            const md = data.memoria.map((m: any)=>`# ${m.title}\n**Categoría:** ${m.category}\n**Fecha:** ${m.created_at?localDayKey(m.created_at):''}\n\n${m.content}`).join('\n\n---\n\n')
             const blob = new Blob([md], {type:'text/markdown'})
             const a = document.createElement('a')
             a.href = URL.createObjectURL(blob)

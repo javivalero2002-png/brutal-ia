@@ -811,6 +811,9 @@ ${memLines2||'  sin documentos'}`
         <div className="flex items-center gap-3">
           {/* Orb */}
           <button onClick={handleOrb}
+            // El texto de estado va debajo del orbe, no dentro del botón, así que
+            // el control en sí no decía qué hace. `orbLabel` ya describe cada modo.
+            title={orbLabel[mode]} aria-label={orbLabel[mode]}
             className="relative flex-shrink-0 w-[52px] h-[52px] rounded-full flex items-center justify-center transition-all duration-300 active:scale-90 disabled:cursor-wait"
             style={{
               background: mode==='recording'?'rgba(229,29,42,0.15)':mode==='speaking'?'rgba(27,95,250,0.15)':'rgba(27,95,250,0.08)',
