@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import type { Task, Project, Profile } from '@/types'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, dlDate, todayKey } from '@/components/shared'
 
-const AMB = 'rgba(255,176,32,0.85)'
+const AMB = '#FFB020'
 const PRIMAP: Record<string,{label:string,color:string}> = {
   urgent: {label:'ALTA',  color: RED},
   high:   {label:'MEDIA', color: AMB},
@@ -17,7 +17,7 @@ function relDate(dateStr: string) {
   if (diff < -1) return {label: new Date(d+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'}), color: RED, over: true}
   if (diff === -1) return {label: 'Ayer', color: RED, over: true}
   if (diff === 0)  return {label: 'Hoy', color: AMB, over: false}
-  if (diff === 1)  return {label: 'Mañana', color: 'rgba(255,255,255,0.45)', over: false}
+  if (diff === 1)  return {label: 'Mañana', color:'#FFFFFF', over: false}
   return {label: new Date(d+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'}), color: 'rgba(255,255,255,0.32)', over: false}
 }
 
@@ -645,7 +645,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
           {data.tasks.length>0 && !activeTask && (
             <div className="grid gap-3 mb-4" style={{gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(4,1fr)'}}>
               {[
-                {label:'PENDIENTES', value:counts.pendientes, icon:'clock',          color:'rgba(100,149,255,0.9)',  bg:'rgba(27,95,250,0.1)',   border:'rgba(27,95,250,0.18)'},
+                {label:'PENDIENTES', value:counts.pendientes, icon:'clock',          color:'#6495FF',  bg:'rgba(27,95,250,0.1)',   border:'rgba(27,95,250,0.18)'},
                 {label:'PARA HOY',   value:counts.hoy,        icon:'sun',            color:AMB,                     bg:'rgba(255,176,32,0.1)',   border:'rgba(255,176,32,0.2)'},
                 {label:'ATRASADAS',  value:counts.atrasadas,  icon:'alert-circle',   color:RED,                     bg:'rgba(229,29,42,0.1)',    border:counts.atrasadas>0?'rgba(229,29,42,0.25)':BORDER},
                 {label:'COMPLETADAS',value:counts.completadas, icon:'check-circle',  color:GRN,                     bg:'rgba(34,197,94,0.1)',   border:'rgba(34,197,94,0.18)'},
@@ -1225,7 +1225,7 @@ function KanbanBoard({ tasks, data, openTask, isMobile, showToast, initialGroupB
     })
     return [
       ...projCols,
-      { key:'none', label:'SIN PROYECTO', color:'rgba(160,160,180,0.9)', kind:'none', match:(t)=>!t.done && !t.project_id },
+      { key:'none', label:'SIN PROYECTO', color:'#A0A0B4', kind:'none', match:(t)=>!t.done && !t.project_id },
       { key:'done', label:'HECHO', color:GRN, kind:'done', match:(t)=>t.done },
     ]
   }, [groupBy, merged, data.projects])

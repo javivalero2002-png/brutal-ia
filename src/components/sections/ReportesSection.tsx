@@ -36,9 +36,9 @@ function ReportesSection({data, onNavigate}: any) {
     const projectsByStatus = [
       {label:'En progreso', count:projects.filter(p=>p.status==='activo').length, color:BLU},
       {label:'Urgente', count:projects.filter(p=>p.status==='urgente').length, color:RED},
-      {label:'Revision', count:projects.filter(p=>p.status==='revisión').length, color:'rgba(255,176,32,0.8)'},
-      {label:'Planificacion', count:projects.filter(p=>p.status==='plan.').length, color:'rgba(255,255,255,0.3)'},
-      {label:'Completado', count:projects.filter(p=>p.status==='completado').length, color:'rgba(34,197,94,0.5)'},
+      {label:'Revision', count:projects.filter(p=>p.status==='revisión').length, color:'#FFB020'},
+      {label:'Planificacion', count:projects.filter(p=>p.status==='plan.').length, color:'#FFFFFF'},
+      {label:'Completado', count:projects.filter(p=>p.status==='completado').length, color:'#22C55E'},
       {label:'Atrasados', count:overdueProjects.length, color:overdueProjects.length>0?RED:'rgba(255,255,255,0.15)'},
     ]
 
@@ -63,7 +63,7 @@ function ReportesSection({data, onNavigate}: any) {
 
     const urgencyBreakdown = [
       {label:'Urgente', count:inbox.filter(m=>m.ai_urgency==='urgent').length, color:RED},
-      {label:'Alta', count:inbox.filter(m=>m.ai_urgency==='high').length, color:'rgba(255,176,32,0.8)'},
+      {label:'Alta', count:inbox.filter(m=>m.ai_urgency==='high').length, color:'#FFB020'},
       {label:'Normal', count:inbox.filter(m=>m.ai_urgency==='normal').length, color:BLU},
     ]
 
@@ -252,9 +252,9 @@ function ReportesSection({data, onNavigate}: any) {
             <div className="text-xs text-white/25 mb-3">Por fuente</div>
             <div className="flex gap-2 flex-wrap">
               {[
-                {label:'Gmail', n:inbox.filter(m=>m.source==='gmail').length, color:'rgba(27,95,250,0.8)'},
-                {label:'WhatsApp', n:inbox.filter(m=>m.source==='whatsapp').length, color:'rgba(37,211,102,0.8)'},
-                {label:'Interno', n:inbox.filter(m=>m.source==='internal').length, color:'rgba(255,176,32,0.8)'},
+                {label:'Gmail', n:inbox.filter(m=>m.source==='gmail').length, color:'#1B5FFA'},
+                {label:'WhatsApp', n:inbox.filter(m=>m.source==='whatsapp').length, color:'#25D366'},
+                {label:'Interno', n:inbox.filter(m=>m.source==='internal').length, color:'#FFB020'},
               ].filter(s=>s.n>0).map((s,i)=>(
                 <div key={i} className="flex-1 text-center px-3 py-2 rounded-xl" style={{background:s.color+'0A',border:`1px solid ${s.color}22`}}>
                   <div className="font-figtree text-[18px] font-black" style={{color:s.color}}>{s.n}</div>

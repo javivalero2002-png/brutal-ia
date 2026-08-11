@@ -188,8 +188,8 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
   const platColor: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
 
   const cols = [
-    { key:'borrador', label:'En bruto', color:'rgba(255,255,255,0.42)' },
-    { key:'pendiente', label:'En producción', color:'rgba(255,176,32,0.9)' },
+    { key:'borrador', label:'En bruto', color:'#FFFFFF' },
+    { key:'pendiente', label:'En producción', color:'#FFB020' },
     { key:'listo', label:'Listo', color:GRN },
     { key:'publicado', label:'Publicado', color:BLU },
   ]

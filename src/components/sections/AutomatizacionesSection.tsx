@@ -43,7 +43,7 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
 
   const ACTION_META: Record<string,{icon:string;color:string;label:string}> = {
     create_task:  { icon:'check-square', color:BLU, label:'Tarea creada' },
-    notify_team:  { icon:'users',        color:'rgba(167,139,250,0.9)', label:'Equipo avisado' },
+    notify_team:  { icon:'users',        color:'#A78BFA', label:'Equipo avisado' },
     notify_owner: { icon:'bell',         color:GRN, label:'Notificación' },
   }
 

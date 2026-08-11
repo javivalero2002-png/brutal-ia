@@ -680,7 +680,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
                                   {/* Priority + assignee row */}
                                   <div className="flex items-center gap-2 flex-wrap">
                                     {(()=>{
-                                      const priMap: Record<string,{label:string,color:string}> = {urgent:{label:'ALTA',color:RED},high:{label:'MEDIA',color:'rgba(255,176,32,0.9)'},normal:{label:'BAJA',color:BLU}}
+                                      const priMap: Record<string,{label:string,color:string}> = {urgent:{label:'ALTA',color:RED},high:{label:'MEDIA',color:'#FFB020'},normal:{label:'BAJA',color:BLU}}
                                       const pri = priMap[e.raw?.level] || priMap.normal
                                       return <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full" style={{color:pri.color,background:`${pri.color}15`,border:`1px solid ${pri.color}25`}}>{pri.label}</span>
                                     })()}

@@ -317,10 +317,10 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
               {/* Live stats strip */}
               <div className="flex items-center gap-0 rounded-xl overflow-hidden" style={{border:`1px solid ${BORDER}`}}>
                 {[
-                  {label:'TOTAL', value:allMsgs.length, color:'rgba(255,255,255,0.4)', mobileOnly:false},
+                  {label:'TOTAL', value:allMsgs.length, color:'#FFFFFF', mobileOnly:false},
                   {label:'SIN LEER', value:unread, color: unread>0?BLU:'rgba(255,255,255,0.2)', mobileOnly:false},
                   {label:'URGENTES', value:urgent, color: urgent>0?RED:'rgba(255,255,255,0.2)', mobileOnly:false},
-                  {label:'PERSONAL', value:personalGmailCount, color:'rgba(234,67,53,0.7)', mobileOnly:true},
+                  {label:'PERSONAL', value:personalGmailCount, color:'#EA4335', mobileOnly:true},
                   {label:'COLABS', value:colabsGmailCount, color:GRN, mobileOnly:true},
                 ].filter(s=>!isMobile||!s.mobileOnly).map((s,i,arr)=>(
                   <div key={s.label} className="flex-1 flex flex-col items-center py-2" style={{borderRight:i<arr.length-1?`1px solid ${BORDER}`:'none',background:SURF2}}>
