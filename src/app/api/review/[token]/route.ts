@@ -44,9 +44,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   const prev = (existing.feedback || '').trim()
   const merged = (prev ? `${prev}\n\n` : '') + `[${stamp}] ${feedback.trim()}`
 
+  // El recorte se hace por el PRINCIPIO, no por el final. Cortando por el final,
+  // una vez lleno el campo el cliente enviaba su comentario, recibia "ok" y se
+  // perdia en silencio — justo el ultimo, que es el que importa. Asi se conserva
+  // siempre lo mas reciente y lo que se descarta es lo mas antiguo, avisando de
+  // que se ha recortado para que no parezca que el historial empieza ahi.
+  const LIMITE = 20000
+  const recortado = merged.length > LIMITE
+  const final = recortado
+    ? '[…historial antiguo recortado…]\n\n' + merged.slice(-(LIMITE - 40))
+    : merged
+
   const { error } = await admin
     .from('content_agenda')
-    .update({ feedback: merged.slice(0, 20000) })
+    .update({ feedback: final })
     .eq('id', token)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

@@ -151,10 +151,14 @@ E += [PageBreak()]
 E += [Paragraph("PRIMER DÍA", KICK), Paragraph("Los tres pasos para empezar", H1),
       Paragraph("Quince minutos y ya lo tienes funcionando.", LEAD)]
 
-E += [Paragraph("1 · Entra en la app", H2),
-      Paragraph("Abre <b>brutalstudios-ia.vercel.app</b> y entra con el correo y la contraseña "
-                "que te ha dado Javi. Si te falla, no reintentes cinco veces: avísale.", BODY)]
+E += [Paragraph("1 · Elige tu contraseña y entra", H2),
+      Paragraph("Javi te manda un <b>enlace de acceso</b>. Ábrelo y elige ahí tu contraseña: "
+                "es la que usarás a partir de ese momento, también en el móvil. El enlace sirve "
+                "una sola vez.", BODY)]
 E += bullets([
+    "A partir de ahí entras en <b>brutalstudios-ia.vercel.app</b> con tu correo y esa contraseña.",
+    "Si la olvidas, pulsa <b>¿Olvidaste tu contraseña?</b> en la pantalla de acceso. "
+    "Si no te llega el correo, pídele a Javi otro enlace: Operativa → Equipo.",
     "En el móvil, pulsa <b>Compartir → Añadir a pantalla de inicio</b>. Se instala como una app "
     "y así te llegan los avisos.",
 ])

@@ -32,7 +32,6 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
   const [contentSearch, setContentSearch] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
   const [confirmDeleteContent, setConfirmDeleteContent] = useState(false)
-  const [uploadingVideo, setUploadingVideo] = useState(false)
   const [uploadingCover, setUploadingCover] = useState(false)
   const [editCoverUrl, setEditCoverUrl] = useState('')
   const [bocetoPlatform, setBocetoPlatform] = useState<'instagram'|'linkedin'|null>(null)
@@ -65,23 +64,6 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
   const coverFileInputRef = useRef<HTMLInputElement>(null)
   const filteredAgendaRef = useRef<any[]>([])
   const contentSearchInputRef = useRef<HTMLInputElement>(null)
-  const videoFileInputRef = useRef<HTMLInputElement>(null)
-
-  const uploadVideo = async (file: File) => {
-    if (!activeItem) return
-    setUploadingVideo(true)
-    try {
-      const fd = new FormData(); fd.append('file', file)
-      const res = await fetch(`/api/agenda/${activeItem.id}/upload-video`, { method:'POST', body:fd })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error||'Error')
-      setEditVideoUrl(json.url)
-      setActiveItem((prev: any) => ({...prev, video_url: json.url}))
-      data.updateAgenda && data.updateAgenda(activeItem.id, { video_url: json.url }).catch(()=>{})
-      showToast(json.warning || 'Vídeo subido correctamente')
-    } catch (err: any) { showToast('Error: '+err.message) }
-    finally { setUploadingVideo(false) }
-  }
 
   const uploadCover = async (file: File) => {
     if (!activeItem) return
