@@ -187,8 +187,10 @@ export async function createCalendarEvent(refreshToken: string, opts: {
     start = { dateTime: `${opts.date}T${pad(h)}:${pad(m)}:00`, timeZone: 'Europe/Madrid' }
     end   = { dateTime: `${endDay.toISOString().slice(0, 10)}T${pad(Math.floor((endMin % 1440) / 60))}:${pad(endMin % 60)}:00`, timeZone: 'Europe/Madrid' }
   } else {
-    const nextDay = new Date(opts.date + 'T00:00:00')
-    nextDay.setDate(nextDay.getDate() + 1)
+    // Con la Z explicita, igual que el calculo de arriba: sin ella la fecha se
+    // interpreta en la zona del SERVIDOR y solo sale bien porque Vercel es UTC.
+    const nextDay = new Date(opts.date + 'T00:00:00Z')
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1)
     const nextDayStr = nextDay.toISOString().slice(0, 10)
     start = { date: opts.date }
     end   = { date: nextDayStr }

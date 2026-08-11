@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
 import { analyzeEmail, EmailAnalysis } from '@/lib/ai'
 import { sendPushToAll, sendPushToUser, canSendPush } from '@/lib/push'
+import { localDayKey } from '@/components/shared/helpers'
 
 const MEETING_RE = /meet\.google\.com\/[a-z-]+|zoom\.us\/j\/\d+|teams\.microsoft\.com\/l\/meetup/i
 
@@ -112,7 +113,10 @@ export async function syncColabsInbox(
       // Email con enlace de reunión → tarea con fecha (aparece en el Calendario)
       const meetingText = `${email.subject || ''} ${email.body_preview || ''}`
       if (MEETING_RE.test(meetingText)) {
-        const day = (email.received_at || new Date().toISOString()).slice(0, 10)
+        // localDayKey, no slice: `received_at` viene en UTC y cortarlo da el día
+      // UTC. Un email recibido a las 00:30 de Madrid generaba la tarea con la
+      // fecha de AYER, o sea vencida en el momento de crearse.
+      const day = localDayKey(email.received_at || Date.now())
         await admin.from('tasks').insert({
           created_by: ownerId,
           text: `Reunión: ${email.subject || email.from_name || 'sin asunto'}`,

@@ -3,6 +3,7 @@ import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
 import { analyzeEmail, EmailAnalysis } from '@/lib/ai'
 import { NextResponse } from 'next/server'
 import { sendPushToUser, sendPushToAll, canSendPush } from '@/lib/push'
+import { localDayKey } from '@/components/shared/helpers'
 
 // Hasta 20 analisis de email con Claude en secuencia: el default de Vercel se queda corto.
 export const maxDuration = 60
@@ -136,7 +137,10 @@ export async function POST() {
     // Email con enlace de reunión → tarea con fecha (aparece en el Calendario)
     const meetingText = `${email.subject || ''} ${email.body_preview || ''}`
     if (MEETING_RE.test(meetingText)) {
-      const day = (email.received_at || new Date().toISOString()).slice(0, 10)
+      // localDayKey, no slice: `received_at` viene en UTC y cortarlo da el día
+      // UTC. Un email recibido a las 00:30 de Madrid generaba la tarea con la
+      // fecha de AYER, o sea vencida en el momento de crearse.
+      const day = localDayKey(email.received_at || Date.now())
       await admin.from('tasks').insert({
         created_by: user.id,
         assigned_to: isCompanyAccount ? null : user.id,

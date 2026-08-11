@@ -92,12 +92,27 @@ describe('rutas API · el cuerpo de la petición nunca se vuelca entero en la ba
 })
 
 describe('rutas API · las fechas de negocio son de Madrid', () => {
-  // new Date().toISOString().slice(0,10) da el día UTC: a partir de las ~22:00 de
-  // Madrid salta al día siguiente. Ya costó un bug real con tareas vencidas.
+  // Cortar los 10 primeros caracteres de un ISO da el día UTC, no el de Madrid.
+  //
+  // La primera versión de esta regla solo buscaba el literal exacto
+  // `new Date().toISOString().slice(0,10)` y se le escapó
+  // `(email.received_at || new Date().toISOString()).slice(0,10)` en el sync de
+  // Gmail, que creaba las tareas de reunión con la fecha de AYER —vencidas de
+  // nacimiento— para cualquier correo llegado entre las 00:00 y las 02:00. Así
+  // que la regla mira el .slice(0,10), venga de donde venga.
+  //
+  // Un slice anclado a medianoche UTC a propósito (`...T00:00:00Z`) sí es
+  // correcto y queda exento: ahí el corte es exacto por construcción.
+  const CORTE = /\.slice\(\s*0\s*,\s*10\s*\)/g
+
   it.each(TODAS.map(f => [nombre(f), f]))('%s', (_n, f) => {
     const s = leer(f)
-    expect(/new Date\(\)\.toISOString\(\)\.slice\(0,\s*10\)/.test(s),
-      `${nombre(f)} calcula un día en UTC: usa todayKey() o localDayKey() de components/shared/helpers`).toBe(false)
+    for (const m of s.matchAll(CORTE)) {
+      const contexto = s.slice(Math.max(0, m.index! - 160), m.index!)
+      const anclado = /T00:00:00Z|dayKeyToUTC/.test(contexto)
+      expect(anclado,
+        `${nombre(f)} corta un ISO para sacar un día (.slice(0,10)) sin anclarlo a medianoche UTC: usa todayKey() o localDayKey()`).toBe(true)
+    }
   })
 })
 
