@@ -25,6 +25,7 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
   modeRef.current = mode
   const recognitionRef = useRef<any>(null)
   const convEndRef = useRef<HTMLDivElement>(null)
+  const convScrollRef = useRef<HTMLDivElement>(null)
   const harveyActionCardRef = useRef<HTMLDivElement>(null)
   // `mode` no pasa a 'recording' hasta que getUserMedia resuelve —con su diálogo
   // de permiso de por medio—, así que en esa ventana el orbe sigue en 'idle' y un
@@ -35,7 +36,14 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
   const arrancandoRef = useRef(false)
   const abriendoMicRef = useRef(false)
 
-  useEffect(() => { convEndRef.current?.scrollIntoView({behavior:'smooth'}) }, [conversation])
+  useEffect(() => {
+    const c = convScrollRef.current
+    if (!c) return
+    // Salto instantáneo, no 'smooth': la animación suave la cancela el siguiente
+    // render —y en streaming hay muchos— dejando el hilo clavado arriba. Medido:
+    // scrollTop 0 de 1465 posibles después de tres preguntas.
+    requestAnimationFrame(() => { c.scrollTop = c.scrollHeight })
+  }, [conversation])
   useEffect(() => {
     if (pendingAction && isMobile) setTimeout(() => harveyActionCardRef.current?.scrollIntoView({behavior:'smooth',block:'center'}), 150)
   }, [pendingAction, isMobile])
@@ -318,7 +326,12 @@ ${memLines2||'  sin documentos'}`
       }
       if (!aliveRef.current || run !== voiceRunRef.current) { setIsSearching(false); return }
       reply = reply.trim()
-      if (!reply) { setIsSearching(false); setMode('idle'); return }
+      if (!reply) {
+        // Respuesta vacia: antes se rendia sin decir absolutamente nada.
+        setIsSearching(false); setMode('idle')
+        setConversation(prev=>[...prev,{role:'harvey',text:'Me he quedado en blanco con eso. Prueba a preguntármelo de otra forma.',ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Madrid'})}])
+        return
+      }
 
       // Parse action command
       const actionMatch = reply.match(/\[ACCION:([^\]]+)\]/)
@@ -337,7 +350,15 @@ ${memLines2||'  sin documentos'}`
       setConversation(prev=>[...prev,{role:'harvey',text:reply,searched,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}])
       setFollowUps(generateFollowUps(userText, reply))
       await speak(reply, prefetch)
-    } catch { setIsSearching(false); setMode('idle'); showToast('Error conectando con Harvey') }
+    } catch (err: any) {
+      setIsSearching(false); setMode('idle')
+      // El aviso flotante se va en tres segundos; el mensaje se queda. Asi, tras
+      // varios intentos, se ve QUE fallo y CUANTAS veces, en vez de una columna
+      // de preguntas sin respuesta.
+      const motivo = /timeout|abort/i.test(err?.message||'') ? 'He tardado demasiado en responder.' : 'No he podido conectar.'
+      setConversation(prev=>[...prev,{role:'harvey',text:`${motivo} Vuelve a intentarlo en un momento — tu pregunta sigue aquí arriba.`,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Madrid'})}])
+      showToast('Error conectando con Harvey')
+    }
   }
 
   const transcribeAndAsk = async (blob: Blob, preText?: string) => {
@@ -686,7 +707,7 @@ ${memLines2||'  sin documentos'}`
       </div>
 
       {/* Conversation */}
-      <div className={`flex-1 overflow-y-auto ${isMobile?'px-4':'px-7'} py-4 relative z-10 flex flex-col`}>
+      <div ref={convScrollRef} className={`flex-1 overflow-y-auto ${isMobile?'px-4':'px-7'} py-4 relative z-10 flex flex-col`}>
         {/* Sin conversación, esta zona era un hueco muerto: en móvil, el 47% de la
             pantalla en negro entre la cabecera y las sugerencias. Es justo el sitio
             donde Harvey tiene que invitar a hablarle, así que aquí va el orbe

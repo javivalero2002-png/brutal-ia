@@ -285,7 +285,13 @@ ${memLines||'  sin documentos'}`
       }
       if (!aliveRef.current || run !== voiceRunRef.current) return
       reply = reply.trim()
-      if (!reply) { setOrbMode('idle'); return }
+      if (!reply) {
+        // Respuesta vacia: antes se rendia sin decir nada y la pantalla se quedaba
+        // igual que antes de preguntar, como si el toque no hubiera existido.
+        setOrbMode('idle')
+        setHarveyReply('Me he quedado en blanco con eso. Prueba a preguntármelo de otra forma.')
+        return
+      }
 
       const actionMatch = reply.match(/\[ACCION:([^\]]+)\]/)
       if (actionMatch) {
@@ -301,7 +307,14 @@ ${memLines||'  sin documentos'}`
 
       setHarveyReply(reply)
       await speak(reply, prefetch)
-    } catch { setOrbMode('idle'); showToast('Error con Harvey') }
+    } catch (err: any) {
+      setOrbMode('idle')
+      // El toast dura tres segundos; esto se queda en pantalla hasta la siguiente
+      // pregunta, que es lo que hace falta para saber que fallo.
+      const motivo = /timeout|abort/i.test(err?.message||'') ? 'He tardado demasiado en responder.' : 'No he podido conectar.'
+      setHarveyReply(`${motivo} Vuelve a intentarlo en un momento.`)
+      showToast('Error con Harvey')
+    }
   }
 
   const confirmHarveyAction = async () => {
