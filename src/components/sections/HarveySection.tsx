@@ -26,6 +26,14 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
   const recognitionRef = useRef<any>(null)
   const convEndRef = useRef<HTMLDivElement>(null)
   const harveyActionCardRef = useRef<HTMLDivElement>(null)
+  // `mode` no pasa a 'recording' hasta que getUserMedia resuelve —con su diálogo
+  // de permiso de por medio—, así que en esa ventana el orbe sigue en 'idle' y un
+  // segundo toque abría OTRO micrófono. La referencia al primer MediaRecorder se
+  // perdía, su stream no se cerraba nunca y el indicador rojo de grabación se
+  // quedaba encendido hasta recargar la página. Un estado de React no sirve aquí:
+  // no se actualiza a tiempo para el segundo toque. Una ref sí, es síncrona.
+  const arrancandoRef = useRef(false)
+  const abriendoMicRef = useRef(false)
 
   useEffect(() => { convEndRef.current?.scrollIntoView({behavior:'smooth'}) }, [conversation])
   useEffect(() => {
@@ -151,6 +159,16 @@ ${memLines2||'  sin documentos'}`
 
   // ÚNICA voz (Vega, servidor). Si falla, silencio + texto en pantalla;
   // jamás la voz robótica del navegador.
+  // Deja el audio de ESTA respuesta listo para el botón ESCUCHAR. Se llama por
+  // las dos salidas de speak() —la normal y la del autoplay bloqueado— porque si
+  // solo lo hace una, la otra deja el botón apuntando a la respuesta anterior.
+  const guardarAudioCompleto = (blobs: Blob[]) => {
+    if (!blobs.length) return
+    const full = URL.createObjectURL(new Blob(blobs, { type: 'audio/mpeg' }))
+    setLastAudioUrl(prev => { if (prev) URL.revokeObjectURL(prev); return full })
+    lastAudioUrlRef.current = full
+  }
+
   const speak = async (text: string, prefetch?: { text: string; promise: Promise<Response> }) => {
     if (!text?.trim()) { setMode('idle'); return }
     const run = voiceRunRef.current
@@ -202,18 +220,37 @@ ${memLines2||'  sin documentos'}`
         // Si el autoplay está bloqueado queda el botón ESCUCHAR, que reproduce
         // dentro del gesto del usuario.
         const played = await audio.play().then(() => true).catch(() => false)
-        if (!played) { setMode('idle'); URL.revokeObjectURL(url); return }
+        if (!played) {
+          URL.revokeObjectURL(url)
+          // Antes se salía aquí SIN guardar el audio, así que ESCUCHAR seguía
+          // apuntando a `lastAudioUrl` — la respuesta ANTERIOR. Pulsabas el botón
+          // esperando lo que Harvey acaba de decir y oías lo de antes, que es peor
+          // que no oír nada. Y en iOS el bloqueo de autoplay es lo normal hasta
+          // que el usuario ha interactuado con audio, o sea que este camino se
+          // recorre a diario.
+          //
+          // Los trozos que faltan ya están pedidos (van en paralelo): se recogen
+          // para que ESCUCHAR reproduzca la respuesta ENTERA, no solo la primera
+          // frase.
+          for (let j = i + 1; j < requests.length; j++) {
+            const r = await requests[j].catch(() => null)
+            if (!aliveRef.current || run !== voiceRunRef.current) break
+            if (!r?.ok) break
+            const b = await r.blob()
+            if (!b.size) break
+            blobs.push(b)
+          }
+          guardarAudioCompleto(blobs)
+          setMode('idle')
+          return
+        }
         await done
         audio.onpause = null
         URL.revokeObjectURL(url)
         if (!aliveRef.current || run !== voiceRunRef.current) return
       }
       // Audio completo para el botón ESCUCHAR
-      if (blobs.length) {
-        const full = URL.createObjectURL(new Blob(blobs, { type: 'audio/mpeg' }))
-        setLastAudioUrl(prev => { if (prev) URL.revokeObjectURL(prev); return full })
-        lastAudioUrlRef.current = full
-      }
+      guardarAudioCompleto(blobs)
       if (modeRef.current === 'speaking') setMode('idle')
     } catch { setMode('idle') }
   }
@@ -327,6 +364,8 @@ ${memLines2||'  sin documentos'}`
   }
 
   const startRecording = async () => {
+    if (arrancandoRef.current) return
+    arrancandoRef.current = true
     // Nueva consulta: invalida cualquier flujo anterior y corta la voz en curso
     voiceRunRef.current++
     stopAllVoices()
@@ -378,13 +417,19 @@ ${memLines2||'  sin documentos'}`
         if (modeRef.current==='recording') setMode('idle')
       }
       recognitionRef.current = r
-      try { r.start(); return } catch { recognitionRef.current = null }
+      try { r.start(); arrancandoRef.current = false; return } catch { recognitionRef.current = null }
     }
     // 2) Fallback: grabar + transcribir en servidor (Groq → OpenAI Whisper)
     await startMediaRecording()
+    arrancandoRef.current = false
   }
 
   const startMediaRecording = async () => {
+    // getUserMedia tarda —y en el primer uso muestra el diálogo de permiso—, así
+    // que aquí es donde de verdad se puede colar un segundo toque y abrir dos
+    // streams. El primero se perdería y su micrófono seguiría abierto.
+    if (abriendoMicRef.current) return
+    abriendoMicRef.current = true
     try {
       const stream = await navigator.mediaDevices.getUserMedia({audio:true})
       // Si el constructor de MediaRecorder lanza (mimeType no soportado en este
@@ -417,6 +462,8 @@ ${memLines2||'  sin documentos'}`
       setMode('idle')
       if (err?.name==='NotAllowedError') showToast('Permite el micrófono en el navegador')
       else showToast('Error al acceder al micrófono')
+    } finally {
+      abriendoMicRef.current = false
     }
   }
 
