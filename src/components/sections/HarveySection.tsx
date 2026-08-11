@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey } from '@/components/shared'
+import { BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel } from '@/components/shared'
 
 function HarveySection({data, profile, showToast, onNavigate, preloadMessage, onClearPreload}: any) {
   const isMobile = useIsMobile()
@@ -121,7 +121,7 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
 
     const memLines2 = ((data.memoria||[]) as any[]).slice(0,12).map((m:any)=>`  - ${m.title}${m.category?` [${m.category}]`:''}: ${(m.content||'').replace(/\s+/g,' ').slice(0,400)}`).join('\n')
 
-    return `BRUTAL STUDIOS — ${new Date().toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'})}
+    return `BRUTAL STUDIOS — ${madridDateLabel()}
 
 TAREAS: ${tasks.filter(t=>!t.done).length} pendientes | ${completedToday} completadas hoy
 URGENTES (${urgentTasks.length}): ${urgentTasks.slice(0,5).map((t:any)=>t.text).join(' · ')||'ninguna'}
@@ -564,7 +564,7 @@ ${memLines2||'  sin documentos'}`
   const urgentUnread = unreadEmails.filter((m:any)=>m.ai_urgency==='urgent')
   const quickActions = [
     ...(urgentTasks.length>0 ? [{t:`Prioriza mis ${urgentTasks.length} tareas urgentes`, icon:'zap', c:RED}] : []),
-    ...(urgentUnread.length>0 ? [{t:`Tengo ${urgentUnread.length} email(s) urgente(s), ¿qué hago?`, icon:'mail', c:RED}] : unreadEmails.length>0 ? [{t:`Resume los ${unreadEmails.length} emails sin leer`, icon:'mail', c:'rgba(234,67,53,0.8)'}] : []),
+    ...(urgentUnread.length>0 ? [{t:`Tengo ${urgentUnread.length} email${urgentUnread.length>1?'s':''} urgente${urgentUnread.length>1?'s':''}, ¿qué hago?`, icon:'mail', c:RED}] : unreadEmails.length>0 ? [{t:`Resume los ${unreadEmails.length} emails sin leer`, icon:'mail', c:'rgba(234,67,53,0.8)'}] : []),
     ...(overdueProjectsH.length>0 ? [{t:`¿Cómo recuperamos "${overdueProjectsH[0]?.name}"?`, icon:'alert-circle', c:'rgba(255,176,32,0.9)'}] : []),
     ...(todayCalEvtsH.length>0 ? [{t:`Prepárame para "${todayCalEvtsH[0]?.title}"`, icon:'calendar', c:'rgba(167,139,250,0.9)'}] : []),
     ...(urgentTasks.length===0&&urgentUnread.length===0 ? [{t:'¿Cómo está Brutal Studios hoy?', icon:'bar-chart-2', c:GRN}] : []),

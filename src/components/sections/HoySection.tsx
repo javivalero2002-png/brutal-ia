@@ -594,9 +594,9 @@ ${memLines||'  sin documentos'}`
               if (unread.length>0 && importante===0 && !focusEmail) items.push({icon:'mail',color:BLU,text:`Revisa ${unread.length} correo${unread.length>1?'s':''} sin leer`,nav:'inbox'})
               const shown = items.slice(0,5)
               const greeting = hour<13?'Buenos días':hour<20?'Buenas tardes':'Buenas noches'
-              const urgMsg = urgentTasks.length>0?`Hay ${urgentTasks.length} tarea(s) urgente(s): ${urgentTasks.slice(0,2).map((t:Task)=>t.text).join(' y ')}.`:'Sin urgencias.'
-              const inboxMsg = unreadCount>0?`${unreadCount} email(s) sin leer en el inbox.`:'Inbox al día.'
-              const calMsg = todayEvts.length>0?`Hoy tienes ${todayEvts.length} evento(s): ${todayEvts.slice(0,2).map((e:any)=>e.title).join(', ')}.`:'Sin eventos de calendario hoy.'
+              const urgMsg = urgentTasks.length>0?`Hay ${urgentTasks.length} tarea${urgentTasks.length>1?'s':''} urgente${urgentTasks.length>1?'s':''}: ${urgentTasks.slice(0,2).map((t:Task)=>t.text).join(' y ')}.`:'Sin urgencias.'
+              const inboxMsg = unreadCount>0?`${unreadCount} email${unreadCount>1?'s':''} sin leer en el inbox.`:'Inbox al día.'
+              const calMsg = todayEvts.length>0?`Hoy tienes ${todayEvts.length} evento${todayEvts.length>1?'s':''}: ${todayEvts.slice(0,2).map((e:any)=>e.title).join(', ')}.`:'Sin eventos de calendario hoy.'
               const briefQ = `${greeting}. Dame el briefing del día de Brutal Studios. ${urgMsg} ${inboxMsg} ${calMsg} ¿Cuál es el plan?`
               return (
                 <div className="animate-fadeUp rounded-3xl px-6 py-5 w-full" style={{background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,255,255,0.06)',backdropFilter:'blur(4px)'}}>
