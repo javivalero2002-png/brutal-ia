@@ -9,6 +9,25 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [aviso, setAviso] = useState('')
+  const [enviandoReset, setEnviandoReset] = useState(false)
+
+  // Sin esto, quien no sepa su contraseña depende de que el owner le genere un
+  // enlace a mano cada vez. A las cuentas nuevas les pasa siempre: se crean con
+  // una contraseña aleatoria que no conoce nadie.
+  async function recuperar() {
+    if (!email.trim()) { setError('Escribe tu email primero'); return }
+    setEnviandoReset(true); setError(''); setAviso('')
+    const supabase = createClient()
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    setEnviandoReset(false)
+    // No se distingue si el email existe o no: da igual el resultado, se responde
+    // lo mismo. Y si el envío falla, queda el enlace que genera el owner.
+    if (err) { setError('No se pudo enviar. Pídele a Javi un enlace desde Operativa → Equipo.'); return }
+    setAviso('Si ese email tiene cuenta, te llega un enlace para elegir contraseña.')
+  }
 
 
   async function handleSubmit(e: React.FormEvent) {
@@ -50,6 +69,12 @@ export default function LoginPage() {
         <div style={s.card}>
           <div style={{ fontFamily: 'Syne,sans-serif', fontSize: '17px', fontWeight: 800, color: 'white', marginBottom: '24px' }}>Acceder</div>
 
+          {aviso && (
+            <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', color: '#22c55e', fontSize: '13px', marginBottom: '16px' }}>
+              {aviso}
+            </div>
+          )}
+
           {error && (
             <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(229,29,42,0.1)', border: '1px solid rgba(229,29,42,0.25)', color: '#ff7070', fontSize: '13px', marginBottom: '16px' }}>
               {error}
@@ -88,6 +113,16 @@ export default function LoginPage() {
               {loading ? 'ENTRANDO…' : 'ENTRAR →'}
             </button>
           </form>
+
+          <button
+            type="button"
+            onClick={recuperar}
+            disabled={enviandoReset}
+            style={{ display: 'block', margin: '18px auto 0', background: 'none', border: 'none', padding: '4px 8px',
+                     color: 'rgba(240,240,248,0.42)', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
+          >
+            {enviandoReset ? 'Enviando…' : '¿Olvidaste tu contraseña?'}
+          </button>
         </div>
       </div>
     </div>

@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     const { data: linkData } = await admin.auth.admin.generateLink({
       type: 'recovery',
       email,
-      options: { redirectTo: `${appUrl}/dashboard` },
+      options: { redirectTo: `${appUrl}/reset-password` },
     })
     inviteLink = (linkData as any)?.properties?.action_link || null
   } catch { /* non-fatal */ }
@@ -115,7 +115,7 @@ export async function PATCH(request: NextRequest) {
       const { data: linkData } = await admin.auth.admin.generateLink({
         type: 'recovery',
         email,
-        options: { redirectTo: `${appUrl}/dashboard` },
+        options: { redirectTo: `${appUrl}/reset-password` },
       })
       inviteLink = (linkData as any)?.properties?.action_link || null
     } catch { /* non-fatal */ }
