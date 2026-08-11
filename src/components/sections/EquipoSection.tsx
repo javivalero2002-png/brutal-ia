@@ -560,7 +560,17 @@ function EquipoSection({data, profile, showToast}: any) {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center" style={{background:'#050510'}}>
+        // En móvil la lista ocupa el 100% del ancho; este panel se colocaba AL
+        // LADO dentro del mismo flex y empujaba 103px fuera de pantalla. Sobra
+        // en móvil: la lista ya ES la pantalla.
+        //
+        // Se oculta con `hidden md:flex` y no con isMobile a propósito. El ancho
+        // de la ventana es CSS, y resolverlo con estado de React lo hace depender
+        // de que un efecto se ejecute y de que el elemento se vuelva a pintar
+        // después — con `isMobile` el atributo style se quedaba con el valor del
+        // servidor y el panel seguía desbordando. La media query se aplica en el
+        // primer píxel pintado, sin hidratación de por medio.
+        <div className="flex-1 hidden md:flex items-center justify-center" style={{background:'#050510'}}>
           <div className="text-center">
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${BORDER}`}}><LucideIcon name="message-square" size={22} color="rgba(255,255,255,0.15)"/></div>
             <div className="font-figtree text-[16px] font-semibold text-white mb-1">Selecciona un compañero</div>

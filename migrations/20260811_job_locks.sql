@@ -35,5 +35,17 @@ alter table public.job_locks enable row level security;
 
 revoke all on public.job_locks from anon, authenticated;
 
--- Comprobación: debe devolver `job_locks | t` y ninguna política.
-select tablename, rowsecurity from pg_tables where tablename = 'job_locks';
+-- Comprobación. Debe devolver:  4 | key | true
+--
+-- Mirar solo pg_tables NO basta: prueba que la tabla existe, no que `key` sea la
+-- PRIMARY KEY — y lo que da la exclusión mutua es el 23505 del INSERT contra esa
+-- PK, no la tabla. Con `create table if not exists`, una tabla preexistente con
+-- otra forma se queda como está y el cerrojo no protegería nada.
+select
+  (select count(*) from information_schema.columns
+    where table_schema = 'public' and table_name = 'job_locks')          as columnas,
+  (select string_agg(a.attname, ',' order by a.attname)
+     from pg_constraint c
+     join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any(c.conkey)
+    where c.conrelid = 'public.job_locks'::regclass and c.contype = 'p') as clave_primaria,
+  (select rowsecurity from pg_tables where tablename = 'job_locks')      as rls;

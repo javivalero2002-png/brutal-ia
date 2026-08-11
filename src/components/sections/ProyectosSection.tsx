@@ -384,17 +384,25 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
         </div>
       </div>
       <div className="flex items-center gap-3 mb-6 flex-wrap">
-        <div className="flex items-center gap-1 p-1 rounded-2xl max-w-full" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+        {/* `max-w-full` recortaba la fila sin dejar desplazarla: en móvil el
+            último filtro ("Hecho") quedaba fuera de pantalla y era IMPOSIBLE
+            filtrar por proyectos completados. Con overflow-x-auto se alcanza
+            deslizando, igual que las pestañas de Operativa. */}
+        <div className="flex items-center gap-1 p-1 rounded-2xl max-w-full overflow-x-auto"
+             style={{background:SURFACE,border:`1px solid ${BORDER}`,scrollbarWidth:'none',WebkitOverflowScrolling:'touch' as any}}>
           {statusTabs.map(s=>{
             const cnt = s.id==='Todos' ? data.projects.length : data.projects.filter((p: Project)=>p.status===s.id).length
             return (
-            <button key={s.id} onClick={()=>setProjStatusFilter(s.id)} className="flex items-center gap-1.5 rounded-xl font-syne font-black tracking-wide transition-all" style={{padding:isMobile?'6px 8px':'8px 16px',fontSize:'9px',flex:isMobile?'1 1 0':'none',background:projStatusFilter===s.id?SURF2:'transparent',color:projStatusFilter===s.id?'rgba(255,255,255,0.9)':'rgba(240,240,248,0.28)',whiteSpace:'nowrap',justifyContent:'center'}}>
+            <button key={s.id} onClick={()=>setProjStatusFilter(s.id)} className="flex items-center gap-1.5 rounded-xl font-syne font-black tracking-wide transition-all flex-shrink-0" style={{padding:isMobile?'6px 8px':'8px 16px',fontSize:'9px',flex:isMobile?'1 1 0':'none',background:projStatusFilter===s.id?SURF2:'transparent',color:projStatusFilter===s.id?'rgba(255,255,255,0.9)':'rgba(240,240,248,0.28)',whiteSpace:'nowrap',justifyContent:'center'}}>
               {(isMobile ? s.short : s.label).toUpperCase()}
               {cnt > 0 && <span className="text-[7.5px] font-black opacity-60 ml-1">{cnt}</span>}
             </button>
           )})}
         </div>
-        <div className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2 rounded-2xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+        {/* En móvil el buscador se comprimía hasta que su texto se quedaba en
+            "Busc". `basis-full` lo baja a su propia línea; en escritorio sigue
+            compartiendo fila con los filtros. */}
+        <div className="basis-full md:basis-auto flex-1 min-w-0 flex items-center gap-2 px-3 py-2 rounded-2xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
           <LucideIcon name="search" size={12} color="rgba(255,255,255,0.2)"/>
           <input value={projSearch} onChange={e=>setProjSearch(e.target.value)} placeholder="Busca proyecto…" className="bg-transparent text-[12px] outline-none flex-1 min-w-0" style={{caretColor:BLU,color:'rgba(255,255,255,0.75)'}}/>
           {projSearch && <button onClick={()=>setProjSearch('')}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.2)"/></button>}
