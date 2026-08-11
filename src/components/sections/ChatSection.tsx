@@ -103,6 +103,20 @@ function MarkdownMsg({ text }: { text: string }) {
       flushList(`list-${i}`)
       numberedItems.push(numberedMatch[1])
     } else {
+      // Una línea en blanco DENTRO de una lista no la termina. Claude separa los
+      // puntos con línea en blanco casi siempre, y al cerrar la lista ahí cada
+      // punto acababa en su propio <ol>: los tres salían numerados «1.», «1.»,
+      // «1.». Solo se cierra si lo que viene después ya no es un punto de lista.
+      const siguienteSigueLista = trimmed === '' && (() => {
+        for (let j = i + 1; j < lines.length; j++) {
+          const t = lines[j].trimStart()
+          if (t === '') continue
+          return /^\d+\.\s/.test(t) || t.startsWith('- ') || t.startsWith('• ') || t.startsWith('* ')
+        }
+        return false
+      })()
+      if (siguienteSigueLista && (listItems.length > 0 || numberedItems.length > 0)) return
+
       flushList(`list-${i}`)
       flushNumbered(`num-${i}`)
       if (trimmed === '' || trimmed === '---') {

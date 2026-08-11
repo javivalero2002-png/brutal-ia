@@ -1,3 +1,4 @@
+import { daysBetweenKeys } from '@/components/shared/helpers'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { evaluateTrigger, isSelfFeedingRule, AUTO_MARK, type RuleConfig } from '@/lib/automations'
 
@@ -251,5 +252,37 @@ describe('límites y ventanas', () => {
     const inbox = Array.from({ length: 12 }, (_, i) => mail({ id: `m${i}`, is_read: false }))
     const out = evaluateTrigger(rule({ type: 'unread_pileup', threshold: 10 }), ctx({ inbox }))
     expect(out[0].key).toBe('pileup:2026-08-10')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('daysBetweenKeys · días naturales, no bloques de 24h', () => {
+  it('el mismo día son 0', () => {
+    expect(daysBetweenKeys('2026-08-11', '2026-08-11')).toBe(0)
+  })
+
+  it('ayer es 1 aunque hayan pasado menos de 24 horas', () => {
+    // El caso que rompía la UI: un email de ayer a las 22:00 leído a las 09:00 de
+    // hoy son 11 horas — la resta de timestamps daba 0 y ponía "HOY".
+    expect(daysBetweenKeys('2026-08-10', '2026-08-11')).toBe(1)
+  })
+
+  it('el cambio de hora no descuadra la cuenta', () => {
+    // Último domingo de octubre: la noche dura 25 horas en Madrid. Contando
+    // bloques de 24h, ese día daría 0 en vez de 1.
+    expect(daysBetweenKeys('2026-10-24', '2026-10-25')).toBe(1)
+    expect(daysBetweenKeys('2026-10-25', '2026-10-26')).toBe(1)
+    // Y el de marzo, que dura 23.
+    expect(daysBetweenKeys('2026-03-28', '2026-03-29')).toBe(1)
+  })
+
+  it('cuenta a través de meses y años', () => {
+    expect(daysBetweenKeys('2026-08-31', '2026-09-01')).toBe(1)
+    expect(daysBetweenKeys('2025-12-31', '2026-01-01')).toBe(1)
+    expect(daysBetweenKeys('2026-01-01', '2026-12-31')).toBe(364)
+  })
+
+  it('es negativo si la fecha de destino es anterior', () => {
+    expect(daysBetweenKeys('2026-08-11', '2026-08-04')).toBe(-7)
   })
 })

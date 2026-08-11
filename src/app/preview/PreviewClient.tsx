@@ -114,6 +114,25 @@ const MEMORIA = [
     created_at:iso(-60) },
 ]
 
+// Chat tambien salia vacio en el harness. La respuesta de Harvey lleva a proposito
+// una lista numerada CON linea en blanco entre items —que es como escribe Claude—
+// para poder comprobar que la numeracion no se reinicia.
+const CHAT = [
+  { id:'ch1', role:'user' as const, content:'¿Qué tengo pendiente con Nike?', created_at:iso(-0.02) },
+  { id:'ch2', role:'ai' as const, created_at:iso(-0.019), content:`Con **Nike** tienes tres cosas abiertas:
+
+1. La propuesta Q4 — el deck ejecutivo, vence hoy.
+
+2. Las stories del lanzamiento de verano, asignadas a Marco.
+
+3. El proyecto *Nike Verano 24* va por el 65% y cierra en 5 días.
+
+- El brief de campaña ya está aprobado
+- No hay emails de Nike sin responder
+
+> Lo más urgente es el deck: es lo único que vence hoy.` },
+]
+
 const CAL_EVENTS = [
   { id:'e1', title:'Reunión equipo semanal', start:day(0)+'T10:00' },
   { id:'e2', title:'Presentación Nike',      start:day(2)+'T16:30' },
@@ -178,7 +197,7 @@ export default function PreviewClient({
   const data:any = {
     loading:false, syncing:false,
     tasks, projects:PROJECTS, clients, team:TEAM, inbox, reglas,
-    agenda:AGENDA, memoria:MEMORIA, calendarEvents:CAL_EVENTS, chatMessages:[],
+    agenda:AGENDA, memoria:MEMORIA, calendarEvents:CAL_EVENTS, chatMessages:CHAT,
     createTask, updateTask, deleteTask, toggleTask,
     createRegla, updateRegla, deleteRegla, runAutomations,
     markRead, markUnread, markManyRead,

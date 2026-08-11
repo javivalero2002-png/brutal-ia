@@ -99,7 +99,9 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
     // Incluye los no leídos + los urgentes/altos recibidos HOY aunque ya se hayan
     // leído: si acabas de abrir un email importante, Harvey debe seguir sabiéndolo.
     const unreadEmails = inbox.filter((m:any)=>
-      !m.is_read || ((m.ai_urgency==='urgent'||m.ai_urgency==='high') && (m.received_at||'').slice(0,10)===todayStr)
+      // localDayKey, no slice(0,10): el ISO viene en UTC y todayStr es el dia de
+      // Madrid. De 00:00 a 02:00 no son el mismo dia y el email de hoy no contaba.
+      !m.is_read || ((m.ai_urgency==='urgent'||m.ai_urgency==='high') && localDayKey(m.received_at)===todayStr)
     ).slice(0, 8)
     const completedToday = tasks.filter(t=>t.done&&localDayKey(t.completed_at||t.updated_at||t.created_at)===todayStr).length
     const nextEvents = calEvents.filter((e:any)=>e.start>=todayStr).slice(0,5)

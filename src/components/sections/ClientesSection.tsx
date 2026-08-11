@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR} from '@/components/shared/design-tokens'
 import { useIsMobile, useBackClosable } from '@/components/shared/hooks'
-import { dlDate, dlLabel, strColor, relTime, todayKey } from '@/components/shared/helpers'
+import { dlDate, dlLabel, strColor, relTime, todayKey, localDayKey, daysBetweenKeys } from '@/components/shared/helpers'
 import { fetchWithTimeout } from '@/lib/fetch-timeout'
 import { ProgressRing } from '@/components/shared/ui'
 import LucideIcon from '@/components/shared/LucideIcon'
@@ -672,7 +672,9 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
                     const lm = clientMsgs.sort((a: any,b: any)=>new Date(b.received_at).getTime()-new Date(a.received_at).getTime())[0]
                     const unreadN = clientMsgs.filter((m: any)=>!m.is_read).length
                     if (!lm) return null
-                    const dd = Math.floor((Date.now()-new Date(lm.received_at).getTime())/86400000)
+                    // Dias naturales de Madrid, no bloques de 24h: con la resta,
+                    // un email de ayer a las 22:00 seguia diciendo 'HOY' a las 09:00.
+                    const dd = daysBetweenKeys(localDayKey(lm.received_at), todayKey())
                     return (
                       <div className="flex items-center justify-between mb-2">
                         <div className="font-syne text-[7.5px] font-black tracking-wide" style={{color:'rgba(255,255,255,0.15)'}}>ÚLTIMO CONTACTO · {dd===0?'HOY':dd===1?'AYER':`HACE ${dd}D`}</div>

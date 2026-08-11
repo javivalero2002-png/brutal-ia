@@ -29,6 +29,16 @@ export const todayKey = (): string =>
 export const localDayKey = (d: string | number | Date): string =>
   new Date(d).toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' })
 
+// Días naturales entre dos day keys (YYYY-MM-DD). Positivo si `hasta` es posterior.
+//
+// Restar timestamps y dividir entre 86400000 cuenta bloques de 24 HORAS, que no es
+// lo mismo: un email de ayer a las 22:00 daba 0 días a las 09:00 de la mañana
+// siguiente, y la UI seguía diciendo "HOY". Anclando las dos claves a medianoche
+// UTC la resta es exacta y el cambio de hora no la afecta, porque ambas se anclan
+// igual — el día ya viene resuelto en zona de Madrid por localDayKey/todayKey.
+export const daysBetweenKeys = (desde: string, hasta: string): number =>
+  Math.round((Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86400000)
+
 // Hora del día (0-23) en Madrid. `new Date().getHours()` usa la zona de QUIEN
 // ejecuta: en el servidor de Vercel es UTC y en el navegador la del usuario.
 // HoySection es la única sección con render en servidor, así que ese desajuste
