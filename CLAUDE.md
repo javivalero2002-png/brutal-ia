@@ -86,6 +86,28 @@ hex. Prioriza precisión sobre cobertura: lo que no puede resolver se lo calla.
 
 Bases hex disponibles en `design-tokens.ts`: `BLU`, `RED`, `GRN`, `AMBAR`.
 
+## El service worker sirve código viejo en desarrollo
+
+Si un cambio no aparece en el navegador pero **sí está en el HTML servido**
+(`curl localhost:3000/... | grep`), no es el dev server: es `public/sw.js`.
+Cachea `/_next/static/` con estrategia *cache-first*, y en desarrollo los nombres
+de chunk de Turbopack son **estables**, así que sirve el mismo fichero para
+siempre. Ni reiniciar el servidor, ni borrar `.next`, ni abrir una pestaña nueva
+lo arreglan — la caché vive en el navegador.
+
+```js
+// En la consola de la página, y recargar:
+(async () => {
+  for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister()
+  for (const k of await caches.keys()) await caches.delete(k)
+  location.reload()
+})()
+```
+
+Esto costó horas en una sesión: se persiguieron bugs de hidratación que ya estaban
+arreglados y se dudó de diagnósticos correctos. **La fuente de verdad es el HTML
+servido y el bundle de producción, no lo que pinta la pestaña.**
+
 ## Antes de subir
 
 ```bash

@@ -686,7 +686,36 @@ ${memLines2||'  sin documentos'}`
       </div>
 
       {/* Conversation */}
-      <div className={`flex-1 overflow-y-auto ${isMobile?'px-4':'px-7'} py-4 space-y-3 relative z-10`}>
+      <div className={`flex-1 overflow-y-auto ${isMobile?'px-4':'px-7'} py-4 relative z-10 flex flex-col`}>
+        {/* Sin conversación, esta zona era un hueco muerto: en móvil, el 47% de la
+            pantalla en negro entre la cabecera y las sugerencias. Es justo el sitio
+            donde Harvey tiene que invitar a hablarle, así que aquí va el orbe
+            grande —con espacio de sobra para su halo, que abajo no lo tiene— y una
+            sola frase que diga qué hacer. */}
+        {conversation.length === 0 && mode === 'idle' && (
+          <div className="flex-1 flex flex-col items-center justify-center text-center gap-5 py-6">
+            <button
+              onClick={handleOrb}
+              title={orbLabel.idle} aria-label="Hablar con Harvey"
+              className="relative w-[92px] h-[92px] rounded-full flex items-center justify-center transition-transform active:scale-95"
+              style={{
+                background:'rgba(27,95,250,0.08)',
+                border:`1.5px solid ${BLU}`,
+                boxShadow:`0 0 28px ${BLU}40, 0 0 64px ${BLU}18`,
+              }}>
+              {/* Latido lento: la pantalla quieta no invita a nada. */}
+              <span className="absolute inset-0 rounded-full animate-ping" style={{border:`1px solid ${BLU}30`, animationDuration:'2.8s'}}/>
+              <LucideIcon name="mic" size={30} color={BLU}/>
+            </button>
+            <div>
+              <div className="font-figtree text-[17px] font-semibold text-white mb-1.5">Pregúntame lo que sea</div>
+              <div className="text-[12.5px] leading-relaxed max-w-[250px] mx-auto" style={{color:'rgba(255,255,255,0.4)'}}>
+                Conozco tus clientes, proyectos, tareas y correo. Habla o escribe abajo.
+              </div>
+            </div>
+          </div>
+        )}
+       <div className="mt-auto space-y-3">
         {conversation.map((msg,i)=>(
           <div key={i} className={`flex items-end gap-2.5 group/hconv ${msg.role==='user'?'justify-end':'justify-start'}`}>
             {msg.role==='harvey' && (
@@ -767,6 +796,7 @@ ${memLines2||'  sin documentos'}`
           </div>
         )}
         <div ref={convEndRef}/>
+       </div>
       </div>
 
       {/* Pending action card — inline on desktop */}
@@ -822,7 +852,7 @@ ${memLines2||'  sin documentos'}`
             style={{
               background: mode==='recording'?'rgba(229,29,42,0.15)':mode==='speaking'?'rgba(27,95,250,0.15)':'rgba(27,95,250,0.08)',
               border: `1.5px solid ${MC[mode]}`,
-              boxShadow: `0 0 20px ${MC[mode]}40, 0 0 40px ${MC[mode]}15`,
+              boxShadow: isMobile ? `0 0 14px ${MC[mode]}40, 0 0 22px ${MC[mode]}12` : `0 0 20px ${MC[mode]}40, 0 0 40px ${MC[mode]}15`,
             }}>
             {/* Pulse rings for recording */}
             {mode==='recording' && [80,100].map((sz,ri)=>(
