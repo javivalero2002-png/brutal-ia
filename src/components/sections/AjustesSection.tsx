@@ -23,6 +23,7 @@ function AjustesSection({profile,data,showToast,memFilter,setMemFilter,onOpenMod
   const [confirmPwd, setConfirmPwd] = useState('')
   const [changingPwd, setChangingPwd] = useState(false)
   const changePwd = async () => {
+    if (changingPwd) return   // Enter en "confirmar" se salta el disabled del boton
     if (!currentPwd) { showToast('Introduce tu contraseña actual'); return }
     if (newPwd.length < 8) { showToast('Mínimo 8 caracteres'); return }
     if (newPwd !== confirmPwd) { showToast('Las contraseñas no coinciden'); return }

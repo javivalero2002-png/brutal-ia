@@ -86,9 +86,14 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
   const memoryClients = data.clients.filter((c: Client)=>data.memoria.some((m: any)=>m.client?.id===c.id))
   const byFilter = memFilter==='Todos' ? data.memoria : data.memoria.filter((m: any)=>m.category===memFilter)
   const byClientFilter = memClientFilter==='Todos' ? byFilter : byFilter.filter((m: any)=>m.client?.id===memClientFilter)
-  const filtered = (memSearch.trim()
+  // La copia importa: con los dos filtros en "Todos" y sin busqueda,
+  // byClientFilter ES data.memoria — el array de estado. .sort() ordena EN SITIO,
+  // asi que anclar una entrada reordenaba el array compartido y cambiaba en
+  // silencio cuales son las 12 que Harvey mete en su contexto (buildContext hace
+  // slice(0,12)) y las que ve Hoy.
+  const filtered = [...(memSearch.trim()
     ? byClientFilter.filter((m: any)=>(m.title+' '+m.content).toLowerCase().includes(memSearch.toLowerCase()))
-    : byClientFilter).sort((a: any, b: any) => {
+    : byClientFilter)].sort((a: any, b: any) => {
       const pinDiff = (pinnedIds.has(b.id)?1:0) - (pinnedIds.has(a.id)?1:0)
       if (pinDiff !== 0) return pinDiff
       if (memSort === 'az') return (a.title||'').localeCompare(b.title||'', 'es', {sensitivity:'base'})

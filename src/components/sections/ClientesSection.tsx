@@ -88,7 +88,10 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
     }
     setConfirmDeleteFile(null)
     try {
-      await fetch(`/api/clients/${selected.id}/files`, { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path }) })
+      const r = await fetch(`/api/clients/${selected.id}/files`, { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path }) })
+      // Se quitaba la fila y se decia "Archivo eliminado" pasara lo que pasara.
+      // El archivo seguia en el bucket y reaparecia al recargar la seccion.
+      if (!r.ok) { const e = await r.json().catch(()=>({} as any)); showToast(e.error || 'No se pudo eliminar el archivo'); return }
       setClientFiles(prev => (prev||[]).filter(f => f.path !== path))
       showToast('Archivo eliminado')
     } catch { showToast('Error al eliminar') }
@@ -134,11 +137,18 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
   }
 
   const postComment = async () => {
+    // El input no se vacia hasta que responde el servidor, asi que un segundo
+    // Enter mientras tanto publicaba el mismo comentario dos veces.
+    if (postingComment) return
     if (!newComment.trim() || !selected) return
     setPostingComment(true)
     try {
       const r = await fetch(`/api/clients/${selected.id}/comments`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:newComment.trim()})})
       const c = await r.json()
+      // Sin esta comprobacion el cuerpo del error se anadia al hilo como si fuera
+      // un comentario: burbuja vacia firmada por "Alguien" y el texto perdido.
+      // No se vacia el input al fallar — lo escrito se conserva.
+      if (!r.ok) { showToast(c?.error === 'Comment too long' ? 'El comentario es demasiado largo' : 'No se pudo publicar el comentario'); return }
       setComments(prev => [...(prev||[]), c])
       setNewComment('')
     } catch { showToast('Error al publicar') }
@@ -150,6 +160,10 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
     try {
       const r = await fetch(`/api/clients/${id}/ai-advice`, {method:'POST'})
       const d = await r.json()
+      // Con 429 ("Demasiadas solicitudes") o 502 ("AI no disponible") el boton
+      // pasaba de "Analizando…" a normal y no ocurria nada: parecia roto. Con
+      // varias personas usandolo a la vez, el 429 es lo mas probable.
+      if (!r.ok) { showToast(d.error || 'No se pudieron generar las recomendaciones'); return }
       setAiAdvice(d.recommendations || [])
     } catch { showToast('Error generando recomendaciones') }
     finally { setAiLoading(false) }

@@ -165,7 +165,14 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
     if (inputRef.current) { inputRef.current.style.height = 'auto' }
     setChatLoading(true)
     try { await data.sendChatMessage(txt) }
-    catch { showToast('Error enviando mensaje') }
+    catch {
+      // El input se vacia ANTES de enviar, para que la UI responda al instante.
+      // Si el envio falla habia que devolver el texto: se avisaba del error pero
+      // lo escrito ya no estaba en ningun sitio, y un mensaje largo se perdia
+      // entero.
+      showToast('Error enviando mensaje')
+      setChatInput((prev: string) => prev || txt)
+    }
     finally { setChatLoading(false) }
   }
 

@@ -57,11 +57,26 @@ function EquipoSection({data, profile, showToast}: any) {
 
   const openThread = async (member: Profile) => {
     if (member.id === profile?.id) return
+    // El panel de la derecha es una cadena: invitePanel ? … : addingMember ? … :
+    // selected ? … — así que con cualquiera de los dos primeros abiertos, hacer
+    // clic en un compañero cambiaba `selected` pero seguía viéndose el formulario.
+    // Desde fuera la app parecía no responder al clic.
+    setInvitePanel(null)
+    setAddingMember(false)
+    setInviteResult(null)
     setSelected(member)
+    // El hilo del compañero ANTERIOR seguía en pantalla mientras cargaba el nuevo,
+    // y con una respuesta lenta se quedaba pegado: parecía la conversación de
+    // quien acabas de abrir.
+    setThread([])
+    setMsgBody('')
     setLoadingThread(true)
     try {
       const r = await fetchWithTimeout(`/api/inbox/thread?withUserId=${member.id}&withName=${encodeURIComponent(member.name)}`)
-      if (!r.ok) { setThread([]); return }
+      // Un fallo de carga se pintaba igual que un hilo vacío: "Sin mensajes aún".
+      // Decir que no hay conversación cuando en realidad no se ha podido leer es
+      // peor que no decir nada — se escribe otra vez algo ya enviado.
+      if (!r.ok) { showToast('No se pudo cargar la conversación'); setThread([]); return }
       const msgs = await r.json()
       setThread(Array.isArray(msgs) ? msgs : [])
     } catch { showToast('Error al cargar conversación'); setThread([]) }
@@ -69,6 +84,9 @@ function EquipoSection({data, profile, showToast}: any) {
   }
 
   const sendMessage = async () => {
+    // ⌘↵ se salta el `disabled` del boton: pulsarlo dos veces mandaba el mensaje
+    // dos veces, y el interno le llega a la otra persona duplicado.
+    if (sending) return
     if (!selected || !msgBody.trim()) return
     setSending(true)
     try {
@@ -82,6 +100,11 @@ function EquipoSection({data, profile, showToast}: any) {
   }
 
   const addMember = async () => {
+    // Enter en el campo de email lanza esto saltandose el boton. Un segundo Enter
+    // mientras la primera alta esta en vuelo borraba de pantalla el enlace de
+    // invitacion recien generado, que es lo unico que se le puede mandar a la
+    // persona nueva.
+    if (addingLoading) return
     if (!newMemberName.trim() || !newMemberEmail.trim()) return
     setAddingLoading(true)
     try {
