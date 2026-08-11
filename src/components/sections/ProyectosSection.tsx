@@ -346,7 +346,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
     const m: Record<string,string> = {'activo':'ACTIVO','urgente':'URGENTE','plan.':'PLANIF.','revisión':'REVISIÓN','completado':'COMPLETADO'}
     return m[s] || s.toUpperCase()
   }
-  const statusColor = (s: string) => s==='urgente'?RED:s==='activo'?GRN:s==='revisión'?'rgba(167,139,250,0.9)':s==='completado'?'rgba(34,197,94,0.5)':BLU
+  const statusColor = (s: string) => s==='urgente'?RED:s==='activo'?GRN:s==='revisión'?'#A78BFA':s==='completado'?'#22C55E':BLU
   const listProjectsSorted: Project[] = (()=>{
     const baseL = filteredProjects.filter((p: Project)=>!projSearch.trim()||p.name.toLowerCase().includes(projSearch.toLowerCase())||(p.client as any)?.name?.toLowerCase().includes(projSearch.toLowerCase()))
     if (projListSort==='progress') return [...baseL].sort((a:Project,b:Project)=>b.progress-a.progress)

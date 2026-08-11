@@ -227,7 +227,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
   const matchedClient = matchClientByName(data.clients, selected?.ai_client)
   const relatedTasks = matchedClient ? data.tasks.filter((t: any) => !t.done && t.client_id===matchedClient.id).slice(0, 4) : []
 
-  const uc = (u: string) => u==='urgent'?RED:u==='high'?'rgba(255,176,32,0.9)':BLU
+  const uc = (u: string) => u==='urgent'?RED:u==='high'?AMBAR:BLU
   const ul = (u: string) => u==='urgent'?'URGENTE':u==='high'?'ALTA':'NORMAL'
 
   const tabs = [
