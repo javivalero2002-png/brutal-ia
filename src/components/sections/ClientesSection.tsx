@@ -119,7 +119,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
     const handler = (e: KeyboardEvent) => {
       if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
       if (e.key === 'Escape') { if (clientEditOpen) { setClientEditOpen(false); return } if (selected) { onSelect(null); return } }
-      if (e.key === 'n' && !selected && isOwner) { e.preventDefault(); onOpenModal('cliente') }
+      if (e.key === 'n' && !selected) { e.preventDefault(); onOpenModal('cliente') }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
@@ -194,7 +194,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
             <div>
               <div className="font-syne text-[9px] font-black tracking-widest mb-1" style={{color:'rgba(255,255,255,0.2)'}}>{(selected.industry||'').toUpperCase()}</div>
               <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>{selected.name}</h1>
-              {isOwner ? (
+              {(
                 <div className="flex items-center gap-1.5 mt-2">
                   {([{s:'Activo',c:GRN},{s:'Pausado',c:AMBAR},{s:'Archivado',c:'#FFFFFF'}] as {s:'Activo'|'Pausado'|'Archivado';c:string}[]).map(opt=>(
                     <button key={opt.s} onClick={async()=>{try{await data.updateClient(selected.id,{status:opt.s});showToast(`Estado: ${opt.s}`)}catch{showToast('Error al actualizar')}}} className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:selected.status===opt.s?opt.c+'18':'rgba(255,255,255,0.03)',border:`1px solid ${selected.status===opt.s?opt.c+'50':'rgba(255,255,255,0.08)'}`,color:selected.status===opt.s?opt.c:'#FFFFFF'}}>{opt.s.toUpperCase()}</button>
@@ -208,8 +208,6 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
                     </span>
                   )}
                 </div>
-              ) : (
-                <span className="font-syne text-[8px] font-black px-3 py-1 rounded-full mt-2 inline-block" style={{background:selected.status==='Activo'?'rgba(34,197,94,0.1)':'rgba(255,255,255,0.05)',color:selected.status==='Activo'?GRN:'rgba(255,255,255,0.3)'}}>{selected.status.toUpperCase()}</span>
               )}
             </div>
           </div>
@@ -217,13 +215,13 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
             <button onClick={()=>{ onSetMf?.({cliente:selected.name}); onOpenModal('tarea') }} className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:'rgba(27,95,250,0.08)',color:BLU,border:`1px solid rgba(27,95,250,0.18)`}}>
               <LucideIcon name="check-square" size={11} color={BLU}/>+ TAREA
             </button>
-            {isOwner && <button onClick={()=>{ onSetMf?.({cliente:selected.name}); onOpenModal('proyecto') }} className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.4)',border:`1px solid ${BORDER}`}}>
+            {<button onClick={()=>{ onSetMf?.({cliente:selected.name}); onOpenModal('proyecto') }} className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.4)',border:`1px solid ${BORDER}`}}>
               <LucideIcon name="folder-open" size={11} color="rgba(255,255,255,0.4)"/>+ PROYECTO
             </button>}
             <button onClick={()=>{ setAiAdvice(null); loadAiAdvice(selected.id) }} disabled={aiLoading} className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-50 transition-all" style={{background:`linear-gradient(135deg,rgba(139,92,246,0.3),rgba(27,95,250,0.2))`,border:`1px solid rgba(139,92,246,0.35)`}}>
               <LucideIcon name="zap" size={11} color="#A78BFA"/>{aiLoading?'Analizando…':'IA ESTRATÉGICA'}
             </button>
-            {isOwner && (
+            {(
               <button onClick={()=>{ setClientEditOpen(o=>!o); setEditRevenue(selected.revenue||''); setEditIndustry(selected.industry||''); setEditNotes(selected.notes||'') }} className="px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all" style={{color:clientEditOpen?BLU:'rgba(255,255,255,0.4)',background:clientEditOpen?'rgba(27,95,250,0.1)':'transparent',border:`1px solid ${clientEditOpen?'rgba(27,95,250,0.3)':BORDER}`}}>EDITAR</button>
             )}
             {isOwner && (
@@ -271,7 +269,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
           </div>
         )}
 
-        {clientEditOpen && isOwner && (
+        {clientEditOpen && (
           <div className="mb-8 rounded-2xl p-6" style={{background:'rgba(27,95,250,0.05)',border:'1px solid rgba(27,95,250,0.15)'}}>
             <div className="font-syne text-[8.5px] font-black tracking-widest mb-4" style={{color:'rgba(100,140,255,0.6)'}}>EDITAR CLIENTE</div>
             <div className="grid grid-cols-2 gap-4 mb-4">
@@ -279,17 +277,17 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
                 <label className="block font-syne text-[8px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>INDUSTRIA</label>
                 <input value={editIndustry} onChange={e=>setEditIndustry(e.target.value)} placeholder="Ej: Fashion · Lifestyle" className="w-full px-4 py-3 rounded-xl text-[13px] text-white placeholder-white/20 outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
               </div>
-              <div>
+              {isOwner && <div>
                 <label className="block font-syne text-[8px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>FACTURACIÓN MENSUAL</label>
                 <input value={editRevenue} onChange={e=>setEditRevenue(e.target.value)} placeholder="Ej: €12.000/mes" className="w-full px-4 py-3 rounded-xl text-[13px] text-white placeholder-white/20 outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
-              </div>
+              </div>}
             </div>
             <div className="mb-4">
               <label className="block font-syne text-[8px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>NOTAS INTERNAS</label>
               <textarea value={editNotes} onChange={e=>setEditNotes(e.target.value)} placeholder="Contexto del cliente, preferencias, acuerdos…" rows={3} className="w-full px-4 py-3 rounded-xl text-[13px] text-white placeholder-white/20 outline-none transition-all resize-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
             </div>
             <div className="flex gap-2">
-              <button onClick={async()=>{ setSavingClient(true); try { await data.updateClient(selected.id,{industry:editIndustry,revenue:editRevenue,notes:editNotes}); showToast('Cliente actualizado'); setClientEditOpen(false) } catch { showToast('Error') } finally { setSavingClient(false) } }} disabled={savingClient} className="px-5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingClient?'GUARDANDO…':'GUARDAR'}</button>
+              <button onClick={async()=>{ setSavingClient(true); try { await data.updateClient(selected.id,{industry:editIndustry,notes:editNotes,...(isOwner?{revenue:editRevenue}:{})}); showToast('Cliente actualizado'); setClientEditOpen(false) } catch { showToast('Error') } finally { setSavingClient(false) } }} disabled={savingClient} className="px-5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingClient?'GUARDANDO…':'GUARDAR'}</button>
               <button onClick={()=>setClientEditOpen(false)} className="px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-colors" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>CANCELAR</button>
             </div>
           </div>
@@ -486,7 +484,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
                       <a href={f.url} target="_blank" rel="noopener noreferrer" className={`w-7 h-7 flex items-center justify-center rounded-lg transition-opacity ${isMobile?'opacity-50':'opacity-0 group-hover:opacity-100'}`} style={{background:'rgba(27,95,250,0.1)',color:BLU}} title="Descargar">
                         <LucideIcon name="download" size={12} color={BLU}/>
                       </a>
-                      {isOwner && <button onClick={()=>deleteFile(f.path)} className={`w-7 h-7 flex items-center justify-center rounded-lg transition-opacity ${isMobile?'opacity-50':'opacity-0 group-hover:opacity-100'}`} style={{color:'rgba(229,29,42,0.5)'}} title="Eliminar">
+                      {<button onClick={()=>deleteFile(f.path)} className={`w-7 h-7 flex items-center justify-center rounded-lg transition-opacity ${isMobile?'opacity-50':'opacity-0 group-hover:opacity-100'}`} style={{color:'rgba(229,29,42,0.5)'}} title="Eliminar">
                         <LucideIcon name="trash-2" size={12} color="rgba(229,29,42,0.5)"/>
                       </button>}
                     </div>

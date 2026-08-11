@@ -954,7 +954,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
               <LucideIcon name="arrow-left" size={14}/> Tareas
             </button>
             <div className="flex items-center gap-2">
-              {isOwner&&(confirmDelete
+              {(isOwner || (!!profile?.id && activeTask?.created_by === profile.id))&&(confirmDelete
                 ?<div className="flex items-center gap-1">
                    <button onClick={async()=>{try{await data.deleteTask(activeTask.id);setActiveTask(null);showToast('Eliminada')}catch{showToast('Error')}}}
                      className="px-3 py-2 rounded-xl font-syne text-[8px] font-black" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR?</button>
