@@ -71,6 +71,21 @@ hay tests que lo protegen.
 
 ---
 
+## Colores: la opacidad se concatena, así que la base tiene que ser hex
+
+La UI genera variantes con `color + '18'`. Con hex sale `#1B5FFA18` (válido).
+Con `rgba()` sale `rgba(27,95,250,0.9)18`, y el navegador **descarta la
+declaración entera** — sin error y sin nada en consola: el elemento se pinta sin
+fondo ni borde. Ha aparecido nueve veces.
+
+`scripts/check-color-opacity.mjs` (en `prebuild`) lo detecta con el AST de
+TypeScript. **No lo reescribas con expresiones regulares**: se intentó tres veces
+y las tres fallaron con 385, 291 y 118 falsos positivos, porque en un ternario
+`cond ? BLU : 'rgba(...)'` el texto plano parece asignarle el rgba a `BLU`, que es
+hex. Prioriza precisión sobre cobertura: lo que no puede resolver se lo calla.
+
+Bases hex disponibles en `design-tokens.ts`: `BLU`, `RED`, `GRN`, `AMBAR`.
+
 ## Antes de subir
 
 ```bash
