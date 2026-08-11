@@ -758,8 +758,8 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                               {m.attachments?.length>0 && <LucideIcon name="paperclip" size={9} color="rgba(255,255,255,0.2)"/>}
                               <span className="font-syne text-[7.5px] flex-shrink-0" style={{color:'rgba(255,255,255,0.2)'}}>{relTime(m.received_at)}</span>
                             </div>
-                            <div className="font-figtree text-[12.5px] font-semibold leading-snug truncate mb-0.5" style={{color:isUnread?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.3)'}}>{m.subject||'Sin asunto'}</div>
-                            <div className="text-[9px] truncate" style={{color:m.ai_summary?'rgba(100,140,255,0.5)':'rgba(255,255,255,0.18)'}}>{m.ai_summary||m.body_preview?.slice(0,60)||'—'}</div>
+                            <div className="font-figtree text-[12.5px] font-semibold leading-snug truncate mb-0.5" style={{color:isUnread?'rgba(255,255,255,0.9)':'rgba(255,255,255,0.5)'}}>{m.subject||'Sin asunto'}</div>
+                            <div className="text-[10px] truncate" style={{color:m.ai_summary?'rgba(138,170,255,0.78)':'rgba(255,255,255,0.35)'}}>{m.ai_summary||m.body_preview?.slice(0,60)||'—'}</div>
                           </div>
                         </div>
                       </div>
