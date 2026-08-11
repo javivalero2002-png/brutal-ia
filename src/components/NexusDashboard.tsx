@@ -43,6 +43,47 @@ const HarveySection           = dyn(() => import('@/components/sections/HarveySe
 const EquipoSection           = dyn(() => import('@/components/sections/EquipoSection'))
 const ReportesSection         = dyn(() => import('@/components/sections/ReportesSection'))
 const AjustesSection          = dyn(() => import('@/components/sections/AjustesSection'))
+
+// Precarga en segundo plano de los trozos que NO se han pedido todavía.
+//
+// El code splitting abarata la primera carga, pero deja dos filos: al cambiar de
+// sección aparece "CARGANDO…", y si estás SIN CONEXIÓN una sección que nunca
+// visitaste no se puede descargar — y esto es una PWA que se abre en el metro.
+// Trayéndolos cuando la app está quieta, el cambio es instantáneo y el service
+// worker los deja cacheados (todo lo de /_next/static/ es cache-first), así que
+// después funcionan offline.
+//
+// Solo con conexión holgada: en 2G/3G o con el ahorro de datos activado, gastarle
+// a alguien su tarifa en secciones que quizá no abra no está justificado.
+const CARGADORES = [
+  () => import('@/components/sections/InboxSection'),
+  () => import('@/components/sections/TareasSection'),
+  () => import('@/components/sections/ClientesSection'),
+  () => import('@/components/sections/ProyectosSection'),
+  () => import('@/components/sections/ContenidoSection'),
+  () => import('@/components/sections/CalendarioSection'),
+  () => import('@/components/sections/MemoriaSection'),
+  () => import('@/components/sections/AutomatizacionesSection'),
+  () => import('@/components/sections/ChatSection'),
+  () => import('@/components/sections/HarveySection'),
+  () => import('@/components/sections/EquipoSection'),
+  () => import('@/components/sections/ReportesSection'),
+  () => import('@/components/sections/AjustesSection'),
+]
+
+function precargarSecciones() {
+  const con = (navigator as any).connection
+  if (con?.saveData) return
+  if (con?.effectiveType && !/4g|5g/.test(con.effectiveType)) return
+  // De uno en uno y con hueco entre medias: si se piden los 13 a la vez compiten
+  // con las llamadas a la API que la app está haciendo justo al arrancar.
+  let i = 0
+  const siguiente = () => {
+    if (i >= CARGADORES.length) return
+    CARGADORES[i++]().catch(() => {}).then(() => setTimeout(siguiente, 300))
+  }
+  siguiente()
+}
 type Section = 'hoy'|'inbox'|'tareas'|'clientes'|'proyectos'|'contenido'|'calendario'|'memoria'|'automatizaciones'|'chat'|'equipo'|'reportes'|'ajustes'|'harvey'
 
 interface Props { profile: Profile }
@@ -94,6 +135,15 @@ export default function NexusDashboard({ profile }: Props) {
     document.addEventListener('focusout', reset)
     return () => document.removeEventListener('focusout', reset)
   }, [isMobile])
+
+  // Cuando el navegador esté ocioso, trae el resto de secciones. Va aquí y no en
+  // el arranque para no competir con la carga de datos del dashboard.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !navigator.onLine) return
+    const ric = (window as any).requestIdleCallback
+    const id = ric ? ric(precargarSecciones, { timeout: 6000 }) : setTimeout(precargarSecciones, 3000)
+    return () => { const cic = (window as any).cancelIdleCallback; if (ric && cic) cic(id); else clearTimeout(id) }
+  }, [])
 
   const [offline, setOffline] = useState(false)
   useEffect(() => {

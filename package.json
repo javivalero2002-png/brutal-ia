@@ -18,7 +18,6 @@
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.46.2",
     "googleapis": "^144.0.0",
-    "lucide-react": "^0.468.0",
     "next": "^16.3.0",
     "pdfjs-dist": "^6.2.108",
     "react": "^19.0.0",

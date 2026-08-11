@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useMemo } from 'react'
 import type { Task, Project, Client, Profile } from '@/types'
-import { useIsMobile, BLU, RED, GRN, LucideIcon, dlDate, dlLabel, Donut, Gauge, AreaChart, localDayKey } from '@/components/shared'
+import { useIsMobile, BLU, RED, GRN, BORDER, LucideIcon, dlDate, dlLabel, Donut, Gauge, AreaChart, localDayKey } from '@/components/shared'
 
 function ReportesSection({data, onNavigate}: any) {
   const isMobile = useIsMobile()
@@ -39,7 +39,6 @@ function ReportesSection({data, onNavigate}: any) {
       {label:'Revisión', count:projects.filter(p=>p.status==='revisión').length, color:'#FFB020'},
       {label:'Planificación', count:projects.filter(p=>p.status==='plan.').length, color:'#FFFFFF'},
       {label:'Completado', count:projects.filter(p=>p.status==='completado').length, color:'#22C55E'},
-      {label:'Atrasados', count:overdueProjects.length, color:overdueProjects.length>0?RED:'#FFFFFF'},
     ]
 
     const weekAgoReport = new Date(); weekAgoReport.setDate(weekAgoReport.getDate()-7); weekAgoReport.setHours(0,0,0,0)
@@ -192,6 +191,18 @@ function ReportesSection({data, onNavigate}: any) {
                     <span className="font-syne text-[12px] font-black" style={{color:s.color}}>{s.count}</span>
                   </div>
                 ))}
+                {/* Fuera del donut a propósito: estar atrasado NO es un estado,
+                    es un atributo que se cruza con ellos. Metido como un segmento
+                    más, un proyecto urgente Y atrasado contaba dos veces: la
+                    leyenda sumaba 5 con el centro diciendo 4. */}
+                {overdueProjects.length > 0 && (
+                  <div className="flex items-center gap-2 pt-1.5 mt-1.5" style={{borderTop:`1px solid ${BORDER}`}}>
+                    <LucideIcon name="alert-triangle" size={10} color={RED}/>
+                    <span className="text-[11px] flex-1 truncate" style={{color:'rgba(255,255,255,0.45)'}}>
+                      {overdueProjects.length === 1 ? 'de ellos, 1 atrasado' : `de ellos, ${overdueProjects.length} atrasados`}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           )}
