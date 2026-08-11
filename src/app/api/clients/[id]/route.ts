@@ -18,7 +18,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     ? ['name','industry','status','revenue','notes','color','initials']
     : ['name','industry','status','notes','color','initials']
   const admin = ctx.admin
-  const { data, error } = await admin.from('clients').update(pick(body, allowed)).eq('id', id).select().single()
+  const cambios: Record<string, any> = pick(body, allowed)
+  // `archived_at` se deriva del estado, no se acepta del cliente: asi no puede
+  // llegar una fecha inventada por el navegador y no hay forma de que la columna
+  // y el estado se contradigan. Se sella al archivar y se limpia al reactivar.
+  if (typeof cambios.status === 'string') {
+    cambios.archived_at = cambios.status === 'Archivado' ? new Date().toISOString() : null
+  }
+  const { data, error } = await admin.from('clients').update(cambios).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }

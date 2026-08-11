@@ -199,6 +199,14 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
                   {([{s:'Activo',c:GRN},{s:'Pausado',c:AMBAR},{s:'Archivado',c:'#FFFFFF'}] as {s:'Activo'|'Pausado'|'Archivado';c:string}[]).map(opt=>(
                     <button key={opt.s} onClick={async()=>{try{await data.updateClient(selected.id,{status:opt.s});showToast(`Estado: ${opt.s}`)}catch{showToast('Error al actualizar')}}} className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:selected.status===opt.s?opt.c+'18':'rgba(255,255,255,0.03)',border:`1px solid ${selected.status===opt.s?opt.c+'50':'rgba(255,255,255,0.08)'}`,color:selected.status===opt.s?opt.c:'#FFFFFF'}}>{opt.s.toUpperCase()}</button>
                   ))}
+                  {/* Sin esto, `archived_at` seria una columna que se escribe y no
+                      lee nadie. Aqui responde a la pregunta que se hace uno al ver
+                      un cliente archivado: ¿desde cuando? */}
+                  {selected.status==='Archivado' && selected.archived_at && (
+                    <span className="font-syne text-[8px] font-black tracking-wide ml-1" style={{color:'rgba(255,255,255,0.25)'}}>
+                      DESDE {dlLabel(localDayKey(selected.archived_at))}
+                    </span>
+                  )}
                 </div>
               ) : (
                 <span className="font-syne text-[8px] font-black px-3 py-1 rounded-full mt-2 inline-block" style={{background:selected.status==='Activo'?'rgba(34,197,94,0.1)':'rgba(255,255,255,0.05)',color:selected.status==='Activo'?GRN:'rgba(255,255,255,0.3)'}}>{selected.status.toUpperCase()}</span>

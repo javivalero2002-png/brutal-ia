@@ -23,6 +23,9 @@ export interface Client {
   color: string
   initials: string
   created_at: string
+  /** Se sella al pasar a 'Archivado' y se limpia al reactivar. Lo deriva el
+   *  servidor del propio estado — el cliente nunca lo envía. */
+  archived_at?: string | null
 }
 
 export interface Project {

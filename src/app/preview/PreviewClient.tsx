@@ -52,6 +52,9 @@ const CLIENTS: Client[] = [
   { id:'c2', name:'Adidas', industry:'Deporte',  status:'Activo',  revenue:'€36.500', color:'#22c55e', initials:'AD', created_at:iso(-90) },
   { id:'c3', name:'Zara',   industry:'Moda',     status:'Activo',  revenue:'€52.000', color:'#A78BFA', initials:'ZA', created_at:iso(-60) },
   { id:'c4', name:'Mango',  industry:'Moda',     status:'Pausado', revenue:'€18.000', color:'#F59E0B', initials:'MG', created_at:iso(-30) },
+  // El filtro "Archivado" no tenia ningun cliente que mostrar, asi que ese estado
+  // —y la fecha de archivado— no se podian revisar en el harness.
+  { id:'c5', name:'Desigual', industry:'Moda',    status:'Archivado', revenue:'€9.000', color:'#EC4899', initials:'DG', created_at:iso(-400), archived_at:iso(-45) },
 ]
 
 const PROJECTS: Project[] = [
