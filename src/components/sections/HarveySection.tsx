@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel } from '@/components/shared'
+import { BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, AMBAR} from '@/components/shared'
 
 function HarveySection({data, profile, showToast, onNavigate, preloadMessage, onClearPreload}: any) {
   const isMobile = useIsMobile()
@@ -500,9 +500,21 @@ ${memLines2||'  sin documentos'}`
     finally { setConfirmingAction(false) }
   }
 
+  // React ejecuta los efectos en orden de declaración, así que este corría ANTES
+  // del de carga (justo debajo) con `conversation` todavía vacía: hacía
+  // removeItem y borraba el historial del día un instante antes de que el otro
+  // efecto intentara leerlo. Resultado: la conversación no se restauraba nunca y
+  // cada recarga empezaba de cero con el saludo.
+  //
+  // El flag lo pone el efecto de carga cuando termina. Hasta entonces aquí no se
+  // escribe nada, así que el borrado por conversación vacía solo ocurre cuando de
+  // verdad la ha vaciado alguien (el botón de reiniciar).
+  const historialCargado = useRef(false)
+
   // Save conversation to localStorage on every change (max 50KB to avoid quota errors)
   useEffect(() => {
     if (typeof window === 'undefined') return
+    if (!historialCargado.current) return
     try {
       const key = 'harvey_conv_' + todayKey()
       if (conversation.length === 0) { localStorage.removeItem(key); return }
@@ -519,7 +531,9 @@ ${memLines2||'  sin documentos'}`
   // Load persisted conversation or show greeting
   useEffect(() => {
     if (typeof window === 'undefined') return
-    // Try to restore today's conversation
+    // El flag se pone SIEMPRE al salir, por cualquiera de las tres vías: si no,
+    // el efecto de guardado quedaría inhibido para toda la sesión y no se
+    // persistiría nada de lo que se hable a partir de ahí.
     try {
       const key = 'harvey_conv_' + todayKey()
       const saved = localStorage.getItem(key)
@@ -527,10 +541,12 @@ ${memLines2||'  sin documentos'}`
         const parsed = JSON.parse(saved)
         if (Array.isArray(parsed) && parsed.length > 0) {
           setConversation(parsed)
+          historialCargado.current = true
           return
         }
       }
     } catch {}
+    historialCargado.current = true
     // No saved conv — show greeting once per day
     const SK = 'harvey_greeted_' + todayKey()
     if (sessionStorage.getItem(SK)) return
@@ -565,8 +581,8 @@ ${memLines2||'  sin documentos'}`
   const quickActions = [
     ...(urgentTasks.length>0 ? [{t:`Prioriza mis ${urgentTasks.length} tareas urgentes`, icon:'zap', c:RED}] : []),
     ...(urgentUnread.length>0 ? [{t:`Tengo ${urgentUnread.length} email${urgentUnread.length>1?'s':''} urgente${urgentUnread.length>1?'s':''}, ¿qué hago?`, icon:'mail', c:RED}] : unreadEmails.length>0 ? [{t:`Resume los ${unreadEmails.length} emails sin leer`, icon:'mail', c:'rgba(234,67,53,0.8)'}] : []),
-    ...(overdueProjectsH.length>0 ? [{t:`¿Cómo recuperamos "${overdueProjectsH[0]?.name}"?`, icon:'alert-circle', c:'rgba(255,176,32,0.9)'}] : []),
-    ...(todayCalEvtsH.length>0 ? [{t:`Prepárame para "${todayCalEvtsH[0]?.title}"`, icon:'calendar', c:'rgba(167,139,250,0.9)'}] : []),
+    ...(overdueProjectsH.length>0 ? [{t:`¿Cómo recuperamos "${overdueProjectsH[0]?.name}"?`, icon:'alert-circle', c:AMBAR}] : []),
+    ...(todayCalEvtsH.length>0 ? [{t:`Prepárame para "${todayCalEvtsH[0]?.title}"`, icon:'calendar', c:'#A78BFA'}] : []),
     ...(urgentTasks.length===0&&urgentUnread.length===0 ? [{t:'¿Cómo está Brutal Studios hoy?', icon:'bar-chart-2', c:GRN}] : []),
     ...(pipeline.length>0 ? [{t:`Crea una pieza para Instagram`, icon:'film', c:'rgba(193,53,132,0.9)'}] : []),
     {t:'Crea una tarea urgente', icon:'plus-circle', c:BLU},
@@ -603,7 +619,7 @@ ${memLines2||'  sin documentos'}`
           {([
             {v:urgentTasks.length, l:'URG', c:RED},
             {v:activeProjects.length, l:'PROJ', c:BLU},
-            {v:unreadEmails.length, l:'INBOX', c:'rgba(255,176,32,0.9)'},
+            {v:unreadEmails.length, l:'INBOX', c:AMBAR},
           ] as {v:number,l:string,c:string}[]).map((m,i)=>(
             <div key={i} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl" style={{background:m.v>0?m.c+'12':'rgba(255,255,255,0.03)',border:`1px solid ${m.v>0?m.c+'30':BORDER}`}}>
               <span className="font-figtree text-[15px] font-black leading-none" style={{color:m.v>0?m.c:'rgba(255,255,255,0.2)'}}>{m.v}</span>
@@ -710,7 +726,7 @@ ${memLines2||'  sin documentos'}`
           <div className="px-4 pb-3.5">
             <p className="font-figtree text-[14px] font-semibold mb-2" style={{color:'rgba(255,255,255,0.9)'}}>{pendingAction.text}</p>
             <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-              {pendingAction.level && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:pendingAction.level==='urgent'?`${RED}15`:pendingAction.level==='high'?'rgba(255,176,32,0.12)':`${BLU}15`,color:pendingAction.level==='urgent'?RED:pendingAction.level==='high'?'rgba(255,176,32,0.9)':BLU}}>{pendingAction.level.toUpperCase()}</span>}
+              {pendingAction.level && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:pendingAction.level==='urgent'?`${RED}15`:pendingAction.level==='high'?'rgba(255,176,32,0.12)':`${BLU}15`,color:pendingAction.level==='urgent'?RED:pendingAction.level==='high'?AMBAR:BLU}}>{pendingAction.level.toUpperCase()}</span>}
               {pendingAction.platform && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(193,53,132,0.12)',color:'rgba(193,53,132,0.9)'}}>{pendingAction.platform}</span>}
               {pendingAction.contentType && <span className="font-syne text-[7px] px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.4)'}}>{pendingAction.contentType}</span>}
               {pendingAction.clientName && <span className="font-syne text-[7px] px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.4)'}}>Cliente: {pendingAction.clientName}</span>}
@@ -818,7 +834,7 @@ ${memLines2||'  sin documentos'}`
             <div className="px-5 py-4">
               <p className="font-figtree text-[14px] font-semibold mb-2" style={{color:'rgba(255,255,255,0.9)'}}>{pendingAction.text}</p>
               <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-                {pendingAction.level && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:pendingAction.level==='urgent'?`${RED}15`:pendingAction.level==='high'?'rgba(255,176,32,0.12)':`${BLU}15`,color:pendingAction.level==='urgent'?RED:pendingAction.level==='high'?'rgba(255,176,32,0.9)':BLU}}>{pendingAction.level.toUpperCase()}</span>}
+                {pendingAction.level && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:pendingAction.level==='urgent'?`${RED}15`:pendingAction.level==='high'?'rgba(255,176,32,0.12)':`${BLU}15`,color:pendingAction.level==='urgent'?RED:pendingAction.level==='high'?AMBAR:BLU}}>{pendingAction.level.toUpperCase()}</span>}
                 {pendingAction.platform && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(193,53,132,0.12)',color:'rgba(193,53,132,0.9)'}}>{pendingAction.platform}</span>}
                 {pendingAction.contentType && <span className="font-syne text-[7px] px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.4)'}}>{pendingAction.contentType}</span>}
                 {pendingAction.clientName && <span className="font-syne text-[7px] px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.4)'}}>Cliente: {pendingAction.clientName}</span>}

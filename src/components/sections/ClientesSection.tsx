@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { BLU, RED, GRN, SURFACE, SURF2, BORDER } from '@/components/shared/design-tokens'
+import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR} from '@/components/shared/design-tokens'
 import { useIsMobile, useBackClosable } from '@/components/shared/hooks'
 import { dlDate, dlLabel, strColor, relTime, todayKey } from '@/components/shared/helpers'
 import { fetchWithTimeout } from '@/lib/fetch-timeout'
@@ -35,10 +35,20 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
 
   const selected = selectedId ? data.clients.find((c: Client)=>c.id===selectedId) : null
 
+  // Todo el estado que pertenece a UN cliente concreto se limpia aquí, no en
+  // handleBack. Del detalle se sale por tres sitios —el enlace "Todos los
+  // clientes", Escape y el gesto/botón Atrás— y los dos últimos llaman a
+  // onSelect(null) directamente. Limpiar solo en handleBack dejaba pegados los
+  // comentarios y el plan de IA del cliente anterior al abrir el siguiente: se
+  // leía el hilo de A mientras se respondía sobre B.
   useEffect(() => {
     setClientEditOpen(false)
     setConfirmDeleteClient(false)
     setClientFiles(null)
+    setComments(null)
+    setAiAdvice(null)
+    setExpandedProject(null)
+    setNewComment('')
   }, [selectedId])
 
   const loadFiles = async (id: string) => {
@@ -145,7 +155,8 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
     finally { setAiLoading(false) }
   }
 
-  const handleBack = () => { onSelect(null); setAiAdvice(null); setComments(null); setExpandedProject(null) }
+  // La limpieza la hace el efecto de [selectedId], que cubre también Escape y Atrás.
+  const handleBack = () => onSelect(null)
 
   if (selected) {
     const clientProjects = data.projects.filter((p: Project)=>p.client_id===selected.id)
@@ -171,8 +182,8 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
               <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>{selected.name}</h1>
               {isOwner ? (
                 <div className="flex items-center gap-1.5 mt-2">
-                  {([{s:'Activo',c:GRN},{s:'Pausado',c:'rgba(255,176,32,0.85)'},{s:'Archivado',c:'rgba(255,255,255,0.35)'}] as {s:'Activo'|'Pausado'|'Archivado';c:string}[]).map(opt=>(
-                    <button key={opt.s} onClick={async()=>{try{await data.updateClient(selected.id,{status:opt.s});showToast(`Estado: ${opt.s}`)}catch{showToast('Error al actualizar')}}} className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:selected.status===opt.s?opt.c+'18':'rgba(255,255,255,0.03)',border:`1px solid ${selected.status===opt.s?opt.c+'50':'rgba(255,255,255,0.08)'}`,color:selected.status===opt.s?opt.c:'rgba(255,255,255,0.3)'}}>{opt.s.toUpperCase()}</button>
+                  {([{s:'Activo',c:GRN},{s:'Pausado',c:AMBAR},{s:'Archivado',c:'#FFFFFF'}] as {s:'Activo'|'Pausado'|'Archivado';c:string}[]).map(opt=>(
+                    <button key={opt.s} onClick={async()=>{try{await data.updateClient(selected.id,{status:opt.s});showToast(`Estado: ${opt.s}`)}catch{showToast('Error al actualizar')}}} className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:selected.status===opt.s?opt.c+'18':'rgba(255,255,255,0.03)',border:`1px solid ${selected.status===opt.s?opt.c+'50':'rgba(255,255,255,0.08)'}`,color:selected.status===opt.s?opt.c:'#FFFFFF'}}>{opt.s.toUpperCase()}</button>
                   ))}
                 </div>
               ) : (
@@ -225,7 +236,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {aiAdvice.map((rec: any, i: number)=>{
-                const pc = rec.priority==='alta'?RED:rec.priority==='media'?'rgba(255,176,32,0.85)':BLU
+                const pc = rec.priority==='alta'?RED:rec.priority==='media'?AMBAR:BLU
                 return (
                   <div key={i} className="rounded-xl p-4" style={{background:'rgba(0,0,0,0.25)',borderLeft:`3px solid ${pc}60`}}>
                     <div className="font-syne text-[7px] font-black tracking-widest mb-2" style={{color:pc}}>{rec.priority.toUpperCase()}</div>
@@ -355,7 +366,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
                         <div key={t.id} className="flex items-center gap-3 py-2" style={{borderBottom:ti<Math.min(projTasks.length,6)-1?`1px solid rgba(255,255,255,0.03)`:'none'}}>
                           <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.7)':BLU}}/>
                           <span className="text-[12px] flex-1 truncate" style={{color:'rgba(255,255,255,0.5)'}}>{t.text}</span>
-                          {t.due_date && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:cIsToday?'rgba(255,176,32,0.15)':cOver?`${RED}15`:'rgba(255,255,255,0.04)',color:cIsToday?'rgba(255,176,32,0.9)':cOver?RED:'rgba(255,255,255,0.2)'}}>{cIsToday?'HOY':new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
+                          {t.due_date && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:cIsToday?'rgba(255,176,32,0.15)':cOver?`${RED}15`:'rgba(255,255,255,0.04)',color:cIsToday?AMBAR:cOver?RED:'rgba(255,255,255,0.2)'}}>{cIsToday?'HOY':new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
                         </div>
                       )})}
                       {projTasks.length===0 && <div className="py-2 text-[11px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin tareas activas</div>}
@@ -384,7 +395,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
                     const todayStr = todayKey()
                     const isToday = t.due_date.slice(0,10)===todayStr
                     const over = !isToday && new Date(t.due_date+'T23:59:59')<new Date()
-                    return <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:isToday?'rgba(255,176,32,0.15)':over?`${RED}15`:'rgba(255,255,255,0.04)',color:isToday?'rgba(255,176,32,0.9)':over?RED:'rgba(255,255,255,0.25)'}}>{isToday?'HOY':new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>
+                    return <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:isToday?'rgba(255,176,32,0.15)':over?`${RED}15`:'rgba(255,255,255,0.04)',color:isToday?AMBAR:over?RED:'rgba(255,255,255,0.25)'}}>{isToday?'HOY':new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>
                   })()}
                 </div>
               ))}
@@ -571,7 +582,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
             {clientSearch && <button onClick={()=>setClientSearch('')}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.2)"/></button>}
           </div>
           <div className="flex gap-1 p-1 rounded-2xl overflow-x-auto max-w-full" style={{background:SURFACE,border:`1px solid ${BORDER}`,scrollbarWidth:'none'}}>
-            {([{v:'Todos',c:'rgba(255,255,255,0.9)'},{v:'Activo',c:GRN},{v:'Pausado',c:'rgba(255,176,32,0.85)'},{v:'Archivado',c:'rgba(255,255,255,0.35)'}] as const).map(s=>(
+            {([{v:'Todos',c:'rgba(255,255,255,0.9)'},{v:'Activo',c:GRN},{v:'Pausado',c:AMBAR},{v:'Archivado',c:'#FFFFFF'}] as const).map(s=>(
               <button key={s.v} onClick={()=>setClientStatusFilter(s.v)} className="px-3.5 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all flex-shrink-0" style={{background:clientStatusFilter===s.v?SURF2:'transparent',color:clientStatusFilter===s.v?s.c:'rgba(255,255,255,0.28)'}}>
                 {s.v.toUpperCase()}
               </button>
