@@ -86,6 +86,13 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   const [tabFilter,      setTabFilter]      = useState<'todas'|'hoy'|'semana'|'sin_fecha'|'completadas'>('todas')
   const [assigneeFilter, setAssigneeFilter] = useState('all')
   const [projectFilter,  setProjectFilter]  = useState('all')
+  // Los tres desplegables ocupaban 148px — el bloque más alto de la cabecera en
+  // móvil. Con la altura útil real de un iPhone (622px, ya sin la cabecera de la
+  // app ni la barra de pestañas) la primera tarea caía en el píxel 810: un 130% de
+  // pantalla antes de ver una sola, en la sección que más se usa. Plegados por
+  // defecto, con aviso si alguno está activo — para que nadie crea que le faltan
+  // tareas cuando en realidad las está filtrando.
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false)
   const [priorityFilter, setPriorityFilter] = useState<'all'|'urgent'|'high'|'normal'>('all')
   const [searchText,     setSearchText]     = useState('')
   const [taskSort,       setTaskSort]       = useState<'prioridad'|'fecha'>('prioridad')
@@ -671,21 +678,26 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
 
           {/* ── STATS CARDS ────────────────────────────────────────────────── */}
           {data.tasks.length>0 && !activeTask && (
-            <div className="grid gap-3 mb-4" style={{gridTemplateColumns:isMobile?'repeat(2,1fr)':'repeat(4,1fr)'}}>
+            <div className={`grid mb-4 ${isMobile?'gap-2':'gap-3'}`} style={{gridTemplateColumns:'repeat(4,1fr)'}}>
               {[
                 {label:'PENDIENTES', value:counts.pendientes, icon:'clock',          color:'#6495FF',  bg:'rgba(27,95,250,0.1)',   border:'rgba(27,95,250,0.18)'},
                 {label:'PARA HOY',   value:counts.hoy,        icon:'sun',            color:AMB,                     bg:'rgba(255,176,32,0.1)',   border:'rgba(255,176,32,0.2)'},
                 {label:'ATRASADAS',  value:counts.atrasadas,  icon:'alert-circle',   color:RED,                     bg:'rgba(229,29,42,0.1)',    border:counts.atrasadas>0?'rgba(229,29,42,0.25)':BORDER},
                 {label:'COMPLETADAS',value:counts.completadas, icon:'check-circle',  color:GRN,                     bg:'rgba(34,197,94,0.1)',   border:'rgba(34,197,94,0.18)'},
               ].map(s=>(
-                <div key={s.label} className="flex items-center gap-3 px-4 py-4 rounded-2xl transition-all"
+                <div key={s.label}
+                  className={`rounded-2xl transition-all ${isMobile?'flex flex-col items-center justify-center px-1 py-2.5':'flex items-center gap-3 px-4 py-4'}`}
                   style={{background:SURFACE,border:`1px solid ${s.border}`}}>
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:s.bg}}>
-                    <LucideIcon name={s.icon as any} size={18} color={s.color}/>
-                  </div>
-                  <div>
-                    <div className="font-figtree font-black leading-none text-white" style={{fontSize:isMobile?'26px':'28px'}}>{s.value}</div>
-                    <div className="font-syne text-[7px] font-black tracking-widest mt-1" style={{color:'rgba(255,255,255,0.25)'}}>{s.label}</div>
+                  {/* Sin icono en móvil: ocupaba 40px por tarjeta y la cifra ya va
+                      en su color, así que no añadía información. */}
+                  {!isMobile && (
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:s.bg}}>
+                      <LucideIcon name={s.icon as any} size={18} color={s.color}/>
+                    </div>
+                  )}
+                  <div className={isMobile?'text-center':''}>
+                    <div className="font-figtree font-black leading-none" style={{fontSize:isMobile?'20px':'28px',color:isMobile?s.color:'#fff'}}>{s.value}</div>
+                    <div className="font-syne font-black tracking-widest mt-1" style={{fontSize:isMobile?'6px':'7px',color:'rgba(255,255,255,0.28)'}}>{s.label}</div>
                   </div>
                 </div>
               ))}
@@ -836,6 +848,18 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                 </button>
                 <button onClick={exportCSV} className="flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0" style={{background:SURF2,border:`1px solid ${BORDER}`}} aria-label="Descargar"><LucideIcon name="download" size={14} color="rgba(255,255,255,0.4)"/></button>
               </div>
+              {(() => {
+                const activos = [assigneeFilter, projectFilter, priorityFilter].filter(v => v !== 'all').length
+                return (
+                  <button onClick={()=>setFiltrosAbiertos(o=>!o)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-widest"
+                    style={{background:SURF2,border:`1px solid ${activos?BLU+'55':BORDER}`,color:activos?'#7aa5ff':'rgba(255,255,255,0.45)'}}>
+                    <LucideIcon name="sliders-horizontal" size={11} color={activos?BLU:'rgba(255,255,255,0.35)'}/>
+                    FILTROS{activos?` · ${activos}`:''}
+                  </button>
+                )
+              })()}
+              {filtrosAbiertos && (<>
               <select value={assigneeFilter} onChange={e=>setAssigneeFilter(e.target.value)}
                 className="px-3 py-2 rounded-xl text-[11.5px] text-white outline-none" style={{background:SURF2,border:`1px solid ${assigneeFilter!=='all'?BLU+'50':BORDER}`,colorScheme:'dark',flex:'1 1 auto',minWidth:0}}>
                 <option value="all">Responsable</option>
@@ -853,6 +877,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                 <option value="high">Media</option>
                 <option value="normal">Baja</option>
               </select>
+              </>)}
             </div>
           )}
         </div>
