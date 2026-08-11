@@ -83,8 +83,21 @@ export async function POST() {
     .in('gmail_id', gmailIds)
   const known = new Set((existingRows || []).map((r: { gmail_id: string }) => r.gmail_id))
 
+  // Presupuesto de tiempo. Cada email nuevo cuesta una llamada a Claude, y en el
+  // plan Hobby la funcion se MATA a los 60s: sin margen, el corte llegaba a mitad
+  // del bucle y se perdia todo lo de despues — sobre todo la notificacion push de
+  // los emails nuevos, que es justo el aviso por el que existe el cron.
+  //
+  // Al agotarse se sale limpiamente: lo insertado queda guardado, el push se
+  // envia, y los emails que faltan los recoge la ejecucion de la hora siguiente
+  // (el bucle salta los gmail_id ya conocidos, asi que no se repite trabajo).
+  const T0 = Date.now()
+  const PRESUPUESTO_MS = 45_000
+  let truncado = false
+
   for (const email of emails) {
     if (known.has(email.gmail_id)) continue
+    if (Date.now() - T0 > PRESUPUESTO_MS) { truncado = true; break }
 
     let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
     try {
@@ -154,6 +167,8 @@ export async function POST() {
     if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgency: analysis.urgency })
     newCount++
   }
+
+  if (truncado) console.warn('[sync] presupuesto de tiempo agotado: el resto de emails se procesará en la siguiente ejecución')
 
   // Notificación push por los emails nuevos sin leer (con rate-limit de 90s para evitar duplicados)
   if (newUnread.length > 0) {

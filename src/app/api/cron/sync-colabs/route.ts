@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { syncColabsInbox, syncPersonalInbox } from '@/lib/colabsSync'
 import { runAutomations } from '@/lib/automations'
+import { madridHour } from '@/components/shared/helpers'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Analizar varios buzones con IA puede superar los 10s por defecto
@@ -25,6 +26,22 @@ export async function GET(request: NextRequest) {
   }
 
   const admin = await createAdminClient()
+
+  // Presupuesto de tiempo para TODA la ejecución.
+  //
+  // El cron hace en serie: buzón compartido → los buzones personales de todo el
+  // equipo → motor de automatizaciones → purga de retención. Cada email nuevo
+  // cuesta una llamada a Claude, y en el plan Hobby la función se MATA a los 60s.
+  // Con 7 personas con Gmail conectado, los buzones podían comerse el tiempo
+  // entero y dejar sin ejecutar el motor — que es justo lo que crea tareas y
+  // avisa al equipo. Y sin ninguna señal: la ejecución simplemente moría.
+  //
+  // Se reserva margen para la cola. Si los buzones agotan lo suyo, se paran y el
+  // motor se ejecuta igual; los buzones que falten van en la siguiente hora.
+  const T0 = Date.now()
+  const PARA_BUZONES_MS = 38_000
+  const quedaTiempo = () => Date.now() - T0 < PARA_BUZONES_MS
+  const pendientes: string[] = []
 
   // Estados que NO son fallos: el buzón simplemente no está conectado. Tratarlos
   // como error dejaría el cron en rojo permanente en un estudio que aún no ha
@@ -55,7 +72,20 @@ export async function GET(request: NextRequest) {
     outcomes.push({ mailbox: 'profiles', ok: false, error: profilesError.message, terminal: true })
   }
 
-  for (const p of profiles || []) record(p.id, await syncPersonalInbox(admin, p))
+  // Se empieza por una posición distinta cada hora. Recorriendo siempre en el
+  // mismo orden, si el tiempo se agota son SIEMPRE los mismos últimos perfiles los
+  // que se quedan sin sincronizar — para ellos el cron no existiría. Rotando, en
+  // 24 ejecuciones le toca a todo el mundo.
+  const lista = profiles || []
+  const inicio = lista.length ? madridHour() % lista.length : 0
+  for (let i = 0; i < lista.length; i++) {
+    const p = lista[(inicio + i) % lista.length]
+    if (!quedaTiempo()) { pendientes.push(p.id); continue }
+    record(p.id, await syncPersonalInbox(admin, p))
+  }
+  if (pendientes.length) {
+    console.warn(`[cron] sin tiempo para ${pendientes.length} buzón(es); se sincronizan en la siguiente ejecución`)
+  }
 
   // Motor de automatizaciones: tras sincronizar los buzones, evalúa las reglas
   // activas (crear tareas / avisar) sobre los datos ya frescos. Best-effort:
@@ -128,6 +158,9 @@ export async function GET(request: NextRequest) {
     ok: !failed,
     synced: outcomes.filter(o => o.ok).reduce((n, o) => n + (o.synced || 0), 0),
     mailboxes: outcomes,
+    // Visible desde fuera: si esto es > 0 de forma sostenida, el presupuesto se
+    // queda corto y hay que repartir los buzones en mas ejecuciones.
+    ...(pendientes.length ? { aplazados: pendientes.length } : {}),
     automations,
     ...(retention ? { retention } : {}),
   }, { status: failed ? 500 : 200 })

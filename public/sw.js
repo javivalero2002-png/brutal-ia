@@ -68,7 +68,11 @@ self.addEventListener('fetch', e => {
   // HMR de desarrollo → ignorar
   if (url.pathname.includes('webpack-hmr')) return
   // Rutas de auth → siempre red
-  if (url.pathname.startsWith('/login') || url.pathname.startsWith('/auth')) return
+  // /reset-password entra aqui tambien: es parte del flujo de acceso y nunca debe
+  // venir de cache. Sin esto caia en la rama de paginas (network-first, que ya es
+  // correcto), pero dejarlo explicito evita que un cambio futuro en esa rama lo
+  // afecte sin querer.
+  if (url.pathname.startsWith('/login') || url.pathname.startsWith('/auth') || url.pathname.startsWith('/reset-password')) return
 
   // Assets estáticos de Next.js (_next/static) → Cache-first (tienen hash inmutable)
   if (url.pathname.startsWith('/_next/static/')) {
