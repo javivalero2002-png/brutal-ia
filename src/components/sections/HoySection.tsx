@@ -27,6 +27,12 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimerRef = useRef<ReturnType<typeof setTimeout>|null>(null)
   const actionCardRef = useRef<HTMLDivElement>(null)
+  // getUserMedia tarda —y la primera vez muestra el diálogo de permiso—, y en esa
+  // ventana orbMode sigue en 'idle': un segundo toque abría OTRO micrófono, se
+  // perdía la referencia al primero y su stream se quedaba abierto hasta recargar.
+  // Va en una ref y no en estado porque el estado no se actualiza a tiempo para
+  // el segundo toque.
+  const abriendoMicRef = useRef(false)
 
   useEffect(() => {
     if (pendingAction && isMobile) actionCardRef.current?.scrollIntoView({behavior:'smooth',block:'center'})
@@ -145,17 +151,31 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
         })
         audio.src = url
         const played = await audio.play().then(() => true).catch(() => false)
-        if (!played) { setOrbMode('idle'); URL.revokeObjectURL(url); return }
+        if (!played) {
+          URL.revokeObjectURL(url)
+          // Antes se salia aqui sin guardar nada, y el boton de reproducir seguia
+          // apuntando a la respuesta ANTERIOR: le dabas esperando lo que Harvey
+          // acaba de decir y oias lo de antes. En iOS el autoplay esta bloqueado
+          // hasta que el usuario ha interactuado con audio, o sea que este camino
+          // se recorre a diario en el movil.
+          for (let j = i + 1; j < requests.length; j++) {
+            const r = await requests[j].catch(() => null)
+            if (!aliveRef.current || run !== voiceRunRef.current) break
+            if (!r?.ok) break
+            const b = await r.blob()
+            if (!b.size) break
+            blobs.push(b)
+          }
+          guardarAudio(blobs)
+          setOrbMode('idle')
+          return
+        }
         await done
         audio.onpause = null
         URL.revokeObjectURL(url)
         if (!aliveRef.current || run !== voiceRunRef.current) return
       }
-      if (blobs.length) {
-        const full = URL.createObjectURL(new Blob(blobs, { type: 'audio/mpeg' }))
-        setReplayUrl(prev => { if (prev) URL.revokeObjectURL(prev); return full })
-        replayUrlRef.current = full
-      }
+      guardarAudio(blobs)
       if (orbModeRef.current === 'speaking') setOrbMode('idle')
     } catch { setOrbMode('idle') }
   }
@@ -215,6 +235,16 @@ CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}
 DOCUMENTOS Y CONOCIMIENTO (memoria — úsalo si es relevante):
 ${memLines||'  sin documentos'}`
   }
+  // Deja el audio de ESTA respuesta listo para el botón de reproducir. Lo llaman
+  // las dos salidas —la normal y la del autoplay bloqueado—: si solo lo hiciera
+  // una, la otra dejaría el botón apuntando a la respuesta anterior.
+  const guardarAudio = (blobs: Blob[]) => {
+    if (!blobs.length) return
+    const full = URL.createObjectURL(new Blob(blobs, { type: 'audio/mpeg' }))
+    setReplayUrl(prev => { if (prev) URL.revokeObjectURL(prev); return full })
+    replayUrlRef.current = full
+  }
+
   const askHarvey = async (userMsg: string) => {
     const run = ++voiceRunRef.current
     setOrbMode('thinking')
@@ -420,6 +450,9 @@ ${memLines||'  sin documentos'}`
   }
 
   const startMediaRecording = async () => {
+    if (abriendoMicRef.current) return
+    abriendoMicRef.current = true
+    try {
     if (typeof MediaRecorder !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio:true, video:false })
@@ -447,6 +480,9 @@ ${memLines||'  sin documentos'}`
       }
     }
     showToast('Micrófono no disponible en este navegador'); setOrbMode('idle')
+    } finally {
+      abriendoMicRef.current = false
+    }
   }
 
   const startRecording = async () => {
