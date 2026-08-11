@@ -631,7 +631,17 @@ ${memLines||'  sin documentos'}`
               const focusEmail = unread.find((m:any)=>m.ai_urgency==='urgent') || unread.find((m:any)=>m.ai_urgency==='high')
               type BItem = {icon:string;color:string;text:string;nav:string}
               const items: BItem[] = []
-              if (focusEmail) items.push({icon:'mail',color:'rgba(255,176,32,0.95)',text:`Responde a ${focusEmail.from_name||'un contacto'}${focusEmail.ai_client&&focusEmail.ai_client!=='Desconocido'?' ('+focusEmail.ai_client+')':''}: ${focusEmail.subject||'propuesta'}`,nav:'inbox'})
+              if (focusEmail) {
+                // El cliente solo se añade si el nombre del remitente NO lo lleva
+                // ya. En Gmail la gente firma con su empresa —"Laura Pérez (Nike)"—
+                // y salía "Laura Pérez (Nike) (Nike)" en lo primero que se lee cada
+                // mañana.
+                const quien = focusEmail.from_name || 'un contacto'
+                const cli = focusEmail.ai_client
+                const yaLoDice = !!cli && quien.toLowerCase().includes(cli.toLowerCase())
+                const sufijo = cli && cli !== 'Desconocido' && !yaLoDice ? ` (${cli})` : ''
+                items.push({icon:'mail',color:'rgba(255,176,32,0.95)',text:`Responde a ${quien}${sufijo}: ${focusEmail.subject||'propuesta'}`,nav:'inbox'})
+              }
               if (urgentTasks.length>0) items.push({icon:'alert-triangle',color:RED,text:`${urgentTasks.length} tarea${urgentTasks.length>1?'s':''} urgente${urgentTasks.length>1?'s':''} por cerrar: ${urgentTasks[0].text}`,nav:'tareas'})
               if (dueTodayTasks.length>0) items.push({icon:'clock',color:'rgba(255,176,32,0.95)',text:`${dueTodayTasks.length} tarea${dueTodayTasks.length>1?'s':''} vence${dueTodayTasks.length>1?'n':''} hoy: ${dueTodayTasks[0].text}`,nav:'tareas'})
               if (importante>0 && !focusEmail) items.push({icon:'mail',color:'rgba(255,176,32,0.95)',text:`${importante} correo${importante>1?'s':''} importante${importante>1?'s':''} esperan respuesta`,nav:'inbox'})
@@ -665,7 +675,7 @@ ${memLines||'  sin documentos'}`
                         <button key={i} onClick={()=>onNavigate?.(it.nav)}
                           className="flex items-center gap-3 py-2.5 text-left transition-all hover:opacity-80 active:scale-[0.99]">
                           <LucideIcon name={it.icon} size={16} color={it.color}/>
-                          <span className="font-figtree flex-1 truncate" style={{fontSize:'14px',color:'rgba(255,255,255,0.66)'}}>{it.text}</span>
+                          <span className="font-figtree flex-1 min-w-0" style={{fontSize:'14px',color:'rgba(255,255,255,0.66)',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',lineHeight:1.35}}>{it.text}</span>
                           <LucideIcon name="chevron-right" size={13} color="rgba(255,255,255,0.14)"/>
                         </button>
                       ))}
