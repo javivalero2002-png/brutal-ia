@@ -65,16 +65,21 @@ function SincronizacionSection({data, profile, showToast}: any) {
     // Solo mostramos "cargando" si NO teníamos ya un estado cacheado (evita el parpadeo)
     if (!gmailStatus) setLoadingGmail(true)
     fetch('/api/gmail/status')
-      .then(r=>r.json())
+      .then(r => { if (!r.ok) throw new Error('estado'); return r.json() })
       .then(s => { setGmailStatus(s); try { localStorage.setItem(GMAIL_STATUS_LS, JSON.stringify(s)) } catch {} })
+      // Se conserva el ultimo estado conocido: pintar "no conectado" porque fallo
+      // la CONSULTA hace que alguien reconecte Gmail sin ninguna necesidad.
       .catch(()=>setGmailStatus((prev: any) => prev || {connected:false}))
       .finally(()=>setLoadingGmail(false))
   }
 
   const reloadTeam = () => {
     fetch('/api/gmail/team-status')
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error('estado'); return r.json() })
       .then(res => setTeamMembers(res.members || []))
+      // Silencioso a proposito: es informacion secundaria y ya hay un aviso por el
+      // estado propio. Lo que NO se hace es vaciar la lista, que se leeria como
+      // "nadie del equipo tiene Gmail conectado".
       .catch(() => {})
   }
 

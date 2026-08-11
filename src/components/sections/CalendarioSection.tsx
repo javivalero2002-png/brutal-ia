@@ -41,8 +41,12 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
         else if (r?.ok === false) showToast('No se pudo sincronizar el calendario')
         else showToast('Calendario sincronizado')
       } else {
-        const res = await fetch('/api/calendar/events').then(r=>r.json())
+        const rEv = await fetch('/api/calendar/events')
+        const res = await rEv.json()
         if (res?.__error === 'no_scope') { showToast('Sin permisos de calendario — reconecta Gmail Personal'); return }
+        // Sin esto el mensaje era "0 eventos de Google Calendar": suena a que no
+        // tienes ninguno, no a que no se pudieron leer.
+        if (!rEv.ok) { showToast(res?.error || 'No se pudieron leer los eventos de Google Calendar'); return }
         const events = Array.isArray(res) ? res : []
         setCalEvents(events)
         showToast(`${events.length} eventos de Google Calendar`)

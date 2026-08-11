@@ -153,11 +153,19 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
 
   useEffect(()=>{
     if (activeTask && activeTask.id !== subtasksLoaded) {
-      fetch(`/api/tasks/subtasks?taskId=${activeTask.id}`).then(r=>r.json()).then(d=>{
+      fetch(`/api/tasks/subtasks?taskId=${activeTask.id}`).then(async r=>{
+        if (!r.ok) throw new Error('carga')
+        return r.json()
+      }).then(d=>{
         setSubtasks(Array.isArray(d)?d:[])
         setSubtasksLoaded(activeTask.id)
         setStText('')
-      }).catch(()=>{ setSubtasks([]); setSubtasksLoaded(activeTask.id) })
+      }).catch(()=>{
+        // "Sin subtareas" y "no se pudieron cargar" se veian igual, y quien lo
+        // creia volvia a crearlas: subtareas duplicadas al recargar.
+        showToast('No se pudieron cargar las subtareas')
+        setSubtasks([]); setSubtasksLoaded(activeTask.id)
+      })
     }
     if (!activeTask) { setSubtasks([]); setSubtasksLoaded(null); setStText('') }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -165,10 +173,16 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
 
   useEffect(()=>{
     if (activeTask && activeTask.id !== attachLoaded) {
-      fetch(`/api/tasks/${activeTask.id}/attachments`).then(r=>r.json()).then(d=>{
+      fetch(`/api/tasks/${activeTask.id}/attachments`).then(async r=>{
+        if (!r.ok) throw new Error('carga')
+        return r.json()
+      }).then(d=>{
         setAttachments(Array.isArray(d)?d:[])
         setAttachLoaded(activeTask.id)
-      }).catch(()=>{ setAttachments([]); setAttachLoaded(activeTask.id) })
+      }).catch(()=>{
+        showToast('No se pudieron cargar los adjuntos')
+        setAttachments([]); setAttachLoaded(activeTask.id)
+      })
     }
     if (!activeTask) { setAttachments([]); setAttachLoaded(null) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -191,8 +205,12 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
     try {
       const res = await fetch('/api/tasks/subtasks', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id:st.id,done:!st.done}) })
       const updated = await res.json()
+      // Sin esta comprobacion el cuerpo del error sustituia a la subtarea en la
+      // lista: se quedaba sin texto y sin id, o sea que desaparecia de pantalla
+      // sin ningun aviso y volvia al recargar.
+      if (!res.ok) { showToast(updated?.error || 'No se pudo actualizar la subtarea'); return }
       setSubtasks(s=>s.map(x=>x.id===st.id?updated:x))
-    } catch { showToast('Error') }
+    } catch { showToast('Error al actualizar la subtarea') }
   }
 
   const deleteSubtask = async (id: string) => {
@@ -206,10 +224,15 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
     if (!activeTask) return
     setUploadProgress(0)
     try {
-      const { signedUrl, publicUrl } = await fetch('/api/pdf-upload-url', {
+      const rUrl = await fetch('/api/pdf-upload-url', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ filename: file.name, size: file.size, prefix: 'task-attachments' })
-      }).then(r=>r.json())
+      })
+      const { signedUrl, publicUrl, error: errUrl } = await rUrl.json()
+      // Sin esto, signedUrl venia undefined y el PUT se hacia contra la cadena
+      // "undefined": el fallo aparecia mucho despues y sin relacion con la causa
+      // real (fichero demasiado grande, tipo no permitido...).
+      if (!rUrl.ok || !signedUrl) { showToast(errUrl || 'No se pudo preparar la subida'); return }
       const xhr = new XMLHttpRequest()
       await new Promise<void>((resolve, reject) => {
         xhr.upload.onprogress = e => { if (e.lengthComputable) setUploadProgress(Math.round(e.loaded/e.total*100)) }
@@ -219,10 +242,15 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
         xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
         xhr.send(file)
       })
-      const att = await fetch(`/api/tasks/${activeTask.id}/attachments`, {
+      const rAtt = await fetch(`/api/tasks/${activeTask.id}/attachments`, {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ name: file.name, url: publicUrl, size: file.size, mime_type: file.type||null })
-      }).then(r=>r.json())
+      })
+      const att = await rAtt.json()
+      // El fichero ya esta subido al bucket; lo que falla aqui es registrarlo. Sin
+      // la comprobacion se anadia el objeto de error a la lista Y se decia
+      // "Archivo adjuntado": el adjunto no existia y nadie se enteraba.
+      if (!rAtt.ok) { showToast(att?.error || 'El archivo se subio pero no se pudo adjuntar'); return }
       setAttachments(a=>[...a, att])
       showToast('Archivo adjuntado')
     } catch { showToast('Error al subir el archivo') }

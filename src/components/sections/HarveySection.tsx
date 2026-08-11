@@ -354,6 +354,10 @@ ${memLines2||'  sin documentos'}`
         const res = await fetch('/api/harvey/transcribe', { method:'POST', body:form, signal:AbortSignal.timeout(30000) })
         if (!aliveRef.current || run !== voiceRunRef.current) return
         const json = await res.json()
+        // "No te escuche" es un diagnostico FALSO si lo que fallo fue el servicio
+        // de transcripcion: el usuario repite la grabacion una y otra vez creyendo
+        // que habla mal. Un fallo del servidor tiene que decirse como lo que es.
+        if (!res.ok) { setMode('idle'); showToast(json?.error || 'El servicio de transcripción falló — inténtalo en un momento'); return }
         text = (json.text||'').trim()
       }
 

@@ -133,6 +133,9 @@ function EquipoSection({data, profile, showToast}: any) {
         body: JSON.stringify({ email, action: 'regenerate_invite' }),
       })
       const json = await res.json()
+      // Sin comprobar r.ok el panel se quedaba sin enlace y sin decir por que, y
+      // ese enlace es lo unico que le puedes mandar a la persona nueva.
+      if (!res.ok) { setInvitePanel(prev => prev ? { ...prev, loading: false } : null); showToast(json?.error || 'No se pudo generar el enlace'); return }
       setInvitePanel(prev => prev ? { ...prev, link: json.inviteLink || null, loading: false } : null)
     } catch {
       setInvitePanel(prev => prev ? { ...prev, loading: false } : null)

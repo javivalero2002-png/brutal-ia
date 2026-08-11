@@ -44,10 +44,15 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   const detailPanelRef = useRef<HTMLDivElement>(null)
 
   const loadProjectExtras = useCallback(async (pid: string) => {
+    // Un fallo de carga se pintaba como "sin notas" / "sin hitos", asi que se
+    // volvian a escribir y quedaban duplicados al recargar.
+    let fallo = false
+    const pedir = (url: string) => fetch(url).then(r => { if (!r.ok) throw new Error('carga'); return r.json() }).catch(() => { fallo = true; return [] })
     const [nr, mr] = await Promise.all([
-      fetch(`/api/projects/${pid}/notes`).then(r=>r.json()).catch(()=>[]),
-      fetch(`/api/projects/${pid}/milestones`).then(r=>r.json()).catch(()=>[]),
+      pedir(`/api/projects/${pid}/notes`),
+      pedir(`/api/projects/${pid}/milestones`),
     ])
+    if (fallo) showToast('No se pudieron cargar las notas o los hitos del proyecto')
     setProjNotes(Array.isArray(nr)?nr:[])
     setMilestones(Array.isArray(mr)?mr:[])
     setNotesLoaded(pid)
@@ -306,8 +311,10 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
     try {
       const res = await fetch(`/api/projects/${selectedProject.id}/milestones`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({milestoneId:ms.id,done:!ms.done}) })
       const updated = await res.json()
+      // Mismo caso que las subtareas: el cuerpo del error sustituia al hito.
+      if (!res.ok) { showToast(updated?.error || 'No se pudo actualizar el hito'); return }
       setMilestones(m=>m.map(x=>x.id===ms.id?updated:x))
-    } catch { showToast('Error') }
+    } catch { showToast('Error al actualizar el hito') }
   }
 
   const deleteMilestone = async (msId: string) => {

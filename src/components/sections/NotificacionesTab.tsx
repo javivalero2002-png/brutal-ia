@@ -84,6 +84,10 @@ function NotificacionesTab({ showToast }: any) {
     try {
       const r = await fetch('/api/push/test', { method: 'POST' })
       const d = await r.json()
+      // Con un error del servidor, `d.sent` no existe y el mensaje decia "Sin
+      // dispositivos suscritos": un diagnostico FALSO que manda a mirar donde no
+      // es. Los dispositivos podian estar perfectamente suscritos.
+      if (!r.ok) { showToast(d?.error || 'No se pudo enviar la prueba'); return }
       showToast(d.sent > 0 ? 'Prueba enviada — debería sonar en unos segundos' : 'Sin dispositivos suscritos')
       setTimeout(loadHistory, 900)
     } catch { showToast('Error al enviar la prueba') }
