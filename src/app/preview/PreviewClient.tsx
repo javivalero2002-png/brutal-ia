@@ -6,6 +6,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { Task, Project, Client, Profile, Regla, InboxMessage } from '@/types'
 import { SectionErrorBoundary } from '@/components/shared/ErrorBoundary'
+import CreateModal from '@/components/CreateModal'
 import { BLU } from '@/components/shared/design-tokens'
 import { todayKey } from '@/components/shared/helpers'
 import HoySection from '@/components/sections/HoySection'
@@ -176,6 +177,20 @@ export default function PreviewClient({
   const [inbox, setInbox] = useState<InboxMessage[]>(INBOX)
   const [clients, setClients] = useState<Client[]>(CLIENTS)
   const [section, setSection] = useState(initialSection)
+  // CreateModal conectado de verdad: antes onOpenModal era una función vacía y
+  // este componente —por donde pasa la creación de tareas, clientes, proyectos,
+  // piezas y reglas— no se podía mirar sin credenciales.
+  const [modal, setModal] = useState<string|null>(null)
+  const [mf, setMf] = useState<Record<string,any>>({})
+  const [modalSaving, setModalSaving] = useState(false)
+  const abrirModal = useCallback((tipo: string) => { setMf({}); setModal(tipo) }, [])
+  const guardarModal = useCallback(async () => {
+    setModalSaving(true)
+    await new Promise(r => setTimeout(r, 500))   // simula la ida al servidor
+    setModalSaving(false); setModal(null)
+    setToast(`(preview) ${modal} creado`)
+  }, [modal])
+
   const [toast, setToast] = useState('')
   const [projView, setProjView] = useState<'board'|'list'>('board')
   const [projStatusFilter, setProjStatusFilter] = useState('Todos')
@@ -268,26 +283,39 @@ export default function PreviewClient({
       </div>
 
       <div className="flex-1 overflow-hidden min-h-0">
-        {section==='hoy' && <SectionErrorBoundary section="hoy"><HoySection profile={profile} data={data} urgentCount={urgentCount} unreadCount={unreadCount} onOpenModal={()=>{}} showToast={showToast} isOwner onNavigate={setSection}/></SectionErrorBoundary>}
-        {section==='tareas' && <SectionErrorBoundary section="tareas"><TareasSection data={data} onOpenModal={()=>{}} showToast={showToast} isOwner profile={profile} onNavigate={setSection} onSelectProject={()=>{}} onSelectClient={()=>{}} initialView={initialView} initialFocus={initialFocus} initialGroupBy={initialGroupBy}/></SectionErrorBoundary>}
-        {section==='automatizaciones' && <SectionErrorBoundary section="automatizaciones"><AutomatizacionesSection data={data} onOpenModal={()=>{}} showToast={showToast} isOwner/></SectionErrorBoundary>}
+        {section==='hoy' && <SectionErrorBoundary section="hoy"><HoySection profile={profile} data={data} urgentCount={urgentCount} unreadCount={unreadCount} onOpenModal={abrirModal} showToast={showToast} isOwner onNavigate={setSection}/></SectionErrorBoundary>}
+        {section==='tareas' && <SectionErrorBoundary section="tareas"><TareasSection data={data} onOpenModal={abrirModal} showToast={showToast} isOwner profile={profile} onNavigate={setSection} onSelectProject={()=>{}} onSelectClient={()=>{}} initialView={initialView} initialFocus={initialFocus} initialGroupBy={initialGroupBy}/></SectionErrorBoundary>}
+        {section==='automatizaciones' && <SectionErrorBoundary section="automatizaciones"><AutomatizacionesSection data={data} onOpenModal={abrirModal} showToast={showToast} isOwner/></SectionErrorBoundary>}
         {section==='inbox' && <SectionErrorBoundary section="inbox"><InboxSection data={data} showToast={showToast} profile={profile} onNavigate={setSection} onSelectClient={()=>{}} onAskHarvey={()=>{}}/></SectionErrorBoundary>}
         {section==='reportes' && <SectionErrorBoundary section="reportes"><ReportesSection data={data} onNavigate={setSection}/></SectionErrorBoundary>}
-        {section==='clientes' && <SectionErrorBoundary section="clientes"><ClientesSection data={data} selectedId={null} onSelect={()=>{}} onOpenModal={()=>{}} onSetMf={()=>{}} showToast={showToast} isOwner onNavigate={setSection} onSelectProject={()=>{}}/></SectionErrorBoundary>}
-        {section==='proyectos' && <SectionErrorBoundary section="proyectos"><ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={()=>{}} onSetMf={()=>{}} showToast={showToast} isOwner onNavigate={setSection} onSelectClient={()=>{}} justCreatedId={null} onJustCreatedScrolled={()=>{}}/></SectionErrorBoundary>}
-        {section==='contenido' && <SectionErrorBoundary section="contenido"><ContenidoSection data={data} onOpenModal={()=>{}} showToast={showToast} onNavigate={setSection} onSelectClient={()=>{}} profile={profile}/></SectionErrorBoundary>}
-        {section==='calendario' && <SectionErrorBoundary section="calendario"><CalendarioSection data={data} profile={profile} showToast={showToast} onOpenModal={()=>{}} onSetMf={()=>{}}/></SectionErrorBoundary>}
-        {section==='memoria' && <SectionErrorBoundary section="memoria"><MemoriaSection data={data} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={()=>{}} showToast={showToast}/></SectionErrorBoundary>}
+        {section==='clientes' && <SectionErrorBoundary section="clientes"><ClientesSection data={data} selectedId={null} onSelect={()=>{}} onOpenModal={abrirModal} onSetMf={()=>{}} showToast={showToast} isOwner onNavigate={setSection} onSelectProject={()=>{}}/></SectionErrorBoundary>}
+        {section==='proyectos' && <SectionErrorBoundary section="proyectos"><ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={abrirModal} onSetMf={()=>{}} showToast={showToast} isOwner onNavigate={setSection} onSelectClient={()=>{}} justCreatedId={null} onJustCreatedScrolled={()=>{}}/></SectionErrorBoundary>}
+        {section==='contenido' && <SectionErrorBoundary section="contenido"><ContenidoSection data={data} onOpenModal={abrirModal} showToast={showToast} onNavigate={setSection} onSelectClient={()=>{}} profile={profile}/></SectionErrorBoundary>}
+        {section==='calendario' && <SectionErrorBoundary section="calendario"><CalendarioSection data={data} profile={profile} showToast={showToast} onOpenModal={abrirModal} onSetMf={()=>{}}/></SectionErrorBoundary>}
+        {section==='memoria' && <SectionErrorBoundary section="memoria"><MemoriaSection data={data} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={abrirModal} showToast={showToast}/></SectionErrorBoundary>}
         {section==='equipo' && <SectionErrorBoundary section="equipo"><EquipoSection data={data} profile={profile} showToast={showToast}/></SectionErrorBoundary>}
         {section==='chat' && <SectionErrorBoundary section="chat"><ChatSection profile={profile} data={data} chatInput={chatInput} setChatInput={setChatInput} chatLoading={chatLoading} setChatLoading={setChatLoading} showToast={showToast} onNavigate={setSection}/></SectionErrorBoundary>}
         {section==='harvey' && <SectionErrorBoundary section="harvey"><HarveySection data={data} profile={profile} showToast={showToast} onNavigate={setSection} preloadMessage={null} onClearPreload={()=>{}}/></SectionErrorBoundary>}
-        {section==='ajustes' && <SectionErrorBoundary section="ajustes"><AjustesSection profile={profile} data={data} showToast={showToast} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={()=>{}} isOwner/></SectionErrorBoundary>}
+        {section==='ajustes' && <SectionErrorBoundary section="ajustes"><AjustesSection profile={profile} data={data} showToast={showToast} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={abrirModal} isOwner/></SectionErrorBoundary>}
       </div>
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-xl font-figtree text-[13px] z-[200]" style={{ background:'#0F0F1E', border:`1px solid ${BLU}44`, color:'white', boxShadow:'0 10px 40px rgba(0,0,0,0.5)' }}>
           {toast}
         </div>
+      )}
+
+      {modal && (
+        <CreateModal
+          modal={modal as any}
+          onClose={() => setModal(null)}
+          mf={mf}
+          setMf={setMf}
+          saving={modalSaving}
+          onSave={guardarModal}
+          team={TEAM}
+          clients={CLIENTS}
+        />
       )}
     </div>
   )
