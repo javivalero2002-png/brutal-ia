@@ -39,13 +39,21 @@ function AjustesSection({profile,data,showToast,memFilter,setMemFilter,onOpenMod
     if (!editName.trim()) return
     setSavingProfile(true)
     try {
-      const res = await fetch('/api/admin/team', {
+      // /api/profile, no /api/admin/team: esa exige owner y devolvía 403 a todo
+      // el equipo al editar su PROPIA ficha. La ruta nueva escribe solo en la
+      // fila de quien llama y no admite `role` ni `email`.
+      const res = await fetch('/api/profile', {
         method:'PATCH',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ email: profile.email, name: editName.trim(), initials: editInitials.trim().toUpperCase().slice(0,2)||editName.trim().split(' ').map((n:string)=>n[0]).join('').toUpperCase().slice(0,2), avatar_color: editAvatarColor })
+        body: JSON.stringify({ name: editName.trim(), initials: editInitials.trim().toUpperCase().slice(0,2)||editName.trim().split(' ').map((n:string)=>n[0]).join('').toUpperCase().slice(0,2), avatar_color: editAvatarColor })
       })
       if (res.ok) { showToast('Perfil actualizado — recarga para ver los cambios'); }
-      else { showToast('Error actualizando perfil') }
+      else {
+        // El motivo real ayuda mucho más que "Error": el color inválido y el
+        // nombre vacío se corrigen solos si el usuario sabe cuál es el problema.
+        const e = await res.json().catch(()=>({} as any))
+        showToast(e.error || 'Error actualizando perfil')
+      }
     } catch { showToast('Error') }
     finally { setSavingProfile(false) }
   }
