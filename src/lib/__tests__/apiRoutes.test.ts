@@ -116,6 +116,44 @@ describe('rutas API · las fechas de negocio son de Madrid', () => {
   })
 })
 
+describe('UI vs API · lo que se ofrece es lo que se permite', () => {
+  // El fallo que esto vigila ya ha pasado DOS veces:
+  //   · "Guardar perfil" en Ajustes iba a /api/admin/team (owner-only), así que
+  //     los 6 miembros veían "Error actualizando perfil" al cambiar su propio
+  //     nombre
+  //   · el menú rápido del móvil ofrecía crear una REGLA a cualquiera, con un
+  //     comentario al lado afirmando que la API ya no exigía owner. Sí lo exigía:
+  //     rellenabas el formulario entero y al guardar salía "Forbidden"
+  //
+  // La regla: si POST /api/reglas exige owner, ningún sitio de la UI puede
+  // ofrecer crear reglas sin comprobar isOwner. Se verifica el par concreto
+  // porque es el que se rompió; comprobar "toda la UI contra toda la API" en
+  // texto plano daría falsos positivos sin fin.
+  const rutaReglas = readFileSync('src/app/api/reglas/route.ts', 'utf8')
+  const dashboard = readFileSync('src/components/NexusDashboard.tsx', 'utf8')
+  const seccion = readFileSync('src/components/sections/AutomatizacionesSection.tsx', 'utf8')
+
+  const crearExigeOwner = /export async function POST[\s\S]*?role\s*!==\s*'owner'[\s\S]*?403/.test(rutaReglas)
+
+  it('POST /api/reglas sigue siendo owner-only (si cambia, revisa la UI)', () => {
+    expect(crearExigeOwner).toBe(true)
+  })
+
+  it('el menú rápido del móvil no ofrece crear reglas a un member', () => {
+    if (!crearExigeOwner) return
+    const ofreceRegla = /label:'Regla'/.test(dashboard)
+    if (!ofreceRegla) return
+    expect(/modal!=='regla'\s*\|\|\s*isOwner|isOwner\s*&&[^\n]*'regla'/.test(dashboard),
+      'NexusDashboard ofrece crear una regla sin filtrar por isOwner, pero POST /api/reglas devuelve 403 a los members').toBe(true)
+  })
+
+  it('la sección de Automatizaciones gatea crear con isOwner', () => {
+    if (!crearExigeOwner) return
+    expect(/isOwner\s*&&[\s\S]{0,400}onOpenModal\('regla'\)|e\.key === 'n' && isOwner/.test(seccion),
+      'AutomatizacionesSection ofrece crear reglas sin comprobar isOwner').toBe(true)
+  })
+})
+
 describe('rutas API · las excepciones anotadas siguen existiendo', () => {
   // Una lista de excepciones que nadie repasa acaba tapando rutas que ya no son
   // excepcionales. Si una desaparece o deja de necesitar la exención, se avisa.

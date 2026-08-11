@@ -752,10 +752,16 @@ export default function NexusDashboard({ profile }: Props) {
             <span className="font-syne text-[10px] font-black tracking-[0.25em] truncate flex-1" style={{color:'rgba(255,255,255,0.55)'}}>
               {({hoy:'HOY',inbox:'INBOX',calendario:'CALENDARIO',tareas:'TAREAS',clientes:'CLIENTES',proyectos:'PROYECTOS',contenido:'CONTENIDO',chat:'BRUTAL.IA',harvey:'HARVEY',ajustes:'OPERATIVA',memoria:'MEMORIA',equipo:'EQUIPO',reportes:'REPORTES',automatizaciones:'AUTOMATIZACIONES'} as Record<string,string>)[section] || 'BRUTAL.IA'}
             </span>
-            {/* Sin gate de owner: la API dejó de exigirlo en la CREACIÓN (solo el
-                borrado sigue siendo de dueños), y las secciones ya muestran sus
-                botones de crear a todo el mundo. Ocultarlo solo aquí dejaba a los
-                miembros —que son quienes más usan el móvil— sin acceso rápido. */}
+            {/* Sin gate de owner en el menú: tarea, cliente, proyecto y pieza los
+                puede crear cualquiera —sus rutas no miran el rol— y ocultar el
+                acceso rápido dejaba sin él a los miembros, que son quienes más
+                usan el móvil.
+                REGLA es la excepción, y va filtrada abajo: POST /api/reglas SÍ
+                exige owner. Un comentario anterior aquí afirmaba lo contrario, y
+                por creerlo se ofrecía a los miembros: rellenaban el formulario
+                entero —nombre, disparador, acción— y al guardar les salía
+                "Error: Forbidden". La sección de Automatizaciones ya gatea crear
+                con isOwner; esto era el único sitio que no. */}
             {(
               <div className="relative">
                 <button onClick={()=>setQuickCreateOpen(!quickCreateOpen)} className="w-9 h-9 flex items-center justify-center rounded-xl" style={{background:quickCreateOpen?'rgba(27,95,250,0.15)':'rgba(255,255,255,0.03)',border:`1px solid ${quickCreateOpen?'rgba(27,95,250,0.3)':BORDER}`}}>
@@ -765,7 +771,7 @@ export default function NexusDashboard({ profile }: Props) {
                   <>
                     <div className="fixed inset-0 z-40" onClick={()=>setQuickCreateOpen(false)}/>
                     <div className="absolute right-0 top-full mt-2 z-50 rounded-2xl py-2 min-w-[180px] animate-fadeUp" style={{background:'#12122A',border:`1px solid ${BORDER}`,boxShadow:'0 12px 40px rgba(0,0,0,0.6)'}}>
-                      {([{icon:'check-square',label:'Tarea',modal:'tarea'},{icon:'users',label:'Cliente',modal:'cliente'},{icon:'folder-open',label:'Proyecto',modal:'proyecto'},{icon:'film',label:'Pieza',modal:'contenido'},{icon:'zap',label:'Regla',modal:'regla'}] as const).map(item=>(
+                      {([{icon:'check-square',label:'Tarea',modal:'tarea'},{icon:'users',label:'Cliente',modal:'cliente'},{icon:'folder-open',label:'Proyecto',modal:'proyecto'},{icon:'film',label:'Pieza',modal:'contenido'},{icon:'zap',label:'Regla',modal:'regla'}] as const).filter(item=>item.modal!=='regla'||isOwner).map(item=>(
                         <button key={item.modal} onClick={()=>{setQuickCreateOpen(false);setModal(item.modal);setMf({})}} className="flex items-center gap-3 w-full px-4 py-2.5 text-left transition-colors hover:bg-white/5">
                           <LucideIcon name={item.icon} size={14} color="rgba(240,240,248,0.4)"/>
                           <span className="font-syne text-[10px] font-black tracking-wide" style={{color:'rgba(240,240,248,0.7)'}}>{item.label}</span>
