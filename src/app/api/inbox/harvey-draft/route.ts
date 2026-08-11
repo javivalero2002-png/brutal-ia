@@ -2,6 +2,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { checkAiRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { textOf } from '@/lib/aiText'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -46,7 +47,7 @@ Responde SOLO con el cuerpo del email, nada más.`
       }]
     })
 
-    const draft = msg.content[0].type === 'text' ? msg.content[0].text.trim() : ''
+    const draft = textOf(msg).trim()
     return NextResponse.json({ draft })
   } catch {
     return NextResponse.json({ error: 'Error generando borrador' }, { status: 502 })

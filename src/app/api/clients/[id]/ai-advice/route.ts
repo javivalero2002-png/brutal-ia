@@ -2,6 +2,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { checkAiRateLimit } from '@/lib/rate-limit'
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { textOf } from '@/lib/aiText'
 
 // Analisis de cliente con Claude: el default de Vercel se queda corto.
 export const maxDuration = 60
@@ -39,7 +40,7 @@ ${tasks?.slice(0,5).map((t: any) => `  - ${t.text} [${t.level}]`).join('\n') || 
   let msg: Awaited<ReturnType<typeof anthropic.messages.create>>
   try {
     msg = await anthropic.messages.create({
-      model: 'claude-sonnet-5',
+      model: 'claude-sonnet-4-6',
       max_tokens: 800,
       messages: [{
         role: 'user',
@@ -58,10 +59,10 @@ Sin texto fuera del JSON. Sin asteriscos. En español. Sé específico y directo
   }
 
   try {
-    const raw = msg.content[0].type === 'text' ? msg.content[0].text.trim() : '{}'
+    const raw = textOf(msg).trim() || '{}'
     const json = JSON.parse(raw.replace(/```json\n?|```/g, '').trim())
     return NextResponse.json(json)
   } catch {
-    return NextResponse.json({ recommendations: [{ title: 'Sin datos suficientes', body: msg.content[0].type === 'text' ? msg.content[0].text : '', priority: 'media' }] })
+    return NextResponse.json({ recommendations: [{ title: 'Sin datos suficientes', body: textOf(msg), priority: 'media' }] })
   }
 }

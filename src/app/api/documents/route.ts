@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'crypto'
 import { isOwnStorageUrl } from '@/lib/safeFetch'
+import { textOf } from '@/lib/aiText'
 
 export const maxDuration = 60
 
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
           { type: 'text', text: 'Resume este documento para la base de conocimiento de Brutal Studios. En español, 80-150 palabras: de qué trata, datos clave (cliente, presupuesto, fechas, entregables) y puntos importantes. Sin preámbulos.' }
         ] }],
       })
-      summary = msg.content[0]?.type === 'text' ? msg.content[0].text.trim() : ''
+      summary = textOf(msg).trim()
     } else {
       summary = 'Documento subido (demasiado grande para resumir automáticamente).'
     }
