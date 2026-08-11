@@ -82,7 +82,7 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
     return () => window.removeEventListener('keydown', handler)
   }, [editing, onOpenModal, expanded, pinnedIds])
   const cats = ['Todos','Clientes','Procesos','Decisiones','Aprendizajes','General']
-  const catColor: Record<string,string> = { Clientes:BLU, Procesos:'rgba(255,176,32,0.9)', Decisiones:RED, Aprendizajes:GRN, General:'rgba(167,139,250,0.8)' }
+  const catColor: Record<string,string> = { Clientes:BLU, Procesos:'#FFB020', Decisiones:RED, Aprendizajes:GRN, General:'#A78BFA' }
   const memoryClients = data.clients.filter((c: Client)=>data.memoria.some((m: any)=>m.client?.id===c.id))
   const byFilter = memFilter==='Todos' ? data.memoria : data.memoria.filter((m: any)=>m.category===memFilter)
   const byClientFilter = memClientFilter==='Todos' ? byFilter : byFilter.filter((m: any)=>m.client?.id===memClientFilter)
@@ -182,7 +182,7 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
           return (
           <div key={m.id} className="rounded-2xl transition-all group" style={{background:pinnedIds.has(m.id)?'rgba(255,176,32,0.015)':SURFACE,border:`1px solid ${isExp?'rgba(27,95,250,0.2)':pinnedIds.has(m.id)?'rgba(255,176,32,0.14)':BORDER}`,borderLeft:`3px solid ${pinnedIds.has(m.id)?'rgba(255,176,32,0.38)':'transparent'}`}}>
             <div className="flex items-start gap-4 p-5 cursor-pointer" onClick={()=>setExpanded(isExp?null:m.id)}>
-              {(()=>{ const cc=catColor[m.category]||'rgba(167,139,250,0.8)'; const ci:Record<string,string>={Clientes:'users-2',Procesos:'layers',Decisiones:'flag',Aprendizajes:'lightbulb',General:'brain'}; const ic=ci[m.category]||'brain'; return (<div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{background:cc+'14',border:`1px solid ${cc}25`}}><LucideIcon name={ic} size={15} color={cc+'bb'}/></div>) })()}
+              {(()=>{ const cc=catColor[m.category]||'#A78BFA'; const ci:Record<string,string>={Clientes:'users-2',Procesos:'layers',Decisiones:'flag',Aprendizajes:'lightbulb',General:'brain'}; const ic=ci[m.category]||'brain'; return (<div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{background:cc+'14',border:`1px solid ${cc}25`}}><LucideIcon name={ic} size={15} color={cc+'bb'}/></div>) })()}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                   <span className="font-figtree text-[14px] font-semibold text-white">{m.title}</span>
@@ -214,7 +214,7 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
                 <input value={editTitle} onChange={e=>setEditTitle(e.target.value)} className="w-full px-3 py-2 rounded-xl text-[13px] text-white placeholder-white/20 outline-none" style={{background:SURF2,border:`1.5px solid rgba(27,95,250,0.25)`,caretColor:BLU}}/>
                 <div className="flex flex-wrap gap-1.5">
                   {(['Clientes','Procesos','Decisiones','Aprendizajes','General'] as const).map(cat=>{
-                    const cc = catColor[cat]||'rgba(255,255,255,0.3)'
+                    const cc = catColor[cat]||'#FFFFFF'
                     const isAct = editCategory===cat
                     return <button key={cat} onClick={()=>setEditCategory(cat)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all" style={{background:isAct?cc+'18':SURF2,border:`1.5px solid ${isAct?cc+'55':BORDER}`,color:isAct?cc:'rgba(255,255,255,0.3)'}}>
                       <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:isAct?cc:'rgba(255,255,255,0.15)'}}/>

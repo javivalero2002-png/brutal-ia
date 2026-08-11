@@ -766,7 +766,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                     <div className="flex gap-1.5">
                       {([['publicacion','📷','POST'],['reel','🎬','REEL'],['story','⭕','STORY']] as const).map(([t,icon,label])=>{
                         const on = editContentType===t
-                        const c = 'rgba(195,53,132,0.9)'
+                        const c = '#C33584'
                         return (
                           <button key={t} onClick={()=>setEditContentType(t)}
                             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-syne text-[7px] font-black tracking-wide transition-all active:opacity-70"
@@ -967,7 +967,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                     <div className="grid grid-cols-3 gap-2">
                       {([['publicacion','📷','Publicación','Imagen fija en el feed'],['reel','🎬','Reel','Vídeo vertical 9:16'],['story','⭕','Story','Desaparece en 24h']] as const).map(([t,icon,label,desc])=>{
                         const on=editContentType===t
-                        const colors: Record<string,string>={publicacion:'rgba(195,53,132,0.85)',reel:'rgba(195,53,132,0.85)',story:'rgba(107,33,168,0.85)'}
+                        const colors: Record<string,string>={publicacion:'#C33584',reel:'#C33584',story:'#6B21A8'}
                         const c=colors[t]
                         return (
                           <button key={t} onClick={()=>setEditContentType(t)} className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl transition-all" style={{background:on?c+'18':'rgba(255,255,255,0.03)',border:`1.5px solid ${on?c+'55':'rgba(255,255,255,0.06)'}`}}>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, dlDate } from '@/components/shared'
+import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, dlDate, AMBAR } from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
 
 function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any) {
@@ -181,7 +181,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
   // Tasks with due_date — enrich with resolved assignee from team
   data.tasks?.forEach((t: any) => {
     if (t.due_date && !t.done) {
-      const c = t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.9)':BLU
+      const c = t.level==='urgent'?RED:t.level==='high'?AMBAR:BLU
       const assignee = data.team?.find((p: any) => p.id === t.assigned_to) || null
       addEvent(t.due_date.split('T')[0], {type:'task', label:t.text, color:c, raw:{...t, assignee}})
     }
@@ -509,7 +509,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
                     const evs = selEvents.filter(e=>e.type===type)
                     if (!evs.length) return null
                     const typeLabel = type==='gcal'?'GOOGLE CALENDAR':type==='content'?'CONTENIDO A PUBLICAR':type==='project'?'DEADLINE PROYECTO':'TAREAS CON DEADLINE'
-                    const typeColor = type==='gcal'?'#a78bfa':type==='content'?BLU:type==='project'?GRN:'rgba(255,176,32,0.8)'
+                    const typeColor = type==='gcal'?'#a78bfa':type==='content'?BLU:type==='project'?GRN:AMBAR
                     return (
                       <div key={type}>
                         <div className="font-syne text-[8px] font-black tracking-widest mb-3 flex items-center gap-2">

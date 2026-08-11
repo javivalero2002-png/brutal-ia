@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, todayKey } from '@/components/shared'
+import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, todayKey, AMBAR } from '@/components/shared'
 import type { Project, Task, Profile } from '@/types'
 
 function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView,projStatusFilter,setProjStatusFilter,dragRef,selectedId,onSelect,onOpenModal,onSetMf,showToast,isOwner,onNavigate,onSelectClient,justCreatedId,onJustCreatedScrolled}: any) {
@@ -689,7 +689,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 {projTasks.length > 0 && (
                   <div className="space-y-2">
                     {projTasks.slice(0,6).map((t: Task)=>{
-                      const tc = t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.85)':BLU
+                      const tc = t.level==='urgent'?RED:t.level==='high'?AMBAR:BLU
                       const ptodayStr = todayKey()
                       const ptIsToday = t.due_date && t.due_date.slice(0,10) === ptodayStr
                       const ptOver = t.due_date && !ptIsToday && new Date(t.due_date+'T23:59:59') < new Date()

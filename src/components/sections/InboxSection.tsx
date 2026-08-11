@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { BLU, RED, GRN, SURFACE, SURF2, BORDER } from '@/components/shared'
+import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR } from '@/components/shared'
 import { useIsMobile, useBackClosable } from '@/components/shared'
 import { strColor, relTime, todayKey } from '@/components/shared'
 import { LucideIcon } from '@/components/shared'
@@ -607,7 +607,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
               if (new Date(m.received_at)>new Date(senderMap[key].latest.received_at)) senderMap[key].latest = m
             })
             const senders = Object.entries(senderMap).sort((a,b)=>new Date(b[1].latest.received_at).getTime()-new Date(a[1].latest.received_at).getTime())
-            const srcColor = filter==='Gmail'?'#EA4335':filter==='WhatsApp'?'#25D366':'rgba(255,176,32,0.8)'
+            const srcColor = filter==='Gmail'?'#EA4335':filter==='WhatsApp'?'#25D366':AMBAR
             return (
               <div className="flex-1 overflow-y-auto">
                 {senders.length===0 ? (
@@ -736,7 +736,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                     const isColabs = isGmail && !!m.shared
                     const isSelected = selected?.id===m.id
                     const isUnread = !m.is_read
-                    const avatarBg = isInternal ? 'rgba(255,176,32,0.85)' : strColor(m.from_name||'?')
+                    const avatarBg = isInternal ? AMBAR : strColor(m.from_name||'?')
                     const leftBar = isUnread ? (m.ai_urgency==='urgent'?RED:isColabs?GRN:isInternal?'rgba(255,176,32,0.7)':isGmail?'#EA433570':isWA?'#25D36670':BLU) : 'transparent'
                     return (
                       <div key={m.id} onClick={()=>handleSelect(m)} className="relative cursor-pointer transition-colors"
