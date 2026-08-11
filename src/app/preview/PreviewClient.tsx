@@ -7,6 +7,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import type { Task, Project, Client, Profile, Regla, InboxMessage } from '@/types'
 import { SectionErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { BLU } from '@/components/shared/design-tokens'
+import { todayKey } from '@/components/shared/helpers'
 import HoySection from '@/components/sections/HoySection'
 import TareasSection from '@/components/sections/TareasSection'
 import AutomatizacionesSection from '@/components/sections/AutomatizacionesSection'
@@ -24,7 +25,20 @@ import ChatSection from '@/components/sections/ChatSection'
 import HarveySection from '@/components/sections/HarveySection'
 import AjustesSection from '@/components/sections/AjustesSection'
 
-const iso = (dOffsetDays: number) => new Date(Date.now() + dOffsetDays*86400000).toISOString()
+// Base DETERMINISTA: mediodía UTC del día de hoy en Madrid.
+//
+// Con `Date.now()` los datos de ejemplo salían distintos en el servidor y en el
+// navegador —el módulo se evalúa por petición en uno y al cargar el bundle en el
+// otro—, así que el orden de los eventos de una celda del calendario cambiaba y
+// React abortaba la hidratación. Eso llenaba la consola de /preview de errores
+// que NO existen en producción (allí los datos llegan por fetch después de
+// montar, y el servidor no pinta ninguno), y me tapó errores de verdad varias
+// veces: cada vez que veía "1 Issue" tenía que descartar este primero.
+//
+// El mediodía evita además que un desfase de horas cruce la medianoche y cambie
+// el día. Sigue siendo relativo a HOY, así que "vence hoy" y "ayer" se ven bien.
+const BASE = Date.parse(`${todayKey()}T12:00:00Z`)
+const iso = (dOffsetDays: number) => new Date(BASE + dOffsetDays*86400000).toISOString()
 const day = (dOffsetDays: number) => iso(dOffsetDays).slice(0,10)
 
 const TEAM: Profile[] = [
