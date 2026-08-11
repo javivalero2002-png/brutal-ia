@@ -502,7 +502,14 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
   }
   const activeClients = data.clients.filter((c: Client)=>c.status==='Activo')
   const totalMRR = activeClients.reduce((sum: number, c: Client) => sum + parseRevenue(c.revenue||''), 0)
-  const maxRevenue = Math.max(...data.clients.map((c: Client)=>parseRevenue(c.revenue||'')), 1)
+  // El desglose tiene que contar los MISMOS clientes que el total que hay al lado.
+  // Antes salían todos —también los pausados—, así que las barras sumaban más que
+  // el MRR: con los datos de ejemplo, €154.500 en barras bajo un total de €136.500.
+  const revenueClients = activeClients
+    .filter((c: Client)=>parseRevenue(c.revenue||'')>0)
+    .sort((a: Client,b: Client)=>parseRevenue(b.revenue||'')-parseRevenue(a.revenue||''))
+  const REVENUE_TOP = 4
+  const maxRevenue = Math.max(...revenueClients.map((c: Client)=>parseRevenue(c.revenue||'')), 1)
   const visibleClients = data.clients.filter((c: Client) => {
     const matchStatus = clientStatusFilter === 'Todos' || c.status === clientStatusFilter
     const matchSearch = !clientSearch.trim() || c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.industry?.toLowerCase().includes(clientSearch.toLowerCase())
@@ -533,9 +540,13 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
             <div className="text-[11px] mt-1.5" style={{color:'rgba(255,255,255,0.3)'}}>{activeClients.length} clientes activos</div>
           </div>
           <div className="col-span-1 md:col-span-2 rounded-2xl p-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-            <div className="font-syne text-[8.5px] font-black tracking-widest mb-4" style={{color:'rgba(255,255,255,0.2)'}}>REVENUE POR CLIENTE</div>
+            {/* Solo caben 4 barras. Decirlo evita que se lea como el desglose
+                completo del MRR cuando hay más clientes activos que eso. */}
+            <div className="font-syne text-[8.5px] font-black tracking-widest mb-4" style={{color:'rgba(255,255,255,0.2)'}}>
+              REVENUE POR CLIENTE ACTIVO{revenueClients.length > REVENUE_TOP ? ` · TOP ${REVENUE_TOP} DE ${revenueClients.length}` : ''}
+            </div>
             <div className="space-y-2.5">
-              {data.clients.filter((c: Client)=>parseRevenue(c.revenue||'')>0).sort((a: Client,b: Client)=>parseRevenue(b.revenue||'')-parseRevenue(a.revenue||'')).slice(0,4).map((c: Client)=>{
+              {revenueClients.slice(0,REVENUE_TOP).map((c: Client)=>{
                 const rev = parseRevenue(c.revenue||'')
                 const pct = Math.round((rev/maxRevenue)*100)
                 return (

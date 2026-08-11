@@ -98,30 +98,27 @@ const CAL_EVENTS = [
   { id:'e2', title:'Presentación Nike',      start:day(2)+'T16:30' },
 ]
 
-export default function PreviewClient() {
+// Los parámetros de la URL llegan ya resueltos desde page.tsx, que es un Server
+// Component. Leerlos aquí —en el render o en un useEffect, da igual— hace que el
+// servidor pinte la sección por defecto y el navegador otra: React aborta la
+// hidratación y regenera el árbol. Con la lectura en el servidor los dos parten
+// del mismo valor y no hay nada que reconciliar.
+export default function PreviewClient({
+  initialSection,
+  initialView,
+  initialFocus,
+  initialGroupBy,
+}: {
+  initialSection: string
+  initialView?: string
+  initialFocus: boolean
+  initialGroupBy?: 'priority' | 'project'
+}) {
   const [tasks, setTasks] = useState<Task[]>(TASKS)
   const [reglas, setReglas] = useState<Regla[]>(REGLAS)
   const [inbox, setInbox] = useState<InboxMessage[]>(INBOX)
   const [clients, setClients] = useState<Client[]>(CLIENTS)
-  // Los parámetros de URL se leen DESPUÉS de montar, no durante el render: en el
-  // servidor no hay `window`, así que el primer render usaba el valor por defecto
-  // y el cliente el de la URL → mismatch de hidratación en los botones del
-  // conmutador. Es solo de desarrollo, pero llenaba la consola de ruido y tapaba
-  // los errores de verdad.
-  const [section, setSection] = useState('tareas')
-  const [urlOpts, setUrlOpts] = useState<{v?:string; focus:boolean; g?:'priority'|'project'}>({ focus:false })
-  useEffect(() => {
-    const p = new URLSearchParams(window.location.search)
-    if (p.get('s')) setSection(p.get('s')!)
-    setUrlOpts({
-      v: p.get('v') || undefined,
-      focus: p.get('focus') === '1',
-      g: (p.get('g') as 'priority'|'project') || undefined,
-    })
-  }, [])
-  const initialView = urlOpts.v
-  const initialFocus = urlOpts.focus
-  const initialGroupBy = urlOpts.g
+  const [section, setSection] = useState(initialSection)
   const [toast, setToast] = useState('')
   const [projView, setProjView] = useState<'board'|'list'>('board')
   const [projStatusFilter, setProjStatusFilter] = useState('Todos')
