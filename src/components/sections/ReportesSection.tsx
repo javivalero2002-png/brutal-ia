@@ -36,10 +36,10 @@ function ReportesSection({data, onNavigate}: any) {
     const projectsByStatus = [
       {label:'En progreso', count:projects.filter(p=>p.status==='activo').length, color:BLU},
       {label:'Urgente', count:projects.filter(p=>p.status==='urgente').length, color:RED},
-      {label:'Revision', count:projects.filter(p=>p.status==='revisión').length, color:'#FFB020'},
-      {label:'Planificacion', count:projects.filter(p=>p.status==='plan.').length, color:'#FFFFFF'},
+      {label:'Revisión', count:projects.filter(p=>p.status==='revisión').length, color:'#FFB020'},
+      {label:'Planificación', count:projects.filter(p=>p.status==='plan.').length, color:'#FFFFFF'},
       {label:'Completado', count:projects.filter(p=>p.status==='completado').length, color:'#22C55E'},
-      {label:'Atrasados', count:overdueProjects.length, color:overdueProjects.length>0?RED:'rgba(255,255,255,0.15)'},
+      {label:'Atrasados', count:overdueProjects.length, color:overdueProjects.length>0?RED:'#FFFFFF'},
     ]
 
     const weekAgoReport = new Date(); weekAgoReport.setDate(weekAgoReport.getDate()-7); weekAgoReport.setHours(0,0,0,0)
