@@ -39,10 +39,21 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
   useEffect(() => {
     const c = convScrollRef.current
     if (!c) return
-    // Salto instantáneo, no 'smooth': la animación suave la cancela el siguiente
-    // render —y en streaming hay muchos— dejando el hilo clavado arriba. Medido:
-    // scrollTop 0 de 1465 posibles después de tres preguntas.
-    requestAnimationFrame(() => { c.scrollTop = c.scrollHeight })
+    // SIN requestAnimationFrame a propósito. El navegador lo SUSPENDE cuando la
+    // pestaña no está visible, así que si alguien se va a otra pestaña mientras
+    // Harvey responde, al volver el hilo se queda clavado arriba con la respuesta
+    // sin leer. Medido: el callback del rAF no llegaba a ejecutarse nunca.
+    //
+    // El primer intento cubre el caso normal; el timeout cubre el momento en que
+    // el hilo EMPIEZA a desbordar, cuando `mt-auto` deja de empujar y el layout
+    // cambia justo después del commit.
+    //
+    // Salto instantáneo y no 'smooth': la animación la cancela el siguiente
+    // render, y durante el streaming hay muchos.
+    const irAlFinal = () => { c.scrollTop = c.scrollHeight }
+    irAlFinal()
+    const t = setTimeout(irAlFinal, 60)
+    return () => clearTimeout(t)
   }, [conversation])
   useEffect(() => {
     if (pendingAction && isMobile) setTimeout(() => harveyActionCardRef.current?.scrollIntoView({behavior:'smooth',block:'center'}), 150)

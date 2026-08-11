@@ -144,6 +144,7 @@ function MarkdownMsg({ text }: { text: string }) {
 function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoading,showToast,onNavigate}: any) {
   const isMobile = useIsMobile()
   const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [copiedId, setCopiedId] = useState<string|null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
@@ -151,7 +152,14 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
   const chatLoadingRef = useRef(false)
   const promptsRef = useRef<{text:string,cat:string}[]>([])
 
-  useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}) },[data.chatMessages])
+  useEffect(() => {
+    const c = scrollRef.current
+    if (!c) return
+    const irAlFinal = () => { c.scrollTop = c.scrollHeight }
+    irAlFinal()
+    const t = setTimeout(irAlFinal, 60)
+    return () => clearTimeout(t)
+  }, [data.chatMessages])
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
@@ -269,7 +277,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
       {/* Messages / Empty state */}
       <div className="flex-1 overflow-y-auto">
         {isEmpty ? (
-          <div className="flex flex-col h-full overflow-y-auto px-5 py-6 gap-4">
+          <div ref={scrollRef} className="flex flex-col h-full overflow-y-auto px-5 py-6 gap-4">
             {/* Hero */}
             <div className="flex items-center gap-3 mb-1">
               <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden p-2" style={{background:'rgba(27,95,250,0.1)',border:'1px solid rgba(27,95,250,0.2)'}}>
