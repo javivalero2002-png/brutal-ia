@@ -62,7 +62,7 @@ function HarveyTaskSuggestions({ data, onOpenModal, onCreateTask }: any) {
               <div className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center" style={{border:`1.5px solid ${done?GRN:pri.color}40`}}>
                 {done ? <LucideIcon name="check" size={10} color={GRN}/> : busy ? <div className="w-2 h-2 rounded-full" style={{background:BLU,animation:'pulse 1s infinite'}}/> : null}
               </div>
-              <span className="font-figtree text-[13px] flex-1" style={{color:done?'rgba(255,255,255,0.35)':'rgba(255,255,255,0.7)'}}>{s.text}</span>
+              <span className="font-figtree text-[13px] flex-1" style={{color:done?'#FFFFFF':'rgba(255,255,255,0.7)'}}>{s.text}</span>
               <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full flex-shrink-0" style={{color:pri.color,background:`${pri.color}14`,border:`1px solid ${pri.color}28`}}>{pri.label}</span>
             </button>
           )
@@ -968,7 +968,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                 {[{v:'urgent',l:'Alta',c:RED},{v:'high',l:'Media',c:AMB},{v:'normal',l:'Baja',c:BLU}].map(p=>(
                   <button key={p.v} onClick={()=>setEditing(x=>({...x,level:p.v as any}))}
                     className="flex-1 py-3 rounded-2xl font-syne text-[10px] font-black tracking-wide transition-all"
-                    style={{background:editing.level===p.v?p.c+'18':SURF2,border:`1.5px solid ${editing.level===p.v?p.c+'70':BORDER}`,color:editing.level===p.v?p.c:'rgba(255,255,255,0.3)'}}>
+                    style={{background:editing.level===p.v?p.c+'18':SURF2,border:`1.5px solid ${editing.level===p.v?p.c+'70':BORDER}`,color:editing.level===p.v?p.c:'#FFFFFF'}}>
                     {p.l.toUpperCase()}
                   </button>
                 ))}
@@ -1004,10 +1004,10 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
             <div>
               <label className="block font-syne text-[9px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.25)'}}>ESTADO</label>
               <div className="flex gap-2">
-                {[{v:false,l:'Pendiente',c:'rgba(255,255,255,0.3)'},{v:true,l:'Completada',c:GRN}].map(s=>(
+                {[{v:false,l:'Pendiente',c:'#FFFFFF'},{v:true,l:'Completada',c:GRN}].map(s=>(
                   <button key={s.l} onClick={()=>setEditing(x=>({...x,done:s.v}))}
                     className="flex-1 py-3 rounded-2xl font-syne text-[10px] font-black tracking-wide transition-all"
-                    style={{background:editing.done===s.v?s.c+'18':SURF2,border:`1.5px solid ${editing.done===s.v?s.c+'55':BORDER}`,color:editing.done===s.v?s.c:'rgba(255,255,255,0.3)'}}>
+                    style={{background:editing.done===s.v?s.c+'18':SURF2,border:`1.5px solid ${editing.done===s.v?s.c+'55':BORDER}`,color:editing.done===s.v?s.c:'#FFFFFF'}}>
                     {s.l.toUpperCase()}
                   </button>
                 ))}
@@ -1118,7 +1118,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                       <button onClick={()=>toggleSubtask(st)} className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 border-2 transition-all" style={{background:st.done?BLU:'transparent',borderColor:st.done?BLU:BLU+'45'}}>
                         {st.done&&<LucideIcon name="check" size={8} color="white"/>}
                       </button>
-                      <span className="flex-1 text-[12.5px]" style={{color:st.done?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.75)',textDecoration:st.done?'line-through':'none'}}>{st.text}</span>
+                      <span className="flex-1 text-[12.5px]" style={{color:st.done?'#FFFFFF':'rgba(255,255,255,0.75)',textDecoration:st.done?'line-through':'none'}}>{st.text}</span>
                       <button onClick={()=>deleteSubtask(st.id)} className="opacity-0 group-hover:opacity-50 transition-opacity flex-shrink-0">
                         <LucideIcon name="x" size={11} color={RED}/>
                       </button>
@@ -1310,7 +1310,7 @@ function KanbanBoard({ tasks, data, openTask, isMobile, showToast, initialGroupB
             {t.done && <LucideIcon name="check" size={9} color="#04120a"/>}
           </button>
           <div className="flex-1 min-w-0">
-            <div className="font-figtree text-[12.5px] leading-snug" style={{ color: t.done ? 'rgba(255,255,255,0.4)' : 'rgba(240,240,248,0.92)', textDecoration: t.done ? 'line-through' : 'none' }}>{t.text}</div>
+            <div className="font-figtree text-[12.5px] leading-snug" style={{ color: t.done ? '#FFFFFF' : 'rgba(240,240,248,0.92)', textDecoration: t.done ? 'line-through' : 'none' }}>{t.text}</div>
             <div className="flex items-center gap-1.5 mt-2 flex-wrap">
               {!t.done && <span className="font-syne text-[7px] font-black tracking-widest px-1.5 py-0.5 rounded-md" style={{ background: pr.color+'18', color: pr.color }}>{pr.label}</span>}
               {proj && (

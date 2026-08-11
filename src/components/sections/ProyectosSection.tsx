@@ -478,7 +478,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                           const dSoon = !dOver && dlDate(p.deadline)<new Date(Date.now()+7*24*3600*1000)
                           const diffDays = Math.round(Math.abs(dlDate(p.deadline).getTime()-Date.now())/(1000*60*60*24))
                           const dLabel = dOver ? `−${diffDays}d` : diffDays===0 ? 'HOY' : `+${diffDays}d`
-                          return <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.12)':'rgba(255,255,255,0.04)',color:dOver?RED:dSoon?'rgba(255,176,32,0.9)':'rgba(255,255,255,0.3)'}}>{dLabel}</span>
+                          return <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.12)':'rgba(255,255,255,0.04)',color:dOver?RED:dSoon?AMBAR:'rgba(255,255,255,0.3)'}}>{dLabel}</span>
                         })()}
                         {(()=>{ const n=data.tasks.filter((t:Task)=>t.project_id===p.id&&!t.done).length; if(n>0) return <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.65)'}}>{n} tareas</span>; if(p.status!=='completado'&&p.status!=='plan.') return <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,176,32,0.07)',color:'rgba(255,176,32,0.5)'}}>sin tareas</span>; return null })()}
                       </div>
@@ -537,7 +537,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 const dSoon = !dOver && dlDate(p.deadline)<new Date(Date.now()+7*24*3600*1000)
                 const diffDays = Math.round(Math.abs(dlDate(p.deadline).getTime()-Date.now())/(1000*60*60*24))
                 const dLabel = dOver ? `−${diffDays}d` : diffDays===0 ? 'HOY' : `${diffDays}d`
-                return <span className="font-syne text-[9px] font-black flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.28)'}}>{dLabel}</span>
+                return <span className="font-syne text-[9px] font-black flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?AMBAR:'rgba(255,255,255,0.28)'}}>{dLabel}</span>
               })()}
               {(()=>{ const n=data.tasks.filter((t:Task)=>t.project_id===p.id&&!t.done).length; if(n>0) return <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.55)'}}>{n}t</span>; if(p.status!=='completado'&&p.status!=='plan.') return <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(255,176,32,0.07)',color:'rgba(255,176,32,0.5)'}}>SIN TAREAS</span>; return null })()}
               {isOwner && (
@@ -608,7 +608,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                     const diffDays = Math.round(Math.abs(diffMs)/(1000*60*60*24))
                     const daysLabel = dOver ? `hace ${diffDays}d` : diffDays === 0 ? 'HOY' : `en ${diffDays}d`
                     return (
-                      <span className="flex items-center gap-1.5 font-syne text-[8px] font-black px-2 py-1 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'rgba(255,255,255,0.04)',color:dOver?RED:dSoon?'rgba(255,176,32,0.85)':'rgba(255,255,255,0.3)'}}>
+                      <span className="flex items-center gap-1.5 font-syne text-[8px] font-black px-2 py-1 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'rgba(255,255,255,0.04)',color:dOver?RED:dSoon?AMBAR:'rgba(255,255,255,0.3)'}}>
                         {dOver&&'⚠ '}Deadline {fmtDate(selectedProject.deadline)}
                         <span className="font-black" style={{color:dOver?RED+'cc':dSoon?'rgba(255,176,32,0.7)':'rgba(255,255,255,0.2)',opacity:0.9}}>· {daysLabel}</span>
                       </span>
@@ -643,8 +643,8 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.08)'}}>S CICLAR</span>
             </div>
             <div className="flex gap-1.5 flex-wrap">
-              {[{s:'plan.',l:'Planif.',c:'rgba(255,255,255,0.4)'},{s:'activo',l:'Activo',c:GRN},{s:'urgente',l:'Urgente',c:RED},{s:'revisión',l:'Revisión',c:'rgba(167,139,250,0.9)'},{s:'completado',l:'Completado',c:'rgba(34,197,94,0.6)'}].map(opt=>(
-                <button key={opt.s} onClick={async()=>{ try{await data.updateProject(selectedProject.id,{status:opt.s});showToast(`Estado: ${opt.l}`)}catch{showToast('Error al actualizar')} }} className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:selectedProject.status===opt.s?opt.c+'18':SURF2,border:`1px solid ${selectedProject.status===opt.s?opt.c+'50':BORDER}`,color:selectedProject.status===opt.s?opt.c:'rgba(255,255,255,0.3)'}}>{opt.l.toUpperCase()}</button>
+              {[{s:'plan.',l:'Planif.',c:'#FFFFFF'},{s:'activo',l:'Activo',c:GRN},{s:'urgente',l:'Urgente',c:RED},{s:'revisión',l:'Revisión',c:'#A78BFA'},{s:'completado',l:'Completado',c:GRN}].map(opt=>(
+                <button key={opt.s} onClick={async()=>{ try{await data.updateProject(selectedProject.id,{status:opt.s});showToast(`Estado: ${opt.l}`)}catch{showToast('Error al actualizar')} }} className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:selectedProject.status===opt.s?opt.c+'18':SURF2,border:`1px solid ${selectedProject.status===opt.s?opt.c+'50':BORDER}`,color:selectedProject.status===opt.s?opt.c:'#FFFFFF'}}>{opt.l.toUpperCase()}</button>
               ))}
             </div>
           </div>
@@ -697,7 +697,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                         <div key={t.id} className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{background:tc+'10',border:`1px solid ${tc}25`}}>
                           <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:tc}}/>
                           <span className="text-[11.5px] flex-1 truncate" style={{color:'rgba(255,255,255,0.65)'}}>{t.text}</span>
-                          {t.due_date && <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:ptIsToday?'rgba(255,176,32,0.15)':ptOver?`${RED}18`:'rgba(255,255,255,0.05)',color:ptIsToday?'rgba(255,176,32,0.9)':ptOver?RED:'rgba(255,255,255,0.25)'}}>{ptIsToday?'HOY':new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
+                          {t.due_date && <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:ptIsToday?'rgba(255,176,32,0.15)':ptOver?`${RED}18`:'rgba(255,255,255,0.05)',color:ptIsToday?AMBAR:ptOver?RED:'rgba(255,255,255,0.25)'}}>{ptIsToday?'HOY':new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
                           {t.assignee && <div className="w-5 h-5 rounded-full flex items-center justify-center font-syne text-[7px] font-black flex-shrink-0" style={{background:t.assignee.avatar_color+'22',color:t.assignee.avatar_color}}>{t.assignee.initials}</div>}
                         </div>
                       )
@@ -956,7 +956,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                     <button onClick={()=>toggleMilestone(ms)} className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 border-2 transition-all" style={{background:ms.done?(selectedProject!.color||BLU):'transparent',borderColor:ms.done?(selectedProject!.color||BLU):(selectedProject!.color||BLU)+'55'}}>
                       {ms.done&&<LucideIcon name="check" size={9} color="white"/>}
                     </button>
-                    <span className="flex-1 text-[12.5px]" style={{color:ms.done?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.75)',textDecoration:ms.done?'line-through':'none'}}>{ms.name}</span>
+                    <span className="flex-1 text-[12.5px]" style={{color:ms.done?'#FFFFFF':'rgba(255,255,255,0.75)',textDecoration:ms.done?'line-through':'none'}}>{ms.name}</span>
                     {ms.due_date&&<span className="font-syne text-[8px] font-black" style={{color:'rgba(255,255,255,0.25)'}}>{new Date(ms.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
                     <button onClick={()=>deleteMilestone(ms.id)} className="opacity-0 group-hover:opacity-60 transition-opacity flex-shrink-0">
                       <LucideIcon name="x" size={11} color={RED}/>

@@ -1,6 +1,6 @@
 'use client'
 import type { Profile, Client } from '@/types'
-import { BLU, RED, GRN, SURF2, BORDER, LucideIcon, useIsMobile } from '@/components/shared'
+import { BLU, RED, GRN, SURF2, BORDER, LucideIcon, useIsMobile, AMBAR} from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
 
 const meta: Record<string, { eyebrow: string; title: string; saveLabel: string }> = {
@@ -124,8 +124,8 @@ export default function CreateModal({ modal, onClose, mf, setMf, saving, onSave,
 
               {f.type === 'priority' ? (
                 <div className="flex gap-2">
-                  {[{v:'urgente',l:'Urgente',c:RED},{v:'high',l:'Alta',c:'rgba(255,176,32,0.9)'},{v:'normal',l:'Normal',c:BLU}].map(p=>(
-                    <button key={p.v} onClick={()=>setMf(m=>({...m,[f.key]:p.v}))} className="flex-1 py-3 rounded-2xl font-syne text-[10px] font-black tracking-wide transition-all" style={{background:mf[f.key]===p.v?p.c+'18':SURF2,border:`1.5px solid ${mf[f.key]===p.v?p.c+'70':BORDER}`,color:mf[f.key]===p.v?p.c:'rgba(255,255,255,0.35)'}}>
+                  {[{v:'urgente',l:'Urgente',c:RED},{v:'high',l:'Alta',c:AMBAR},{v:'normal',l:'Normal',c:BLU}].map(p=>(
+                    <button key={p.v} onClick={()=>setMf(m=>({...m,[f.key]:p.v}))} className="flex-1 py-3 rounded-2xl font-syne text-[10px] font-black tracking-wide transition-all" style={{background:mf[f.key]===p.v?p.c+'18':SURF2,border:`1.5px solid ${mf[f.key]===p.v?p.c+'70':BORDER}`,color:mf[f.key]===p.v?p.c:'#FFFFFF'}}>
                       {p.l.toUpperCase()}
                     </button>
                   ))}
@@ -141,8 +141,8 @@ export default function CreateModal({ modal, onClose, mf, setMf, saving, onSave,
                 </div>
               ) : f.type === 'status' ? (
                 <div className="grid grid-cols-2 gap-2">
-                  {[{v:'borrador',l:'En bruto',c:'rgba(255,255,255,0.45)'},{v:'pendiente',l:'En producción',c:'rgba(255,176,32,0.9)'},{v:'listo',l:'Listo',c:'#22c55e'},{v:'publicado',l:'Publicado',c:BLU}].map(s=>(
-                    <button key={s.v} onClick={()=>setMf(m=>({...m,[f.key]:s.v}))} className="flex items-center gap-2.5 px-4 py-3 rounded-2xl font-syne text-[10px] font-black tracking-wide transition-all" style={{background:(mf[f.key]||'borrador')===s.v?s.c+'18':SURF2,border:`1.5px solid ${(mf[f.key]||'borrador')===s.v?s.c+'60':BORDER}`,color:(mf[f.key]||'borrador')===s.v?s.c:'rgba(255,255,255,0.3)'}}>
+                  {[{v:'borrador',l:'En bruto',c:'#FFFFFF'},{v:'pendiente',l:'En producción',c:AMBAR},{v:'listo',l:'Listo',c:'#22c55e'},{v:'publicado',l:'Publicado',c:BLU}].map(s=>(
+                    <button key={s.v} onClick={()=>setMf(m=>({...m,[f.key]:s.v}))} className="flex items-center gap-2.5 px-4 py-3 rounded-2xl font-syne text-[10px] font-black tracking-wide transition-all" style={{background:(mf[f.key]||'borrador')===s.v?s.c+'18':SURF2,border:`1.5px solid ${(mf[f.key]||'borrador')===s.v?s.c+'60':BORDER}`,color:(mf[f.key]||'borrador')===s.v?s.c:'#FFFFFF'}}>
                       <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:(mf[f.key]||'borrador')===s.v?s.c:'rgba(255,255,255,0.15)'}}/>
                       <span>{s.l.toUpperCase()}</span>
                     </button>
@@ -164,8 +164,8 @@ export default function CreateModal({ modal, onClose, mf, setMf, saving, onSave,
                 </div>
               ) : f.type === 'proj-status' ? (
                 <div className="flex gap-2">
-                  {[{v:'plan.',l:'Plan.',c:'rgba(167,139,250,0.85)'},{v:'activo',l:'Activo',c:BLU},{v:'urgente',l:'Urgente',c:RED},{v:'revisión',l:'Revisión',c:'rgba(255,176,32,0.9)'}].map(s=>(
-                    <button key={s.v} onClick={()=>setMf(m=>({...m,[f.key]:s.v}))} className="flex-1 py-3 rounded-2xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:(mf[f.key]||'activo')===s.v?s.c+'18':SURF2,border:`1.5px solid ${(mf[f.key]||'activo')===s.v?s.c+'60':BORDER}`,color:(mf[f.key]||'activo')===s.v?s.c:'rgba(255,255,255,0.3)'}}>
+                  {[{v:'plan.',l:'Plan.',c:'#A78BFA'},{v:'activo',l:'Activo',c:BLU},{v:'urgente',l:'Urgente',c:RED},{v:'revisión',l:'Revisión',c:AMBAR}].map(s=>(
+                    <button key={s.v} onClick={()=>setMf(m=>({...m,[f.key]:s.v}))} className="flex-1 py-3 rounded-2xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:(mf[f.key]||'activo')===s.v?s.c+'18':SURF2,border:`1.5px solid ${(mf[f.key]||'activo')===s.v?s.c+'60':BORDER}`,color:(mf[f.key]||'activo')===s.v?s.c:'#FFFFFF'}}>
                       {s.l.toUpperCase()}
                     </button>
                   ))}
@@ -311,9 +311,9 @@ function RuleBuilder({ mf, setMf, team, clients }: {
             <div>
               <Eyebrow>PRIORIDAD</Eyebrow>
               <div className="flex gap-2">
-                {[{v:'urgent',l:'Urgente',c:RED},{v:'high',l:'Alta',c:'rgba(255,176,32,0.9)'},{v:'normal',l:'Normal',c:BLU}].map(p=>{
+                {[{v:'urgent',l:'Urgente',c:RED},{v:'high',l:'Alta',c:AMBAR},{v:'normal',l:'Normal',c:BLU}].map(p=>{
                   const on = (mf.act_level||'normal')===p.v
-                  return <button key={p.v} onClick={()=>set('act_level', p.v)} className="flex-1 py-2.5 rounded-2xl font-syne text-[10px] font-black tracking-wide transition-all" style={{background:on?p.c+'18':SURF2, border:`1.5px solid ${on?p.c+'70':BORDER}`, color:on?p.c:'rgba(255,255,255,0.35)'}}>{p.l.toUpperCase()}</button>
+                  return <button key={p.v} onClick={()=>set('act_level', p.v)} className="flex-1 py-2.5 rounded-2xl font-syne text-[10px] font-black tracking-wide transition-all" style={{background:on?p.c+'18':SURF2, border:`1.5px solid ${on?p.c+'70':BORDER}`, color:on?p.c:'#FFFFFF'}}>{p.l.toUpperCase()}</button>
                 })}
               </div>
             </div>

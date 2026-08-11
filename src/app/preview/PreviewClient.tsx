@@ -93,6 +93,27 @@ const AGENDA = [
   { id:'a3', title:'TikTok Adidas',         platform:'TikTok',    content_type:'Video', status:'listo', client_id:'c2' },
 ]
 
+// Memoria salía vacía en el harness, así que su estado real —el que ve el equipo
+// todos los días— no se podía revisar: solo el cartel de "sin entradas". Una
+// entrada por categoría, para poder comprobar los colores de cada una.
+const MEMORIA = [
+  { id:'m1', category:'Clientes',     title:'Nike · tono de marca',
+    content:'Nada de superlativos ni signos de exclamación. Frases cortas. El logo siempre sobre fondo liso, nunca sobre foto.',
+    created_at:iso(-12), client:CLIENTS[0] },
+  { id:'m2', category:'Procesos',     title:'Entrega de vídeo a cliente',
+    content:'Exportar en H.264 a 1080p, subir a Drive y compartir el enlace por email — nunca adjunto. El máster en ProRes se queda en el NAS.',
+    created_at:iso(-30) },
+  { id:'m3', category:'Decisiones',   title:'Por qué dejamos Figma para wireframes',
+    content:'Duplicaba el trabajo: el diseño final acababa haciéndose otra vez. Se decidió pasar directo a maqueta en enero.',
+    created_at:iso(-45) },
+  { id:'m4', category:'Aprendizajes', title:'Los briefs por WhatsApp se pierden',
+    content:'Dos encargos se quedaron sin hacer por quedar enterrados en el chat. Todo brief entra por email o se copia a una tarea.',
+    created_at:iso(-8) },
+  { id:'m5', category:'General',      title:'Accesos y contraseñas',
+    content:'Todo va en el gestor compartido. Nunca por chat, nunca en una nota. Si alguien sale del equipo se rotan ese mismo día.',
+    created_at:iso(-60) },
+]
+
 const CAL_EVENTS = [
   { id:'e1', title:'Reunión equipo semanal', start:day(0)+'T10:00' },
   { id:'e2', title:'Presentación Nike',      start:day(2)+'T16:30' },
@@ -157,7 +178,7 @@ export default function PreviewClient({
   const data:any = {
     loading:false, syncing:false,
     tasks, projects:PROJECTS, clients, team:TEAM, inbox, reglas,
-    agenda:AGENDA, memoria:[], calendarEvents:CAL_EVENTS, chatMessages:[],
+    agenda:AGENDA, memoria:MEMORIA, calendarEvents:CAL_EVENTS, chatMessages:[],
     createTask, updateTask, deleteTask, toggleTask,
     createRegla, updateRegla, deleteRegla, runAutomations,
     markRead, markUnread, markManyRead,

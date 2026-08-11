@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "prebuild": "node scripts/check-env.mjs && cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs",
+    "prebuild": "node scripts/check-env.mjs && node scripts/check-color-opacity.mjs && cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs",
     "check-env": "node scripts/check-env.mjs",
     "build": "next build",
     "start": "next start",

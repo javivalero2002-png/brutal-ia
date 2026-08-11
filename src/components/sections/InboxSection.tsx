@@ -258,10 +258,10 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
             const carpetas = [
               {id:'Todos', label:'Bandeja unificada', n:activeMsgs.length, c:'rgba(255,255,255,0.5)', ic:'inbox'},
               {id:'Sin leer', label:'Sin leer', n:unread, c:BLU, ic:'mail'},
-              {id:'Urgente', label:'Prioridad', n:urgent, c:'rgba(255,176,32,0.9)', ic:'zap'},
+              {id:'Urgente', label:'Prioridad', n:urgent, c:AMBAR, ic:'zap'},
               {id:'Clientes', label:'Clientes', n:fromClients, c:'rgba(255,176,32,0.8)', ic:'user'},
-              {id:'Interno', label:'Equipo', n:internal, c:'rgba(167,139,250,0.85)', ic:'users'},
-              {id:'Archivados', label:'Archivados', n:archivedCount, c:'rgba(255,255,255,0.3)', ic:'archive'},
+              {id:'Interno', label:'Equipo', n:internal, c:'#A78BFA', ic:'users'},
+              {id:'Archivados', label:'Archivados', n:archivedCount, c:'#FFFFFF', ic:'archive'},
             ]
             const item = (f:any)=>{
               const act = filter===f.id
@@ -370,10 +370,10 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
         {!isMobile && !selected && filter!=='hub' && filter!=='Calendar' && (
           <div className="flex gap-3 px-6 py-3.5 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
             {[
-              {n:unread, l:'Sin leer', c:unread>0?'#e2b877':'rgba(255,255,255,0.3)', ic:'mail'},
-              {n:allMsgs.filter((m:any)=>m.ai_urgency==='high'||m.ai_urgency==='urgent').filter((m:any)=>!m.is_read).length, l:'Prioridad', c:'rgba(255,176,32,0.9)', ic:'zap'},
+              {n:unread, l:'Sin leer', c:unread>0?'#e2b877':'#FFFFFF', ic:'mail'},
+              {n:allMsgs.filter((m:any)=>m.ai_urgency==='high'||m.ai_urgency==='urgent').filter((m:any)=>!m.is_read).length, l:'Prioridad', c:AMBAR, ic:'zap'},
               {n:colabsGmailCount, l:'Colaboraciones', c:GRN, ic:'users-2'},
-              {n:urgent, l:'Urgentes', c:urgent>0?RED:'rgba(255,255,255,0.3)', ic:'alert-circle'},
+              {n:urgent, l:'Urgentes', c:urgent>0?RED:'#FFFFFF', ic:'alert-circle'},
             ].map((s,i)=>(
               <div key={i} className="flex-1 flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl" style={{background:'rgba(255,255,255,0.025)',border:`1px solid rgba(255,255,255,0.05)`}}>
                 <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:`${s.c}18`}}><LucideIcon name={s.ic} size={14} color={s.c}/></div>
