@@ -7,7 +7,11 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 //   condition_text → JSON completo de la suscripción (endpoint + claves)
 //   created_by     → usuario dueño de la suscripción
 // La API de reglas y la UI las filtran por nombre.
-export const PUSH_ROW = '__push_subscription__'
+// Definido en reglaRows.ts junto al resto de filas que no son reglas, para que el
+// filtro que las excluye y los nombres no puedan volver a separarse. Se reexporta
+// aquí porque varios llamantes ya lo importaban desde este módulo.
+export { PUSH_ROW } from '@/lib/reglaRows'
+import { PUSH_ROW } from '@/lib/reglaRows'
 
 let configured = false
 function ensureConfigured() {

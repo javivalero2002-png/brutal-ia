@@ -13,10 +13,11 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = await createAdminClient()
-  const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).single()
 
   // Todos los miembros del equipo ven todas las tareas — la agencia es pequeña
   // y la visibilidad compartida es esencial para la coordinación diaria.
+  // (El rol ya no se consulta aquí: se leía y no se usaba desde que se quitó el
+  // filtrado por rol, así que era un viaje a la BD en cada carga de tareas.)
   const { data, error } = await admin
     .from('tasks')
     .select('*, assignee:profiles!assigned_to(id,name,initials,avatar_color), co_assignee:profiles!co_assigned_to(id,name,initials,avatar_color), client:clients(id,name,initials,color)')

@@ -1,7 +1,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
-const LOGO_ROW = '__account_logo__'
+import { LOGO_ROW } from '@/lib/reglaRows'
 
 export async function GET() {
   const supabase = await createClient()

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createHash } from 'crypto'
 import { isOwnStorageUrl } from '@/lib/safeFetch'
+import { textOf } from '@/lib/aiText'
 
 export const maxDuration = 60
 
@@ -116,7 +117,7 @@ Si el documento está en otro idioma, responde en español. Si un campo no tiene
           : [pdfBlock, { type: 'text', text: analysisPrompt }] }
       ],
     })
-    const text = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
+    const text = textOf(msg)
 
     if (isChat) return NextResponse.json({ answer: text || 'No pude leer el documento.' })
 

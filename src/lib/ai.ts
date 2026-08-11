@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { textOf } from '@/lib/aiText'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -154,7 +155,7 @@ Responde SOLO con JSON válido (sin markdown):
   }
 
   try {
-    const text = msg.content[0].type === 'text' ? msg.content[0].text : '{}'
+    const text = textOf(msg) || '{}'
     return parseJsonLoose(text)
   } catch {
     return { summary: subject, action: 'Revisar email', client: 'Desconocido', urgency: 'normal', degraded: true }
@@ -219,7 +220,7 @@ Responde SOLO con JSON válido:
   }
 
   try {
-    const text = msg.content[0].type === 'text' ? msg.content[0].text : '{}'
+    const text = textOf(msg) || '{}'
     return parseJsonLoose(text)
   } catch {
     return {
@@ -308,6 +309,6 @@ Responde siempre en español. Sé directo, concreto y profesional. Formato markd
     messages,
   })
 
-  const reply = msg.content[0].type === 'text' ? msg.content[0].text : 'No pude procesar tu mensaje.'
+  const reply = textOf(msg) || 'No pude procesar tu mensaje.'
   return { reply, searched: shouldSearch && results.length > 0 }
 }

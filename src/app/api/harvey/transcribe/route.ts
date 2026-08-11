@@ -1,8 +1,16 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { checkAiRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Transcribir audio largo puede superar los 10s por defecto de Vercel
 export const maxDuration = 60
+
+// Mismo razonamiento que /api/harvey/speak: esta ruta gasta dinero (cae a OpenAI
+// Whisper, $0.006/min, cuando Groq falla o no está) y no tenía ni tope de tamaño
+// ni límite de tasa. Un micrófono colgado en bucle facturaba sin techo. 25 MB es
+// el máximo que aceptan ambos proveedores; por encima, la llamada iba a fallar
+// igualmente después de haber subido el fichero entero.
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -13,6 +21,11 @@ export async function POST(request: NextRequest) {
   const openaiKey = process.env.OPENAI_API_KEY
   if (!groqKey && !openaiKey) return NextResponse.json({ error: 'STT not configured' }, { status: 503 })
 
+  const admin = await createAdminClient()
+  if (await checkAiRateLimit(admin, user.id, 'stt')) {
+    return NextResponse.json({ error: 'Demasiadas solicitudes. Espera un momento.' }, { status: 429 })
+  }
+
   let formData: FormData
   try {
     formData = await request.formData()
@@ -22,6 +35,9 @@ export async function POST(request: NextRequest) {
 
   const audio = formData.get('audio') as Blob | null
   if (!audio || audio.size === 0) return NextResponse.json({ error: 'No audio' }, { status: 400 })
+  if (audio.size > MAX_AUDIO_BYTES) {
+    return NextResponse.json({ error: 'Audio demasiado largo (máx. 25 MB)' }, { status: 413 })
+  }
 
   const ext = audio.type.includes('mp4') ? 'recording.mp4' : 'recording.webm'
 

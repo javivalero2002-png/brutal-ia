@@ -54,8 +54,10 @@ hay tests que lo protegen.
 - **Rutas API**: `createClient()` para consultas con el usuario, `createAdminClient()`
   (service role, **se salta RLS**) para lo demás. Toda ruta que use el admin client
   debe resolver antes al usuario con `supabase.auth.getUser()`.
-- **`pick(body, [...])`**: allowlist de columnas en todo insert/update. Es lo que
-  impide que un cliente escriba `created_by` o `role`. No lo quites.
+- **`pick(body, [...])`**: allowlist de columnas. Es lo que impide que un cliente
+  escriba `created_by` o `role`. **No lo quites de donde está.** Ojo: se usa en 10
+  de las 33 rutas que escriben; las otras 23 construyen el objeto campo a campo
+  (comprobado: no es un agujero, pero tampoco des por hecho que `pick()` te cubre).
 - **Autorización**: `src/lib/authz.ts`. `profiles.role` es la **única** señal de
   autorización del servidor. Las escrituras a `profiles` van solo por service role
   (el rol `authenticated` tiene REVOKE de update/insert/delete).
@@ -98,9 +100,10 @@ que el fundador esté delante — incluyen SQL contra la base de datos viva:
    embed de `co_assignee:profiles!co_assigned_to(...)` en **toda** lectura de
    tareas — sin esa FK, `GET /api/tasks` devuelve 500 y la app arranca sin tareas.
 
-Los ficheros `migrations/20260810_reconcile_prod.sql` y
-`supabase/inspect_prod_schema.sql` son restos del plan rechazado. **No están
-versionados a propósito. No los ejecutes.**
+Los restos de ese plan rechazado viven en `docs/sql-rechazado/`. **No los
+ejecutes.** Estuvieron por error dentro de `migrations/`, junto a una migración
+legítima y con el mismo prefijo de fecha: se colaron en el commit `5861947` con un
+`git add -A` sin la exclusión que llevaban los demás commits de esa tanda.
 
 ---
 

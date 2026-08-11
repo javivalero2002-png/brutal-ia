@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendPushToAll, sendPushToUser, canSendPush } from '@/lib/push'
 import { todayKey, localDayKey } from '@/components/shared/helpers'
 import { logQueryErrors } from '@/lib/queryLog'
+import { NON_RULE_ROWS_FILTER } from '@/lib/reglaRows'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTOR DE AUTOMATIZACIONES (determinista)
@@ -290,12 +291,12 @@ export async function runAutomations(admin: SupabaseClient): Promise<{ ran: numb
   // tabla `reglas` (el motor solo carga reglas activas, justo debajo).
   if (process.env.NEXUS_AUTOMATIONS === 'off') return { ran: 0, results }
 
-  // Reglas activas (excluye las filas de suscripción push)
+  // Reglas activas (excluye las filas que no son reglas: push y logos de cuenta)
   const { data: rules, error: rulesError } = await admin
     .from('reglas')
     .select('id,name,condition_text,action_text,active,trigger_count,last_triggered_at,created_by')
     .eq('active', true)
-    .neq('name', '__push_subscription__')
+    .not('name', 'in', NON_RULE_ROWS_FILTER)
 
   // Sin esto, un fallo al leer las reglas se reportaba como "0 automatizaciones
   // ejecutadas" — indistinguible de no tener ninguna regla activa.
@@ -356,6 +357,10 @@ export async function runAutomations(admin: SupabaseClient): Promise<{ ran: numb
           created_by: r.created_by || null,
           notes: `${AUTO_MARK}${markId}`,
         })
+        // Un fallo persistente aquí (columna ausente, RLS) dejaba al motor sin
+        // hacer nada para siempre y sin rastro: el cron seguía reportando "0
+        // automatizaciones ejecutadas", indistinguible de no tener coincidencias.
+        if (error) console.error(`[automations] insert de tarea falló (regla ${r.name}):`, error.message)
         if (!error) {
           existingMarks.add(markId)
           fired = true
@@ -374,8 +379,12 @@ export async function runAutomations(admin: SupabaseClient): Promise<{ ran: numb
         // canSendPush como en colabsSync y gmail/sync. Sin él, el único freno era
         // `last_triggered_at`, cuyo UPDATE (abajo) no comprueba errores: si esa
         // escritura fallaba, la regla notificaba a los 7 del equipo 24 veces al día.
+        // El cerrojo va ANTES de bifurcar: las dos ramas dependen del mismo
+        // `last_triggered_at`, cuyo UPDATE (abajo) puede fallar. Aplicarlo solo a
+        // notify_team dejaba a notify_owner con el aviso repetido en las 24
+        // ejecuciones del día si esa escritura no cuajaba.
+        if (!(await canSendPush(admin, `auto-${r.id}`))) break
         if (a.type === 'notify_team') {
-          if (!(await canSendPush(admin, `auto-${r.id}`))) break
           await sendPushToAll(admin, payload)
         } else if (r.created_by) await sendPushToUser(admin, r.created_by, payload)
         fired = true
@@ -385,10 +394,15 @@ export async function runAutomations(admin: SupabaseClient): Promise<{ ran: numb
     }
 
     if (fired) {
-      await admin.from('reglas').update({
+      // Este UPDATE es el throttle de las reglas de aviso. Si falla en silencio,
+      // `last_triggered_at` se queda viejo y la regla vuelve a disparar en la
+      // siguiente ejecución; canSendPush es la segunda red, pero el fallo debe
+      // verse en los logs para poder arreglarlo.
+      const { error: updErr } = await admin.from('reglas').update({
         trigger_count: (r.trigger_count || 0) + results.filter(x => x.ruleId === r.id).length,
         last_triggered_at: new Date().toISOString(),
       }).eq('id', r.id)
+      if (updErr) console.error(`[automations] no se pudo actualizar la regla ${r.name}:`, updErr.message)
     }
   }
 
