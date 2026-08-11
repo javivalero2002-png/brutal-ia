@@ -3,6 +3,12 @@ import { sendPushToAll, sendPushToUser, canSendPush } from '@/lib/push'
 import { todayKey, localDayKey } from '@/components/shared/helpers'
 import { logQueryErrors } from '@/lib/queryLog'
 import { NON_RULE_ROWS_FILTER } from '@/lib/reglaRows'
+import { acquireLock, releaseLock } from '@/lib/jobLock'
+
+const LOCK_KEY = 'automations'
+// El techo de Vercel (Hobby) son 60 s: pasado ese punto la instancia ya no existe
+// y su cerrojo es basura. 90 s deja margen sin llegar al cron de la hora siguiente.
+const LOCK_TTL_MS = 90_000
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTOR DE AUTOMATIZACIONES (determinista)
@@ -283,7 +289,7 @@ export function evaluateTrigger(cfg: RuleConfig, ctx: {
 }
 
 // ── Ejecución ────────────────────────────────────────────────────────────────
-export async function runAutomations(admin: SupabaseClient): Promise<{ ran: number; results: AutomationResult[] }> {
+export async function runAutomations(admin: SupabaseClient): Promise<{ ran: number; results: AutomationResult[]; skipped?: true }> {
   const results: AutomationResult[] = []
 
   // Interruptor de emergencia. Ojo: cambiar una env var en Vercel requiere
@@ -291,6 +297,30 @@ export async function runAutomations(admin: SupabaseClient): Promise<{ ran: numb
   // tabla `reglas` (el motor solo carga reglas activas, justo debajo).
   if (process.env.NEXUS_AUTOMATIONS === 'off') return { ran: 0, results }
 
+  // Una sola ejecución a la vez en toda la instalación. El dedup de create_task
+  // compara contra las marcas leídas en el snapshot de abajo y no las escribe
+  // hasta el insert: dos motores solapados pasan los dos por ese hueco y crean
+  // la tarea dos veces. TTL por encima del corte de 60 s de Vercel, para que una
+  // instancia matada a mitad no bloquee la ejecución de la hora siguiente.
+  const cerrojo = await acquireLock(admin, LOCK_KEY, LOCK_TTL_MS)
+  if (!cerrojo.adquirido) {
+    console.warn('[automations] ya hay una ejecución en curso, se omite esta')
+    return { ran: 0, results, skipped: true }
+  }
+
+  try {
+    return await ejecutarReglas(admin, results)
+  } finally {
+    // Solo si el cerrojo es real. En modo degradado (tabla ausente) no hay nada
+    // que soltar y el DELETE volvería a fallar por lo mismo.
+    if (!cerrojo.degradado) await releaseLock(admin, LOCK_KEY, cerrojo.holder)
+  }
+}
+
+async function ejecutarReglas(
+  admin: SupabaseClient,
+  results: AutomationResult[],
+): Promise<{ ran: number; results: AutomationResult[] }> {
   // Reglas activas (excluye las filas que no son reglas: push y logos de cuenta)
   const { data: rules, error: rulesError } = await admin
     .from('reglas')

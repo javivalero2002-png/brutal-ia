@@ -35,6 +35,9 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
     setRunning(true)
     try {
       const res = await data.runAutomations()
+      // `skipped` = otra ejecución tenía el cerrojo (el cron, u otra persona).
+      // Decir «sin acciones pendientes» ahí sería mentir: no se llegó a mirar.
+      if (res.skipped) { showToast('El motor ya se estaba ejecutando · espera unos segundos') ; return }
       setLastRun({ at: Date.now(), results: res.results || [] })
       showToast(res.ran > 0 ? `⚡ ${res.ran} ${res.ran===1?'acción ejecutada':'acciones ejecutadas'}` : 'Motor ejecutado · sin acciones pendientes')
     } catch { showToast('Error al ejecutar el motor') }

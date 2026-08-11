@@ -17,8 +17,10 @@ export async function POST() {
   if (profile?.role !== 'owner') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   try {
-    const { ran, results } = await runAutomations(admin)
-    return NextResponse.json({ ok: true, ran, results })
+    const { ran, results, skipped } = await runAutomations(admin)
+    // `skipped` distingue "no había nada que hacer" de "otra ejecución lo tenía
+    // tomado". Sin ese matiz la UI dice "sin acciones pendientes", que es falso.
+    return NextResponse.json({ ok: true, ran, results, skipped: skipped ?? false })
   } catch (err: any) {
     console.error('runAutomations error:', err?.message)
     return NextResponse.json({ error: 'Error ejecutando automatizaciones' }, { status: 500 })

@@ -380,7 +380,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
 
   // Ejecuta el motor de automatizaciones ahora y refresca lo que pueda haber
   // cambiado (tareas creadas + contador/última ejecución de las reglas).
-  const runAutomations = useCallback(async (): Promise<{ ran: number; results: Array<{ ruleName: string; action: string; detail: string }> }> => {
+  const runAutomations = useCallback(async (): Promise<{ ran: number; results: Array<{ ruleName: string; action: string; detail: string }>; skipped?: boolean }> => {
     const res = await apiFetch('/api/automations/run', { method: 'POST' })
     try {
       const [t, r] = await Promise.all([apiFetch('/api/tasks'), apiFetch('/api/reglas')])

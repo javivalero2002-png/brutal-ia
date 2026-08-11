@@ -26,7 +26,7 @@ vi.mock('@/lib/push', () => ({
 import { runAutomations, AUTO_MARK, type RuleConfig } from '@/lib/automations'
 
 // ── Doble de Supabase ────────────────────────────────────────────────────────
-type Tabla = 'reglas' | 'inbox_messages' | 'tasks' | 'projects' | 'clients'
+type Tabla = 'reglas' | 'inbox_messages' | 'tasks' | 'projects' | 'clients' | 'job_locks'
 
 interface Estado {
   reglas: any[]
@@ -42,9 +42,30 @@ interface Estado {
   updateFalla?: string
   /** fuerza un error al leer las reglas */
   reglasFalla?: string
+  /** el cerrojo ya está tomado por otra instancia (INSERT → 23505) */
+  lockTomado?: boolean
+  /** ...y además caducó, así que se puede recuperar (UPDATE condicional → 1 fila) */
+  lockCaducado?: boolean
+  /** la migración de job_locks no está aplicada (42P01) */
+  lockSinTabla?: boolean
+  /** cerrojos soltados, para comprobar que no se queda tomado */
+  releases: { key: string }[]
 }
 
 function fakeSupabase(e: Estado): any {
+  // El cerrojo (src/lib/jobLock.ts) se apoya en códigos de error de Postgres, no
+  // en mensajes: 23505 = la fila ya existe (lo tiene otro), 42P01 = la tabla no
+  // está creada. El doble tiene que devolver el `code`, no solo el `message`.
+  const cerrojo = {
+    insert: () =>
+      e.lockSinTabla ? { data: null, error: { code: '42P01', message: 'relation "job_locks" does not exist' } }
+      : e.lockTomado ? { data: null, error: { code: '23505', message: 'duplicate key value' } }
+      : { data: null, error: null },
+    // UPDATE ... WHERE key=? AND expires_at < ahora. Devuelve las filas tocadas:
+    // 1 = estaba caducado y lo recuperamos, 0 = sigue vigente en otra instancia.
+    recuperar: () => ({ data: e.lockCaducado ? [{ key: 'automations' }] : [], error: null }),
+  }
+
   const resolver = (tabla: Tabla) => {
     const datos =
       tabla === 'reglas' ? e.reglas :
@@ -69,6 +90,7 @@ function fakeSupabase(e: Estado): any {
         order: () => q,
         limit: () => q,
         insert: (fila: any) => {
+          if (tabla === 'job_locks') return Promise.resolve(cerrojo.insert())
           e.inserts.push({ tabla, fila })
           return Promise.resolve(
             e.insertFalla && tabla === 'tasks'
@@ -76,12 +98,31 @@ function fakeSupabase(e: Estado): any {
               : { data: fila, error: null }
           )
         },
+        // El DELETE del cerrojo encadena .eq('key').eq('holder'): cada eslabón
+        // devuelve el mismo objeto y solo el último se resuelve.
+        delete: () => {
+          const d: any = {
+            eq: () => d,
+            then: (r: any) => { e.releases.push({ key: 'automations' }); return Promise.resolve({ error: null }).then(r) },
+          }
+          return d
+        },
         update: (datos: any) => {
-          e.updates.push({ tabla, datos })
-          const res = e.updateFalla && tabla === 'reglas'
-            ? { data: null, error: { message: e.updateFalla } }
-            : { data: datos, error: null }
-          const u: any = { eq: () => Promise.resolve(res), then: (r: any) => Promise.resolve(res).then(r) }
+          const esCerrojo = tabla === 'job_locks'
+          if (!esCerrojo) e.updates.push({ tabla, datos })
+          const res = esCerrojo
+            ? cerrojo.recuperar()
+            : e.updateFalla && tabla === 'reglas'
+              ? { data: null, error: { message: e.updateFalla } }
+              : { data: datos, error: null }
+          // `.eq()` y `.lt()` siguen encadenando; `.select()` cierra la cadena del
+          // cerrojo, y el update de reglas se resuelve ya en el primer `.eq()`.
+          const u: any = {
+            eq: () => (esCerrojo ? u : Promise.resolve(res)),
+            lt: () => u,
+            select: () => Promise.resolve(res),
+            then: (r: any) => Promise.resolve(res).then(r),
+          }
           return u
         },
         then: (onOk: any, onErr?: any) => Promise.resolve(resolver(tabla)).then(onOk, onErr),
@@ -103,7 +144,7 @@ const tarea = (o: Record<string, any> = {}) => ({
 })
 
 const estadoBase = (): Estado => ({
-  reglas: [], inbox: [], tasks: [], projects: [], clients: [], inserts: [], updates: [],
+  reglas: [], inbox: [], tasks: [], projects: [], clients: [], inserts: [], updates: [], releases: [],
 })
 
 beforeEach(() => {
@@ -298,5 +339,93 @@ describe('runAutomations · resiliencia', () => {
     const r = await runAutomations(fakeSupabase(e))
     expect(r.ran).toBe(0)
     expect(e.inserts).toHaveLength(0)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('runAutomations · cerrojo entre instancias', () => {
+  // El dedup de create_task compara contra las marcas leídas en el snapshot
+  // inicial y no las escribe hasta el insert. Dos motores solapados —dos personas
+  // pulsando "Ejecutar ahora", o una persona justo cuando salta el cron— pasan
+  // los dos por ese hueco: misma tarea dos veces, mismo aviso a los 7 dos veces.
+  // Misma forma que en el describe de create_task: una tarea vencida dispara la
+  // regla y provoca exactamente un insert. Así "se creó / no se creó" es la
+  // única variable, y lo que se está midiendo es el cerrojo.
+  const conTareaVencida = (e: Estado) => {
+    e.reglas = [regla({
+      v: 1,
+      trigger: { type: 'task_overdue' },
+      action: { type: 'create_task', taskText: 'Revisar: {tarea}', level: 'normal' },
+    })]
+    e.tasks = [tarea({ id: 'vieja', due_date: '2026-08-01' })]
+  }
+
+  it('si otra ejecución lo tiene tomado, se omite sin tocar nada', async () => {
+    const e = estadoBase(); conTareaVencida(e)
+    e.lockTomado = true            // INSERT → 23505
+    e.lockCaducado = false         // ...y sigue vigente: no se puede recuperar
+
+    const r = await runAutomations(fakeSupabase(e))
+
+    expect(r.skipped).toBe(true)
+    expect(r.ran).toBe(0)
+    // Lo que de verdad importa: NO se creó la tarea duplicada.
+    expect(e.inserts).toHaveLength(0)
+    expect(pushCalls).toHaveLength(0)
+  })
+
+  it('no suelta el cerrojo que no ha llegado a tomar', async () => {
+    const e = estadoBase(); conTareaVencida(e)
+    e.lockTomado = true; e.lockCaducado = false
+    await runAutomations(fakeSupabase(e))
+    // Soltarlo aquí liberaría la ejecución de la OTRA instancia, y volveríamos
+    // a tener dos motores a la vez — justo lo que el cerrojo evita.
+    expect(e.releases).toHaveLength(0)
+  })
+
+  it('recupera un cerrojo caducado (instancia matada por el corte de 60 s)', async () => {
+    const e = estadoBase(); conTareaVencida(e)
+    e.lockTomado = true; e.lockCaducado = true   // existe la fila, pero expiró
+
+    const r = await runAutomations(fakeSupabase(e))
+
+    // Sin recuperación por caducidad, una instancia cortada a mitad dejaría el
+    // motor bloqueado para siempre: Vercel no ejecuta el `finally` al matarla.
+    expect(r.skipped).toBeUndefined()
+    expect(e.inserts).toHaveLength(1)
+  })
+
+  it('suelta el cerrojo al terminar bien', async () => {
+    const e = estadoBase(); conTareaVencida(e)
+    await runAutomations(fakeSupabase(e))
+    expect(e.inserts).toHaveLength(1)
+    expect(e.releases).toHaveLength(1)
+  })
+
+  it('suelta el cerrojo aunque la ejecución falle a mitad', async () => {
+    const e = estadoBase(); conTareaVencida(e)
+    const db = fakeSupabase(e)
+    const original = db.from
+    // Revienta el snapshot: sin `finally`, el cerrojo se quedaría tomado 90 s y
+    // el cron de la hora siguiente se omitiría sin motivo.
+    db.from = (t: Tabla) => { if (t === 'inbox_messages') throw new Error('boom'); return original(t) }
+
+    await expect(runAutomations(db)).rejects.toThrow('boom')
+    expect(e.releases).toHaveLength(1)
+  })
+
+  it('sin la migración aplicada el motor sigue funcionando (fail-open)', async () => {
+    const e = estadoBase(); conTareaVencida(e)
+    e.lockSinTabla = true          // 42P01: job_locks no existe
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const r = await runAutomations(fakeSupabase(e))
+
+    // La migración la aplica una persona a mano. Que el motor deje de funcionar
+    // entero por eso es peor que la duplicación rara que el cerrojo evita.
+    expect(r.skipped).toBeUndefined()
+    expect(e.inserts).toHaveLength(1)
+    // Y no intenta soltar un cerrojo que nunca existió (fallaría por lo mismo).
+    expect(e.releases).toHaveLength(0)
   })
 })
