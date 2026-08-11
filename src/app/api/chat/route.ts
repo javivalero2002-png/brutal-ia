@@ -3,6 +3,7 @@ import { chat } from '@/lib/ai'
 import { checkChatRateLimit } from '@/lib/rate-limit'
 import { logQueryErrors } from '@/lib/queryLog'
 import { NextRequest, NextResponse } from 'next/server'
+import { madridDateLabel } from '@/components/shared/helpers'
 
 // Chat con contexto completo del estudio + busqueda web: el default de Vercel se queda corto.
 export const maxDuration = 60
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
         unreadInbox: (inbox || []).filter((e: any) => !e.is_read).length,
         emails: emailsList,
         teamSize: team?.length || 1,
-        todayDate: new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+        todayDate: madridDateLabel({ weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
         contentPipeline: contentPipelineCount ?? 0,
       }
     )

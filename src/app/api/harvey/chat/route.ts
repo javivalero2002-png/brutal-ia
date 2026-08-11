@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { todayKey } from '@/components/shared/helpers'
 import { webSearch, needsWebSearch, formatSearchContextVoice } from '@/lib/ai'
 import { checkHarveyRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
@@ -137,7 +138,7 @@ ACCIONES — cuando el usuario pida crear, añadir o apuntar algo de estos tipos
 - Proyecto: [ACCION:proyecto|nombre del proyecto|cliente o vacío|fecha YYYY-MM-DD o vacío]
 - Cliente nuevo: [ACCION:cliente|nombre del cliente|sector o industria]
 - Pieza de contenido: [ACCION:pieza|título de la pieza|plataforma|tipo]  (plataformas: Instagram, TikTok, YouTube, LinkedIn, Twitter, Podcast; tipos: Post, Reel, Story, Video, Carrusel, Newsletter, Thread). "Añade una pieza / un reel / un post al pipeline" SIEMPRE emite esta acción EN ESA MISMA RESPUESTA. NO preguntes por el cliente, la fecha ni más detalles: con el tema y la plataforma basta (el resto se edita luego en el pipeline). Ejemplo: "añade un reel de Instagram sobre el festival" → [ACCION:pieza|Reel sobre el festival|Instagram|Reel]
-- Evento o reunión: [ACCION:evento|título|YYYY-MM-DD|HH:MM o vacío|invitados]  — la fecha es OBLIGATORIA; si el usuario no la dice, pregúntala antes de emitir la acción. invitados = nombres de miembros del EQUIPO separados por comas, o vacío. Si el usuario dice "todo el equipo" o "todos", escribe literalmente la palabra todos (no listes los nombres). Una reunión con invitados les llega como invitación de Google Calendar. La fecha de hoy es ${new Date().toISOString().slice(0,10)}.
+- Evento o reunión: [ACCION:evento|título|YYYY-MM-DD|HH:MM o vacío|invitados]  — la fecha es OBLIGATORIA; si el usuario no la dice, pregúntala antes de emitir la acción. invitados = nombres de miembros del EQUIPO separados por comas, o vacío. Si el usuario dice "todo el equipo" o "todos", escribe literalmente la palabra todos (no listes los nombres). Una reunión con invitados les llega como invitación de Google Calendar. La fecha de hoy es ${todayKey()}.
 
 Solo UNA acción por respuesta. No expliques la sintaxis. Confirma en una frase qué vas a crear, incluyendo a quién se asigna o a quién invitas.
 
