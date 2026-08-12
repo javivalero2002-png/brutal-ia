@@ -91,7 +91,7 @@ function EquipoSection({data, profile, showToast}: any) {
     setLoadingThread(true)
     // La peticion tarda hasta 10s. Pulsar sobre A y enseguida sobre B dejaba las
     // dos en vuelo, y si la de A llegaba despues se pintaba SU conversacion bajo
-    // el nombre de B. Leer mensajes de un companero creyendo que son de otro es
+    // el nombre de B. Leer mensajes de un compañero creyendo que son de otro es
     // de lo peor que puede hacer esta seccion.
     const vigente = () => selectedRef.current?.id === member.id
     try {
@@ -134,7 +134,7 @@ function EquipoSection({data, profile, showToast}: any) {
   const addMember = async () => {
     // Enter en el campo de email lanza esto saltandose el boton. Un segundo Enter
     // mientras la primera alta esta en vuelo borraba de pantalla el enlace de
-    // invitacion recien generado, que es lo unico que se le puede mandar a la
+    // invitación recien generado, que es lo unico que se le puede mandar a la
     // persona nueva.
     if (addingLoading) return
     if (!newMemberName.trim() || !newMemberEmail.trim()) return
@@ -456,7 +456,7 @@ function EquipoSection({data, profile, showToast}: any) {
                 ) : (
                   <div>
                     <div className="text-[13px] text-white mb-2">Cuenta creada correctamente</div>
-                    <div className="text-[12px]" style={{color:'rgba(255,255,255,0.35)'}}>El miembro puede iniciar sesion en brutalstudios-ia.vercel.app con el email <strong>{inviteResult.email}</strong>. Si no recuerda la contrasena, puede usar "¿Olvidaste tu contrasena?" en el login.</div>
+                    <div className="text-[12px]" style={{color:'rgba(255,255,255,0.35)'}}>El miembro puede iniciar sesión en brutalstudios-ia.vercel.app con el email <strong>{inviteResult.email}</strong>. Si no recuerda la contrasena, puede usar "¿Olvidaste tu contrasena?" en el login.</div>
                     <button onClick={()=>{setInviteResult(null)}} className="mt-4 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all hover:opacity-80" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.4)'}}>AÑADIR OTRO</button>
                   </div>
                 )}
@@ -563,13 +563,13 @@ function EquipoSection({data, profile, showToast}: any) {
 
           {/* Thread */}
           <div className={`flex-1 overflow-y-auto ${isMobile?'px-4':'px-6'} py-4 space-y-3`}>
-            <div className="font-syne text-[8.5px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.18)'}}>CONVERSACION</div>
+            <div className="font-syne text-[8.5px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.18)'}}>CONVERSACIÓN</div>
             {loadingThread && <div className="text-center py-8 text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Cargando mensajes…</div>}
             {!loadingThread && thread.length===0 && (
               <div className="flex flex-col items-center py-12 text-center">
                 <div className="w-10 h-10 rounded-2xl flex items-center justify-center mb-3" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`}}><LucideIcon name="message-square" size={16} color="rgba(255,255,255,0.2)"/></div>
-                <div className="text-[13px] text-white mb-1">Sin mensajes aun</div>
-                <div className="text-[11px]" style={{color:'rgba(255,255,255,0.25)'}}>Empieza la conversacion abajo</div>
+                <div className="text-[13px] text-white mb-1">Sin mensajes aún</div>
+                <div className="text-[11px]" style={{color:'rgba(255,255,255,0.25)'}}>Empieza la conversación abajo</div>
               </div>
             )}
             {thread.map((msg: any) => {
@@ -626,7 +626,7 @@ function EquipoSection({data, profile, showToast}: any) {
           <div className="text-center">
             <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${BORDER}`}}><LucideIcon name="message-square" size={22} color="rgba(255,255,255,0.15)"/></div>
             <div className="font-figtree text-[16px] font-semibold text-white mb-1">Selecciona un compañero</div>
-            <div className="text-[12px] mb-5" style={{color:'rgba(255,255,255,0.3)'}}>Haz clic en su nombre para ver la conversacion</div>
+            <div className="text-[12px] mb-5" style={{color:'rgba(255,255,255,0.3)'}}>Haz clic en su nombre para ver la conversación</div>
             {isOwner && (
               <button onClick={()=>setAddingMember(true)}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest mx-auto transition-all hover:opacity-80"
