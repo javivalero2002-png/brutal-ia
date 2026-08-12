@@ -52,6 +52,15 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
       pedir(`/api/projects/${pid}/notes`),
       pedir(`/api/projects/${pid}/milestones`),
     ])
+    // Solo se pinta si sigues en el proyecto que lo pidio. Mismo patron que ya
+    // usan onPickPdf y analyzePdf en este fichero: abrir el proyecto A y saltar al
+    // B antes de que responda dejaba dos peticiones en vuelo, y si la de A llegaba
+    // la ultima el panel de B mostraba las notas y los HITOS de A. Y como
+    // notesLoaded acababa valiendo A mientras selectedId era B, las deps no
+    // cambiaban y no se corregia: se leian el brief y las fechas de entrega de otro
+    // proyecto. Al tocar uno de esos hitos, el PATCH iba contra B con el id de A y
+    // fallaba sin explicar por que.
+    if (selectedProjectRef.current?.id !== pid) return
     if (fallo) showToast('No se pudieron cargar las notas o los hitos del proyecto')
     setProjNotes(Array.isArray(nr)?nr:[])
     setMilestones(Array.isArray(mr)?mr:[])

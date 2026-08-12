@@ -230,8 +230,23 @@ export async function syncPersonalInbox(
     .in('gmail_id', personalIds)
   const personalKnown = new Set((personalExisting || []).map((r: { gmail_id: string }) => r.gmail_id))
 
+  // Presupuesto de tiempo, gemelo del de syncColabsInbox. Se le puso alli y aqui
+  // no, y esta funcion la llama el cron UNA VEZ POR CADA persona con Gmail
+  // conectado: siete buzones en serie, cada email nuevo con su llamada a Claude, y
+  // la funcion muere a los 60s de Hobby. Sin tope, un buzon con tanda grande se
+  // come lo que quede del minuto y se lleva por delante los demas, el motor de
+  // automatizaciones y la purga.
+  //
+  // 12s y no 25: aqui se multiplica por el numero de personas, mientras que el
+  // compartido es uno solo. Al agotarse se sale limpiamente y lo que falte lo
+  // recoge la ejecucion siguiente — el bucle salta los gmail_id ya conocidos.
+  const T0 = Date.now()
+  const PRESUPUESTO_MS = 12_000
+  let truncado = false
+
   for (const email of emails) {
     if (personalKnown.has(email.gmail_id)) continue
+    if (Date.now() - T0 > PRESUPUESTO_MS) { truncado = true; break }
 
     let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
     try {
@@ -285,5 +300,6 @@ export async function syncPersonalInbox(
   }
 
   if (aiFailures) console.error(`[sync] analyzeEmail falló en ${aiFailures} de ${emails.length} emails`)
-  return { ok: true, synced: newCount, total: emails.length, account: gmailAccount, aiFailures }
+  if (truncado) console.warn('[sync personal] sin tiempo: quedan emails sin analizar, se recogen en la siguiente ejecucion')
+  return { ok: true, synced: newCount, total: emails.length, account: gmailAccount, aiFailures, ...(truncado ? { truncado: true } : {}) }
 }

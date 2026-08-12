@@ -204,15 +204,26 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
 
   useEffect(()=>{
     if (activeTask && activeTask.id !== attachLoaded) {
-      fetch(`/api/tasks/${activeTask.id}/attachments`).then(async r=>{
+      // Misma guarda que el efecto de subtareas de arriba, y por lo mismo: abrir la
+      // tarea A y pasar enseguida a la B deja DOS peticiones en vuelo, y si la de A
+      // llega despues pinta SUS adjuntos bajo la B. Peor: setAttachLoaded(A) deja el
+      // efecto por «ya cargado», las deps no cambian y no se corrige nunca — la B
+      // enseña los adjuntos de la A mientras siga abierta. Y al intentar borrar uno,
+      // el DELETE va contra /api/tasks/B/... con el id de A, la ruta filtra por
+      // task_id, devuelve 404 y sale un error que no explica nada.
+      const idPedido = activeTask.id
+      const vigente = () => activeTaskRef.current?.id === idPedido
+      fetch(`/api/tasks/${idPedido}/attachments`).then(async r=>{
         if (!r.ok) throw new Error('carga')
         return r.json()
       }).then(d=>{
+        if (!vigente()) return
         setAttachments(Array.isArray(d)?d:[])
-        setAttachLoaded(activeTask.id)
+        setAttachLoaded(idPedido)
       }).catch(()=>{
+        if (!vigente()) return
         showToast('No se pudieron cargar los adjuntos')
-        setAttachments([]); setAttachLoaded(activeTask.id)
+        setAttachments([]); setAttachLoaded(idPedido)
       })
     }
     if (!activeTask) { setAttachments([]); setAttachLoaded(null) }
@@ -445,7 +456,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
           padding: '12px 14px 12px 12px',
         }}>
         <button
-          onClick={e=>{e.stopPropagation();canComplete&&data.toggleTask(t.id).catch(()=>{})}}
+          onClick={e=>{e.stopPropagation();canComplete&&data.toggleTask(t.id).catch(()=>showToast('No se pudo marcar — vuelve a intentarlo'))}}
           // La casilla de completar es el control mas usado de la app y no tenia
           // nombre accesible: solo un div redondo dentro, sin texto ni icono, asi
           // que un lector de pantalla la anunciaba como «boton» a secas. Con
@@ -529,7 +540,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
         onMouseLeave={e=>{if(!active&&!isOver)(e.currentTarget as HTMLElement).style.background='transparent'}}>
 
         {/* Checkbox */}
-        <button onClick={e=>{e.stopPropagation();canComplete&&data.toggleTask(t.id).catch(()=>{})}}
+        <button onClick={e=>{e.stopPropagation();canComplete&&data.toggleTask(t.id).catch(()=>showToast('No se pudo marcar — vuelve a intentarlo'))}}
           aria-label={t.done ? `Marcar «${t.text}» como pendiente` : `Completar «${t.text}»`} aria-pressed={t.done} disabled={!canComplete}
           title={undefined}
           className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 border-2 transition-all"

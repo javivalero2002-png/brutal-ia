@@ -162,9 +162,6 @@ export async function DELETE(request: NextRequest) {
   if (!profile) return NextResponse.json({ error: 'User not found' }, { status: 404 })
   if (profile.role === 'owner') return NextResponse.json({ error: 'Cannot delete owner' }, { status: 403 })
 
-  const { error: authErr } = await admin.auth.admin.deleteUser(profile.id)
-  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 500 })
-
   // La suscripcion push se borra TAMBIEN, y antes que el perfil.
   //
   // Vive en `reglas` con name = PUSH_ROW y created_by = el usuario (ver
@@ -174,8 +171,11 @@ export async function DELETE(request: NextRequest) {
   // quien ya no esta en el equipo seguia recibiendo en su movil los avisos de
   // correo de CLIENTES, con remitente y asunto en la notificacion del sistema.
   //
-  // Va antes del delete del perfil para que un fallo no deje la suscripcion
-  // huerfana sin cuenta a la que asociarla.
+  // Va lo PRIMERO, antes incluso de borrar la cuenta de auth. Lo tenia despues, y
+  // eso era inutil: deleteUser cascadea sobre profiles, y segun como este la FK de
+  // `reglas` o bien la fila ya habia desaparecido (y este DELETE no borraba nada)
+  // o bien la referencia impedia el borrado de la cuenta. Primero se retira la
+  // suscripcion, y solo si eso funciona se sigue.
   const { error: pushErr } = await admin
     .from('reglas')
     .delete()
@@ -188,6 +188,9 @@ export async function DELETE(request: NextRequest) {
       { status: 500 },
     )
   }
+
+  const { error: authErr } = await admin.auth.admin.deleteUser(profile.id)
+  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 500 })
 
   await admin.from('profiles').delete().eq('id', profile.id)
   return NextResponse.json({ ok: true })
