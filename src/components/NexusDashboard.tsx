@@ -84,9 +84,16 @@ function precargarSecciones() {
   }
   siguiente()
 }
-type Section = 'hoy'|'inbox'|'tareas'|'clientes'|'proyectos'|'contenido'|'calendario'|'memoria'|'automatizaciones'|'chat'|'equipo'|'reportes'|'ajustes'|'harvey'
+// La lista es la fuente de verdad y el tipo se deriva de ella, no al revés: hace
+// falta poder validar en tiempo de ejecución lo que llega por `?s=` (los atajos
+// de la PWA), y una unión de tipos no existe en tiempo de ejecución. Escribir
+// las dos por separado invita a que se desincronicen.
+const SECCIONES = ['hoy','inbox','tareas','clientes','proyectos','contenido','calendario','memoria','automatizaciones','chat','equipo','reportes','ajustes','harvey'] as const
+type Section = typeof SECCIONES[number]
+const esSeccion = (v: string | null): v is Section =>
+  !!v && (SECCIONES as readonly string[]).includes(v)
 
-interface Props { profile: Profile }
+interface Props { profile: Profile; initialSection?: string }
 
 // El tema va en cookie para que el servidor pueda pintarlo en el HTML inicial y
 // no haya destello. Se sigue escribiendo localStorage por si queda alguna pestaña
@@ -103,14 +110,17 @@ function guardarTema(claro: boolean) {
   } catch {}
 }
 
-export default function NexusDashboard({ profile }: Props) {
+export default function NexusDashboard({ profile, initialSection }: Props) {
   const data = useNexusData(profile, (msg) => {
     const sender = msg.from_name || 'Alguien'
     const label = msg.source === 'internal' ? `Mensaje de ${sender}` : `Nuevo mensaje de ${sender}`
     setToast(label)
     setTimeout(() => setToast(null), 4000)
   })
-  const [section, setSection_] = useState<Section>('hoy')
+  // `initialSection` llega del servidor (los atajos de la PWA, `?s=`). Se valida
+  // aquí porque es una cadena que viene de la URL: cualquiera puede escribir
+  // ?s=loquesea y no debe dejar la app en una sección inexistente.
+  const [section, setSection_] = useState<Section>(esSeccion(initialSection ?? null) ? initialSection as Section : 'hoy')
   const [sectionStack, setSectionStack] = useState<Section[]>([])
   const setSection = (s: Section) => {
     setSection_(prev => { if (prev !== s && !popNavRef.current) setSectionStack(stack => [...stack.slice(-9), prev]); return s })
@@ -222,6 +232,11 @@ export default function NexusDashboard({ profile }: Props) {
     } else if (gmailStatus === 'error' || gmailStatus === 'no_refresh_token') {
       window.history.replaceState({}, '', '/dashboard')
       setToast('Error al conectar. Inténtalo de nuevo desde Operativa → Sincronización.')
+    } else if (params.get('s')) {
+      // La sección ya la aplicó el servidor vía `initialSection`; aquí solo se
+      // limpia la URL para que un F5 no vuelva a fijarla. Los atajos de la PWA
+      // son una puerta de entrada, no un estado que deba persistir.
+      window.history.replaceState({}, '', '/dashboard')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

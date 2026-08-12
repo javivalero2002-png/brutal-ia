@@ -5,7 +5,7 @@ import NexusDashboard from '@/components/NexusDashboard'
 import NexusBootScreen from '@/components/NexusBootScreen'
 import type { Profile } from '@/types'
 
-export default function DashboardClient() {
+export default function DashboardClient({ initialSection }: { initialSection?: string }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -43,5 +43,5 @@ export default function DashboardClient() {
   }
 
   if (!profile) return null
-  return <NexusDashboard profile={profile} />
+  return <NexusDashboard profile={profile} initialSection={initialSection} />
 }
