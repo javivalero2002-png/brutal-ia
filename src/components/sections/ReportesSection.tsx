@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useMemo } from 'react'
 import type { Task, Project, Client, Profile } from '@/types'
-import { useIsMobile, BLU, RED, GRN, BORDER, LucideIcon, dlDate, dlLabel, Donut, Gauge, AreaChart, localDayKey } from '@/components/shared'
+import { useIsMobile, BLU, RED, GRN, BORDER, LucideIcon, dlDate, dlLabel, estadoDeadline, Donut, Gauge, AreaChart, localDayKey } from '@/components/shared'
 
 function ReportesSection({data, onNavigate}: any) {
   const isMobile = useIsMobile()
@@ -354,9 +354,16 @@ function ReportesSection({data, onNavigate}: any) {
             <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Próximos vencimientos</div>
             <div className="space-y-1">
               {upcoming.map((p:Project,i:number)=>{
-                const daysLeft = Math.ceil((dlDate(p.deadline).getTime()-Date.now())/86400000)
-                const isOver = daysLeft < 0
-                const isSoon = !isOver && daysLeft <= 7
+                // estadoDeadline y no una resta de instantes. dlDate() devuelve el
+                // deadline a las 23:59:59, asi que a las 09:00 del dia en que vence
+                // la resta daba 0,62 -> Math.ceil -> 1 -> "1d" para algo que vence
+                // HOY; y lo vencido ayer daba Math.ceil(-0,37) = -0 -> decia HOY.
+                // Es el mismo fallo que ya se corrigio en Proyectos, con la misma
+                // funcion: un deadline es un DIA, no un instante.
+                const dl = estadoDeadline(p.deadline)!
+                const daysLeft = dl.dias
+                const isOver = dl.vencido
+                const isSoon = dl.pronto
                 return (
                   <div key={p.id} className="flex items-center gap-3 py-2" style={{borderBottom:i<upcoming.length-1?'1px solid rgba(255,255,255,0.04)':'none'}}>
                     <div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:p.color||BLU}}/>

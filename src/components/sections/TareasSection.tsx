@@ -244,9 +244,17 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
     } catch { showToast('Error al actualizar la subtarea') }
   }
 
+  // `fetch` NO lanza con 4xx/5xx: solo si se cae la red. Sin mirar r.ok, un fallo
+  // del servidor quitaba la subtarea de la pantalla igualmente y reaparecia al
+  // recargar — la app decia haber borrado algo que seguia ahi.
   const deleteSubtask = async (id: string) => {
     try {
-      await fetch(`/api/tasks/subtasks?id=${id}`, { method:'DELETE' })
+      const r = await fetch(`/api/tasks/subtasks?id=${id}`, { method:'DELETE' })
+      if (!r.ok) {
+        const e = await r.json().catch(()=>({}))
+        showToast(e.error || 'No se pudo eliminar la subtarea')
+        return
+      }
       setSubtasks(s=>s.filter(x=>x.id!==id))
     } catch { showToast('Error al eliminar') }
   }
@@ -291,7 +299,12 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   const deleteAttachment = async (att: any) => {
     if (!activeTask) return
     try {
-      await fetch(`/api/tasks/${activeTask.id}/attachments?attachmentId=${att.id}`, { method:'DELETE' })
+      const r = await fetch(`/api/tasks/${activeTask.id}/attachments?attachmentId=${att.id}`, { method:'DELETE' })
+      if (!r.ok) {
+        const e = await r.json().catch(()=>({}))
+        showToast(e.error || 'No se pudo eliminar el adjunto')
+        return
+      }
       setAttachments(a=>a.filter(x=>x.id!==att.id))
     } catch { showToast('Error al eliminar adjunto') }
   }

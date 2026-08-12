@@ -160,6 +160,10 @@ function EquipoSection({data, profile, showToast}: any) {
       if (!res.ok) { showToast(json.error || 'Error al crear cuenta'); return }
       setInviteResult({ email: newMemberEmail.trim().toLowerCase(), inviteLink: json.inviteLink || null })
       setNewMemberName(''); setNewMemberEmail(''); setNewMemberRole('member')
+      // La lista se refresca. Sin esto, la persona recien dada de alta no aparecia
+      // hasta recargar la pagina: parecia que el alta no habia funcionado, y lo
+      // logico entonces es repetirla.
+      await data.reloadTeam?.()
       showToast(`Cuenta creada para ${newMemberEmail.trim().split('@')[0]}`)
     } catch { showToast('Error de red') }
     finally { setAddingLoading(false) }

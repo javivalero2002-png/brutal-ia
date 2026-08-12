@@ -183,6 +183,15 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id])
 
+  // Dar de alta o de baja a alguien no refrescaba la lista: la persona nueva no
+  // aparecia hasta recargar la pagina, asi que parecia que el alta no habia
+  // funcionado —y mas de uno la repetiria—.
+  const reloadTeam = useCallback(async () => {
+    const nuevo = await apiFetch('/api/team')
+    setTeam(nuevo)
+    return nuevo
+  }, [])
+
   const reloadInbox = useCallback(async () => {
     const newInbox = await apiFetch('/api/inbox')
     setInbox(newInbox)
@@ -424,7 +433,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     agenda, createAgenda, updateAgenda, deleteAgenda,
     reglas, createRegla, updateRegla, deleteRegla, runAutomations,
     chatMessages, sendChatMessage, clearChat,
-    team, calendarEvents, calendarScopeError, reloadCalendar, reload: load,
+    team, reloadTeam, calendarEvents, calendarScopeError, reloadCalendar, reload: load,
     // loadError se calculaba y NO se devolvía: era estado muerto. Sin él, un 500
     // en /api/tasks dejaba la app con la sección vacía y CERO señal — y el cambio
     // a allSettled borró el último rastro (antes el rechazo salía en consola).
