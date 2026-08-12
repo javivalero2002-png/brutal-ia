@@ -125,7 +125,14 @@ html.theme-light body .nx-noinvert {
   filter: invert(1) hue-rotate(180deg) contrast(0.94) brightness(0.97);
 }
 html.theme-light { background: #f0f0e8; color-scheme: light; }
-html.theme-light body img[src*="brutal-logo-white"] { filter: none; }
+/* Los logos NO se invierten en modo claro: cada versión ya está pensada para su
+   fondo, e invertirlas enseñaría justo la contraria. La regla anterior apuntaba a
+   `brutal-logo-white`, un fichero que NO EXISTE en public/ — llevaba tiempo sin
+   proteger nada, y el logo de la marca se invertía igualmente. */
+html.theme-light body img[src$="logo-oscuro.svg"],
+html.theme-light body img[src$="logo-claro.svg"],
+html.theme-light body img[src$="brutal-logo.svg"],
+html.theme-light body img[src$="brutal-logo-ig.svg"] { filter: none; }
 html.theme-light ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); }
 
 /* Elevación de tarjetas: las cards pierden contraste al invertir porque

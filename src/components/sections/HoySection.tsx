@@ -257,6 +257,7 @@ ${memLines||'  sin documentos'}`
       if (!res.ok) { const j = await res.json().catch(()=>({})); throw new Error(j.error||'Error') }
 
       let reply = ''
+      let degradado = false
       let prefetch: { text: string; promise: Promise<Response> } | undefined
       const ct = res.headers.get('content-type') || ''
       if (res.body && ct.includes('text/plain')) {
@@ -282,6 +283,11 @@ ${memLines||'  sin documentos'}`
       } else {
         const json = await res.json()
         reply = (json.reply as string) || ''
+        // El servidor marca `fallback: true` cuando NO ha hablado con Claude y
+        // devuelve una frase enlatada. Aqui se ignoraba, igual que pasaba en
+        // HarveySection: la frase se pintaba —y se LEIA EN VOZ ALTA con su voz—
+        // como si la hubiera pensado el. Es el gemelo exacto del mismo fallo.
+        degradado = !!json.fallback
       }
       if (!aliveRef.current || run !== voiceRunRef.current) return
       reply = reply.trim()
@@ -305,7 +311,11 @@ ${memLines||'  sin documentos'}`
         if (type === 'pieza')    setPendingAction({type:'pieza',    text:parts[1]||'', platform:parts[2]||'Instagram', contentType:parts[3]||'Post'})
       }
 
-      setHarveyReply(reply)
+      // Si viene del fallback local, se DICE. Callarlo era hacer pasar por Harvey
+      // una frase guardada, y encima leerla en voz alta con su voz.
+      setHarveyReply(degradado
+        ? `${reply}\n\n(No he podido conectar con mi cerebro ahora mismo — esto es lo que tengo guardado. Vuelve a preguntarme en un momento.)`
+        : reply)
       await speak(reply, prefetch)
     } catch (err: any) {
       setOrbMode('idle')
