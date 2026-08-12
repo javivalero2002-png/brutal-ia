@@ -385,7 +385,13 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   const lc = (l:string) => l==='urgent'?RED:l==='high'?AMB:BLU
 
   // ── Mobile Task Row ─────────────────────────────────────────────────────────
-  const MobileTaskRow = ({t,last}:{t:Task,last:boolean}) => {
+  // Igual que en el tablero: NO son componentes, son funciones que devuelven JSX.
+  // Declaradas dentro de TareasSection, usarlas como <Componente/> hacia que el
+  // tipo del elemento cambiase por identidad en cada render, asi que React
+  // desmontaba y volvia a montar TODA la lista en vez de actualizarla — incluido
+  // el sondeo periodico de notificaciones, que re-renderiza sin que nadie toque
+  // nada. Van en minuscula para que no inviten a usarlas como etiqueta otra vez.
+  const renderFilaMovil = (t: Task, last: boolean) => {
     const pri  = PRIMAP[t.level]||PRIMAP.normal
     const proj = t.project_id ? data.projects.find((p:Project)=>p.id===t.project_id) : null
     const due  = t.due_date ? relDate(t.due_date) : null
@@ -393,7 +399,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
     const canComplete = true
     const isOver = due?.over && !t.done
     return (
-      <div onClick={()=>openTask(t)}
+      <div key={t.id} onClick={()=>openTask(t)}
         className="flex items-center gap-3 cursor-pointer transition-colors"
         style={{
           background: active ? 'rgba(27,95,250,0.06)' : isOver ? 'rgba(229,29,42,0.025)' : 'transparent',
@@ -464,7 +470,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   // Grid: 28px | 1fr | 116px | 72px | 80px | 100px | 28px
   const COLS = '28px 1fr 116px 72px 80px 100px 28px'
 
-  const DesktopTaskRow = ({t,last}:{t:Task,last:boolean}) => {
+  const renderFilaEscritorio = (t: Task, last: boolean) => {
     const pri  = PRIMAP[t.level]||PRIMAP.normal
     const proj = t.project_id ? data.projects.find((p:Project)=>p.id===t.project_id) : null
     const due  = t.due_date ? relDate(t.due_date) : null
@@ -472,7 +478,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
     const canComplete = true
     const isOver = due?.over && !t.done
     return (
-      <div onClick={()=>openTask(t)} className="group cursor-pointer transition-all"
+      <div key={t.id} onClick={()=>openTask(t)} className="group cursor-pointer transition-all"
         style={{
           display:'grid', gridTemplateColumns: COLS,
           alignItems: 'center', gap: '0 12px',
@@ -559,11 +565,11 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
     )
   }
 
-  const TaskRow = ({t,last}:{t:Task,last:boolean}) =>
-    isMobile ? <MobileTaskRow t={t} last={last}/> : <DesktopTaskRow t={t} last={last}/>
+  const renderFila = (t: Task, last: boolean) =>
+    isMobile ? renderFilaMovil(t, last) : renderFilaEscritorio(t, last)
 
   // ── Column headers (desktop only) ───────────────────────────────────────────
-  const ColHeaders = () => (
+  const renderCabeceras = () => (
     <div style={{
       display:'grid', gridTemplateColumns: COLS,
       gap:'0 12px', padding:'0 20px',
@@ -582,7 +588,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   )
 
   // ── Section block ────────────────────────────────────────────────────────────
-  const Section = ({label,tasks,dot,showCols}:{label:string,tasks:Task[],dot?:string,showCols?:boolean}) => {
+  const renderGrupo = ({label,tasks,dot,showCols}:{label:string,tasks:Task[],dot?:string,showCols?:boolean}) => {
     if (!tasks.length) return null
     return (
       <div className="mb-3">
@@ -595,8 +601,8 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
           <div className="h-px flex-1 ml-1" style={{background: dot ? dot+'18' : 'rgba(255,255,255,0.04)'}}/>
         </div>
         <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-          {!isMobile && showCols && <ColHeaders/>}
-          {tasks.map((t,i)=><TaskRow key={t.id} t={t} last={i===tasks.length-1}/>)}
+          {!isMobile && showCols && renderCabeceras()}
+          {tasks.map((t,i)=>renderFila(t, i===tasks.length-1))}
         </div>
       </div>
     )
@@ -917,10 +923,10 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
             </div>
           ) : grouped ? (
             <>
-              {grouped.over.length>0 && <Section label="ATRASADAS" tasks={grouped.over} dot={RED} showCols/>}
-              <Section label="HOY" tasks={grouped.today} dot={AMB} showCols={!grouped.over.length}/>
-              <Section label="PRÓXIMAS" tasks={grouped.upcoming} dot={GRN} showCols={!grouped.over.length&&!grouped.today.length}/>
-              <Section label="SIN FECHA" tasks={grouped.nodate} showCols={!grouped.over.length&&!grouped.today.length&&!grouped.upcoming.length}/>
+              {grouped.over.length>0 && renderGrupo({label:"ATRASADAS", tasks:grouped.over, dot:RED, showCols:true})}
+              {renderGrupo({label:"HOY", tasks:grouped.today, dot:AMB, showCols:!grouped.over.length})}
+              {renderGrupo({label:"PRÓXIMAS", tasks:grouped.upcoming, dot:GRN, showCols:!grouped.over.length&&!grouped.today.length})}
+              {renderGrupo({label:"SIN FECHA", tasks:grouped.nodate, showCols:!grouped.over.length&&!grouped.today.length&&!grouped.upcoming.length})}
               {filtered.length===0 && data.tasks.length===0 && (
                 <HarveyTaskSuggestions data={data} onOpenModal={onOpenModal} onCreateTask={async(text:string,level:string)=>{
                   try{await data.createTask({text,level,done:false});showToast('Tarea creada')}catch{showToast('Error')}
@@ -942,8 +948,8 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                 </div>
               ) : (
                 <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-                  {!isMobile && <ColHeaders/>}
-                  {filtered.map((t:Task,i:number)=><TaskRow key={t.id} t={t} last={i===filtered.length-1}/>)}
+                  {!isMobile && renderCabeceras()}
+                  {filtered.map((t:Task,i:number)=>renderFila(t, i===filtered.length-1))}
                 </div>
               )}
               {tabFilter==='completadas'&&filtered.length>0&&isOwner&&(
