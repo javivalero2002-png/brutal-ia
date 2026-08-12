@@ -1,6 +1,6 @@
 'use client'
 import type { Profile, Client } from '@/types'
-import { BLU, RED, GRN, SURF2, BORDER, LucideIcon, useIsMobile, AMBAR} from '@/components/shared'
+import { PLATAFORMA_COLOR, BLU, RED, GRN, SURF2, BORDER, LucideIcon, useIsMobile, AMBAR} from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
 
 const meta: Record<string, { eyebrow: string; title: string; saveLabel: string }> = {
@@ -90,7 +90,7 @@ export default function CreateModal({ modal, onClose, mf, setMf, saving, onSave,
   const m = meta[modal]
   if (!m) return null
 
-  const platC: Record<string, string> = { TikTok:'#ff0050', Instagram:'#C13584', LinkedIn:'#0A66C2', YouTube:'#FF0000', Twitter:'#1DA1F2', Pinterest:'#E60023' }
+  const platC = PLATAFORMA_COLOR
   // HEX de 6 dígitos, obligatorio: abajo se les concatena la opacidad (cc+'18',
   // cc+'55'). Con rgba() salía `rgba(255,176,32,0.9)18`, que el navegador DESCARTA
   // entero, sin error y sin nada en consola. Resultado: cuatro de las cinco

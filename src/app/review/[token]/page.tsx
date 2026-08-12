@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, use } from 'react'
 import { PlatformLogo } from '@/components/PlatformLogo'
+import { PLATAFORMA_COLOR } from '@/components/shared/design-tokens'
 
 function videoEmbed(url: string): string | null {
   if (!url) return null
@@ -11,10 +12,7 @@ function videoEmbed(url: string): string | null {
   return null
 }
 
-const platColor: Record<string,string> = {
-  TikTok:'#ff0050', Instagram:'#C13584', LinkedIn:'#0A66C2',
-  YouTube:'#FF0000', Twitter:'#1DA1F2', Pinterest:'#E60023',
-}
+const platColor = PLATAFORMA_COLOR
 
 export default function ReviewPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params)

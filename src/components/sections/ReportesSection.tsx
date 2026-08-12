@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useMemo } from 'react'
 import type { Task, Project, Client, Profile } from '@/types'
-import { useIsMobile, BLU, RED, GRN, BORDER, LucideIcon, dlDate, dlLabel, estadoDeadline, Donut, Gauge, AreaChart, localDayKey } from '@/components/shared'
+import { PLATAFORMA_COLOR, useIsMobile, BLU, RED, GRN, BORDER, LucideIcon, dlDate, dlLabel, estadoDeadline, Donut, Gauge, AreaChart, localDayKey } from '@/components/shared'
 
 function ReportesSection({data, onNavigate}: any) {
   const isMobile = useIsMobile()
@@ -315,7 +315,7 @@ function ReportesSection({data, onNavigate}: any) {
             })}
           </div>
           {(()=>{
-            const platColors: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
+            const platColors = PLATAFORMA_COLOR
             const platCounts: Record<string,number> = {}
             agendaItems.filter((a:any)=>a.status!=='publicado').forEach((a:any)=>{ if(a.platform) platCounts[a.platform]=(platCounts[a.platform]||0)+1 })
             const entries = Object.entries(platCounts).sort((a,b)=>b[1]-a[1])

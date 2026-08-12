@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, todayKey } from '@/components/shared'
+import { PLATAFORMA_COLOR, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, todayKey } from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
 import BocetoPanel from '@/components/BocetoPanel'
 
@@ -176,7 +176,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeItem, onOpenModal])
 
-  const platColor: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
+  const platColor = PLATAFORMA_COLOR
 
   const cols = [
     { key:'borrador', label:'En bruto', color:'#FFFFFF' },
@@ -285,7 +285,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                   {data.agenda.length > 0 && (() => {
                     const platCounts: Record<string,number> = {}
                     filteredAgenda.forEach((a: any)=>{ if(a.platform) platCounts[a.platform]=(platCounts[a.platform]||0)+1 })
-                    const platColors: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
+                    const platColors = PLATAFORMA_COLOR
                     return Object.entries(platCounts).length > 0 ? (
                       <>
                         <span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.12)'}}>·</span>
@@ -317,7 +317,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
               {allPlatforms.map((pl: string)=>{
                 const isAll = pl === 'Todas'
                 const isActive = platformFilter === pl
-                const platColors: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
+                const platColors = PLATAFORMA_COLOR
                 const plColor = platColors[pl] || BLU
                 return (
                   <button key={pl} onClick={()=>setPlatformFilter(pl)} className="flex items-center gap-1.5 font-syne text-[8.5px] font-black px-3 py-1.5 rounded-xl transition-all" style={{

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, dlDate, AMBAR } from '@/components/shared'
+import { PLATAFORMA_COLOR, useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, dlDate, AMBAR } from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
 
 function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
@@ -184,7 +184,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
   // Content pieces by publish date
   data.agenda?.forEach((a: any) => {
     if (a.publish_date) {
-      const platColors: Record<string,string> = {TikTok:'#ff0050',Instagram:'#C13584',LinkedIn:'#0A66C2',YouTube:'#FF0000',Twitter:'#1DA1F2',Pinterest:'#E60023'}
+      const platColors = PLATAFORMA_COLOR
       addEvent(a.publish_date, {type:'content', label:a.title, color:platColors[a.platform]||BLU, raw:a})
     }
   })
