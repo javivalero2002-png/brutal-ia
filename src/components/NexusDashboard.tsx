@@ -342,7 +342,16 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
     const onPop = (e: PopStateEvent) => {
       const s = e.state?.nxSection
       if (s) {
-        popNavRef.current = true
+        // El flag SOLO se arma si la sección cambia de verdad.
+        //
+        // Lo desarma el efecto de [section], y ese efecto no se ejecuta si el
+        // estado no cambia. Cuando el popstate apuntaba a la sección en la que ya
+        // estábamos —lo que pasa al cerrar un detalle en el móvil, que hace
+        // history.back()— el flag se quedaba armado para siempre. La siguiente
+        // navegación de verdad lo encontraba puesto, se lo tomaba como «esto viene
+        // del botón atrás» y NO metía la entrada en el historial: a partir de ahí,
+        // atrás se saltaba esa pantalla.
+        if (s !== sectionRef.current) popNavRef.current = true
         setModal(null)
         setSearchOpen(false)
         setSidebarOpen(open => open && window.matchMedia('(max-width: 767px)').matches ? false : open)
