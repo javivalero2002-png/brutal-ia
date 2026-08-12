@@ -1268,6 +1268,11 @@ function KanbanBoard({ tasks, data, openTask, isMobile, showToast, initialGroupB
 
   const merged = useMemo(() => tasks.map(t => ov[t.id] ? { ...t, ...ov[t.id] } : t), [tasks, ov])
 
+  // `ov` son los cambios optimistas mientras el servidor responde. Se retiran en
+  // cuanto la peticion termina —salga bien o mal— porque a partir de ahi la
+  // verdad esta en data.tasks.
+  const quitarOverlay = (id: string) => setOv(o => { if (!o[id]) return o; const n = { ...o }; delete n[id]; return n })
+
   // Columnas dinámicas: por prioridad (fijas) o por proyecto (según proyectos con tareas).
   const columns: KanCol[] = useMemo(() => {
     if (groupBy === 'priority') return PRIORITY_COLS
@@ -1304,9 +1309,16 @@ function KanbanBoard({ tasks, data, openTask, isMobile, showToast, initialGroupB
     setOv(o => ({ ...o, [t.id]: { ...o[t.id], ...updates } }))
     try {
       await data.updateTask(t.id, updates)
+      // El overlay se retira TAMBIEN al salir bien, no solo al fallar. Existe para
+      // tapar el viaje de ida y vuelta al servidor; pasado eso, updateTask ya ha
+      // escrito la fila autentica en data.tasks y dejarlo puesto solo sirve para
+      // esconderla. Se quedaba residente hasta desmontar el tablero, que NO ocurre
+      // al abrir una tarea: cambiabas el estado en el detalle, guardabas, y la
+      // tarjeta seguia tachada en HECHO con el contador de columna contandola ahi.
+      quitarOverlay(t.id)
       showToast(col.kind === 'done' ? '✓ Tarea completada' : `Movida a ${col.label}`)
     } catch {
-      setOv(o => { const n = { ...o }; delete n[t.id]; return n })
+      quitarOverlay(t.id)
       showToast('Error al mover')
     }
   }
@@ -1335,17 +1347,34 @@ function KanbanBoard({ tasks, data, openTask, isMobile, showToast, initialGroupB
   const toggleDone = async (t: Task) => {
     const updates: Partial<Task> = { done: !t.done }
     setOv(o => ({ ...o, [t.id]: { ...o[t.id], ...updates } }))
-    try { await data.updateTask(t.id, updates); showToast(updates.done ? '✓ Tarea completada' : 'Tarea reabierta') }
-    catch { setOv(o => { const n = { ...o }; delete n[t.id]; return n }); showToast('Error al actualizar') }
+    try { await data.updateTask(t.id, updates); quitarOverlay(t.id); showToast(updates.done ? '✓ Tarea completada' : 'Tarea reabierta') }
+    catch { quitarOverlay(t.id); showToast('Error al actualizar') }
   }
 
-  const Card = ({ t }: { t: Task }) => {
+  // OJO: estas tres NO son componentes, son funciones que devuelven JSX, y se
+  // llaman —renderTarjeta(t)— en vez de usarse como <Tarjeta t={t}/>. La
+  // diferencia importa:
+  //
+  // Declaradas dentro de KanbanBoard, cada render creaba una funcion nueva. Usadas
+  // como <Componente/>, el TIPO del elemento cambia por identidad en cada render, y
+  // React entonces no actualiza el subarbol: lo desmonta y monta otro. El input de
+  // "+ Anadir tarea" llamaba a setQaText en cada onChange -> re-render -> nodo DOM
+  // nuevo -> foco perdido tras la primera letra. En el movil ademas se cerraba el
+  // teclado. La alta rapida del tablero era inservible.
+  //
+  // Llamadas como funciones, su JSX se integra en el arbol de KanbanBoard y los
+  // nodos se conservan. Se pueden dejar aqui dentro y seguir leyendo del closure,
+  // que es lo que las hace legibles; sacarlas al modulo obligaria a pasarles catorce
+  // props. Por eso NO llevan mayuscula inicial: para que no inviten a usarlas como
+  // etiqueta otra vez. Y por eso no pueden usar hooks (ninguna lo hace).
+  const renderTarjeta = (t: Task) => {
     const pr = PRIMAP[t.level] || PRIMAP.normal
     const assignee = t.assignee
     const dd = t.due_date ? relDate(t.due_date) : null
     const proj = t.project_id ? data.projects?.find((p: Project) => p.id === t.project_id) : null
     return (
       <div
+        key={t.id}
         draggable={!isMobile}
         onDragStart={()=>setDraggedId(t.id)}
         onDragEnd={()=>{ setDraggedId(null); setOverCol(null) }}
@@ -1382,13 +1411,14 @@ function KanbanBoard({ tasks, data, openTask, isMobile, showToast, initialGroupB
     )
   }
 
-  const KanColContent = ({ col }: { col: KanCol }) => {
+  const renderColumna = (col: KanCol) => {
     const items = merged.filter(col.match)
     const hot = overCol === col.key
     const qa = qaText[col.key] || ''
     const adding = qaAdding[col.key] || false
     return (
       <div
+        key={col.key}
         onDragOver={e=>{ if(!isMobile){ e.preventDefault(); setOverCol(col.key) } }}
         onDragLeave={()=>{ if(overCol===col.key) setOverCol(null) }}
         onDrop={()=>onDrop(col)}
@@ -1412,7 +1442,7 @@ function KanbanBoard({ tasks, data, openTask, isMobile, showToast, initialGroupB
         <div className="px-2.5 space-y-2 overflow-y-auto flex-1 pt-2.5" style={{ scrollbarWidth:'none' }}>
           {items.length === 0
             ? <div className="rounded-xl py-8 text-center text-[10.5px]" style={{ color:'rgba(255,255,255,0.15)', border:`1px dashed ${BORDER}` }}>{isMobile?'Sin tareas en esta columna':'Suelta aquí'}</div>
-            : items.map(t => <Card key={t.id} t={t}/>)}
+            : items.map(t => renderTarjeta(t))}
         </div>
         {/* Quick-add */}
         {(!isMobile || col.key !== 'done') && (
@@ -1442,7 +1472,7 @@ function KanbanBoard({ tasks, data, openTask, isMobile, showToast, initialGroupB
   }
 
   // Toggle de agrupación (prioridad / proyecto)
-  const GroupToggle = () => (
+  const renderAgrupacion = () => (
     <div className="flex p-0.5 rounded-xl gap-0.5" style={{ background:SURF2, border:`1px solid ${BORDER}` }}>
       {([{id:'priority' as const,icon:'flag',label:'Prioridad'},{id:'project' as const,icon:'folder',label:'Proyecto'}] as const).map(g=>(
         <button key={g.id} onClick={()=>setGroupBy(g.id)}
@@ -1461,7 +1491,7 @@ function KanbanBoard({ tasks, data, openTask, isMobile, showToast, initialGroupB
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-2">
           <span className="font-syne text-[8.5px] font-black tracking-widest" style={{ color:'rgba(255,255,255,0.28)' }}>AGRUPAR POR</span>
-          <GroupToggle/>
+          {renderAgrupacion()}
         </div>
         {/* Mobile column tab bar (scrollable when many project columns) */}
         <div className="flex rounded-2xl overflow-x-auto" style={{ border:`1px solid ${BORDER}`, background:'rgba(255,255,255,0.014)', scrollbarWidth:'none' }}>
@@ -1478,7 +1508,7 @@ function KanbanBoard({ tasks, data, openTask, isMobile, showToast, initialGroupB
             )
           })}
         </div>
-        {activeKanCol && <KanColContent col={activeKanCol}/>}
+        {activeKanCol && renderColumna(activeKanCol)}
       </div>
     )
   }
@@ -1487,10 +1517,10 @@ function KanbanBoard({ tasks, data, openTask, isMobile, showToast, initialGroupB
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <span className="font-syne text-[8.5px] font-black tracking-widest" style={{ color:'rgba(255,255,255,0.28)' }}>AGRUPAR POR</span>
-        <GroupToggle/>
+        {renderAgrupacion()}
       </div>
       <div className="flex gap-3 overflow-x-auto pb-4" style={{ scrollbarWidth:'thin' }}>
-        {columns.map(col => <KanColContent key={col.key} col={col}/>)}
+        {columns.map(col => renderColumna(col))}
       </div>
     </div>
   )
