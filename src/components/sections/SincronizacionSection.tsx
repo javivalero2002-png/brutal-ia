@@ -103,6 +103,7 @@ function SincronizacionSection({data, profile, showToast}: any) {
       addLog('Gmail Personal', true, detail)
       setSyncResultMsg({ok:true, text:`${synced} email${synced!==1?'s':''} nuevo${synced!==1?'s':''}`, account:'personal'})
       showToast(`Gmail Personal — ${detail}`)
+      return true
     } catch (err: any) {
       const isExpired = err?.message?.includes('token_expired') || err?.error === 'token_expired'
       const msg = isExpired ? 'Token caducado — reconecta tu cuenta'
@@ -111,6 +112,11 @@ function SincronizacionSection({data, profile, showToast}: any) {
       setSyncResultMsg({ok:false, text:msg, account:'personal'})
       showToast(isExpired ? 'Token de Gmail caducado — reconecta desde aquí' : 'Error al sincronizar Gmail')
       if (isExpired) reloadStatus()
+      // Devuelve si funcionó. syncAll usaba Promise.allSettled, pero esta función
+      // captura su propio error y no lo relanza: allSettled la veía SIEMPRE como
+      // cumplida y contaba los fallos como éxitos. El registro decía "2/2 OK" con
+      // las dos cuentas caídas, que es justo lo contrario de lo que hace falta.
+      return false
     } finally { setSyncing(false) }
   }
 
@@ -131,6 +137,7 @@ function SincronizacionSection({data, profile, showToast}: any) {
         setSyncResultMsg({ok:true, text:`${synced} email${synced!==1?'s':''} compartido${synced!==1?'s':''}`, account:'colabs'})
         showToast(`Colaboraciones — ${detail}`)
         await data.reloadInbox?.()
+        return true
       } else {
         const isExpired = result.error === 'token_expired'
         const errMsg = isExpired ? 'Token caducado — reconecta la cuenta' : (result.error || 'Error del servidor')
@@ -144,6 +151,7 @@ function SincronizacionSection({data, profile, showToast}: any) {
       setSyncResultMsg({ok:false, text:'Error de conexión', account:'colabs'})
       showToast('Error al sincronizar')
     } finally { setSyncingColabs(false) }
+    return false
   }
 
   const syncAll = async () => {
@@ -151,20 +159,39 @@ function SincronizacionSection({data, profile, showToast}: any) {
     setSyncResultMsg(null)
     const ok1 = gmailStatus?.connected
     const ok2 = gmailStatus?.colabs_connected
-    const results = await Promise.allSettled([
+    // Se cuenta lo que DEVUELVEN, no si la promesa se cumplió.
+    //
+    // Antes era Promise.allSettled + filter(status === 'fulfilled'), pero las dos
+    // funciones capturan su propio error y no lo relanzan: allSettled las veía
+    // siempre como cumplidas y contaba los fallos como éxitos. El registro decía
+    // "Personal + Colabs — 2/2 OK" con las dos cuentas caídas, y ese registro es
+    // lo único que se mira cuando alguien dice que no le llegan los emails.
+    const resultados = await Promise.all([
       ok1 ? syncPersonal() : Promise.resolve(null),
       ok2 ? syncColabs() : Promise.resolve(null),
     ])
-    const success = results.filter(r => r.status === 'fulfilled').length
+    const intentadas = [ok1, ok2].filter(Boolean).length
+    const success = resultados.filter(r => r === true).length
     const label = [ok1?'Personal':'',ok2?'Colabs':''].filter(Boolean).join(' + ') || 'nada conectado'
-    addLog('Sync All', success > 0, `${label} — ${success}/${[ok1,ok2].filter(Boolean).length} OK`)
+    addLog('Sync All', intentadas > 0 && success === intentadas, `${label} — ${success}/${intentadas} OK`)
     setSyncingAll(false)
   }
 
   const disconnect = async (account: 'personal'|'colabs') => {
     setDisconnecting(account)
     try {
-      await fetch('/api/gmail/disconnect', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({account}) })
+      // `fetch` no lanza con 4xx/5xx, solo si se cae la red. Sin mirar r.ok se
+      // anunciaba "desconectado" pasara lo que pasara, y como reloadStatus()
+      // repinta la tarjeta con lo que dice el servidor, quedaba conectada justo
+      // debajo del mensaje que decía lo contrario.
+      const r = await fetch('/api/gmail/disconnect', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({account}) })
+      if (!r.ok) {
+        const e = await r.json().catch(()=>({}))
+        addLog('Desconectar', false, e.error || `HTTP ${r.status}`)
+        showToast(e.error || 'No se pudo desconectar')
+        return
+      }
+      addLog('Desconectar', true, account === 'colabs' ? 'Colaboraciones' : 'Personal')
       showToast(account === 'colabs' ? 'Gmail Colaboraciones desconectado' : 'Gmail Personal desconectado')
       reloadStatus()
       reloadTeam()
@@ -472,9 +499,13 @@ function SincronizacionSection({data, profile, showToast}: any) {
                     <a href="/api/gmail/connect?account=colabs" className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all hover:opacity-80 no-underline" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>
                       <LucideIcon name="rotate-ccw" size={10} color="rgba(255,255,255,0.2)"/>Reauth
                     </a>
-                    <button onClick={()=>disconnect('colabs')} disabled={disconnecting==='colabs'} className="flex items-center gap-1 px-2.5 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all disabled:opacity-40 hover:opacity-80" style={{background:'rgba(229,29,42,0.06)',color:'rgba(229,29,42,0.45)',border:`1px solid rgba(229,29,42,0.12)`}}>
+                    {/* Solo el propietario. El buzón compartido es infraestructura
+                        de la empresa: desconectarlo deja a los siete sin sincronizar.
+                        La ruta ya lo impide con un 403; ocultarlo aquí evita que
+                        alguien lo pulse y se coma un error sin saber por qué. */}
+                    {profile?.role === 'owner' && <button onClick={()=>disconnect('colabs')} disabled={disconnecting==='colabs'} className="flex items-center gap-1 px-2.5 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all disabled:opacity-40 hover:opacity-80" style={{background:'rgba(229,29,42,0.06)',color:'rgba(229,29,42,0.45)',border:`1px solid rgba(229,29,42,0.12)`}}>
                       <LucideIcon name="log-out" size={10} color="rgba(229,29,42,0.45)"/>
-                    </button>
+                    </button>}
                   </>
                 ) : (
                   <a href="/api/gmail/connect?account=colabs" className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white transition-all hover:opacity-80 no-underline" style={{background:'linear-gradient(135deg,#EA4335,#C62828)'}}>
