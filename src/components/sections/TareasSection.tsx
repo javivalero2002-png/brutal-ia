@@ -403,7 +403,14 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
         }}>
         <button
           onClick={e=>{e.stopPropagation();canComplete&&data.toggleTask(t.id).catch(()=>{})}}
-          title={undefined}
+          // La casilla de completar es el control mas usado de la app y no tenia
+          // nombre accesible: solo un div redondo dentro, sin texto ni icono, asi
+          // que un lector de pantalla la anunciaba como «boton» a secas. Con
+          // aria-pressed ademas se puede saber si la tarea esta hecha sin verla.
+          aria-label={t.done ? `Marcar «${t.text}» como pendiente` : `Completar «${t.text}»`}
+          aria-pressed={t.done}
+          disabled={!canComplete}
+          title={canComplete ? undefined : 'Solo el responsable o quien la creó puede completarla'}
           style={{width:'36px',height:'36px',borderRadius:'50%',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',background:t.done?pri.color+'18':'transparent',cursor:canComplete?'pointer':'not-allowed',opacity:canComplete?1:0.4}}>
           <div style={{width:'20px',height:'20px',borderRadius:'50%',border:`2px solid ${t.done?lc(t.level):canComplete?lc(t.level)+'60':'rgba(255,255,255,0.12)'}`,background:t.done?lc(t.level):'transparent',display:'flex',alignItems:'center',justifyContent:'center'}}>
             {t.done && <LucideIcon name="check" size={10} color="white"/>}
@@ -480,6 +487,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
 
         {/* Checkbox */}
         <button onClick={e=>{e.stopPropagation();canComplete&&data.toggleTask(t.id).catch(()=>{})}}
+          aria-label={t.done ? `Marcar «${t.text}» como pendiente` : `Completar «${t.text}»`} aria-pressed={t.done} disabled={!canComplete}
           title={undefined}
           className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 border-2 transition-all"
           style={{background:t.done?lc(t.level):'transparent',borderColor:t.done?lc(t.level):canComplete?lc(t.level)+'50':'rgba(255,255,255,0.1)',cursor:canComplete?'pointer':'not-allowed',opacity:canComplete?1:0.5}}>
@@ -542,7 +550,8 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
 
         {/* Menu */}
         <button onClick={e=>{e.stopPropagation();openTask(t)}}
-          className="w-6 h-6 flex items-center justify-center rounded-lg transition-opacity opacity-0 group-hover:opacity-100 flex-shrink-0"
+          aria-label={`Abrir «${t.text}»`}
+          className="w-6 h-6 flex items-center justify-center rounded-lg transition-opacity opacity-50 md:opacity-0 md:group-hover:opacity-100 flex-shrink-0"
           style={{color:'rgba(255,255,255,0.3)'}}>
           <LucideIcon name="more-horizontal" size={13} color="rgba(255,255,255,0.3)"/>
         </button>
@@ -1142,7 +1151,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                             style={{color:'rgba(255,255,255,0.75)'}}>{att.name}</a>
                           {sizeLabel&&<span className="text-[10px]" style={{color:'rgba(255,255,255,0.25)'}}>{sizeLabel}</span>}
                         </div>
-                        <button onClick={()=>deleteAttachment(att)} className="opacity-0 group-hover:opacity-60 transition-opacity flex-shrink-0" aria-label="Eliminar adjunto">
+                        <button onClick={()=>deleteAttachment(att)} className="opacity-50 md:opacity-0 md:group-hover:opacity-60 transition-opacity flex-shrink-0" aria-label="Eliminar adjunto">
                           <LucideIcon name="trash-2" size={13} color={RED}/>
                         </button>
                       </div>
@@ -1173,7 +1182,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                         {st.done&&<LucideIcon name="check" size={8} color="white"/>}
                       </button>
                       <span className="flex-1 text-[12.5px]" style={{color:st.done?'#FFFFFF':'rgba(255,255,255,0.75)',textDecoration:st.done?'line-through':'none'}}>{st.text}</span>
-                      <button onClick={()=>deleteSubtask(st.id)} className="opacity-0 group-hover:opacity-50 transition-opacity flex-shrink-0">
+                      <button onClick={()=>deleteSubtask(st.id)} aria-label="Eliminar subtarea" className="opacity-50 md:opacity-0 md:group-hover:opacity-50 transition-opacity flex-shrink-0">
                         <LucideIcon name="x" size={11} color={RED}/>
                       </button>
                     </div>
@@ -1388,6 +1397,7 @@ function KanbanBoard({ tasks, data, openTask, isMobile, showToast, initialGroupB
         <div className="flex items-start gap-2">
           <button
             onClick={(e)=>{ e.stopPropagation(); toggleDone(t) }}
+            aria-label={t.done ? `Marcar «${t.text}» como pendiente` : `Completar «${t.text}»`} aria-pressed={t.done}
             className="mt-0.5 w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
             style={{ border:`1.5px solid ${t.done ? GRN : 'rgba(255,255,255,0.25)'}`, background: t.done ? GRN : 'transparent' }}>
             {t.done && <LucideIcon name="check" size={9} color="#04120a"/>}

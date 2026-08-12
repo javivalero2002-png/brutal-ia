@@ -1015,7 +1015,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                     </button>
                     <span className="flex-1 text-[12.5px]" style={{color:ms.done?'#FFFFFF':'rgba(255,255,255,0.75)',textDecoration:ms.done?'line-through':'none'}}>{ms.name}</span>
                     {ms.due_date&&<span className="font-syne text-[8px] font-black" style={{color:'rgba(255,255,255,0.25)'}}>{new Date(ms.due_date+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span>}
-                    <button onClick={()=>deleteMilestone(ms.id)} className="opacity-0 group-hover:opacity-60 transition-opacity flex-shrink-0">
+                    <button onClick={()=>deleteMilestone(ms.id)} aria-label="Eliminar hito" className="opacity-50 md:opacity-0 md:group-hover:opacity-60 transition-opacity flex-shrink-0">
                       <LucideIcon name="x" size={11} color={RED}/>
                     </button>
                   </div>
@@ -1059,7 +1059,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                       </div>
                       <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap" style={{color:'rgba(255,255,255,0.65)'}}>{n.content}</p>
                     </div>
-                    <button onClick={()=>deleteNote(n.id)} title="Eliminar nota" aria-label="Eliminar esta nota" className="opacity-0 group-hover:opacity-50 transition-opacity flex-shrink-0 mt-0.5">
+                    <button onClick={()=>deleteNote(n.id)} title="Eliminar nota" aria-label="Eliminar esta nota" className="opacity-50 md:opacity-0 md:group-hover:opacity-50 transition-opacity flex-shrink-0 mt-0.5">
                       <LucideIcon name="trash" size={11} color={RED}/>
                     </button>
                   </div>

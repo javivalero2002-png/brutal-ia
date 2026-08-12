@@ -775,8 +775,8 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
               <div className="text-[13px] font-medium text-white/75 truncate leading-tight">{profile.name}</div>
               <div className="text-[10px] mt-0.5" style={{color:'rgba(255,255,255,0.2)'}}>{profile.role === 'owner' ? 'Propietario' : 'Equipo'}</div>
             </div>
-            <button onClick={toggleTheme} title={lightMode?'Modo oscuro':'Modo claro'} className="opacity-20 hover:opacity-50 transition-opacity flex-shrink-0"><LucideIcon name={lightMode?'moon':'sun'} size={14}/></button>
-            <button onClick={handleLogout} className="opacity-20 hover:opacity-50 transition-opacity flex-shrink-0"><LucideIcon name="log-out" size={14}/></button>
+            <button onClick={toggleTheme} title={lightMode?'Modo oscuro':'Modo claro'} aria-label={lightMode?'Cambiar a modo oscuro':'Cambiar a modo claro'} className="w-10 h-10 -m-1 flex items-center justify-center opacity-30 hover:opacity-60 transition-opacity flex-shrink-0"><LucideIcon name={lightMode?'moon':'sun'} size={14}/></button>
+            <button onClick={handleLogout} title="Cerrar sesión" aria-label="Cerrar sesión" className="w-10 h-10 -m-1 flex items-center justify-center opacity-30 hover:opacity-60 transition-opacity flex-shrink-0"><LucideIcon name="log-out" size={14}/></button>
           </div>
           <button onClick={()=>setSidebarOpen(false)} className="flex items-center justify-center w-full py-1.5 mt-1 transition-colors" style={{color:'rgba(255,255,255,0.12)'}}>
             <LucideIcon name="panel-left-close" size={13}/>
