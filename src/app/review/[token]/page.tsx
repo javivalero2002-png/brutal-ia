@@ -48,8 +48,20 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
   const pc = item ? (platColor[item.platform] || '#1B5FFA') : '#1B5FFA'
   const embed = item?.video_url ? videoEmbed(item.video_url) : null
 
+  // `overflow-y-auto` + altura fija: esta página necesita su PROPIO contenedor de
+  // scroll.
+  //
+  // globals.css pone `html, body { height: 100%; overflow: hidden }` sin media
+  // query, y solo hay un layout, así que esa regla alcanza también a esta ruta. La
+  // app interna vive con ella porque cada sección scrollea por dentro; esta página
+  // no tenía ninguno, así que el body recortaba el contenido y NO HABÍA FORMA DE
+  // BAJAR: el cliente no llegaba al textarea ni al botón de enviar, que son el
+  // único propósito de la página. Y es la única pantalla que ve gente de fuera.
   return (
-    <div className="min-h-screen" style={{ background: '#08080F', fontFamily: 'system-ui, sans-serif' }}>
+    <div
+      className="min-h-screen overflow-y-auto"
+      style={{ background: '#08080F', fontFamily: 'system-ui, sans-serif', height: '100dvh' }}
+    >
       {/* Header */}
       <div className="border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
         <div className="max-w-[720px] mx-auto px-6 py-4 flex items-center gap-3">

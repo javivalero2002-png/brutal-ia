@@ -32,7 +32,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
   const admin = await createAdminClient()
 
-  // No sobrescribir el feedback anterior: se anexa con fecha, preservando el historial.
   const { data: existing } = await admin
     .from('content_agenda')
     .select('feedback')
@@ -40,24 +39,56 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     .single()
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const stamp = new Date().toLocaleString('es-ES', { timeZone: 'Europe/Madrid', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-  const prev = (existing.feedback || '').trim()
-  const merged = (prev ? `${prev}\n\n` : '') + `[${stamp}] ${feedback.trim()}`
+  // El feedback se anexa al MISMO ARRAY JSON que usa el equipo.
+  //
+  // Antes esta ruta trataba `content_agenda.feedback` como un log de texto y hacia
+  // `prev + '\n\n[12/08 10:30] texto'`. Pero esa columna tiene otro escritor:
+  // ContenidoSection guarda ahi un array JSON de opiniones y TODAS sus lecturas
+  // hacen JSON.parse dentro de un try/catch que devuelve [] al fallar. Los dos
+  // caminos llevan vivos desde que se añadio el boton COPIAR ENLACE PARA EL CLIENTE.
+  //
+  // Lo que pasaba, en orden:
+  //   1. el equipo opina  -> feedback = '[{...}]'
+  //   2. el cliente envia -> feedback = '[{...}]\n\n[12/08 10:30] Cambiad el final'
+  //   3. al abrir la pieza, JSON.parse lanza y el catch devuelve []: TODAS las
+  //      opiniones del equipo desaparecen de pantalla, sin ningun aviso
+  //   4. la siguiente opinion parte de [] y sobrescribe la columna entera: el
+  //      comentario del cliente se borra para siempre
+  // Y sin nada previo era igual de malo: el texto plano tampoco es JSON, asi que
+  // el comentario del cliente NO SE PINTABA EN NINGUN SITIO. La funcion de
+  // revision no entregaba nunca su resultado, que es lo unico que tenia que hacer.
+  const entradas: Array<Record<string, unknown>> = (() => {
+    const bruto = (existing.feedback || '').trim()
+    if (!bruto) return []
+    try {
+      const p = JSON.parse(bruto)
+      if (Array.isArray(p)) return p
+    } catch {}
+    // Texto de la version anterior: se conserva como una entrada mas en vez de
+    // tirarlo, que es lo que hacia el JSON.parse del cliente.
+    return [{ origen: 'cliente', name: 'Cliente', initials: 'CL', color: '#FFB020', note: bruto, at: null }]
+  })()
+
+  entradas.push({
+    origen: 'cliente',
+    name: 'Cliente',
+    initials: 'CL',
+    color: '#FFB020',
+    note: feedback.trim(),
+    at: new Date().toISOString(),
+  })
 
   // El recorte se hace por el PRINCIPIO, no por el final. Cortando por el final,
   // una vez lleno el campo el cliente enviaba su comentario, recibia "ok" y se
-  // perdia en silencio — justo el ultimo, que es el que importa. Asi se conserva
-  // siempre lo mas reciente y lo que se descarta es lo mas antiguo, avisando de
-  // que se ha recortado para que no parezca que el historial empieza ahi.
+  // perdia en silencio — justo el ultimo, que es el que importa. Ahora que son
+  // entradas y no texto, se descartan las mas antiguas hasta que quepa.
   const LIMITE = 20000
-  const recortado = merged.length > LIMITE
-  const final = recortado
-    ? '[…historial antiguo recortado…]\n\n' + merged.slice(-(LIMITE - 40))
-    : merged
+  while (entradas.length > 1 && JSON.stringify(entradas).length > LIMITE) entradas.shift()
+  const recortado = JSON.stringify(entradas).length > LIMITE
 
   const { error } = await admin
     .from('content_agenda')
-    .update({ feedback: final })
+    .update({ feedback: JSON.stringify(entradas) })
     .eq('id', token)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
