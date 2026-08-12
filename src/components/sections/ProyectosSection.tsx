@@ -172,17 +172,21 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
     } catch { return null }
   }
 
-  const analyzePdf = async (pdfUrl: string) => {
+  // `proyectoId` entra por parametro y no se lee del ref al final: el analisis es
+  // una llamada a Claude de hasta 60 segundos, y en ese hueco da tiempo de sobra a
+  // cambiar de proyecto. Se persistia en el que estuvieras mirando al terminar.
+  const analyzePdf = async (pdfUrl: string, proyectoId: string) => {
     setPdfBusy(true)
     try {
-      const res = await fetch('/api/projects/analyze-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfUrl,projectName:selectedProjectRef.current?.name}),signal:AbortSignal.timeout(60000)})
+      const nombre = data.projects?.find((p: Project) => p.id === proyectoId)?.name
+      const res = await fetch('/api/projects/analyze-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfUrl,projectName:nombre}),signal:AbortSignal.timeout(60000)})
       const j = await res.json().catch(()=>({}))
       if (!res.ok) { showToast(j.error||'Error al analizar'); return }
-      setPdfAnalysis(j.analysis)
+      if (selectedProjectRef.current?.id === proyectoId) setPdfAnalysis(j.analysis)
       // Persistir el análisis en el proyecto para que sobreviva a la sesión.
       // Aislado y best-effort: si la columna pdf_analysis aún no existe en la BD,
       // el fallo no debe afectar al guardado de pdf_url ni romper el flujo.
-      const pid = selectedProjectRef.current?.id
+      const pid = proyectoId
       if (pid && j.analysis) {
         fetch(`/api/projects/${pid}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pdf_analysis: JSON.stringify(j.analysis) }) }).catch(() => {})
       }
@@ -193,6 +197,14 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   const onPickPdf = async (file: File) => {
     if (file.type !== 'application/pdf') { showToast('Solo archivos PDF'); return }
     if (file.size > 50 * 1024 * 1024) { showToast('PDF muy grande (máx. 50 MB)'); return }
+    // El proyecto se fija AQUI, al empezar.
+    //
+    // Subir + extraer portada + analizar con Claude son varios segundos, a veces
+    // mas de medio minuto. El id se leia al FINAL, de selectedProjectRef.current,
+    // asi que si cambiabas de proyecto mientras tanto el contrato se adjuntaba al
+    // proyecto que estuvieras mirando en ese momento — sin ningun aviso.
+    const proyectoId = selectedProjectRef.current?.id
+    if (!proyectoId) { showToast('Abre un proyecto antes de subir el PDF'); return }
     setPdfDoc(null); setPdfAnalysis(null); setPdfChat([]); setPdfUploadPct(0)
     try {
       // 1. Pedir signed upload URL al servidor
@@ -213,23 +225,25 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
         xhr.send(fd)
       })
       setPdfUploadPct(100)
-      setPdfDoc({ name: file.name, url: urlJ.publicUrl })
+      // Los setters de aqui pintan el panel que se este viendo: si ya no es el
+      // proyecto de la subida, no se tocan.
+      if (selectedProjectRef.current?.id === proyectoId) setPdfDoc({ name: file.name, url: urlJ.publicUrl })
       // 3. Extraer portada (cliente) + analizar en paralelo
       const [coverBlob] = await Promise.all([
         extractPdfCover(file),
-        analyzePdf(urlJ.publicUrl),
+        analyzePdf(urlJ.publicUrl, proyectoId),
       ])
       // 4. Guardar pdf_url siempre; cover_url solo si la extracción funcionó
-      if (selectedProjectRef.current) {
+      {
         const projUpdates: Record<string, string> = { pdf_url: urlJ.publicUrl }
         if (coverBlob) {
-          const coverUrl = await uploadCoverBlob(coverBlob, selectedProjectRef.current.id)
+          const coverUrl = await uploadCoverBlob(coverBlob, proyectoId)
           if (coverUrl) projUpdates.cover_url = coverUrl
         }
         // Sin este aviso, el PDF se subía y su enlace no quedaba guardado en el
         // proyecto: al recargar, el documento y su análisis habían desaparecido y
         // nadie sabía por qué.
-        data.updateProject(selectedProjectRef.current.id, projUpdates)
+        data.updateProject(proyectoId, projUpdates)
           .catch(() => showToast('El PDF se subió pero no se pudo guardar en el proyecto'))
       }
     } catch { showToast('Error subiendo el PDF') }
@@ -285,10 +299,18 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
     finally { setNoteSaving(false) }
   }
 
+  // `fetch` NO lanza con 4xx/5xx: solo si se cae la red. Sin mirar r.ok, un 500 del
+  // servidor quitaba la nota de la pantalla igualmente y reaparecia al recargar —
+  // la app decia que habia borrado algo que seguia ahi.
   const deleteNote = async (noteId: string) => {
     if (!selectedProject) return
     try {
-      await fetch(`/api/projects/${selectedProject.id}/notes?noteId=${noteId}`, { method:'DELETE' })
+      const r = await fetch(`/api/projects/${selectedProject.id}/notes?noteId=${noteId}`, { method:'DELETE' })
+      if (!r.ok) {
+        const e = await r.json().catch(()=>({}))
+        showToast(e.error || 'No se pudo eliminar la nota')
+        return
+      }
       setProjNotes(n=>n.filter(x=>x.id!==noteId))
     } catch { showToast('Error al eliminar nota') }
   }
@@ -317,10 +339,38 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
     } catch { showToast('Error al actualizar el hito') }
   }
 
+  // Quitar el documento tiene que ESCRIBIRSE. Antes el boton solo limpiaba el
+  // estado local: pdf_url y pdf_analysis seguian en la base de datos y el efecto
+  // de [selectedId] los restauraba al recargar. El PDF que creias haber quitado
+  // volvia a estar ahi — y son contratos y presupuestos.
+  //
+  // cover_url se limpia con ellos porque es la portada extraida del propio PDF
+  // (se rellena en onPickPdf y solo si la extraccion funciono): dejarla apuntando
+  // a un documento que ya no esta es dejar una imagen huerfana.
+  //
+  // El fichero del bucket no se borra: `content-videos` es publico y sus URLs
+  // estan guardadas como cadenas en varias tablas, asi que tocarlo es harina de
+  // otro costal. Aqui se desvincula del proyecto, que es lo que promete el boton.
+  const quitarDocumento = async () => {
+    if (!selectedProject) return
+    try {
+      await data.updateProject(selectedProject.id, { pdf_url: null, pdf_analysis: null, cover_url: null } as any)
+      setPdfDoc(null); setPdfAnalysis(null); setPdfChat([])
+      showToast('Documento quitado')
+    } catch {
+      showToast('No se pudo quitar el documento')
+    }
+  }
+
   const deleteMilestone = async (msId: string) => {
     if (!selectedProject) return
     try {
-      await fetch(`/api/projects/${selectedProject.id}/milestones?milestoneId=${msId}`, { method:'DELETE' })
+      const r = await fetch(`/api/projects/${selectedProject.id}/milestones?milestoneId=${msId}`, { method:'DELETE' })
+      if (!r.ok) {
+        const e = await r.json().catch(()=>({}))
+        showToast(e.error || 'No se pudo eliminar el hito')
+        return
+      }
       setMilestones(m=>m.filter(x=>x.id!==msId))
     } catch { showToast('Error al eliminar hito') }
   }
@@ -813,7 +863,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 )}
                 {!pdfBusy && !pdfAnalysis && pdfDoc && (
                   <div className="flex gap-2">
-                    <button onClick={()=>analyzePdf(pdfDoc.url)} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all active:opacity-70" style={{background:`${BLU}12`,border:`1px solid ${BLU}30`}}>
+                    <button onClick={()=>{ if (selectedProject) analyzePdf(pdfDoc.url, selectedProject.id) }} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all active:opacity-70" style={{background:`${BLU}12`,border:`1px solid ${BLU}30`}}>
                       <LucideIcon name="sparkles" size={14} color={BLU}/>
                       <span className="font-syne text-[8px] font-black tracking-widest" style={{color:BLU}}>ANALIZAR DOCUMENTO</span>
                     </button>
@@ -948,7 +998,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                   </div>
                   <div className="flex gap-3">
                     <label htmlFor={`pdf-input-${selectedProject?.id||'new'}`} className="flex-1 py-2 font-syne text-[8px] font-black tracking-widest cursor-pointer text-center transition-opacity active:opacity-60" style={{color:'rgba(255,255,255,0.25)'}}>REEMPLAZAR PDF</label>
-                    <button onClick={()=>{setPdfDoc(null);setPdfAnalysis(null);setPdfChat([])}} className="flex-1 py-2 font-syne text-[8px] font-black tracking-widest transition-opacity hover:opacity-60" style={{color:'rgba(255,255,255,0.2)'}}>QUITAR DOCUMENTO</button>
+                    <button onClick={quitarDocumento} className="flex-1 py-2 font-syne text-[8px] font-black tracking-widest transition-opacity hover:opacity-60" style={{color:'rgba(255,255,255,0.2)'}}>QUITAR DOCUMENTO</button>
                   </div>
                 </>)}
               </div>
