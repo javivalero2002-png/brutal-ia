@@ -70,8 +70,29 @@ export async function syncColabsInbox(
     .in('gmail_id', colabsIds)
   const colabsKnown = new Set((colabsExisting || []).map((r: { gmail_id: string }) => r.gmail_id))
 
+  // Presupuesto de tiempo, igual que en /api/gmail/sync y por el mismo motivo.
+  //
+  // Cada email nuevo cuesta una llamada a Claude, y en Hobby la funcion se MATA a
+  // los 60s. El cron llama a esta funcion LA PRIMERA y sin comprobar el reloj: con
+  // una tanda grande en el buzon compartido se comia el tiempo entero, moria a
+  // mitad del bucle y se llevaba por delante el push y todo lo que venia despues
+  // —los buzones personales, el motor de automatizaciones y la purga—, sin dejar
+  // rastro mas alla de un timeout en Vercel.
+  //
+  // Al agotarse se sale limpiamente: lo ya insertado queda guardado, el push sale,
+  // y los emails que falten los recoge la ejecucion de la hora siguiente (el bucle
+  // salta los gmail_id ya conocidos, asi que no se repite trabajo).
+  //
+  // 25s y no 45 como en /api/gmail/sync: alli la funcion solo hace eso, mientras
+  // que aqui el cron tiene por delante los buzones personales de las 7 personas,
+  // las automatizaciones y la purga dentro del mismo minuto.
+  const T0 = Date.now()
+  const PRESUPUESTO_MS = 25_000
+  let truncado = false
+
   for (const email of emails) {
     if (colabsKnown.has(email.gmail_id)) continue
+    if (Date.now() - T0 > PRESUPUESTO_MS) { truncado = true; break }
 
     let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
     try {
@@ -146,7 +167,11 @@ export async function syncColabsInbox(
   }
 
   if (aiFailures) console.error(`[sync] analyzeEmail falló en ${aiFailures} de ${emails.length} emails`)
-  return { ok: true, synced: newCount, total: emails.length, account: gmailAccount, aiFailures }
+  // `truncado` sale al exterior: si aparece de forma sostenida, el buzon compartido
+  // no cabe en el presupuesto y hay que repartirlo en mas ejecuciones. Callarlo
+  // dejaria el problema invisible, que es como empezo este.
+  if (truncado) console.warn(`[colabs] sin tiempo: quedan emails sin analizar, se recogen en la siguiente ejecucion`)
+  return { ok: true, synced: newCount, total: emails.length, account: gmailAccount, aiFailures, ...(truncado ? { truncado: true } : {}) }
 }
 
 /**

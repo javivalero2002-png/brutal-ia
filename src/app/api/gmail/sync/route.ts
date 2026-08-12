@@ -181,8 +181,24 @@ export async function POST() {
     }
     const lockKey = isCompanyAccount ? 'company' : user.id
     if (await canSendPush(admin, lockKey)) {
-      if (isCompanyAccount) sendPushToAll(admin, payload).catch(() => {})
-      else sendPushToUser(admin, user.id, payload).catch(() => {})
+      // CON await. Sin el, el envio quedaba pendiente al devolver la respuesta y en
+      // serverless eso es una loteria: la instancia se congela o se recicla en
+      // cuanto responde, y a sendPushToAll aun le quedaban una consulta a `reglas`,
+      // un insert en notification_log y las llamadas a web-push.
+      //
+      // El detalle que lo hace grave: canSendPush() YA ha escrito last_sent, o sea
+      // que la ventana de 90 segundos se ha consumido igual. Si el envio se corta,
+      // ese aviso no se reintenta — se pierde del todo, en silencio.
+      //
+      // El coste es la latencia del push sumada a la respuesta del sync. Aqui
+      // sobra: el bucle de emails ya se acota con PRESUPUESTO_MS muy por debajo
+      // del corte de 60s de Hobby.
+      try {
+        if (isCompanyAccount) await sendPushToAll(admin, payload)
+        else await sendPushToUser(admin, user.id, payload)
+      } catch (err) {
+        console.error('[sync] el push fallo:', err)
+      }
     }
   }
 

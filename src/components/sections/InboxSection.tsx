@@ -171,7 +171,13 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
     if (!m.is_read) data.markRead(m.id).catch(()=>{})
   }
 
+  // `borradorRef` numera cada peticion. Sin eso, abrir un email, cerrarlo y abrir
+  // otro deja DOS peticiones en vuelo y pinta la que llegue ultima: el borrador de
+  // un correo aparecia bajo otro, listo para copiar y enviar. Nada delataba el
+  // cambiazo, porque un borrador plausible lo es para cualquier email.
+  const borradorRef = useRef(0)
   const openHarveyReply = useCallback(async (m: any) => {
+    const turno = ++borradorRef.current
     setReplyOpen(true)
     setReplyDraft('')
     setReplyCopied(false)
@@ -189,10 +195,22 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
           senderLanguage: 'español',
         }),
       })
-      const json = await res.json()
-      setReplyDraft(json.draft || '')
-    } catch { setReplyDraft('Error al generar borrador.') }
-    finally { setReplyLoading(false) }
+      const json = await res.json().catch(()=>({}))
+      if (turno !== borradorRef.current) return   // ha ganado otra peticion mas nueva
+      // Sin esta rama, un fallo de la API dejaba `json.draft` en undefined y el
+      // cuadro salia VACIO, sin decir nada: parecia que Harvey no habia tenido
+      // nada que sugerir.
+      if (!res.ok || !json.draft) {
+        setReplyDraft(json.error
+          ? `No se pudo generar el borrador: ${json.error}`
+          : 'No se pudo generar el borrador. Vuelve a intentarlo en un momento.')
+        return
+      }
+      setReplyDraft(json.draft)
+    } catch {
+      if (turno === borradorRef.current) setReplyDraft('No se pudo generar el borrador — comprueba la conexión.')
+    }
+    finally { if (turno === borradorRef.current) setReplyLoading(false) }
   }, [])
 
   const createTaskFromEmail = async (m: any) => {
