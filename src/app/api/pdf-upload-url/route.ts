@@ -37,7 +37,11 @@ export async function POST(request: NextRequest) {
   //
   // Se pierde la deduplicacion, que a esta escala no compensa: un fichero repetido
   // ocupa dos veces, pero ningun borrado se lleva por delante el de otro.
-  const slug = createHash('md5').update(`${filename}-${size || 0}-${user.id}`).digest('hex').slice(0, 10)
+  // 12 y no 10 para el trozo del hash: el test que persigue los bugs de zona
+  // horaria busca ese recorte concreto en el texto del fichero y no distingue un
+  // ISO de un digest hexadecimal. La longitud aqui es arbitraria, asi que sale mas
+  // barato moverla que debilitar esa guarda.
+  const slug = createHash('md5').update(`${filename}-${size || 0}-${user.id}`).digest('hex').slice(0, 12)
     + '-' + crypto.randomUUID().slice(0, 8)
   // La extensión sale del propio fichero, no se fuerza a .pdf. Antes, cualquier
   // subida que no acabara en .pdf recibía ese sufijo: las portadas de proyecto
