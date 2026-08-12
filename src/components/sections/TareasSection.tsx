@@ -98,6 +98,11 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   const [taskSort,       setTaskSort]       = useState<'prioridad'|'fecha'>('prioridad')
   const [focusMode,      setFocusMode]      = useState(!!initialFocus)
   const [activeTask,     setActiveTask]     = useState<Task|null>(null)
+  // Espejo en ref del estado. Los `.then()` de una peticion capturan el closure del
+  // render en que se lanzaron, asi que dentro no se puede consultar `activeTask`
+  // para saber cual es la tarea abierta AHORA.
+  const activeTaskRef = useRef(activeTask)
+  activeTaskRef.current = activeTask
   useBackClosable(!!activeTask, ()=>setActiveTask(null))
   const [editing,        setEditing]        = useState<Partial<Task>>({})
   const [saving,         setSaving]         = useState(false)
@@ -160,18 +165,28 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
 
   useEffect(()=>{
     if (activeTask && activeTask.id !== subtasksLoaded) {
-      fetch(`/api/tasks/subtasks?taskId=${activeTask.id}`).then(async r=>{
+      // `vigente` ata esta carga a la tarea que la pidio. Abrir la tarea A y pasar
+      // enseguida a la B dejaba dos peticiones en vuelo, y si la de A llegaba
+      // despues se pintaban las subtareas de A bajo la B — con setSubtasksLoaded(A)
+      // ademas quedaba marcado como "ya cargado", asi que no se corregia nunca:
+      // los adjuntos y subtareas de una tarea se quedaban pegados en otra hasta
+      // recargar la pagina.
+      const idPedido = activeTask.id
+      const vigente = () => activeTaskRef.current?.id === idPedido
+      fetch(`/api/tasks/subtasks?taskId=${idPedido}`).then(async r=>{
         if (!r.ok) throw new Error('carga')
         return r.json()
       }).then(d=>{
+        if (!vigente()) return
         setSubtasks(Array.isArray(d)?d:[])
-        setSubtasksLoaded(activeTask.id)
+        setSubtasksLoaded(idPedido)
         setStText('')
       }).catch(()=>{
+        if (!vigente()) return
         // "Sin subtareas" y "no se pudieron cargar" se veian igual, y quien lo
         // creia volvia a crearlas: subtareas duplicadas al recargar.
         showToast('No se pudieron cargar las subtareas')
-        setSubtasks([]); setSubtasksLoaded(activeTask.id)
+        setSubtasks([]); setSubtasksLoaded(idPedido)
       })
     }
     if (!activeTask) { setSubtasks([]); setSubtasksLoaded(null); setStText('') }

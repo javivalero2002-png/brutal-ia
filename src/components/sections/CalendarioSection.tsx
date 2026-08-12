@@ -66,6 +66,12 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
       const res = await fetch(`/api/calendar/events/${eventId}`, { method: 'DELETE' })
       if (!res.ok) { showToast('Error eliminando evento'); return }
       setCalEvents(prev => prev.filter(e => e.id !== eventId))
+      // Tambien hay que refrescar el calendario del HOOK, no solo `calEvents`.
+      // El resto de la app —Hoy, Harvey, el briefing— lee data.calendarEvents:
+      // borrabas un evento aqui, salia "Evento eliminado" y desaparecia de la
+      // pantalla, pero seguia anunciandose como proxima reunion en las demas
+      // secciones hasta recargar. submitEvent ya lo hacia; estas dos no.
+      if (data.reloadCalendar) await data.reloadCalendar()
       showToast('Evento eliminado')
     } catch { showToast('Error eliminando evento') }
     finally { setDeletingEventId(null) }
@@ -83,6 +89,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
       if (!res.ok) { showToast('Error actualizando evento'); return }
       const updated = await res.json()
       setCalEvents(prev => prev.map(e => e.id === editEvent.id ? { ...e, title: updated.title, start: updated.start } : e))
+      if (data.reloadCalendar) await data.reloadCalendar()
       setEditEvent(null)
       showToast('Evento actualizado')
     } catch { showToast('Error actualizando evento') }
@@ -703,7 +710,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
                                     })()}
                                   </div>
                                   {/* Complete button */}
-                                  <button onClick={()=>data.toggleTask&&data.toggleTask(e.raw.id).catch(()=>{})}
+                                  <button onClick={()=>data.toggleTask&&data.toggleTask(e.raw.id).then(()=>showToast('Tarea completada')).catch(()=>showToast('No se pudo marcar como hecha — vuelve a intentarlo'))}
                                     className="flex items-center gap-2 px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all w-full justify-center"
                                     style={{background:e.raw?.done?'rgba(34,197,94,0.10)':'rgba(255,255,255,0.04)',border:`1px solid ${e.raw?.done?'rgba(34,197,94,0.22)':'rgba(255,255,255,0.08)'}`,color:e.raw?.done?GRN:'rgba(255,255,255,0.45)'}}>
                                     <LucideIcon name={e.raw?.done?'check-circle':'circle'} size={11} color={e.raw?.done?GRN:'rgba(255,255,255,0.3)'}/>

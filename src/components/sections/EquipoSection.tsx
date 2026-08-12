@@ -21,6 +21,10 @@ const tieneResponsable = (t: Task) => !!t.assignee || !!t.co_assignee || !!t.co_
 function EquipoSection({data, profile, showToast}: any) {
   const isMobile = useIsMobile()
   const [selected, setSelected] = useState<Profile|null>(null)
+  // Espejo en ref: dentro de un `await` no se puede consultar `selected`, porque el
+  // closure es el del render en que arranco la peticion.
+  const selectedRef = useRef(selected)
+  selectedRef.current = selected
   useBackClosable(!!selected, () => setSelected(null))
   const [thread, setThread] = useState<any[]>([])
   const [loadingThread, setLoadingThread] = useState(false)
@@ -85,16 +89,23 @@ function EquipoSection({data, profile, showToast}: any) {
     setThread([])
     setMsgBody('')
     setLoadingThread(true)
+    // La peticion tarda hasta 10s. Pulsar sobre A y enseguida sobre B dejaba las
+    // dos en vuelo, y si la de A llegaba despues se pintaba SU conversacion bajo
+    // el nombre de B. Leer mensajes de un companero creyendo que son de otro es
+    // de lo peor que puede hacer esta seccion.
+    const vigente = () => selectedRef.current?.id === member.id
     try {
       const r = await fetchWithTimeout(`/api/inbox/thread?withUserId=${member.id}&withName=${encodeURIComponent(member.name)}`)
       // Un fallo de carga se pintaba igual que un hilo vacío: "Sin mensajes aún".
       // Decir que no hay conversación cuando en realidad no se ha podido leer es
       // peor que no decir nada — se escribe otra vez algo ya enviado.
+      if (!vigente()) return
       if (!r.ok) { showToast('No se pudo cargar la conversación'); setThread([]); return }
       const msgs = await r.json()
+      if (!vigente()) return
       setThread(Array.isArray(msgs) ? msgs : [])
-    } catch { showToast('Error al cargar conversación'); setThread([]) }
-    finally { setLoadingThread(false) }
+    } catch { if (vigente()) { showToast('Error al cargar conversación'); setThread([]) } }
+    finally { if (vigente()) setLoadingThread(false) }
   }
 
   const sendMessage = async () => {

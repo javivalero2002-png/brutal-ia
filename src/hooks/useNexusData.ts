@@ -247,8 +247,13 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     setTasks(prev => prev.map(t => t.id === id ? { ...t, done } : t))
     try {
       await apiFetch(`/api/tasks/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done }) })
-    } catch {
+    } catch (err) {
       setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !done } : t))
+      // Se RELANZA despues de deshacer. Antes se tragaba aqui, asi que el
+      // `.catch()` de quien llamaba no se ejecutaba nunca y no habia forma de
+      // avisar: con la sesion caducada pulsabas "marcar como hecha", la tarea
+      // desaparecia un instante, volvia, y nadie decia por que.
+      throw err
     }
   }, [tasks])
 
