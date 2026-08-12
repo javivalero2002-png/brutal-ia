@@ -123,7 +123,17 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     } finally {
       if (aliveRef.current) setLoading(false)
     }
-  }, [profile])
+    // Depende del ID, no del objeto `profile` entero.
+    //
+    // DashboardClient reconstruye ese objeto en cada onAuthStateChange —lo saca de
+    // un `await resp.json()`— y Supabase dispara ese evento al refrescar el token y
+    // al volver a la pestaña. Con el objeto como dependencia, cada uno de esos
+    // eventos creaba un `load` nuevo, el efecto de abajo se volvia a ejecutar y se
+    // recargaba el dashboard ENTERO: diez endpoints, incluido el que sale a Google
+    // Calendar por cada miembro del equipo. Todo para volver a pintar exactamente
+    // lo mismo, porque el perfil no habia cambiado: solo era otro objeto.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id])
 
   useEffect(() => { load() }, [load])
 
