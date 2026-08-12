@@ -773,7 +773,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
       {/* ── MODAL: NUEVO EVENTO EN GOOGLE CALENDAR ─────────────────────────── */}
       {eventForm && (
         <div onClick={()=>!evSaving&&setEventForm(null)} className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{background:'rgba(2,2,10,0.8)',backdropFilter:'blur(8px)'}}>
-          <div onClick={e=>e.stopPropagation()} onKeyDown={e=>{ if(e.key==='Enter'&&(e.target as HTMLElement).tagName!=='TEXTAREA'&&!evSaving){ e.preventDefault(); submitEvent() } }}
+          <div onClick={e=>e.stopPropagation()} onKeyDown={e=>{ const tag=(e.target as HTMLElement).tagName; if(e.key==='Enter'&&tag!=='TEXTAREA'&&tag!=='BUTTON'&&!evSaving){ e.preventDefault(); submitEvent() } }}
             className="w-[440px] max-w-full rounded-3xl overflow-hidden" style={{background:'linear-gradient(180deg,#0D0D1E 0%,#080810 100%)',border:'1px solid rgba(167,139,250,0.28)',boxShadow:'0 40px 100px rgba(0,0,0,0.8)'}}>
             <div className="h-[2px]" style={{background:'linear-gradient(90deg,transparent,#a78bfa,transparent)'}}/>
             <div className="flex items-center justify-between px-6 py-5" style={{borderBottom:`1px solid ${BORDER}`}}>

@@ -380,6 +380,21 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
           </div>
         ) : isMobile ? (
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+            {/* Cada columna vacia devuelve null, asi que si NINGUNA pieza pasa el
+                filtro no se pintaba absolutamente nada: la pantalla se quedaba en
+                blanco y parecia que la app se habia roto o que no habia contenido.
+                En escritorio no pasa porque las columnas se ven igual de vacias. */}
+            {filteredAgenda.length === 0 && (
+              <div className="rounded-2xl px-6 py-10 text-center" style={{background:SURFACE,border:`1px dashed ${BORDER}`}}>
+                <div className="font-figtree text-[15px] font-black text-white mb-1.5">Ningún resultado</div>
+                <div className="text-[12.5px] mb-5" style={{color:'rgba(255,255,255,0.3)'}}>
+                  Hay piezas en el pipeline, pero ninguna encaja con lo que has filtrado.
+                </div>
+                <button onClick={()=>{ setContentSearch(''); setPlatformFilter('Todas'); setAccountFilter('Todas') }}
+                  className="font-syne text-[9px] font-black tracking-widest px-5 py-2.5 rounded-xl"
+                  style={{background:`${BLU}14`,border:`1px solid ${BLU}30`,color:BLU}}>QUITAR FILTROS</button>
+              </div>
+            )}
             {cols.map(col=>{
               const items = filteredAgenda.filter((a: any)=>a.status===col.key)
               if (items.length===0) return null

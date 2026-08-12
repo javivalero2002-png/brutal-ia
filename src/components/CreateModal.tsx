@@ -97,7 +97,13 @@ export default function CreateModal({ modal, onClose, mf, setMf, saving, onSave,
     <div onClick={onClose} className="fixed inset-0 z-[100] flex items-center justify-center" style={{background:'rgba(2,2,10,0.8)',backdropFilter:'blur(8px)',touchAction:'none'}}>
       <div
         onClick={e => e.stopPropagation()}
-        onKeyDown={e => { if (e.key==='Enter' && (e.target as HTMLElement).tagName!=='TEXTAREA' && !saving) { e.preventDefault(); onSave() } }}
+        onKeyDown={e => {
+          // Los BUTTON quedan fuera del atajo. Con el foco en CANCELAR, pulsar
+          // Enter activaba este manejador antes que el boton: se GUARDABA el
+          // registro en vez de descartarlo. Quien navega con el teclado —o quien
+          // llega a CANCELAR con Tab— acababa creando justo lo que queria anular.
+          const tag = (e.target as HTMLElement).tagName
+          if (e.key==='Enter' && tag!=='TEXTAREA' && tag!=='BUTTON' && !saving) { e.preventDefault(); onSave() } }}
         className={isMobile ? 'relative w-full flex flex-col' : 'relative w-[480px] max-w-[94vw] rounded-3xl'}
         style={isMobile
           ? { background:'linear-gradient(180deg,#0D0D1E 0%,#080810 100%)', height:'100dvh', paddingTop:'env(safe-area-inset-top)', paddingBottom:'env(safe-area-inset-bottom)', touchAction:'pan-y' }

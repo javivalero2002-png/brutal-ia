@@ -34,9 +34,18 @@ function HarveyTaskSuggestions({ data, onOpenModal, onCreateTask }: any) {
 
   const handleCreate = async (text: string, level: string) => {
     setCreating(text)
-    await onCreateTask(text, level)
-    setCreated(prev => new Set([...prev, text]))
-    setCreating(null)
+    try {
+      await onCreateTask(text, level)
+      // El setCreated va DENTRO del try. Antes se ejecutaba pasara lo que pasara:
+      // la sugerencia se tachaba como creada aunque la tarea no existiera, y
+      // encima el boton quedaba deshabilitado, asi que no habia forma de
+      // reintentarlo sin recargar.
+      setCreated(prev => new Set([...prev, text]))
+    } catch {
+      // El aviso ya lo da onCreateTask; aqui basta con no tacharla.
+    } finally {
+      setCreating(null)
+    }
   }
 
   return (
@@ -944,7 +953,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
               {renderGrupo({label:"SIN FECHA", tasks:grouped.nodate, showCols:!grouped.over.length&&!grouped.today.length&&!grouped.upcoming.length})}
               {filtered.length===0 && data.tasks.length===0 && (
                 <HarveyTaskSuggestions data={data} onOpenModal={onOpenModal} onCreateTask={async(text:string,level:string)=>{
-                  try{await data.createTask({text,level,done:false});showToast('Tarea creada')}catch{showToast('Error')}
+                  try{await data.createTask({text,level,done:false});showToast('Tarea creada')}catch(err){showToast('No se pudo crear la tarea');throw err}
                 }}/>
               )}
               {filtered.length===0 && data.tasks.length>0 && (
@@ -1018,8 +1027,8 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                 :<button onClick={()=>setConfirmDelete(true)} className="px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide" style={{color:'rgba(229,29,42,0.5)',border:`1px solid rgba(229,29,42,0.15)`}}>ELIMINAR</button>
               )}
               <button onClick={async()=>{
-                try{const copy=await data.createTask({text:`${activeTask.text} (copia)`,level:activeTask.level,assigned_to:activeTask.assigned_to,due_date:activeTask.due_date,project_id:activeTask.project_id,client_id:activeTask.client_id,source:'manual'})
-                showToast('Duplicada');setActiveTask(copy);setEditing({text:copy.text,level:copy.level,assigned_to:copy.assigned_to,done:copy.done,due_date:copy.due_date,project_id:copy.project_id})}catch{showToast('Error al duplicar')}
+                try{const copy=await data.createTask({text:`${activeTask.text} (copia)`,level:activeTask.level,assigned_to:activeTask.assigned_to,co_assigned_to:activeTask.co_assigned_to,notes:activeTask.notes,due_date:activeTask.due_date,project_id:activeTask.project_id,client_id:activeTask.client_id,source:'manual'})
+                showToast('Duplicada');setActiveTask(copy);setEditing({text:copy.text,level:copy.level,assigned_to:copy.assigned_to,co_assigned_to:copy.co_assigned_to,notes:copy.notes,done:copy.done,due_date:copy.due_date,project_id:copy.project_id})}catch{showToast('Error al duplicar')}
               }} className="w-8 h-8 rounded-xl flex items-center justify-center transition-all hover:opacity-80" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`}} title="Duplicar">
                 <LucideIcon name="copy" size={13} color="rgba(255,255,255,0.35)"/>
               </button>

@@ -316,6 +316,11 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   }
 
   const addMilestone = async () => {
+    // `msAdding` como guarda, no solo como indicador. El campo se envia con Enter,
+    // y pulsarlo dos veces seguidas creaba el hito DUPLICADO: la segunda pulsacion
+    // entraba antes de que la primera hubiera vaciado msText. Es el mismo guard
+    // que ya tienen postComment, sendMessage y addMember.
+    if (msAdding) return
     if (!msText.trim() || !selectedProject) return
     setMsAdding(true)
     try {
