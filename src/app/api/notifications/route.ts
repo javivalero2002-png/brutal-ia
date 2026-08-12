@@ -22,7 +22,11 @@ export async function GET() {
       .select('id, text, level, due_date')
       .eq('done', false)
       .eq('level', 'urgent')
-      .or(`assigned_to.eq.${user.id},created_by.eq.${user.id}`)
+      // co_assigned_to entra tambien. La UI ya considera tuya una tarea en la que
+      // eres co-responsable —Tareas y Hoy la cuentan— pero el campanario no la
+      // veia: te asignaban algo urgente como co-responsable y no te enteraba
+      // nadie. Las dos vistas del mismo dato decian cosas distintas.
+      .or(`assigned_to.eq.${user.id},co_assigned_to.eq.${user.id},created_by.eq.${user.id}`)
       .order('created_at', { ascending: false })
       .limit(5),
   ])

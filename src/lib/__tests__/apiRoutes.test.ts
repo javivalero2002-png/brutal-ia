@@ -161,3 +161,31 @@ describe('rutas API · las excepciones anotadas siguen existiendo', () => {
     expect(TODAS.map(nombre), `«${clave}» está en la lista de excepciones pero ya no existe: bórrala`).toContain(clave)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// "Mis tareas" tiene que significar lo mismo en toda la app.
+//
+// Una tarea puede tener responsable (assigned_to) y CO-responsable
+// (co_assigned_to). Tareas y Hoy siempre contaron las dos, pero el campanario de
+// notificaciones filtraba solo por assigned_to y Equipo comparaba por nombre de
+// responsable: te asignaban algo urgente como co-responsable y no te avisaba
+// nadie, y en Equipo salias con cero tareas.
+//
+// Son dos vistas del mismo dato diciendo cosas distintas, que es peor que un
+// error: nadie sospecha de un contador.
+describe('rutas API · co_assigned_to cuenta como tuya', () => {
+  it('ningun filtro de "mis tareas" se olvida del co-responsable', () => {
+    const olvidos: string[] = []
+    for (const f of TODAS) {
+      const s = leer(f)
+      // Filtros del tipo .or(`assigned_to.eq.X,...`) o .eq('assigned_to', user.id)
+      for (const m of s.matchAll(/\.or\(`([^`]*assigned_to\.eq[^`]*)`\)/g)) {
+        if (!m[1].includes('co_assigned_to')) olvidos.push(`${nombre(f)}: .or(${m[1].slice(0, 70)}…)`)
+      }
+      for (const m of s.matchAll(/\.eq\('assigned_to',\s*user\.id\)/g)) {
+        olvidos.push(`${nombre(f)}: .eq('assigned_to', user.id) sin co_assigned_to`)
+      }
+    }
+    expect(olvidos).toEqual([])
+  })
+})

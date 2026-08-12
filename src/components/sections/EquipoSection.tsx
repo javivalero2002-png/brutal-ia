@@ -4,6 +4,20 @@ import type { Profile, Task } from '@/types'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, BORDER, LucideIcon, ProgressRing, relTime, todayKey } from '@/components/shared'
 import { fetchWithTimeout } from '@/lib/fetch-timeout'
 
+// Una tarea es de alguien si es su responsable O su co-responsable. Equipo
+// ignoraba por completo co_assigned_to: quien solo estaba co-asignado salia con
+// CERO tareas, con el anillo de progreso a cero y sin nada en su ficha — mientras
+// el resto de la app (Tareas, Hoy) esas mismas tareas si se las contaba.
+//
+// Y se comparaba por NOMBRE, no por id. Dos perfiles con el mismo nombre —que los
+// hay— se fusionaban en uno.
+const esTareaDe = (t: Task, miembro: { id?: string }) =>
+  !!miembro?.id && (t.assignee?.id === miembro.id || t.co_assignee?.id === miembro.id || t.co_assigned_to === miembro.id)
+
+/** Tiene responsable, sea principal o co-responsable. */
+const tieneResponsable = (t: Task) => !!t.assignee || !!t.co_assignee || !!t.co_assigned_to
+
+
 function EquipoSection({data, profile, showToast}: any) {
   const isMobile = useIsMobile()
   const [selected, setSelected] = useState<Profile|null>(null)
@@ -187,11 +201,11 @@ function EquipoSection({data, profile, showToast}: any) {
             ))}
           </div>
           {(()=>{
-            const teamPending = data.tasks.filter((t: Task)=>!t.done&&!!t.assignee).length
-            const teamOverdue = data.tasks.filter((t: Task)=>!t.done&&!!t.assignee&&!!t.due_date&&new Date(t.due_date+'T23:59:59')<new Date()).length
-            const teamUrgent = data.tasks.filter((t: Task)=>!t.done&&!!t.assignee&&t.level==='urgent').length
+            const teamPending = data.tasks.filter((t: Task)=>!t.done&&tieneResponsable(t)).length
+            const teamOverdue = data.tasks.filter((t: Task)=>!t.done&&tieneResponsable(t)&&!!t.due_date&&new Date(t.due_date+'T23:59:59')<new Date()).length
+            const teamUrgent = data.tasks.filter((t: Task)=>!t.done&&tieneResponsable(t)&&t.level==='urgent').length
             const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate()-7); weekAgo.setHours(0,0,0,0)
-            const teamCompletedWeek = data.tasks.filter((t: Task)=>t.done&&!!t.assignee&&new Date(t.updated_at||t.created_at)>=weekAgo).length
+            const teamCompletedWeek = data.tasks.filter((t: Task)=>t.done&&tieneResponsable(t)&&new Date(t.updated_at||t.created_at)>=weekAgo).length
             if (teamPending === 0 && teamCompletedWeek === 0) return null
             return (
               <div className="flex items-center gap-3">
@@ -223,7 +237,7 @@ function EquipoSection({data, profile, showToast}: any) {
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {allActive.map((member: Profile) => {
-            const memberTasks = data.tasks.filter((t: Task) => t.assignee?.name === member.name)
+            const memberTasks = data.tasks.filter((t: Task) => esTareaDe(t, member))
             const pending = memberTasks.filter((t: Task) => !t.done)
             const done = memberTasks.filter((t: Task) => t.done)
             const completePct = memberTasks.length > 0 ? Math.round((done.length/memberTasks.length)*100) : 0
@@ -467,7 +481,7 @@ function EquipoSection({data, profile, showToast}: any) {
           {/* Header */}
           <div className={`flex items-center gap-4 ${isMobile?'px-4':'px-6'} py-5 flex-shrink-0`} style={{borderBottom:`1px solid ${BORDER}`,background:`linear-gradient(135deg,${selected.avatar_color}0C,transparent)`}}>
             <div className="relative flex-shrink-0">
-              <ProgressRing pct={Math.round((data.tasks.filter((t:Task)=>t.assignee?.name===selected.name&&t.done).length/Math.max(1,data.tasks.filter((t:Task)=>t.assignee?.name===selected.name).length))*100)} size={40} stroke={2} color={selected.avatar_color}/>
+              <ProgressRing pct={Math.round((data.tasks.filter((t:Task)=>esTareaDe(t,selected)&&t.done).length/Math.max(1,data.tasks.filter((t:Task)=>esTareaDe(t,selected)).length))*100)} size={40} stroke={2} color={selected.avatar_color}/>
               <div className="absolute inset-0 flex items-center justify-center font-syne text-[9px] font-black" style={{color:selected.avatar_color}}>{selected.initials}</div>
             </div>
             <div className="flex-1 min-w-0">
@@ -476,7 +490,7 @@ function EquipoSection({data, profile, showToast}: any) {
             </div>
             <div className="flex items-center gap-3">
               {(() => {
-                const mt = data.tasks.filter((t:Task)=>t.assignee?.name===selected.name)
+                const mt = data.tasks.filter((t:Task)=>esTareaDe(t,selected))
                 const pend = mt.filter((t:Task)=>!t.done)
                 const urg = pend.filter((t:Task)=>t.level==='urgent')
                 return (
@@ -494,7 +508,7 @@ function EquipoSection({data, profile, showToast}: any) {
           <div className={`flex-shrink-0 ${isMobile?'px-4':'px-6'} py-4`} style={{borderBottom:`1px solid ${BORDER}`}}>
             <div className="font-syne text-[8.5px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.2)'}}>TAREAS ASIGNADAS</div>
             <div className="flex gap-2 flex-wrap">
-              {data.tasks.filter((t:Task)=>t.assignee?.name===selected.name&&!t.done).slice(0,4).map((t:Task)=>(
+              {data.tasks.filter((t:Task)=>esTareaDe(t,selected)&&!t.done).slice(0,4).map((t:Task)=>(
                 <div key={t.id} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl" style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${t.level==='urgent'?RED+'25':t.level==='high'?'rgba(255,176,32,0.15)':BORDER}`}}>
                   <div className="w-1 h-1 rounded-full flex-shrink-0" style={{background:t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.8)':BLU}}/>
                   <span className="text-[11px] truncate max-w-[180px]" style={{color:'rgba(255,255,255,0.5)'}}>{t.text}</span>
@@ -506,7 +520,7 @@ function EquipoSection({data, profile, showToast}: any) {
                   })()}
                 </div>
               ))}
-              {data.tasks.filter((t:Task)=>t.assignee?.name===selected.name&&!t.done).length===0 && (
+              {data.tasks.filter((t:Task)=>esTareaDe(t,selected)&&!t.done).length===0 && (
                 <span className="text-[11px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin tareas pendientes</span>
               )}
             </div>
