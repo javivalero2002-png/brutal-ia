@@ -198,7 +198,6 @@ export interface SectionProps {
   data: NexusData
   profile: Profile
   showToast: (msg: string) => void
-  onOpenModal: (type: string) => void
-  onSetMf: (fields: Record<string, string>) => void
+  onOpenModal: (type: string, prellenado?: Record<string,string>) => void
   isOwner: boolean
 }

@@ -41,7 +41,16 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
   useEffect(()=>{
     const plat = activeItem?.platform
     setBocetoPlatform(plat==='Instagram'?'instagram':plat==='LinkedIn'?'linkedin':null)
-    setBocetoCaption(activeItem?.notes||null)
+    // null, NO activeItem.notes. `bocetoCaption` es «lo que el usuario ha escrito
+    // en el copy», y null significa «no ha tocado nada»: BocetoPanel ya cae en
+    // activeItem.title, que es donde vive el copy de verdad (onSaveCopy escribe
+    // title, no notes).
+    //
+    // Sembrando con las notas de producción pasaban dos cosas, las dos malas: el
+    // boceto en vivo enseñaba «Grabar en 4K, entregar viernes» como si fuera el
+    // texto del post, y `dirty` daba true sin haber tocado nada, así que aparecía
+    // GUARDAR COPY solo y un clic escribía las notas ENCIMA del título de la pieza.
+    setBocetoCaption(null)
     setEditContentType(normContentType(activeItem?.content_type))
     setMobileTab('boceto')
   }, [activeItem?.id])

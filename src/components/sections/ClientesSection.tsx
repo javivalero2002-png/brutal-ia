@@ -9,7 +9,7 @@ import LucideIcon from '@/components/shared/LucideIcon'
 import { PlatformLogo } from '@/components/PlatformLogo'
 import type { Client, Project, Task } from '@/types'
 
-export default function ClientesSection({data,selectedId,onSelect,onOpenModal,onSetMf,showToast,isOwner,onNavigate,onSelectProject}: any) {
+export default function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner,onNavigate,onSelectProject}: any) {
   const isMobile = useIsMobile()
   useBackClosable(!!selectedId, () => onSelect(null))
   const [aiAdvice, setAiAdvice] = useState<any[]|null>(null)
@@ -212,10 +212,10 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,on
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <button onClick={()=>{ onSetMf?.({cliente:selected.name}); onOpenModal('tarea') }} className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:'rgba(27,95,250,0.08)',color:BLU,border:`1px solid rgba(27,95,250,0.18)`}}>
+            <button onClick={()=>{ onOpenModal('tarea', {cliente:selected.name}) }} className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:'rgba(27,95,250,0.08)',color:BLU,border:`1px solid rgba(27,95,250,0.18)`}}>
               <LucideIcon name="check-square" size={11} color={BLU}/>+ TAREA
             </button>
-            {<button onClick={()=>{ onSetMf?.({cliente:selected.name}); onOpenModal('proyecto') }} className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.4)',border:`1px solid ${BORDER}`}}>
+            {<button onClick={()=>{ onOpenModal('proyecto', {cliente:selected.name}) }} className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.4)',border:`1px solid ${BORDER}`}}>
               <LucideIcon name="folder-open" size={11} color="rgba(255,255,255,0.4)"/>+ PROYECTO
             </button>}
             <button onClick={()=>{ setAiAdvice(null); loadAiAdvice(selected.id) }} disabled={aiLoading} className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-50 transition-all" style={{background:`linear-gradient(135deg,rgba(139,92,246,0.3),rgba(27,95,250,0.2))`,border:`1px solid rgba(139,92,246,0.35)`}}>

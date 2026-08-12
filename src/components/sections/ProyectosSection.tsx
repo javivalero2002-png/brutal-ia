@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, todayKey, AMBAR } from '@/components/shared'
 import type { Project, Task, Profile } from '@/types'
 
-function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView,projStatusFilter,setProjStatusFilter,dragRef,selectedId,onSelect,onOpenModal,onSetMf,showToast,isOwner,onNavigate,onSelectClient,justCreatedId,onJustCreatedScrolled}: any) {
+function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView,projStatusFilter,setProjStatusFilter,dragRef,selectedId,onSelect,onOpenModal,showToast,isOwner,onNavigate,onSelectClient,justCreatedId,onJustCreatedScrolled}: any) {
   const isMobile = useIsMobile()
   useBackClosable(!!selectedId, () => onSelect(null))
   const [editProgress, setEditProgress] = useState<number|null>(null)
@@ -633,7 +633,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={()=>{ onSetMf?.({cliente:selectedProject.client?.name||''}); onOpenModal('tarea') }} className="flex items-center gap-2 px-3 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all" style={{background:'rgba(27,95,250,0.08)',color:BLU,border:`1px solid rgba(27,95,250,0.18)`}}>
+              <button onClick={()=>{ onOpenModal('tarea', {cliente:selectedProject.client?.name||''}) }} className="flex items-center gap-2 px-3 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all" style={{background:'rgba(27,95,250,0.08)',color:BLU,border:`1px solid rgba(27,95,250,0.18)`}}>
                 <LucideIcon name="plus" size={11} color={BLU}/>TAREA
               </button>
               {isOwner && (

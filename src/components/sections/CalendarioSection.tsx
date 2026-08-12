@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, dlDate, AMBAR } from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
 
-function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any) {
+function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
   const isMobile = useIsMobile()
   const today = new Date()
   const [viewMonth, setViewMonth] = useState(today.getMonth())
@@ -466,10 +466,10 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
                   <button onClick={()=>openEventForm(selKey)} className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-xl font-syne text-[8px] font-black tracking-wide active:scale-95" style={{background:'rgba(167,139,250,0.12)',border:'1px solid rgba(167,139,250,0.25)',color:'#a78bfa'}}>
                     <LucideIcon name="calendar" size={11} color="#a78bfa"/>Evento
                   </button>
-                  <button onClick={()=>{ onSetMf?.({fecha:selKey}); onOpenModal('contenido') }} className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-xl font-syne text-[8px] font-black tracking-wide active:scale-95" style={{background:'rgba(27,95,250,0.10)',border:`1px solid rgba(27,95,250,0.18)`,color:BLU}}>
+                  <button onClick={()=>{ onOpenModal('contenido', {fecha:selKey}) }} className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-xl font-syne text-[8px] font-black tracking-wide active:scale-95" style={{background:'rgba(27,95,250,0.10)',border:`1px solid rgba(27,95,250,0.18)`,color:BLU}}>
                     <LucideIcon name="film" size={11} color={BLU}/>Pieza
                   </button>
-                  <button onClick={()=>{ onSetMf?.({due_date:selKey}); onOpenModal('tarea') }} className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-xl font-syne text-[8px] font-black tracking-wide active:scale-95" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.38)'}}>
+                  <button onClick={()=>{ onOpenModal('tarea', {due_date:selKey}) }} className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-xl font-syne text-[8px] font-black tracking-wide active:scale-95" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.38)'}}>
                     <LucideIcon name="check-square" size={11} color="rgba(255,255,255,0.38)"/>Tarea
                   </button>
                 </div>
@@ -486,10 +486,10 @@ function CalendarioSection({data, profile, showToast, onOpenModal, onSetMf}: any
                   <button onClick={()=>openEventForm(selKey)} className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(167,139,250,0.1)',border:'1px solid rgba(167,139,250,0.22)',color:'#a78bfa'}}>
                     <LucideIcon name="calendar" size={11} color="#a78bfa"/>Evento
                   </button>
-                  <button onClick={()=>{ onSetMf?.({fecha:selKey}); onOpenModal('contenido') }} className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(27,95,250,0.08)',border:`1px solid rgba(27,95,250,0.15)`,color:BLU}}>
+                  <button onClick={()=>{ onOpenModal('contenido', {fecha:selKey}) }} className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(27,95,250,0.08)',border:`1px solid rgba(27,95,250,0.15)`,color:BLU}}>
                     <LucideIcon name="film" size={11} color={BLU}/>Pieza
                   </button>
-                  <button onClick={()=>{ onSetMf?.({due_date:selKey}); onOpenModal('tarea') }} className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.4)'}}>
+                  <button onClick={()=>{ onOpenModal('tarea', {due_date:selKey}) }} className="flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.4)'}}>
                     <LucideIcon name="check-square" size={11} color="rgba(255,255,255,0.4)"/>Tarea
                   </button>
                 </div>

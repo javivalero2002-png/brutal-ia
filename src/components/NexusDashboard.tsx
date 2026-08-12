@@ -311,8 +311,18 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   // las secciones reciben `setModal` tal cual como `onOpenModal`, así que abrir
   // "Cliente" tras haber escrito en "Proyecto" arrastraba los campos del anterior
   // y el guardado reventaba con un error crudo de Postgres (columna inexistente).
-  const openModal = useCallback((type: string | null) => {
-    setMf({})
+  // El prellenado va COMO PARAMETRO, no con un setMf() previo.
+  //
+  // Los botones de "crear desde aquí" hacían `onSetMf?.({cliente: X}); onOpenModal('tarea')`
+  // en el mismo handler, y openModal hacía setMf({}) justo después: React agrupa
+  // las dos actualizaciones y gana la última, así que el prellenado se borraba
+  // siempre. Los siete botones de ese tipo abrían el formulario en blanco.
+  //
+  // Y el setMf({}) tiene que seguir estando: `mf` NO se limpia al cerrar por
+  // Escape ni por la X, así que sin él los campos de un modal se colarían en el
+  // siguiente. Por eso el valor por defecto es {} y no se toca lo que ya hubiera.
+  const openModal = useCallback((type: string | null, prellenado: Record<string,string> = {}) => {
+    setMf(prellenado)
     setModal(type)
   }, [])
   const sectionRef = useRef<Section>('hoy')
@@ -848,10 +858,10 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
           {section === 'tareas' && <SectionErrorBoundary section="tareas"><TareasSection data={data} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} profile={profile} onNavigate={setSection} onSelectProject={setSelectedProject} onSelectClient={setSelectedClient} /></SectionErrorBoundary>}
           {section === 'equipo' && <SectionErrorBoundary section="equipo"><EquipoSection data={data} profile={profile} showToast={showToast} /></SectionErrorBoundary>}
           {section === 'reportes' && <SectionErrorBoundary section="reportes">{isOwner ? <ReportesSection data={data} onNavigate={setSection} /> : <div className="h-full flex items-center justify-center"><div className="text-center"><div className="font-syne text-[10px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>SECCIÓN RESTRINGIDA</div><div className="text-[12px]" style={{color:'rgba(255,255,255,0.3)'}}>Solo disponible para propietarios</div></div></div>}</SectionErrorBoundary>}
-          {section === 'clientes' && <SectionErrorBoundary section="clientes"><ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={openModal} onSetMf={setMf} showToast={showToast} isOwner={isOwner} onNavigate={setSection} onSelectProject={setSelectedProject} /></SectionErrorBoundary>}
-          {section === 'proyectos' && <SectionErrorBoundary section="proyectos"><ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={openModal} onSetMf={setMf} showToast={showToast} isOwner={isOwner} onNavigate={setSection} onSelectClient={setSelectedClient} justCreatedId={justCreatedProjId} onJustCreatedScrolled={()=>setJustCreatedProjId(null)} /></SectionErrorBoundary>}
+          {section === 'clientes' && <SectionErrorBoundary section="clientes"><ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} onNavigate={setSection} onSelectProject={setSelectedProject} /></SectionErrorBoundary>}
+          {section === 'proyectos' && <SectionErrorBoundary section="proyectos"><ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} onNavigate={setSection} onSelectClient={setSelectedClient} justCreatedId={justCreatedProjId} onJustCreatedScrolled={()=>setJustCreatedProjId(null)} /></SectionErrorBoundary>}
           {section === 'contenido' && <SectionErrorBoundary section="contenido"><ContenidoSection data={data} onOpenModal={openModal} showToast={showToast} onNavigate={setSection} onSelectClient={setSelectedClient} profile={profile} /></SectionErrorBoundary>}
-          {section === 'calendario' && <SectionErrorBoundary section="calendario"><CalendarioSection data={data} profile={profile} showToast={showToast} onOpenModal={openModal} onSetMf={setMf} /></SectionErrorBoundary>}
+          {section === 'calendario' && <SectionErrorBoundary section="calendario"><CalendarioSection data={data} profile={profile} showToast={showToast} onOpenModal={openModal} /></SectionErrorBoundary>}
           {section === 'memoria' && <SectionErrorBoundary section="memoria"><MemoriaSection data={data} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={openModal} showToast={showToast} /></SectionErrorBoundary>}
           {section === 'automatizaciones' && <SectionErrorBoundary section="automatizaciones"><AutomatizacionesSection data={data} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} /></SectionErrorBoundary>}
           {section === 'chat' && <SectionErrorBoundary section="chat"><ChatSection profile={profile} data={data} chatInput={chatInput} setChatInput={setChatInput} chatLoading={chatLoading} setChatLoading={setChatLoading} showToast={showToast} onNavigate={setSection} /></SectionErrorBoundary>}
