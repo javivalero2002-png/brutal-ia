@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Profile, Task } from '@/types'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, BORDER, LucideIcon, ProgressRing, relTime, todayKey, AMBAR } from '@/components/shared'
+import { plural } from '@/components/shared/helpers'
 import { fetchWithTimeout } from '@/lib/fetch-timeout'
 
 // Una tarea es de alguien si es su responsable O su co-responsable. Equipo
@@ -114,7 +115,16 @@ function EquipoSection({data, profile, showToast}: any) {
       // Decir que no hay conversación cuando en realidad no se ha podido leer es
       // peor que no decir nada — se escribe otra vez algo ya enviado.
       if (!vigente()) return
-      if (!r.ok) { showToast('No se pudo cargar la conversación'); setThread([]); return }
+      if (!r.ok) {
+        // El servidor manda un motivo accionable en algunos casos —sobre todo el
+        // 409 de dos personas con el mismo nombre, que se arregla cambiando uno
+        // de los dos— y tragárselo bajo un genérico deja al usuario sin saber qué
+        // hacer. Se usa el suyo cuando lo trae.
+        const motivo = await r.json().then(d => d?.error).catch(() => null)
+        showToast(typeof motivo === 'string' && motivo ? motivo : 'No se pudo cargar la conversación')
+        setThread([])
+        return
+      }
       const msgs = await r.json()
       if (!vigente()) return
       setThread(Array.isArray(msgs) ? msgs : [])
@@ -130,10 +140,19 @@ function EquipoSection({data, profile, showToast}: any) {
     setSending(true)
     try {
       await data.sendInternalMessage(selected.id, 'Mensaje directo', msgBody, profile?.name||'Equipo')
-      const optimistic = {id:Date.now()+'',_dir:'sent',subject:'Mensaje directo',body_preview:msgBody,received_at:new Date().toISOString(),from_name:profile?.name}
+      // El servidor guarda `body_preview: body.slice(0, 500)` (api/inbox/route.ts) y
+      // sendInternalMessage descarta la fila que devuelve, asi que NO hay
+      // reconciliacion: la burbuja optimista es lo unico que se ve hasta recargar.
+      // Pintandola con el texto entero, pegar 900 caracteres se veia completo y al
+      // volver aparecia cortado — y el remitente creia haber mandado lo que no llego.
+      const RECORTE = 500
+      const enviado = msgBody.slice(0, RECORTE)
+      const optimistic = {id:Date.now()+'',_dir:'sent',subject:'Mensaje directo',body_preview:enviado,received_at:new Date().toISOString(),from_name:profile?.name}
       setThread(prev=>[...prev, optimistic])
       setMsgBody('')
-      showToast(`Enviado a ${selected.name.split(' ')[0]}`)
+      showToast(msgBody.length > RECORTE
+        ? `Enviado a ${selected.name.split(' ')[0]} · recortado a ${RECORTE} caracteres`
+        : `Enviado a ${selected.name.split(' ')[0]}`)
     } catch { showToast('Error enviando') }
     finally { setSending(false) }
   }
@@ -314,7 +333,7 @@ function EquipoSection({data, profile, showToast}: any) {
                         {urgent.length > 0 && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(229,29,42,0.1)',color:RED}}>{urgent.length} URG</span>}
                       </div>
                       <div className="text-[11px] mt-0.5 truncate" style={{color:'rgba(255,255,255,0.3)'}}>
-                        {member.role==='owner'?'Propietario':'Equipo'} · {pending.length} tareas
+                        {member.role==='owner'?'Propietario':'Equipo'} · {plural(pending.length,'tarea')}
                         {mOverdue.length>0?<span style={{color:RED+'aa'}}> · {mOverdue.length} atrasada{mOverdue.length>1?'s':''}</span>:null}
                         {mDueToday.length>0&&mOverdue.length===0?<span style={{color:'rgba(255,176,32,0.75)'}}> · {mDueToday.length} hoy</span>:null}
                         {' · '}

@@ -9,11 +9,29 @@ export async function POST() {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = await createAdminClient()
-  const sent = await sendPushToUser(admin, user.id, {
-    title: 'BRUTAL.IA — Prueba',
-    body: 'Las notificaciones funcionan en este dispositivo ✓',
-    url: '/dashboard',
-    tag: 'test',
-  })
-  return NextResponse.json({ ok: true, sent })
+  // sendPushToUser lanza si no puede leer las suscripciones. Sin capturarlo, esta
+  // ruta —cuya única razón de ser es decirte si las notificaciones funcionan—
+  // devolvía un 500 pelado sin explicación. Y `sent: 0` con ok:true tampoco vale:
+  // era el bug del hallazgo, anunciar éxito sin haber enviado nada.
+  try {
+    const sent = await sendPushToUser(admin, user.id, {
+      title: 'BRUTAL.IA — Prueba',
+      body: 'Las notificaciones funcionan en este dispositivo ✓',
+      url: '/dashboard',
+      tag: 'test',
+    })
+    if (sent === 0) {
+      return NextResponse.json(
+        { ok: false, sent: 0, error: 'No hay ningún dispositivo suscrito en esta cuenta — activa los avisos primero.' },
+        { status: 409 },
+      )
+    }
+    return NextResponse.json({ ok: true, sent })
+  } catch (err) {
+    console.error('[push/test] no se pudo enviar la prueba:', err)
+    return NextResponse.json(
+      { ok: false, error: 'No se pudieron leer tus suscripciones. Vuelve a intentarlo.' },
+      { status: 503 },
+    )
+  }
 }

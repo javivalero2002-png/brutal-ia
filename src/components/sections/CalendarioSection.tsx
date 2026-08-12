@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { PLATAFORMA_COLOR, useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, dlDate, AMBAR } from '@/components/shared'
+// `plural` no se reexporta desde el índice de shared: se importa del módulo.
+import { plural } from '@/components/shared/helpers'
 import { PlatformLogo } from '@/components/PlatformLogo'
 
 function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
@@ -18,6 +20,13 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
   const [evSaving, setEvSaving] = useState(false)
   const [editEvent, setEditEvent] = useState<null|{id:string;title:string;date:string;time:string}>(null)
   const [editSaving, setEditSaving] = useState(false)
+  // Dos estados, no uno: `deletingEventId` hacía a la vez de «confirmación
+  // armada» y de «petición en vuelo», y como el valor no cambiaba al arrancar el
+  // DELETE el botón seguía diciendo «¿BORRAR?» y seguía habilitado durante toda
+  // la llamada a Google. Un segundo clic mandaba un segundo DELETE: el primero
+  // borraba el evento y el segundo recibía el 410 de Google, que la ruta traduce
+  // a 500 — «Error eliminando evento» sobre un evento que sí se había borrado.
+  const [confirmEventId, setConfirmEventId] = useState<string|null>(null)
   const [deletingEventId, setDeletingEventId] = useState<string|null>(null)
 
   // Sync local state when the parent data hook loads calendar events asynchronously
@@ -49,7 +58,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
         if (!rEv.ok) { showToast(res?.error || 'No se pudieron leer los eventos de Google Calendar'); return }
         const events = Array.isArray(res) ? res : []
         setCalEvents(events)
-        showToast(`${events.length} eventos de Google Calendar`)
+        showToast(`${plural(events.length, 'evento')} de Google Calendar`)
       }
     } catch { showToast('Error sincronizando calendario') }
     finally { setSyncingCal(false) }
@@ -61,10 +70,14 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
   }
 
   const deleteEvent = async (eventId: string) => {
+    // Cinturón además del `disabled` del botón: el teclado (Enter mantenido) y un
+    // doble toque en móvil se cuelan antes de que React repinte.
+    if (deletingEventId) return
     setDeletingEventId(eventId)
     try {
       const res = await fetch(`/api/calendar/events/${eventId}`, { method: 'DELETE' })
       if (!res.ok) { showToast('Error eliminando evento'); return }
+      setConfirmEventId(null)
       setCalEvents(prev => prev.filter(e => e.id !== eventId))
       // Tambien hay que refrescar el calendario del HOOK, no solo `calEvents`.
       // El resto de la app —Hoy, Harvey, el briefing— lee data.calendarEvents:
@@ -108,9 +121,16 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
         body: JSON.stringify({ title: eventForm.title.trim(), date: eventForm.date, time: eventForm.time || undefined, description: eventForm.desc || undefined, attendees }),
       })
       if (res.status === 403) { showToast('Sin permiso de calendario — reconecta Gmail Personal'); return }
-      if (!res.ok) { showToast('Error creando el evento'); return }
+      if (!res.ok) {
+        // La ruta valida la fecha y la hora antes de llamar a Google y explica en
+        // `error` qué no entendió. «Error creando el evento» a secas mandaba a
+        // buscar la avería en Google Calendar cuando estaba en lo que se envió.
+        const j = await res.json().catch(()=>null)
+        showToast(j?.error || 'Error creando el evento')
+        return
+      }
       setEventForm(null)
-      showToast(attendees.length ? `✓ Evento creado · invitación a ${attendees.length}` : '✓ Evento creado en Google Calendar')
+      showToast(attendees.length ? `✓ Evento creado · invitación a ${plural(attendees.length, 'invitado')}` : '✓ Evento creado en Google Calendar')
       if (data.reloadCalendar) await data.reloadCalendar()
     } catch { showToast('Error creando el evento') }
     finally { setEvSaving(false) }
@@ -305,7 +325,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
           {(()=>{
             const monthKey = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}`
             const monthEventCount = Object.keys(eventsByDay).filter(k=>k.startsWith(monthKey)).reduce((s,k)=>s+eventsByDay[k].length,0)
-            return monthEventCount > 0 ? <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.25)'}}>{monthEventCount} evento{monthEventCount>1?'s':''}</span> : null
+            return monthEventCount > 0 ? <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.25)'}}>{plural(monthEventCount, 'evento')}</span> : null
           })()}
           {/* Legend — oculta en móvil, no cabe */}
           {!isMobile && <div className="ml-auto flex items-center gap-4 text-[10px]" style={{color:'rgba(255,255,255,0.3)'}}>
@@ -586,19 +606,24 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
                                       </div>
                                     </div>
                                   ) : (
-                                    <div className="flex gap-1.5">
+                                    <div className="flex gap-1.5 flex-wrap">
                                       <button onClick={()=>setEditEvent({id:e.raw.id,title:e.label,date:e.raw.start?.split('T')[0]||selKey,time:e.raw.start?.includes('T')?formatTime(e.raw.start):''})}
                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[7.5px] font-black transition-all hover:opacity-80"
                                         style={{background:'rgba(167,139,250,0.08)',border:'1px solid rgba(167,139,250,0.18)',color:'rgba(167,139,250,0.75)'}}>
                                         <LucideIcon name="pencil" size={9} color="rgba(167,139,250,0.75)"/>EDITAR
                                       </button>
-                                      {deletingEventId===e.raw?.id ? (
-                                        <div className="flex gap-1">
-                                          <button onClick={()=>deleteEvent(e.raw.id)} className="px-3 py-1.5 rounded-xl font-syne text-[7.5px] font-black" style={{background:`${RED}18`,color:RED,border:`1px solid ${RED}30`}}>¿BORRAR?</button>
-                                          <button onClick={()=>setDeletingEventId(null)} className="px-2 py-1.5 rounded-xl font-syne text-[7.5px] font-black" style={{color:'rgba(255,255,255,0.3)',border:'1px solid rgba(255,255,255,0.08)'}}>NO</button>
+                                      {confirmEventId===e.raw?.id ? (
+                                        <div className="flex gap-1 flex-wrap">
+                                          {/* El borrado no es local: se va de Google Calendar y de la agenda de
+                                              los invitados. La confirmación lo dice, que «¿BORRAR?» a secas sonaba
+                                              a quitarlo de esta pantalla. */}
+                                          <button onClick={()=>deleteEvent(e.raw.id)} disabled={deletingEventId===e.raw?.id} className="px-3 py-1.5 rounded-xl font-syne text-[7.5px] font-black disabled:opacity-50" style={{background:`${RED}18`,color:RED,border:`1px solid ${RED}30`}}>
+                                            {deletingEventId===e.raw?.id ? 'BORRANDO…' : '¿BORRAR DE GOOGLE CALENDAR?'}
+                                          </button>
+                                          <button onClick={()=>setConfirmEventId(null)} disabled={deletingEventId===e.raw?.id} className="px-2 py-1.5 rounded-xl font-syne text-[7.5px] font-black disabled:opacity-40" style={{color:'rgba(255,255,255,0.3)',border:'1px solid rgba(255,255,255,0.08)'}}>NO</button>
                                         </div>
                                       ) : (
-                                        <button onClick={()=>setDeletingEventId(e.raw?.id)}
+                                        <button onClick={()=>setConfirmEventId(e.raw?.id)}
                                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[7.5px] font-black transition-all hover:opacity-80"
                                           style={{background:`${RED}08`,border:`1px solid ${RED}18`,color:`${RED}80`}}>
                                           <LucideIcon name="trash-2" size={9} color={`${RED}80`}/>ELIMINAR
@@ -773,17 +798,23 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
       {/* ── MODAL: NUEVO EVENTO EN GOOGLE CALENDAR ─────────────────────────── */}
       {eventForm && (
         <div onClick={()=>!evSaving&&setEventForm(null)} className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{background:'rgba(2,2,10,0.8)',backdropFilter:'blur(8px)'}}>
+          {/* El modal no acotaba su altura y el contorno lleva overflow-hidden: en un
+              móvil apaisado (o un portátil corto con el zoom subido) el formulario medía
+              más que la ventana, CREAR EVENTO quedaba por debajo del borde y no había
+              forma de llegar a él, porque no scrolleaba ni el modal ni la página. Se
+              acota a la ventana y scrollea solo el cuerpo, con cabecera y pie fijos.
+              dvh y no vh: en móvil la barra del navegador se come los vh. */}
           <div onClick={e=>e.stopPropagation()} onKeyDown={e=>{ const tag=(e.target as HTMLElement).tagName; if(e.key==='Enter'&&tag!=='TEXTAREA'&&tag!=='BUTTON'&&!evSaving){ e.preventDefault(); submitEvent() } }}
-            className="w-[440px] max-w-full rounded-3xl overflow-hidden" style={{background:'linear-gradient(180deg,#0D0D1E 0%,#080810 100%)',border:'1px solid rgba(167,139,250,0.28)',boxShadow:'0 40px 100px rgba(0,0,0,0.8)'}}>
-            <div className="h-[2px]" style={{background:'linear-gradient(90deg,transparent,#a78bfa,transparent)'}}/>
-            <div className="flex items-center justify-between px-6 py-5" style={{borderBottom:`1px solid ${BORDER}`}}>
+            className="w-[440px] max-w-full rounded-3xl overflow-hidden flex flex-col" style={{background:'linear-gradient(180deg,#0D0D1E 0%,#080810 100%)',border:'1px solid rgba(167,139,250,0.28)',boxShadow:'0 40px 100px rgba(0,0,0,0.8)',maxHeight:'calc(100dvh - 2rem)'}}>
+            <div className="h-[2px] flex-shrink-0" style={{background:'linear-gradient(90deg,transparent,#a78bfa,transparent)'}}/>
+            <div className="flex items-center justify-between px-6 py-5 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
               <div>
                 <div className="font-syne text-[9px] font-black tracking-widest mb-1" style={{color:'rgba(167,139,250,0.7)'}}>GOOGLE CALENDAR</div>
                 <h2 className="font-syne text-[20px] font-black text-white leading-none">Nuevo Evento</h2>
               </div>
               <button onClick={()=>!evSaving&&setEventForm(null)} className="w-9 h-9 rounded-xl flex items-center justify-center hover:bg-white/5" style={{background:SURF2}}><LucideIcon name="x" size={16} color="rgba(240,240,248,0.45)"/></button>
             </div>
-            <div className="px-6 py-5 space-y-4">
+            <div className="px-6 py-5 space-y-4 flex-1 min-h-0 overflow-y-auto">
               <div>
                 <label className="block font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.28)'}}>TÍTULO</label>
                 <input autoFocus value={eventForm.title} onChange={e=>setEventForm(f=>f&&{...f,title:e.target.value})} placeholder="Ej: Reunión con Nike" className="w-full px-4 py-3 rounded-2xl text-[14px] text-white placeholder-white/20 outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}}/>
@@ -808,7 +839,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
                 <textarea value={eventForm.desc} onChange={e=>setEventForm(f=>f&&{...f,desc:e.target.value})} rows={2} placeholder="Detalles del evento…" className="w-full px-4 py-3 rounded-2xl text-[14px] text-white placeholder-white/20 outline-none resize-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU,lineHeight:'1.5'}}/>
               </div>
             </div>
-            <div className="flex justify-end gap-3 px-6 py-5" style={{borderTop:`1px solid ${BORDER}`}}>
+            <div className="flex justify-end gap-3 px-6 py-5 flex-shrink-0" style={{borderTop:`1px solid ${BORDER}`}}>
               <button onClick={()=>!evSaving&&setEventForm(null)} className="px-5 py-3 rounded-2xl text-[13px] hover:text-white/70" style={{color:'rgba(255,255,255,0.4)',border:`1px solid ${BORDER}`}}>Cancelar</button>
               <button onClick={submitEvent} disabled={evSaving} className="px-6 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white disabled:opacity-50" style={{background:'linear-gradient(135deg,#a78bfa,#7c5cf5)'}}>{evSaving?'CREANDO…':'CREAR EVENTO'}</button>
             </div>

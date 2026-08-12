@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, todayKey, localDayKey } from '@/components/shared'
+import { plural } from '@/components/shared/helpers'
 import LucideIcon from '@/components/shared/LucideIcon'
 import type { Client } from '@/types'
 
@@ -82,7 +83,13 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
     return () => window.removeEventListener('keydown', handler)
   }, [editing, onOpenModal, expanded, pinnedIds])
   const cats = ['Todos','Clientes','Procesos','Decisiones','Aprendizajes','General']
-  const catColor: Record<string,string> = { Clientes:BLU, Procesos:'#FFB020', Decisiones:RED, Aprendizajes:GRN, General:'#A78BFA' }
+  // 'Documento' no aparece en `cats`, pero existe: `uploadDoc` crea con esa
+  // categoria la entrada de CADA PDF que se sube. Sin color propio caia en el
+  // fallback, que era rgba(255,255,255,0.3) y abajo se le concatena la opacidad
+  // ('18'/'99'): con rgba el navegador tira la declaracion entera en silencio, asi
+  // que la etiqueta de todos los documentos salia sin fondo y sin color de texto.
+  // Por eso todo lo de aqui es hex de 6 digitos.
+  const catColor: Record<string,string> = { Clientes:BLU, Procesos:'#FFB020', Decisiones:RED, Aprendizajes:GRN, General:'#A78BFA', Documento:'#06B6D4' }
   const memoryClients = data.clients.filter((c: Client)=>data.memoria.some((m: any)=>m.client?.id===c.id))
   const byFilter = memFilter==='Todos' ? data.memoria : data.memoria.filter((m: any)=>m.category===memFilter)
   const byClientFilter = memClientFilter==='Todos' ? byFilter : byFilter.filter((m: any)=>m.client?.id===memClientFilter)
@@ -137,7 +144,10 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
             a.download = `memoria-${todayKey()}.md`
             a.click()
             URL.revokeObjectURL(a.href)
-            showToast(`${data.memoria.length} entradas exportadas`)
+            // El participio concuerda con el sustantivo, asi que se le pasa el
+            // plural entero: con una sola entrada el aviso decia "1 entradas
+            // exportadas".
+            showToast(plural(data.memoria.length,'entrada exportada','entradas exportadas'))
           }} className="flex items-center gap-2 px-4 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.35)'}} title="Exportar como Markdown">
             <LucideIcon name="download" size={13} color="rgba(255,255,255,0.35)"/>
             <span>MD</span>
@@ -158,7 +168,7 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
         {cats.map(c=>{
           const cnt = c==='Todos' ? data.memoria.length : data.memoria.filter((m:any)=>m.category===c).length
           return (
-            <button key={c} onClick={()=>setMemFilter(c)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:memFilter===c?(c==='Todos'?SURF2:(catColor[c]||'rgba(255,255,255,0.3)')+'14'):'transparent',color:memFilter===c?(c==='Todos'?'#F0F0F8':(catColor[c]||'rgba(240,240,248,0.7)')):'rgba(240,240,248,0.3)'}}>
+            <button key={c} onClick={()=>setMemFilter(c)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide transition-all" style={{background:memFilter===c?(c==='Todos'?SURF2:(catColor[c]||'#A78BFA')+'14'):'transparent',color:memFilter===c?(c==='Todos'?'#F0F0F8':(catColor[c]||'rgba(240,240,248,0.7)')):'rgba(240,240,248,0.3)'}}>
               {c}
               {cnt > 0 && <span className="text-[7px] font-black px-1 rounded-sm" style={{background:memFilter===c?'rgba(255,255,255,0.1)':'transparent',color:memFilter===c?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.2)'}}>{cnt}</span>}
             </button>
@@ -191,7 +201,9 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                   <span className="font-figtree text-[14px] font-semibold text-white">{m.title}</span>
-                  <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-lg" style={{background:(catColor[m.category]||'rgba(255,255,255,0.3)')+'18',color:(catColor[m.category]||'rgba(255,255,255,0.3)')+'99'}}>{m.category}</span>
+                  {/* El fallback es hex, como el de la linea del icono: aqui se le
+                      concatena opacidad y con rgba() no se pinta nada. */}
+                  <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-lg" style={{background:(catColor[m.category]||'#A78BFA')+'18',color:(catColor[m.category]||'#A78BFA')+'99'}}>{m.category}</span>
                   {m.created_at && <span className="font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.18)'}}>{new Date(m.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',year:'numeric'})}</span>}
                   {m.created_at && Date.now()-new Date(m.created_at).getTime() < 7*24*60*60*1000 && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(34,197,94,0.12)',color:'rgba(34,197,94,0.65)'}}>NUEVO</span>}
                   {pinnedIds.has(m.id) && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.7)'}}>FIJADA</span>}

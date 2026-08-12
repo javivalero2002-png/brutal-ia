@@ -7,9 +7,10 @@ import { createClient } from '@/lib/supabase/client'
 import { PlatformLogo } from '@/components/PlatformLogo'
 import CreateModal from '@/components/CreateModal'
 
-import { BLU, RED, GRN, SURFACE, SURF2, BORDER, ACCENT_COLORS } from '@/components/shared/design-tokens'
+import { BLU, RED, GRN, AMBAR, SURFACE, SURF2, BORDER, ACCENT_COLORS } from '@/components/shared/design-tokens'
 import { useIsMobile } from '@/components/shared/hooks'
-import { dlDate, todayKey } from '@/components/shared/helpers'
+import { dlDate, todayKey, localDayKey, daysBetweenKeys } from '@/components/shared/helpers'
+import { construirKanbanCols } from '@/components/shared/kanban'
 import LucideIcon from '@/components/shared/LucideIcon'
 import { SectionErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { unlockAudio } from '@/components/shared/audio'
@@ -249,10 +250,21 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   const [toast, setToast] = useState<string|null>(null)
   const [notifOpen, setNotifOpen] = useState(false)
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
-  const [notifData, setNotifData] = useState<{dmCount:number;urgentCount:number;total:number;dms:any[];urgent:any[]}>({dmCount:0,urgentCount:0,total:0,dms:[],urgent:[]})
+  // `parcial` lo manda /api/notifications cuando una de sus dos consultas falla:
+  // devuelve 200 con lo que sí pudo contar. Nadie lo leía, así que "no tienes
+  // avisos" y "no he podido mirar" se pintaban idénticos —el panel decía "Todo
+  // está al día" con la consulta caída— y esto se sondea cada 30 segundos, así
+  // que la campana podía estar apagada durante días sin que nadie lo supiera.
+  const [notifData, setNotifData] = useState<{dmCount:number;urgentCount:number;total:number;dms:any[];urgent:any[];parcial?:boolean}>({dmCount:0,urgentCount:0,total:0,dms:[],urgent:[]})
 
   useEffect(() => {
-    const fetchNotifs = () => fetch('/api/notifications').then(r=>r.ok?r.json():null).then(d=>{if(d)setNotifData(d)}).catch(()=>{})
+    // Un 500 o un fallo de red son el mismo caso que `parcial`: no se sabe lo que
+    // hay. Antes se descartaban en silencio y se seguía enseñando el último
+    // recuento bueno como si fuera de ahora.
+    const fetchNotifs = () => fetch('/api/notifications')
+      .then(r=>r.ok?r.json():null)
+      .then(d=>{ if(d) setNotifData(d); else setNotifData(p=>({...p, parcial:true})) })
+      .catch(()=>{ setNotifData(p=>({...p, parcial:true})) })
     // No sondear con la pestaña en segundo plano: eran 2.880 invocaciones diarias
     // por pestaña abierta, la mayoría con nadie mirando. Al volver se refresca
     // inmediatamente, así que no se pierde nada.
@@ -462,7 +474,15 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
 
   const typeColor: Record<string,string> = { Cliente:BLU, Proyecto:'rgba(255,176,32,0.9)', Tarea:RED, Memoria:'rgba(240,240,248,0.4)', Contenido:'#C13584', Inbox:'rgba(100,180,255,0.7)', Equipo:GRN }
 
-  const overdueProjs = data.projects.filter((p: Project) => p.deadline && p.deadline !== 'TBD' && p.status !== 'completado' && dlDate(p.deadline) < new Date())
+  // Días de retraso de un deadline. Un deadline es un DÍA, no un instante:
+  // restar timestamps y dividir entre 86.400.000 cuenta bloques de 24 horas, y
+  // un proyecto vencido AYER daba 0,4 → Math.round → «0d» en el panel de
+  // notificaciones toda la mañana, hasta que pasaba el mediodía. Se comparan
+  // claves de día de Madrid, que es la verdad que usa el resto de la UI
+  // (estadoDeadline); dlDate sigue delante para entender los deadlines en texto
+  // libre ("ago 2026"), que estadoDeadline no sabe leer.
+  const diasAtraso = (deadline?: string|null) => daysBetweenKeys(localDayKey(dlDate(deadline)), todayKey())
+  const overdueProjs = data.projects.filter((p: Project) => p.deadline && p.deadline !== 'TBD' && p.status !== 'completado' && diasAtraso(p.deadline) > 0)
 
   const saveModal = async () => {
     setModalSaving(true)
@@ -555,13 +575,12 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   const todayCalCount = (data.calendarEvents||[]).filter((e: any) => e.start?.slice(0,10) === todayKey()).length
 
   const filteredProjects = projStatusFilter === 'Todos' ? data.projects : data.projects.filter(p => p.status === projStatusFilter)
-  const kanbanCols = [
-    { title:'Plan.', color:'rgba(240,240,248,0.25)', status:'plan.', items:filteredProjects.filter(p=>p.status==='plan.') },
-    { title:'Progreso', color:BLU, status:'activo', items:filteredProjects.filter(p=>p.status==='activo') },
-    { title:'Urgente', color:RED, status:'urgente', items:filteredProjects.filter(p=>p.status==='urgente') },
-    { title:'Revisión', color:'rgba(255,176,32,0.7)', status:'revisión', items:filteredProjects.filter(p=>p.status==='revisión') },
-    { title:'Completado', color:GRN, status:'completado', items:filteredProjects.filter(p=>p.status==='completado') },
-  ]
+  // «Plan.» y «Revisión» declaraban su color en rgba() mientras las otras tres
+  // eran hex, y ProyectosSection concatena opacidad sobre col.color: esas dos
+  // columnas se pintaban sin barra de acento y con el contador sin fondo. El
+  // array estaba además duplicado en PreviewClient, con el mismo fallo; ahora
+  // sale del módulo compartido y no puede divergir.
+  const kanbanCols = construirKanbanCols(filteredProjects)
 
   const dragRef = useRef<string|null>(null)
   showShortcutsRef.current = showShortcuts
@@ -632,7 +651,10 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
               {/* Notification bell */}
               <div className="relative">
                 <button onClick={e=>{e.stopPropagation();setNotifOpen(o=>!o)}} className="w-7 h-7 rounded-xl flex items-center justify-center relative transition-all" style={{background:notifOpen?'rgba(27,95,250,0.15)':'transparent'}}>
-                  <LucideIcon name="bell" size={13} color={(notifData.total+overdueProjs.length)>0?BLU:'rgba(255,255,255,0.2)'}/>
+                  {/* Ámbar —ni azul ni apagado— cuando la consulta ha fallado:
+                      la campana apagada significa "no tienes nada", y eso es
+                      justo lo que no se sabe. */}
+                  <LucideIcon name="bell" size={13} color={(notifData.total+overdueProjs.length)>0?BLU:notifData.parcial?AMBAR:'rgba(255,255,255,0.2)'}/>
                   {(notifData.total+overdueProjs.length)>0 && <div className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center pointer-events-none" style={{background:RED,boxShadow:`0 0 6px ${RED}80`}}><span className="font-syne text-[7px] font-black text-white leading-none">{(notifData.total+overdueProjs.length)>9?'9+':(notifData.total+overdueProjs.length)}</span></div>}
                 </button>
                 {notifOpen && (
@@ -646,12 +668,27 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
                       {(notifData.total+overdueProjs.length) > 0 && <span className="font-figtree text-[11px] font-black" style={{color:RED}}>{notifData.total+overdueProjs.length}</span>}
                     </div>
                     {(notifData.total+overdueProjs.length)===0 ? (
-                      <div className="px-4 py-6 text-center">
-                        <div className="font-syne text-[9px] font-black tracking-widest mb-1" style={{color:'rgba(255,255,255,0.18)'}}>SIN NOTIFICACIONES</div>
-                        <div className="text-[11px]" style={{color:'rgba(255,255,255,0.2)'}}>Todo está al día</div>
-                      </div>
+                      notifData.parcial ? (
+                        <div className="px-4 py-6 text-center">
+                          <div className="font-syne text-[9px] font-black tracking-widest mb-1" style={{color:AMBAR}}>NO SE PUDIERON CONSULTAR LOS AVISOS</div>
+                          <div className="text-[11px]" style={{color:'rgba(255,255,255,0.3)'}}>Puede que tengas mensajes o tareas urgentes sin contar</div>
+                        </div>
+                      ) : (
+                        <div className="px-4 py-6 text-center">
+                          <div className="font-syne text-[9px] font-black tracking-widest mb-1" style={{color:'rgba(255,255,255,0.18)'}}>SIN NOTIFICACIONES</div>
+                          <div className="text-[11px]" style={{color:'rgba(255,255,255,0.2)'}}>Todo está al día</div>
+                        </div>
+                      )
                     ) : (
                       <div className="max-h-[320px] overflow-y-auto">
+                        {/* Con `parcial` puede haber DMs y no tareas (o al revés):
+                            lo que se ve es media respuesta, y sin avisar el
+                            recuento de arriba se lee como si fuera todo. */}
+                        {notifData.parcial && (
+                          <div className="px-4 py-2" style={{background:`${AMBAR}14`,borderBottom:`1px solid ${AMBAR}28`}}>
+                            <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:AMBAR}}>LISTA INCOMPLETA — FALTAN AVISOS POR CONTAR</span>
+                          </div>
+                        )}
                         {notifData.dms.length > 0 && (
                           <div className="px-4 pt-3 pb-1">
                             <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>MENSAJES DIRECTOS</span>
@@ -696,7 +733,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
                           </div>
                         )}
                         {overdueProjs.slice(0,3).map((p:any,i:number)=>{
-                          const daysOver = Math.round((Date.now()-dlDate(p.deadline).getTime())/86400000)
+                          const daysOver = diasAtraso(p.deadline)
                           return (
                             <button key={i} onClick={()=>{setNotifOpen(false);setSection('proyectos'); if (isMobile) setSidebarOpen(false)}} className="w-full text-left px-4 py-2.5 transition-colors" style={{borderBottom:i<Math.min(overdueProjs.length,3)-1?`1px solid rgba(255,255,255,0.04)`:'none'}} onMouseEnter={e=>(e.currentTarget.style.background='rgba(255,176,32,0.05)')} onMouseLeave={e=>(e.currentTarget.style.background='transparent')}>
                               <div className="flex items-center gap-2.5">
@@ -739,7 +776,10 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
           {navLabel('GESTIÓN')}
           {navItem('tareas','Tareas','check-square',data.tasks.filter((t:Task)=>!t.done&&t.level==='urgent').length||undefined)}
           {navItem('clientes','Clientes','users')}
-          {navItem('proyectos','Proyectos','folder-open', data.projects.filter((p: Project)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<new Date()).length||undefined)}
+          {/* La cuenta del badge estaba escrita otra vez aquí, con la misma resta
+              de timestamps: la campana y el menú podían discrepar. Es la misma
+              lista, así que se reutiliza. */}
+          {navItem('proyectos','Proyectos','folder-open', overdueProjs.length||undefined)}
           {navItem('contenido','Contenido','film')}
 
           {navLabel('IA')}

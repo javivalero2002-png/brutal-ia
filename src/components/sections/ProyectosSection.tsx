@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, todayKey, estadoDeadline, AMBAR } from '@/components/shared'
+import { plural } from '@/components/shared/helpers'
 import type { Project, Task, Profile } from '@/types'
 
 function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView,projStatusFilter,setProjStatusFilter,dragRef,selectedId,onSelect,onOpenModal,showToast,isOwner,onNavigate,onSelectClient,justCreatedId,onJustCreatedScrolled}: any) {
@@ -136,6 +137,11 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
       setPdfChat([])
     }
     setPdfQ('')
+    // Si la respuesta de Claude sobre el PDF anterior sigue en vuelo, askPdf ya no
+    // la aplicará (comprueba el proyecto al volver): el `busy` se limpia aquí, que es
+    // donde se sabe que el chat que entra no está esperando a nadie. Sin esto, el
+    // input del proyecto nuevo se quedaba bloqueado hasta un minuto.
+    setPdfChatBusy(false)
     setPdfUploadPct(null)
     setShowPdfViewer(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -271,15 +277,30 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
     finally { setPdfUploadPct(null) }
   }
 
+  // El proyecto se fija AQUI, al empezar, igual que en analyzePdf y onPickPdf. La
+  // peticion lleva AbortSignal.timeout(60000): hasta un minuto pidiendole a Claude
+  // que lea un contrato, tiempo de sobra para cambiar de proyecto. Los setPdfChat de
+  // despues del await escriben en el chat que este EN PANTALLA, y el efecto de
+  // arriba guarda ese chat en pdfCacheRef del proyecto abierto — asi que la
+  // respuesta sobre el contrato de A se colgaba del chat de B y ademas se persistia
+  // en su cache. La pregunta y el `busy` iniciales van antes del await, o sea que
+  // esos si son del proyecto correcto.
   const askPdf = async () => {
     const q = pdfQ.trim(); if (!q || !pdfDoc || pdfChatBusy) return
+    const proyectoId = selectedProjectRef.current?.id
+    const vigente = () => selectedProjectRef.current?.id === proyectoId
     setPdfQ(''); setPdfChat(c=>[...c,{role:'user',content:q}]); setPdfChatBusy(true)
     try {
       const res = await fetch('/api/projects/analyze-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfUrl:pdfDoc.url,question:q}),signal:AbortSignal.timeout(60000)})
       const j = await res.json().catch(()=>({}))
+      if (!vigente()) return
       setPdfChat(c=>[...c,{role:'ai',content: res.ok ? (j.answer||'—') : (j.error||'Error al responder')}])
-    } catch { setPdfChat(c=>[...c,{role:'ai',content:'Error de conexión'}]) }
-    finally { setPdfChatBusy(false) }
+    } catch { if (vigente()) setPdfChat(c=>[...c,{role:'ai',content:'Error de conexión'}]) }
+    // `pdfChatBusy` no esta cacheado por proyecto, es uno solo para toda la seccion:
+    // liberarlo aqui desde una respuesta que ya no toca dejaria el input del proyecto
+    // nuevo escribiendo mientras "responde". Al cambiar de proyecto lo resetea el
+    // efecto de [selectedId], que es quien sabe que el chat de destino no espera nada.
+    finally { if (vigente()) setPdfChatBusy(false) }
   }
 
   useEffect(() => { setEditProgress(null); setConfirmDeleteDetail(false); setQuickProjTask('') }, [selectedId])
@@ -569,7 +590,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                           const dOver = dl.vencido, dSoon = dl.pronto, dLabel = dl.etiqueta
                           return <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.12)':'rgba(255,255,255,0.04)',color:dOver?RED:dSoon?AMBAR:'rgba(255,255,255,0.3)'}}>{dLabel}</span>
                         })()}
-                        {(()=>{ const n=data.tasks.filter((t:Task)=>t.project_id===p.id&&!t.done).length; if(n>0) return <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.65)'}}>{n} tareas</span>; if(p.status!=='completado'&&p.status!=='plan.') return <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,176,32,0.07)',color:'rgba(255,176,32,0.5)'}}>sin tareas</span>; return null })()}
+                        {(()=>{ const n=data.tasks.filter((t:Task)=>t.project_id===p.id&&!t.done).length; if(n>0) return <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.65)'}}>{plural(n,'tarea')}</span>; if(p.status!=='completado'&&p.status!=='plan.') return <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,176,32,0.07)',color:'rgba(255,176,32,0.5)'}}>sin tareas</span>; return null })()}
                       </div>
                     </div>
                   </div>

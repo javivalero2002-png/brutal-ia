@@ -50,7 +50,16 @@ export default function ResetPasswordPage() {
   }
 
   const s: Record<string, React.CSSProperties> = {
-    page: { minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#05050C', padding: '20px' },
+    // Scroll propio y centrado con `margin:auto` en el hijo, igual que en /login y
+    // por lo mismo: el <body> es `height:100%; overflow:hidden` (globals.css:38),
+    // así que lo que sobresalga se RECORTA sin barra que lo alcance, y
+    // `align-items:center` desborda también por ARRIBA, adonde el scroll no llega.
+    // Aquí el recorte es peor: esta página ya arranca más alta (dos campos, dos
+    // etiquetas y el párrafo de explicación) y encima suma avisos —el de enlace
+    // caducado, el de error, el de "guardada"—, así que se pasa de largo con
+    // facilidad. Y es de un solo uso: si no se llega al botón GUARDAR Y ENTRAR hay
+    // que pedir otro correo, porque el enlace de recuperación ya se ha consumido.
+    page: { height: '100dvh', overflowY: 'auto', display: 'flex', background: '#05050C', padding: '20px 20px max(20px, env(safe-area-inset-bottom))' },
     card: { background: 'linear-gradient(180deg,#0C0C1C 0%,#07070F 100%)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', padding: '32px', width: '100%', maxWidth: '380px' },
     label: { display: 'block', fontFamily: 'Syne,sans-serif', fontSize: '9px', fontWeight: 700, letterSpacing: '3px', color: 'rgba(240,240,248,0.3)', textTransform: 'uppercase', marginBottom: '8px' },
     input: { width: '100%', padding: '12px 16px', borderRadius: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(27,95,250,0.2)', color: 'white', fontSize: '14px', marginBottom: '16px', outline: 'none' },
@@ -60,7 +69,7 @@ export default function ResetPasswordPage() {
 
   return (
     <div style={s.page}>
-      <div>
+      <div style={{ margin: 'auto', width: '100%', maxWidth: '380px' }}>
         <div style={{ textAlign: 'center', marginBottom: '36px' }}>
           <img src="/brutal-logo.svg" alt="Brutal Studios" style={{ height: '28px', margin: '0 auto 10px', display: 'block' }} />
           <div style={{ fontFamily: 'Syne,sans-serif', fontSize: '13px', fontWeight: 900, color: 'white', letterSpacing: '4px' }}>BRUTAL<span style={{ color: '#1B5FFA' }}>.IA</span></div>

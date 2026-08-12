@@ -15,10 +15,22 @@ export async function POST() {
   const result = await syncColabsInbox(admin, { triggeredBy: user.id })
 
   if (!result.ok) {
-    return NextResponse.json(
-      { error: result.error, code: result.code, details: result.details },
-      { status: result.error === 'Colaboraciones not connected' ? 400 : 500 }
-    )
+    // `dedup_failed` es un fallo TRANSITORIO: no se pudo leer qué emails ya
+    // estaban guardados, así que el bucle se corta antes de gastar una llamada a
+    // Claude por cada email del buzón. 503 y no 500, igual que /api/gmail/sync:
+    // le dice al cliente que reintente, que es justo lo que procede.
+    const status = result.error === 'Colaboraciones not connected' ? 400
+      : result.error === 'dedup_failed' ? 503
+      : 500
+    return NextResponse.json({ error: result.error, code: result.code, details: result.details }, { status })
   }
-  return NextResponse.json({ synced: result.synced, total: result.total, account: result.account })
+  // insertFailures viaja hasta el cliente: emails analizados y NO guardados. Sin
+  // él, un buzón con la escritura rota se anuncia como "0 nuevos" y parece que
+  // no había correo.
+  return NextResponse.json({
+    synced: result.synced,
+    total: result.total,
+    account: result.account,
+    insertFailures: result.insertFailures ?? 0,
+  })
 }

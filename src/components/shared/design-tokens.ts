@@ -6,6 +6,12 @@ export const GRN = '#22c55e'
 // Estaba escrito como rgba(255,176,32,0.9) en 5 secciones, así que producía
 // `"rgba(255,176,32,0.9)18"` — invalido, y el elemento se pintaba SIN fondo.
 export const AMBAR = '#FFB020'
+// Morado del orbe de Harvey cuando piensa. Estaba escrito como
+// rgba(139,92,246,0.9) en HoySection y en HarveySection —el mismo color, dos
+// copias— y las dos concatenaban opacidad encima, asi que el halo y el
+// resplandor del boton de voz desaparecian JUSTO en modo 'thinking'. Es el
+// mismo tono: #8B5CF6 al 90% es exactamente ese rgba.
+export const VIO = '#8B5CF6'
 export const SURFACE = '#0A0A14'
 export const SURF2 = '#0F0F1E'
 export const BORDER = 'rgba(255,255,255,0.06)'

@@ -73,14 +73,29 @@ export async function POST() {
 
   let newCount = 0
   let aiFailures = 0
+  let insertFailures = 0
   const newUnread: { from_name: string; subject: string; urgency: string }[] = []
 
   // Una sola consulta para saber cuáles ya existen (antes: un SELECT por email).
   const gmailIds = emails.map(e => e.gmail_id).filter(Boolean)
-  const { data: existingRows } = await admin
+  const { data: existingRows, error: existingErr } = await admin
     .from('inbox_messages')
     .select('gmail_id')
     .in('gmail_id', gmailIds)
+  // Se corta aquí en vez de seguir con el Set vacío (tercera copia de este corte,
+  // con las dos de colabsSync). Como supabase-js no lanza, el error pasaba de
+  // largo y el bucle dejaba de saltarse lo ya guardado: una llamada a Claude por
+  // CADA uno de los 20 emails, y detrás el insert rebotando contra el unique de
+  // gmail_id, o sea pagar el análisis entero para sincronizar cero. Sin la lista
+  // de conocidos el bucle no es idempotente, y ejecutarlo a ciegas cuesta más que
+  // no ejecutarlo: se pide reintentar.
+  if (existingErr) {
+    console.error('[sync] no se pudieron leer los gmail_id ya guardados:', existingErr.message)
+    return NextResponse.json(
+      { error: 'dedup_failed', message: 'No se pudo comprobar qué emails ya estaban guardados. Inténtalo de nuevo.' },
+      { status: 503 }
+    )
+  }
   const known = new Set((existingRows || []).map((r: { gmail_id: string }) => r.gmail_id))
 
   // Presupuesto de tiempo. Cada email nuevo cuesta una llamada a Claude, y en el
@@ -134,7 +149,18 @@ export async function POST() {
       attachments: email.attachments?.length ? email.attachments : [],
     })
 
-    if (insertErr) continue
+    if (insertErr) {
+      // Antes era un `continue` pelado: el email se perdía sin rastro. Y el
+      // análisis con Claude ya está pagado en la línea de arriba, así que como el
+      // gmail_id no llega a guardarse el siguiente sync lo vuelve a analizar.
+      // Se cuenta además de loguear porque el log no lo ve nadie: con todos los
+      // inserts fallando esta ruta respondía { synced: 0, total: 20 } con 200 y
+      // Sincronización anunciaba "0 emails nuevos (20 revisados)" como si fuera
+      // un buzón sin novedades.
+      console.error('[sync] insert falló para gmail_id', email.gmail_id, '—', insertErr.message)
+      insertFailures++
+      continue
+    }
 
     // Solo el correo de colaboraciones genera tareas — cuentas personales no
     if (isCompanyAccount && analysis.suggestedTask && analysis.urgency !== 'normal' && gmailTasksCreated < GMAIL_TASK_LIMIT) {
@@ -203,5 +229,9 @@ export async function POST() {
   }
 
   if (aiFailures) console.error(`[sync] analyzeEmail falló en ${aiFailures} de ${emails.length} emails`)
-  return NextResponse.json({ synced: newCount, total: emails.length, account: gmailAccount, shared: isCompanyAccount, aiFailures })
+  if (insertFailures) console.error(`[sync] ${insertFailures} de ${emails.length} emails analizados no se pudieron guardar`)
+  // `insertFailures` viaja en el JSON para que Sincronización pueda decir la
+  // verdad ("revisados 20, guardados 0") en vez de dar por bueno un synced: 0 que
+  // es indistinguible de "no había emails nuevos".
+  return NextResponse.json({ synced: newCount, total: emails.length, account: gmailAccount, shared: isCompanyAccount, aiFailures, insertFailures })
 }

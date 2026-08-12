@@ -7,7 +7,10 @@ import { localDayKey } from '@/components/shared/helpers'
 const MEETING_RE = /meet\.google\.com\/[a-z-]+|zoom\.us\/j\/\d+|teams\.microsoft\.com\/l\/meetup/i
 
 type SyncResult =
-  | { ok: true; synced: number; total: number; account: string; aiFailures?: number }
+  // `insertFailures` sale al exterior a propósito: con los inserts fallando el
+  // resultado es `synced: 0` sobre 20 revisados, que desde fuera es idéntico a
+  // "no había nada nuevo". Es el recuento el que distingue las dos cosas.
+  | { ok: true; synced: number; total: number; account: string; aiFailures?: number; insertFailures?: number }
   | { ok: false; error: string; code?: number; details?: unknown }
 
 /**
@@ -60,14 +63,26 @@ export async function syncColabsInbox(
 
   let newCount = 0
   let aiFailures = 0
+  let insertFailures = 0
   const newUnread: { from_name: string; subject: string; urgent?: boolean }[] = []
 
   // Una sola consulta para saber cuáles ya existen (antes: un SELECT por email).
   const colabsIds = emails.map(e => e.gmail_id).filter(Boolean)
-  const { data: colabsExisting } = await admin
+  const { data: colabsExisting, error: colabsExistingError } = await admin
     .from('inbox_messages')
     .select('gmail_id')
     .in('gmail_id', colabsIds)
+  // Se aborta en vez de seguir: esta lista es lo ÚNICO que hace idempotente al
+  // bucle. Como supabase-js no lanza, ignorar el error dejaba el Set vacío y la
+  // sincronización se ejecutaba a ciegas — una llamada a Claude por CADA email
+  // del buzón (hasta 20), y luego el insert rebotando contra el unique de
+  // gmail_id, así que se pagaba el análisis entero para sincronizar cero. Cada
+  // hora. Ejecutarlo a ciegas cuesta más que no ejecutarlo: lo que falte lo
+  // recoge la ejecución siguiente.
+  if (colabsExistingError) {
+    console.error('[colabs] no se pudieron leer los gmail_id ya guardados:', colabsExistingError.message)
+    return { ok: false, error: 'dedup_failed', details: colabsExistingError.message }
+  }
   const colabsKnown = new Set((colabsExisting || []).map((r: { gmail_id: string }) => r.gmail_id))
 
   // Presupuesto de tiempo, igual que en /api/gmail/sync y por el mismo motivo.
@@ -129,6 +144,7 @@ export async function syncColabsInbox(
       // vuelve a analizar el mismo email. Cada hora. Para siempre. Sin este log
       // el bucle es invisible y solo se nota en la factura.
       console.error('[sync] insert falló para gmail_id', email.gmail_id, '—', insertError.message)
+      insertFailures++
     } else {
       newCount++
       // Email con enlace de reunión → tarea con fecha (aparece en el Calendario)
@@ -178,11 +194,12 @@ export async function syncColabsInbox(
   }
 
   if (aiFailures) console.error(`[sync] analyzeEmail falló en ${aiFailures} de ${emails.length} emails`)
+  if (insertFailures) console.error(`[colabs] ${insertFailures} de ${emails.length} emails analizados no se pudieron guardar`)
   // `truncado` sale al exterior: si aparece de forma sostenida, el buzon compartido
   // no cabe en el presupuesto y hay que repartirlo en mas ejecuciones. Callarlo
   // dejaria el problema invisible, que es como empezo este.
   if (truncado) console.warn(`[colabs] sin tiempo: quedan emails sin analizar, se recogen en la siguiente ejecucion`)
-  return { ok: true, synced: newCount, total: emails.length, account: gmailAccount, aiFailures, ...(truncado ? { truncado: true } : {}) }
+  return { ok: true, synced: newCount, total: emails.length, account: gmailAccount, aiFailures, insertFailures, ...(truncado ? { truncado: true } : {}) }
 }
 
 /**
@@ -220,14 +237,23 @@ export async function syncPersonalInbox(
 
   let newCount = 0
   let aiFailures = 0
+  let insertFailures = 0
   const newUnread: { from_name: string; subject: string; urgent?: boolean }[] = []
 
   // Una sola consulta para saber cuáles ya existen (antes: un SELECT por email).
   const personalIds = emails.map(e => e.gmail_id).filter(Boolean)
-  const { data: personalExisting } = await admin
+  const { data: personalExisting, error: personalExistingError } = await admin
     .from('inbox_messages')
     .select('gmail_id')
     .in('gmail_id', personalIds)
+  // Mismo corte que en syncColabsInbox y por lo mismo: sin la lista de conocidos
+  // el bucle no es idempotente y se paga una llamada a Claude por email para no
+  // guardar ninguno (el unique de gmail_id rechaza los repetidos). Y aquí se
+  // multiplica por las 7 personas del cron, así que es donde más cuesta.
+  if (personalExistingError) {
+    console.error('[sync personal] no se pudieron leer los gmail_id ya guardados:', personalExistingError.message)
+    return { ok: false, error: 'dedup_failed', details: personalExistingError.message }
+  }
   const personalKnown = new Set((personalExisting || []).map((r: { gmail_id: string }) => r.gmail_id))
 
   // Presupuesto de tiempo, gemelo del de syncColabsInbox. Se le puso alli y aqui
@@ -272,7 +298,15 @@ export async function syncPersonalInbox(
       shared: false,
       attachments: email.attachments?.length ? email.attachments : [],
     })
-    if (!insertError) {
+    if (insertError) {
+      // Mismo motivo que en syncColabsInbox: el análisis con Claude va ANTES del
+      // insert, así que si el insert falla el gmail_id no queda guardado y el
+      // cron vuelve a analizar el mismo email a la hora siguiente, y a la
+      // siguiente. Sin este log el bucle era invisible aquí —la rama era un
+      // `if (!insertError)` pelado— y solo se notaba en la factura de Anthropic.
+      console.error('[sync personal] insert falló para gmail_id', email.gmail_id, '—', insertError.message)
+      insertFailures++
+    } else {
       newCount++
       if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgent: analysis.urgency === 'urgent' })
     }
@@ -300,6 +334,7 @@ export async function syncPersonalInbox(
   }
 
   if (aiFailures) console.error(`[sync] analyzeEmail falló en ${aiFailures} de ${emails.length} emails`)
+  if (insertFailures) console.error(`[sync personal] ${insertFailures} de ${emails.length} emails analizados no se pudieron guardar`)
   if (truncado) console.warn('[sync personal] sin tiempo: quedan emails sin analizar, se recogen en la siguiente ejecucion')
-  return { ok: true, synced: newCount, total: emails.length, account: gmailAccount, aiFailures, ...(truncado ? { truncado: true } : {}) }
+  return { ok: true, synced: newCount, total: emails.length, account: gmailAccount, aiFailures, insertFailures, ...(truncado ? { truncado: true } : {}) }
 }

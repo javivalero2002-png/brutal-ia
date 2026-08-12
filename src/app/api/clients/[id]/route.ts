@@ -41,6 +41,23 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const { id } = await params
   const { error } = await admin.from('clients').delete().eq('id', id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[clients] no se pudo borrar el cliente', id, '—', error.message)
+    // 23503 = violación de clave ajena. projects.client_id es ON DELETE RESTRICT
+    // desde migrations/20260810_retencion_e_integridad.sql, precisamente para que
+    // borrar un cliente no se lleve por delante su historial de proyectos. La UI
+    // ya no ofrece el borrado duro cuando quedan proyectos, pero se puede llegar
+    // aquí por una carrera: otra persona crea un proyecto entre el render y el
+    // clic. Sin traducir, el owner veía el texto crudo de Postgres —«violates
+    // foreign key constraint "projects_client_id_fkey"»— porque apiFetch deja
+    // pasar cualquier `error` de menos de 160 caracteres.
+    if ((error as { code?: string }).code === '23503') {
+      return NextResponse.json(
+        { error: 'Este cliente tiene proyectos: archívalo, o mueve o borra sus proyectos antes.' },
+        { status: 409 },
+      )
+    }
+    return NextResponse.json({ error: 'No se pudo borrar el cliente' }, { status: 500 })
+  }
   return NextResponse.json({ ok: true })
 }

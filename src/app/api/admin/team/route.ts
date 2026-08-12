@@ -27,9 +27,18 @@ export async function GET() {
   const { admin } = ctx
   // Igual que en /api/me, y aqui es peor: con el asterisco esta ruta devolvia los
   // refresh tokens de Gmail de LAS SIETE PERSONAS en una sola respuesta.
-  const { data: profiles } = await admin.from('profiles').select('id, email, name, role, avatar_color, initials, gmail_connected, gmail_account, gmail_colabs_connected, gmail_colabs_account')
+  const { data: profiles, error } = await admin.from('profiles').select('id, email, name, role, avatar_color, initials, gmail_connected, gmail_account, gmail_colabs_connected, gmail_colabs_account')
     .ilike('email', '%@brutalstudios.es')
     .order('role', { ascending: false })
+  // supabase-js NO lanza: descartando `error` esto devolvia [] con un 200, que es
+  // exactamente lo mismo que responde una tabla vacia. En Ajustes → Equipo el
+  // propietario veia la lista de las siete personas EN BLANCO y la lectura obvia es
+  // que se han borrado las cuentas — no que la consulta se ha caido. Un 500 deja
+  // que la UI avise y que quede rastro del motivo real en los logs.
+  if (error) {
+    console.error('[admin/team] no se pudo leer la lista de perfiles:', error.message)
+    return NextResponse.json({ error: 'No se pudo cargar el equipo' }, { status: 500 })
+  }
   return NextResponse.json(profiles || [])
 }
 

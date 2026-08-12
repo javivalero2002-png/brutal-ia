@@ -170,6 +170,26 @@ describe('deadline: los dias no dependen de la hora a la que mires', () => {
   it('acepta un deadline con hora, quedandose con el dia', () => {
     expect(estadoDeadline(`${enDias(3)}T17:30:00Z`)!.etiqueta).toBe('+3d')
   })
+
+  // Deadlines en texto libre heredados de cuando el campo era un input suelto.
+  // slice(0,10) no los sabe leer y `dias` salia NaN: como `NaN < 0` y `NaN === 0`
+  // son los dos false, no se marcaba ni vencido ni de hoy, y la etiqueta se
+  // pintaba literalmente "+NaNd" en la ficha de la tarea y en el tablero.
+  it('un deadline en texto libre devuelve null, no "+NaNd"', () => {
+    for (const libre of ['ago 2026', 'finales de mes', 'cuando cierre', 'ASAP']) {
+      expect(estadoDeadline(libre)).toBeNull()
+    }
+  })
+
+  it('ningun deadline produce NaN en dias ni en la etiqueta', () => {
+    for (const d of [enDias(0), enDias(-3), enDias(30), 'ago 2026', 'TBD', '', null]) {
+      const e = estadoDeadline(d)
+      if (e === null) continue
+      expect(Number.isFinite(e.dias)).toBe(true)
+      expect(e.etiqueta).not.toContain('NaN')
+      expect(e.etiquetaLarga).not.toContain('NaN')
+    }
+  })
 })
 
 // El filtro de "CORREOS RECIENTES" de la ficha del cliente. Se replica aqui la

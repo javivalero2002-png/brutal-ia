@@ -60,7 +60,19 @@ export default function LoginPage() {
   }
 
   const s = {
-    page: { minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', background: 'radial-gradient(ellipse 900px 600px at 60% 20%, rgba(27,95,250,0.12), transparent 65%), #040409' } as React.CSSProperties,
+    // Esta caja SCROLLEA, y el centrado va con `margin:auto` en el hijo. Las dos
+    // cosas por el mismo motivo: aquí lo que se salga no se ve nunca.
+    //
+    // El <body> es `height:100%; overflow:hidden` (globals.css:38), así que lo que
+    // sobresalga de esta pantalla se RECORTA y no hay barra que lo alcance. Y con
+    // `align-items:center` el desbordamiento se reparte por ARRIBA también, donde
+    // el scroll ni siquiera puede llegar (no hay scrollTop negativo). Al fallar el
+    // acceso aparece el mensaje de error, el contenido crece ~50px, y en un móvil
+    // con el teclado abierto lo recortado es justo el final: el botón ENTRAR y el
+    // enlace de "¿olvidaste tu contraseña?". Quien no acierta a la primera se queda
+    // sin poder entrar NI recuperar la contraseña. Los márgenes auto se anulan
+    // cuando no sobra espacio, así que el contenido se pega arriba y se alcanza todo.
+    page: { height: '100dvh', overflowY: 'auto', display: 'flex', padding: '24px 16px max(24px, env(safe-area-inset-bottom))', background: 'radial-gradient(ellipse 900px 600px at 60% 20%, rgba(27,95,250,0.12), transparent 65%), #040409' } as React.CSSProperties,
     card: { background: 'linear-gradient(180deg,#0C0C1C 0%,#07070F 100%)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', padding: '32px', width: '100%', maxWidth: '320px' } as React.CSSProperties,
     label: { display: 'block', fontFamily: 'Syne,sans-serif', fontSize: '9px', fontWeight: 700, letterSpacing: '3px', color: 'rgba(240,240,248,0.3)', textTransform: 'uppercase', marginBottom: '8px' } as React.CSSProperties,
     input: { width: '100%', padding: '12px 16px', borderRadius: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(27,95,250,0.2)', color: 'white', fontSize: '14px', outline: 'none', boxSizing: 'border-box', marginBottom: '16px' } as React.CSSProperties,
@@ -69,7 +81,7 @@ export default function LoginPage() {
 
   return (
     <div style={s.page}>
-      <div>
+      <div style={{ margin: 'auto', width: '100%', maxWidth: '320px' }}>
         <div style={{ textAlign: 'center', marginBottom: '36px' }}>
           <img src="/brutal-logo.svg" alt="Brutal Studios" style={{ height: '28px', margin: '0 auto 10px', display: 'block' }} />
           <div style={{ fontFamily: 'Syne,sans-serif', fontSize: '13px', fontWeight: 900, color: 'white', letterSpacing: '4px' }}>BRUTAL<span style={{color:'#1B5FFA'}}>.IA</span></div>

@@ -20,7 +20,8 @@ function ensureConfigured() {
   const priv = process.env.VAPID_PRIVATE_KEY
   if (!pub || !priv) {
     // Sin este log, todo el sistema de notificaciones puede estar apagado y no
-    // hay forma de saberlo: todos los llamantes rematan con `.catch(() => {})`.
+    // hay forma de saberlo: esto no lanza, así que el llamante solo ve un 0 —
+    // idéntico a "nadie suscrito".
     console.error('[push] faltan las claves VAPID — las notificaciones están desactivadas')
     return false
   }
@@ -85,8 +86,31 @@ async function sendToRows(admin: SupabaseClient, rows: { id: string; condition_t
   return sent
 }
 
+// "Cero suscritos" y "no se pudo mirar quién está suscrito" son cosas distintas,
+// y hasta aquí se devolvían igual: un 0. Con `const { data }` a secas —supabase-js
+// NO lanza, devuelve { data: null, error }— un timeout o un fallo de permisos en
+// `reglas` dejaba `data` en null, `sendToRows` recibía [] y la función salía con 0
+// sin llegar siquiera a `ensureConfigured`.
+//
+// Eso mentía en los dos extremos: en el servidor todos los llamantes lo remataban
+// con `.catch(() => {})`, y /api/push/test contestaba `{ ok: true, sent: 0 }`, que
+// la UI traduce como «Sin dispositivos suscritos» — un diagnóstico falso que manda
+// a revisar los permisos del navegador cuando el problema está en la base.
+//
+// Por eso se LANZA en vez de devolver 0: así 0 significa "cero suscritos" y nada
+// más. TODOS los llamantes envuelven el envío en try/catch con console.error
+// (inbox, tasks, gmail/sync, colabsSync y las reglas de aviso de automations, donde
+// además el try/catch impide que un aviso roto pare el motor entero). Y
+// /api/push/test distingue ahora los dos casos que antes daban el mismo mensaje:
+// 409 «no hay dispositivos suscritos» frente a 503 «no se pudieron leer».
+function fallaLectura(scope: string, error: { message: string }): never {
+  console.error(`[push] no se pudieron leer las suscripciones (${scope}):`, error.message)
+  throw new Error(`[push] no se pudieron leer las suscripciones: ${error.message}`)
+}
+
 export async function sendPushToUser(admin: SupabaseClient, userId: string, payload: PushPayload) {
-  const { data } = await admin.from('reglas').select('id,condition_text').eq('name', PUSH_ROW).eq('created_by', userId)
+  const { data, error } = await admin.from('reglas').select('id,condition_text').eq('name', PUSH_ROW).eq('created_by', userId)
+  if (error) fallaLectura(`usuario ${userId}`, error)
   await logNotifications(admin, [userId], payload)
   return sendToRows(admin, data || [], payload)
 }
@@ -94,7 +118,9 @@ export async function sendPushToUser(admin: SupabaseClient, userId: string, payl
 export async function sendPushToAll(admin: SupabaseClient, payload: PushPayload, exceptUserId?: string) {
   let q = admin.from('reglas').select('id,condition_text,created_by').eq('name', PUSH_ROW)
   if (exceptUserId) q = q.neq('created_by', exceptUserId)
-  const { data } = await q
+  // Gemela de la de arriba: descartaba `error` igual, y esta avisa a los siete.
+  const { data, error } = await q
+  if (error) fallaLectura('todo el equipo', error)
   await logNotifications(admin, (data || []).map((r: any) => r.created_by), payload)
   return sendToRows(admin, data || [], payload)
 }

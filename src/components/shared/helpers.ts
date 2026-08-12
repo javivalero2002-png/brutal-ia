@@ -58,6 +58,14 @@ export const dlLabel = (d?: string|null): string => {
   return t.toLocaleDateString('es-ES', {day:'numeric', month:'short'})
 }
 
+// Plural en los recuentos que la UI enseña. Sin esto salían "1 mensajes
+// marcados como leídos", "Propietario · 1 tareas" y "1 eventos": el patrón
+// `${n} cosas` estaba escrito a mano en una docena de sitios y ninguno miraba
+// el número. Se pasa el singular y, si el plural no es el singular + "s"
+// (mes → meses), se pasa también.
+export const plural = (n: number, singular: string, plural?: string): string =>
+  `${n} ${n === 1 ? singular : (plural ?? singular + 's')}`
+
 export const strColor = (s: string) => {
   const palette = ['#3B82F6','#8B5CF6','#EC4899','#F59E0B','#10B981','#EF4444','#06B6D4','#F97316','#6366F1','#84CC16']
   let h = 0; for (let i=0;i<s.length;i++) h = s.charCodeAt(i)+((h<<5)-h)
@@ -106,6 +114,18 @@ export function estadoDeadline(deadline?: string|null): {
 } | null {
   if (!deadline || deadline === 'TBD') return null
   const dias = daysBetweenKeys(todayKey(), deadline.slice(0, 10))
+  // Deadlines en TEXTO LIBRE ("ago 2026", "finales de mes"): quedan de cuando el
+  // campo era un input suelto, y siguen en la base. slice(0,10) no los sabe leer,
+  // Date.parse da NaN y `dias` sale NaN — que no es inofensivo, porque `NaN < 0`
+  // es false y `NaN === 0` también: el deadline no se marca ni vencido ni de hoy,
+  // y la etiqueta se pinta literalmente "+NaNd".
+  //
+  // Devolver null es lo correcto: significa "no sé cuándo vence", que es la
+  // verdad, y todos los consumidores ya tratan el null (es lo que devuelve un
+  // deadline vacío o 'TBD'). Se hace aquí y no en cada sitio porque estadoDeadline
+  // se llama ya desde ocho ficheros, y blindarlo en siete es dejarse uno.
+  // Para PINTAR el texto original está dlLabel(), que sí lo interpreta.
+  if (!Number.isFinite(dias)) return null
   return {
     dias,
     vencido: dias < 0,

@@ -8,7 +8,13 @@ import { textOf } from '@/lib/aiText'
 
 export const maxDuration = 60
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+// Sin topes, el SDK se queda con 10 MINUTOS de timeout y 2 reintentos: quien
+// acaba cortando es la plataforma al llegar al techo de 60s del plan Hobby, y
+// entonces no hay ni mensaje de error ni log — la petición muere a secas. El
+// timeout del SDK es POR INTENTO, así que un reintento no cabe dentro de esos
+// 60s: maxRetries 0 y un tope que deja margen para responder con un error de
+// verdad en vez de que nos maten desde fuera.
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 45_000, maxRetries: 0 })
 const BUCKET = 'content-videos'
 
 // Analiza un PDF con Claude. Dos modos:

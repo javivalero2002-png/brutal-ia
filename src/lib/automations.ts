@@ -407,9 +407,25 @@ async function ejecutarReglas(
           existingMarks.add(markId)
           fired = true
           results.push({ ruleId: r.id, ruleName: r.name, action: 'create_task', detail: text })
-          // Avisar al asignado
+          // Avisar al asignado. CON await, como las ramas notify_* de más abajo.
+          //
+          // Aquí el `.catch(()=>{})` suelto era peor que en el resto de sitios: la
+          // marca de dedup ya está escrita —la tarea se insertó con
+          // `notes: AUTO_MARK+markId` y arriba se hizo existingMarks.add(markId)—,
+          // así que la siguiente ejecución del motor sale por el `continue` de la
+          // línea 389 y NO reintenta nada. Con el envío sin esperar, en serverless
+          // la instancia se congela con la consulta a `reglas`, el insert en
+          // notification_log y las llamadas a FCM/APNs a medias: la tarea aparece
+          // en el tablero y a su asignado no le avisa nadie, nunca.
+          //
+          // El fallo se registra en vez de tumbar la ejecución: la tarea ya existe
+          // y las demás reglas del bucle deben seguir.
           if (a.assignTo && a.assignTo !== r.created_by) {
-            sendPushToUser(admin, a.assignTo, { title: `Tarea automática · ${r.name}`, body: text.slice(0, 120), url: '/dashboard', tag: `auto-${r.id}` }).catch(() => {})
+            try {
+              await sendPushToUser(admin, a.assignTo, { title: `Tarea automática · ${r.name}`, body: text.slice(0, 120), url: '/dashboard', tag: `auto-${r.id}` })
+            } catch (err) {
+              console.error(`[automations] el push al asignado falló (regla ${r.name}) y no se reintentará, la tarea ya está marcada:`, err)
+            }
           }
         }
       } else if (a.type === 'notify_team' || a.type === 'notify_owner') {
@@ -426,9 +442,23 @@ async function ejecutarReglas(
         // notify_team dejaba a notify_owner con el aviso repetido en las 24
         // ejecuciones del día si esa escritura no cuajaba.
         if (!(await canSendPush(admin, `auto-${r.id}`))) break
-        if (a.type === 'notify_team') {
-          await sendPushToAll(admin, payload)
-        } else if (r.created_by) await sendPushToUser(admin, r.created_by, payload)
+        // El try/catch NO es decorativo: sendPushToAll/sendPushToUser ahora LANZAN
+        // cuando no pueden leer las suscripciones (antes devolvían 0 en silencio,
+        // que es justo lo que las hacía inútiles). Sin envolverlo, el fallo de un
+        // solo aviso sale de `ejecutarReglas` y se lleva por delante el resto del
+        // motor: las reglas que vienen detrás en el bucle no se evalúan siquiera.
+        // Un aviso perdido es un aviso; el motor entero parado son todas las
+        // automatizaciones del estudio.
+        //
+        // El aviso de esta vuelta se pierde: canSendPush ya escribió la ventana.
+        // Queda en el log, que es la diferencia con antes.
+        try {
+          if (a.type === 'notify_team') {
+            await sendPushToAll(admin, payload)
+          } else if (r.created_by) await sendPushToUser(admin, r.created_by, payload)
+        } catch (err) {
+          console.error(`[automations] el aviso de la regla "${r.name}" no se pudo enviar y se pierde:`, err)
+        }
         fired = true
         results.push({ ruleId: r.id, ruleName: r.name, action: a.type, detail: body })
         break // un aviso por ejecución basta
