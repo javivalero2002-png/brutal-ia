@@ -39,7 +39,13 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
         body: JSON.stringify({ feedback }),
       })
       if (res.ok) setSent(true)
-      else setError('Error enviando feedback. Inténtalo de nuevo.')
+      else setError('No se pudo enviar. Inténtalo de nuevo en un momento.')
+    } catch {
+      // Sin este catch, un fallo de RED dejaba la promesa rechazada: no se marcaba
+      // como enviado ni se enseñaba error, el boton volvia a estar disponible y el
+      // cliente se quedaba mirando su texto sin saber si habia llegado. Es la unica
+      // pantalla que ve gente de fuera y su unico proposito es recoger esto.
+      setError('No hemos podido enviarlo — comprueba tu conexión y vuelve a intentarlo. Tu texto sigue aquí.')
     } finally { setSending(false) }
   }
 

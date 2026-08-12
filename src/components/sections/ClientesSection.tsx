@@ -34,6 +34,10 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const selected = selectedId ? data.clients.find((c: Client)=>c.id===selectedId) : null
+  // Espejo en ref: dentro de un `await` no se puede consultar `selectedId`, porque
+  // el closure es el del render en que arranco la peticion.
+  const selectedIdRef = useRef(selectedId)
+  selectedIdRef.current = selectedId
 
   // Todo el estado que pertenece a UN cliente concreto se limpia aquí, no en
   // handleBack. Del detalle se sale por tres sitios —el enlace "Todos los
@@ -63,13 +67,18 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
 
   const uploadFile = async (file: File) => {
     if (!selected) return
+    // El cliente se fija al empezar. El registro ya iba contra el correcto —la URL
+    // se evalua antes del await— pero la lista se actualizaba al terminar: si
+    // cambiabas de cliente durante la subida, el archivo aparecia colgando del
+    // siguiente. Mismo patron que onPickPdf de Proyectos.
+    const clienteId = selected.id
     setUploadingFile(true)
     try {
       const fd = new FormData(); fd.append('file', file)
-      const r = await fetch(`/api/clients/${selected.id}/files`, { method: 'POST', body: fd })
+      const r = await fetch(`/api/clients/${clienteId}/files`, { method: 'POST', body: fd })
       const result = await r.json()
       if (!r.ok) { showToast(result.error || 'Error al subir'); return }
-      setClientFiles(prev => [result, ...(prev||[])])
+      if (selectedIdRef.current === clienteId) setClientFiles(prev => [result, ...(prev||[])])
       showToast('Archivo subido')
     } catch { showToast('Error al subir el archivo') }
     finally { setUploadingFile(false) }

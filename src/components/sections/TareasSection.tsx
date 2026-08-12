@@ -277,6 +277,11 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
 
   const uploadAttachment = async (file: File) => {
     if (!activeTask) return
+    // La tarea se fija AQUI, al empezar. Subir el fichero al bucket y registrarlo
+    // son varios segundos, y el id se leia al final: si cambiabas de tarea mientras
+    // tanto, el adjunto se registraba contra la tarea que estuvieras mirando. Mismo
+    // patron que ya se corrigio en onPickPdf de Proyectos.
+    const tareaId = activeTask.id
     setUploadProgress(0)
     try {
       const rUrl = await fetch('/api/pdf-upload-url', {
@@ -297,7 +302,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
         xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
         xhr.send(file)
       })
-      const rAtt = await fetch(`/api/tasks/${activeTask.id}/attachments`, {
+      const rAtt = await fetch(`/api/tasks/${tareaId}/attachments`, {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ name: file.name, url: publicUrl, size: file.size, mime_type: file.type||null })
       })
@@ -306,7 +311,9 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
       // la comprobacion se anadia el objeto de error a la lista Y se decia
       // "Archivo adjuntado": el adjunto no existia y nadie se enteraba.
       if (!rAtt.ok) { showToast(att?.error || 'El archivo se subio pero no se pudo adjuntar'); return }
-      setAttachments(a=>[...a, att])
+      // La lista solo se toca si sigues en la tarea de la subida; el registro ya se
+      // hizo contra la correcta pase lo que pase.
+      if (activeTaskRef.current?.id === tareaId) setAttachments(a=>[...a, att])
       showToast('Archivo adjuntado')
     } catch { showToast('Error al subir el archivo') }
     finally { setUploadProgress(null) }
