@@ -205,6 +205,7 @@ export default function PreviewClient({
   const createTask = useCallback(async (p:Partial<Task>)=>{ const t=mkTask({...p, created_at:iso(0)}); setTasks(x=>[t,...x]); return t }, [])
   const updateTask = useCallback(async (id:string, u:Partial<Task>)=>{ setTasks(x=>x.map(t=>t.id===id?withPeople({...t,...u}):t)) }, [])
   const deleteTask = useCallback(async (id:string)=>{ setTasks(x=>x.filter(t=>t.id!==id)) }, [])
+  const deleteTasks = useCallback(async (ids:string[])=>{ const f=new Set(ids); setTasks(x=>x.filter(t=>!f.has(t.id))) }, [])
   const toggleTask = useCallback(async (id:string)=>{ setTasks(x=>x.map(t=>t.id===id?{...t,done:!t.done,updated_at:iso(0)}:t)) }, [])
 
   const createRegla = useCallback(async (r:Partial<Regla>)=>{ const n={id:'r'+Date.now(),trigger_count:0,active:true,...r} as Regla; setReglas(x=>[n,...x]); return n }, [])
@@ -230,7 +231,7 @@ export default function PreviewClient({
     loading:false, syncing:false,
     tasks, projects:PROJECTS, clients, team:TEAM, inbox, reglas,
     agenda:AGENDA, memoria:MEMORIA, calendarEvents:CAL_EVENTS, chatMessages:CHAT,
-    createTask, updateTask, deleteTask, toggleTask,
+    createTask, updateTask, deleteTask, deleteTasks, toggleTask,
     createRegla, updateRegla, deleteRegla, runAutomations,
     markRead, markUnread, markManyRead,
     createClient:noop, updateClient:noop, deleteClient:noop,

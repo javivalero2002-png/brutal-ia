@@ -63,3 +63,36 @@ export async function POST(request: NextRequest) {
   }
   return NextResponse.json(data)
 }
+
+// Borrado en LOTE. Antes "LIMPIAR COMPLETADAS" hacia
+// Promise.all(filtered.map(t => deleteTask(t.id))): una invocacion de Vercel por
+// tarea, y cada una repitiendo la comprobacion de sesion, la lectura del rol y la
+// del propietario. Con veinte tareas completadas eran veinte funciones y ~80
+// viajes a la base de datos para un solo clic.
+//
+// El criterio de autorizacion es EL MISMO que el del borrado individual, y va
+// escrito como filtro de la propia sentencia en vez de comprobarse antes: asi no
+// hay ventana entre mirar y borrar, y las que no te tocan simplemente no entran
+// en el DELETE en lugar de tumbar la operacion entera.
+export async function DELETE(request: NextRequest) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const body = await request.json().catch(() => ({}))
+  const ids: unknown = body?.ids
+  if (!Array.isArray(ids)) return NextResponse.json({ error: 'Falta la lista de ids' }, { status: 400 })
+  const limpios = ids.filter((x): x is string => typeof x === 'string' && x.length > 0).slice(0, 500)
+  if (limpios.length === 0) return NextResponse.json({ ok: true, borradas: 0 })
+
+  const admin = await createAdminClient()
+  const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).single()
+
+  let q = admin.from('tasks').delete({ count: 'exact' }).in('id', limpios)
+  // Owner borra cualquiera; el resto solo las suyas.
+  if (profile?.role !== 'owner') q = q.eq('created_by', user.id)
+
+  const { error, count } = await q
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true, borradas: count ?? 0 })
+}

@@ -956,7 +956,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                 <div className="mt-3 text-right">
                   {confirmLimpiar
                     ?<div className="flex items-center justify-end gap-2">
-                       <button onClick={async()=>{try{await Promise.all(filtered.map((t:Task)=>data.deleteTask(t.id)));showToast('Eliminadas')}catch{showToast('Error')}finally{setConfirmLimpiar(false)}}}
+                       <button onClick={async()=>{try{await data.deleteTasks(filtered.map((t:Task)=>t.id));showToast('Eliminadas')}catch{showToast('No se pudieron eliminar')}finally{setConfirmLimpiar(false)}}}
                          className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black" style={{background:'rgba(229,29,42,0.12)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR {filtered.length}?</button>
                        <button onClick={()=>setConfirmLimpiar(false)} className="w-7 h-7 rounded-lg flex items-center justify-center" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.3)"/></button>
                      </div>

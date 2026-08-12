@@ -230,6 +230,16 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     setTasks(prev => prev.filter(t => t.id !== id))
   }, [])
 
+  // Una sola peticion en vez de una por tarea. "LIMPIAR COMPLETADAS" hacia un
+  // Promise.all de N borrados: N invocaciones de Vercel repitiendo cada una la
+  // sesion, el rol y el propietario.
+  const deleteTasks = useCallback(async (ids: string[]) => {
+    if (!ids.length) return
+    await apiFetch('/api/tasks', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) })
+    const fuera = new Set(ids)
+    setTasks(prev => prev.filter(t => !fuera.has(t.id)))
+  }, [])
+
   const toggleTask = useCallback(async (id: string) => {
     const task = tasks.find(t => t.id === id)
     if (!task) return
@@ -393,7 +403,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     loading, syncing, syncGmail, syncResult,
     clients, createClient: createClientRecord, updateClient: updateClientRecord, deleteClient,
     projects, createProject, updateProject, deleteProject,
-    tasks, createTask, updateTask, deleteTask, toggleTask,
+    tasks, createTask, updateTask, deleteTask, deleteTasks, toggleTask,
     inbox, markRead, markManyRead, markUnread, sendInternalMessage, reloadInbox,
     memoria, createMemoria, updateMemoria, deleteMemoria,
     agenda, createAgenda, updateAgenda, deleteAgenda,
