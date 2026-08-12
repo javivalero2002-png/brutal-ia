@@ -316,12 +316,25 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
         )}
 
         {(()=>{
-          const name = selected.name.toLowerCase()
-          const firstWord = name.split(' ')[0]
+          // El emparejamiento era `ai.includes(firstWord)` sin minimo de longitud,
+          // asi que la primera palabra del cliente podia ser un articulo: "La Nave"
+          // -> "la", y "coca-cola".includes("la") es cierto. Los correos de
+          // Coca-Cola aparecian en la ficha de La Nave. Igual con "El Corte" ->
+          // "el", que casa con Telefonica, Adobe, Dell...
+          //
+          // Ahora se compara por palabras completas y con un minimo de 4 letras.
+          // Sacrifica alguna coincidencia rara a cambio de no mezclar clientes,
+          // que en la ficha de un cliente es exactamente lo que no puede pasar.
+          const normaliza = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          const name = normaliza(selected.name)
+          const palabras = name.split(/[^a-z0-9]+/).filter(p => p.length >= 4)
           const clientEmails = ((data.inbox||[]) as any[]).filter((m:any)=>{
             if (!m.ai_client||m.ai_client==='Desconocido') return false
-            const ai = m.ai_client.toLowerCase()
-            return name.includes(ai)||ai.includes(firstWord)
+            const ai = normaliza(m.ai_client)
+            if (ai === name) return true
+            const palabrasAi = ai.split(/[^a-z0-9]+/).filter(p => p.length >= 4)
+            // Alguna palabra significativa en comun, no un trozo suelto.
+            return palabras.some(p => palabrasAi.includes(p))
           }).slice(0,5)
           if (clientEmails.length===0) return null
           return (

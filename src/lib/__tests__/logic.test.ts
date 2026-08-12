@@ -171,3 +171,57 @@ describe('deadline: los dias no dependen de la hora a la que mires', () => {
     expect(estadoDeadline(`${enDias(3)}T17:30:00Z`)!.etiqueta).toBe('+3d')
   })
 })
+
+// El filtro de "CORREOS RECIENTES" de la ficha del cliente. Se replica aqui la
+// misma logica porque vive dentro de un IIFE en el JSX y no es importable; lo que
+// se fija es el CRITERIO, que es donde estaba el fallo.
+//
+// Antes era `nombreCliente.includes(ai) || ai.includes(primeraPalabra)` sin minimo
+// de longitud. "La Nave" da primeraPalabra "la", y "coca-cola".includes("la") es
+// cierto: los correos de Coca-Cola salian en la ficha de La Nave.
+describe('clientes: los correos de un cliente no son los de otro', () => {
+  const normaliza = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const casan = (cliente: string, aiClient: string) => {
+    const name = normaliza(cliente)
+    const ai = normaliza(aiClient)
+    if (ai === name) return true
+    const palabras = name.split(/[^a-z0-9]+/).filter(p => p.length >= 4)
+    const palabrasAi = ai.split(/[^a-z0-9]+/).filter(p => p.length >= 4)
+    return palabras.some(p => palabrasAi.includes(p))
+  }
+
+  it('no mete correos de otro cliente por un articulo', () => {
+    expect(casan('La Nave', 'Coca-Cola')).toBe(false)
+    expect(casan('El Corte', 'Telefónica')).toBe(false)
+    expect(casan('El Corte', 'Adobe')).toBe(false)
+    expect(casan('La Nave', 'Dell')).toBe(false)
+  })
+
+  it('sigue casando lo que tiene que casar', () => {
+    expect(casan('La Nave', 'La Nave')).toBe(true)
+    expect(casan('La Nave', 'Nave Producciones')).toBe(true)
+    expect(casan('Coca-Cola', 'Coca-Cola España')).toBe(true)
+    expect(casan('Nike', 'Nike')).toBe(true)          // exacto, aunque tenga 4 letras justas
+  })
+
+  it('los acentos no impiden la coincidencia', () => {
+    expect(casan('Telefónica', 'Telefonica')).toBe(true)
+    expect(casan('Iberdrola España', 'IBERDROLA')).toBe(true)
+  })
+
+  it('una marca con apellido sigue siendo la misma marca', () => {
+    expect(casan('BBVA', 'BBVA')).toBe(true)
+    // "BBVA Asset Management" ES BBVA: la palabra completa esta ahi. Escribi la
+    // expectativa contraria y el test me corrigio a mi, no al reves.
+    expect(casan('BBVA', 'BBVA Asset Management')).toBe(true)
+  })
+
+  // El limite del criterio, escrito para que se vea: un cliente cuyo nombre entero
+  // sean palabras de menos de 4 letras solo casa de forma exacta. Es el precio de
+  // no mezclar clientes, y a esta escala (una veintena) se prefiere fallar por
+  // defecto antes que enseñar correos ajenos.
+  it('un nombre de palabras muy cortas solo casa exacto', () => {
+    expect(casan('Zip Co', 'Zip Co')).toBe(true)
+    expect(casan('Zip Co', 'Zip Co Australia')).toBe(false)
+  })
+})

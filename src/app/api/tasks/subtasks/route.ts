@@ -23,7 +23,15 @@ export async function GET(request: NextRequest) {
       .eq('task_id', taskId)
       .order('sort_order', { ascending: true })
 
-    if (error) return NextResponse.json([], { status: 200 })
+    // Antes: `return NextResponse.json([], { status: 200 })` sin registrar nada.
+    // supabase-js NO lanza al fallar: devuelve { data: null, error }. Devolver []
+    // con un 200 hace que "la consulta revento" y "no hay subtareas" sean
+    // indistinguibles, y la UI se queda diciendo "aun no hay nada" para siempre.
+    // Es la trampa que motiva src/lib/queryLog.ts, escrita otra vez.
+    if (error) {
+      console.error('[tasks/subtasks] la consulta fallo:', error.message)
+      return NextResponse.json({ error: 'No se pudieron cargar los datos' }, { status: 500 })
+    }
     return NextResponse.json(data || [])
   } catch {
     return NextResponse.json([], { status: 200 })

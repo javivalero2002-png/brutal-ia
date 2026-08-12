@@ -8,7 +8,7 @@ export async function GET() {
 
   const admin = await createAdminClient()
 
-  const [{ data: msgs }, { data: tasks }] = await Promise.all([
+  const [{ data: msgs, error: errMsgs }, { data: tasks, error: errTasks }] = await Promise.all([
     // Unread internal (DM) messages
     admin.from('inbox_messages')
       .select('id, from_name, subject, received_at')
@@ -31,11 +31,24 @@ export async function GET() {
       .limit(5),
   ])
 
+  // El Promise.all desestructuraba SOLO `data`. supabase-js no lanza al fallar, asi
+  // que un error dejaba data en null y la ruta respondia 200 con total:0 — «no
+  // tienes nada» y «no he podido mirar» eran la misma respuesta. El dashboard
+  // sondea esto cada 30 segundos, asi que la campana podia estar apagada durante
+  // dias sin que nadie lo supiera.
+  if (errMsgs || errTasks) {
+    console.error('[notifications] consulta fallida:', errMsgs?.message || errTasks?.message)
+  }
+
   return NextResponse.json({
     dmCount: msgs?.length || 0,
     urgentCount: tasks?.length || 0,
     total: (msgs?.length || 0) + (tasks?.length || 0),
     dms: msgs || [],
     urgent: tasks || [],
+    // La UI puede distinguir «cero» de «no se pudo contar». Va como campo y no
+    // como 500 a proposito: media respuesta buena sigue siendo util, y tumbar la
+    // campana entera porque falle una de las dos consultas es peor.
+    ...(errMsgs || errTasks ? { parcial: true } : {}),
   })
 }

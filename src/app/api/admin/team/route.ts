@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
   if (!ctx) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { admin } = ctx
-  const { email, name, role = 'member', avatar_color, initials, password } = await request.json()
+  const { email, name, role = 'member', avatar_color, initials, password, cambiarRol } = await request.json()
 
   if (!email || !name) return NextResponse.json({ error: 'email and name required' }, { status: 400 })
 
@@ -54,8 +54,26 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (existingProfile) {
-    // Update existing profile name/role
-    await admin.from('profiles').update({ name, role, initials: rawInitials, avatar_color: color }).eq('id', existingProfile.id)
+    // El `role` NO se toca aqui, y es a proposito.
+    //
+    // Este formulario es de ALTA, y su selector de rol vuelve a 'member' despues
+    // de cada uso. Si el fundador daba de alta un email que ya existia —para
+    // corregir un nombre mal escrito, por ejemplo— la actualizacion arrastraba
+    // `role: 'member'` y DEGRADABA la cuenta en silencio. Un owner podia dejar de
+    // serlo por corregir una errata, y la respuesta decia ok:true.
+    //
+    // Cambiar de rol tiene que ser una accion deliberada, no un efecto colateral
+    // de un alta. El resto de campos (nombre, iniciales, color) si son lo que se
+    // esta editando.
+    // El rol solo se toca si el cliente lo pide EXPLICITAMENTE con cambiarRol.
+    // Sin esa condicion, `role = 'member'` (el valor por defecto de la linea de
+    // arriba) se colaba en cada actualizacion.
+    const campos: Record<string, string> = { name, initials: rawInitials, avatar_color: color }
+    if (cambiarRol && (role === 'owner' || role === 'member')) campos.role = role
+    const { error: updErr } = await admin.from('profiles').update(campos).eq('id', existingProfile.id)
+    // Antes se devolvia ok:true sin mirar el resultado: un fallo del UPDATE se
+    // reportaba como exito y el cambio no se veia hasta recargar.
+    if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 })
     return NextResponse.json({ ok: true, action: 'updated', email })
   }
 

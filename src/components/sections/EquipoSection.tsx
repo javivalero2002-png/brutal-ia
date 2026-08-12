@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import type { Profile, Task } from '@/types'
-import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, BORDER, LucideIcon, ProgressRing, relTime, todayKey } from '@/components/shared'
+import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, BORDER, LucideIcon, ProgressRing, relTime, todayKey, AMBAR } from '@/components/shared'
 import { fetchWithTimeout } from '@/lib/fetch-timeout'
 
 // Una tarea es de alguien si es su responsable O su co-responsable. Equipo
@@ -113,6 +113,13 @@ function EquipoSection({data, profile, showToast}: any) {
     finally { setSending(false) }
   }
 
+  // ¿El email escrito es de alguien que ya esta en el equipo? El formulario sirve
+  // para las dos cosas —alta y edicion— y sin saberlo no puede decir cual va a
+  // hacer, ni decidir si el rol elegido cuenta.
+  const yaExiste = !!newMemberEmail.trim() && (data.team || []).some(
+    (m: Profile) => (m.email || '').toLowerCase() === newMemberEmail.trim().toLowerCase()
+  )
+
   const addMember = async () => {
     // Enter en el campo de email lanza esto saltandose el boton. Un segundo Enter
     // mientras la primera alta esta en vuelo borraba de pantalla el enlace de
@@ -125,7 +132,17 @@ function EquipoSection({data, profile, showToast}: any) {
       const res = await fetchWithTimeout('/api/admin/team', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newMemberName.trim(), email: newMemberEmail.trim().toLowerCase(), role: newMemberRole }),
+        // `cambiarRol` va solo cuando el email NO es de alguien que ya esta: en un
+        // alta, el rol elegido es lo que se pretende. Si el email ya existe, esto
+        // es una edicion de datos y el rol se deja como estaba — el selector
+        // vuelve a 'member' despues de cada alta, asi que arrastrarlo degradaba a
+        // un owner por corregirle una errata en el nombre.
+        body: JSON.stringify({
+          name: newMemberName.trim(),
+          email: newMemberEmail.trim().toLowerCase(),
+          role: newMemberRole,
+          cambiarRol: !yaExiste,
+        }),
         timeoutMs: 15_000,
       })
       const json = await res.json()
@@ -453,12 +470,19 @@ function EquipoSection({data, profile, showToast}: any) {
                     onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')}
                     onBlur={e=>(e.target.style.borderColor=BORDER)}
                     onKeyDown={e=>{if(e.key==='Enter')addMember()}}/>
+                  {/* El formulario hace dos cosas distintas segun el email, y sin
+                      decirlo parecia que siempre daba de alta. */}
+                  {yaExiste && (
+                    <div className="font-syne text-[8.5px] font-black tracking-wide mt-2" style={{color:AMBAR}}>
+                      ESE EMAIL YA ESTÁ EN EL EQUIPO · SE ACTUALIZARÁN SUS DATOS, EL ROL SE DEJA COMO ESTÁ
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="font-syne text-[8.5px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>ROL</div>
                   <div className="flex gap-2">
                     {(['member','owner'] as const).map(r=>(
-                      <button key={r} onClick={()=>setNewMemberRole(r)}
+                      <button key={r} disabled={yaExiste} onClick={()=>setNewMemberRole(r)}
                         className="flex-1 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all"
                         style={{background:newMemberRole===r?`rgba(27,95,250,0.12)`:'rgba(255,255,255,0.03)',border:`1.5px solid ${newMemberRole===r?`rgba(27,95,250,0.35)`:BORDER}`,color:newMemberRole===r?BLU:'rgba(255,255,255,0.3)'}}>
                         {r==='member'?'MIEMBRO':'PROPIETARIO'}

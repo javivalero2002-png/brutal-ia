@@ -15,9 +15,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .order('created_at', { ascending: true })
 
   if (error) {
-    // Table may not exist yet — return empty gracefully
+    // 42P01 = la tabla aun no existe. Ese caso SI es "no hay comentarios": la
+    // seccion funciona igual y no tiene sentido romperla por una tabla opcional.
     if (error.code === '42P01') return NextResponse.json([])
-    return NextResponse.json([])
+    // Cualquier otro error si es un fallo. Antes las dos ramas devolvian [] —el
+    // comentario decia distinguir el 42P01 y luego no distinguia nada— asi que un
+    // fallo real se veia igual que "todavia no hay comentarios", para siempre y
+    // sin dejar rastro.
+    console.error('[clients/comments] la consulta fallo:', error.message)
+    return NextResponse.json({ error: 'No se pudieron cargar los comentarios' }, { status: 500 })
   }
   return NextResponse.json(data || [])
 }

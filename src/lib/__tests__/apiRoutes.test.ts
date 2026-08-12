@@ -189,3 +189,34 @@ describe('rutas API · co_assigned_to cuenta como tuya', () => {
     expect(olvidos).toEqual([])
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// "No hay filas" y "la consulta revento" no pueden dar la misma respuesta.
+//
+// supabase-js NO lanza al fallar: devuelve { data: null, error }. Cuatro rutas
+// hacian `if (error) return NextResponse.json([], { status: 200 })` sin registrar
+// nada, asi que la UI se quedaba diciendo "aun no hay notas" para siempre y nadie
+// podia saber que estaba rota. Es la misma trampa que motivo src/lib/queryLog.ts.
+//
+// La excepcion legitima es 42P01 (la tabla aun no existe): ahi devolver vacio SI
+// es correcto, porque la funcionalidad es opcional.
+describe('rutas API · un fallo de consulta no se disfraza de lista vacia', () => {
+  it('ninguna ruta devuelve [] con 200 al fallar la consulta', () => {
+    const culpables: string[] = []
+    for (const f of TODAS) {
+      const s = leer(f)
+      for (const m of s.matchAll(/if \(error\)[^\n]*NextResponse\.json\(\[\][^\n]*\)/g)) {
+        culpables.push(`${nombre(f)}: ${m[0].trim().slice(0, 80)}`)
+      }
+      // La forma con bloque: if (error) { ... return NextResponse.json([]) }
+      for (const m of s.matchAll(/if \(error\) \{([\s\S]{0,400}?)\n  \}/g)) {
+        const bloque = m[1]
+        if (!/NextResponse\.json\(\[\]\)/.test(bloque)) continue
+        // Se permite si es el caso de tabla ausente Y hay otra rama que si falla.
+        const soloTablaAusente = /42P01/.test(bloque) && /status:\s*500/.test(bloque)
+        if (!soloTablaAusente) culpables.push(`${nombre(f)}: devuelve [] dentro de if (error) sin distinguir 42P01`)
+      }
+    }
+    expect(culpables).toEqual([])
+  })
+})
