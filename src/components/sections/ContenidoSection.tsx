@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import type { NexusData, ContentItem } from '@/types'
 import { PLATAFORMA_COLOR, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, todayKey } from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
 import BocetoPanel from '@/components/BocetoPanel'
@@ -24,7 +25,16 @@ function normContentType(raw: string|null|undefined): 'publicacion'|'reel'|'stor
   return 'publicacion'
 }
 
-function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,profile}: any) {
+interface PropsContenido {
+  data: NexusData
+  onOpenModal: any
+  showToast: any
+  onNavigate: any
+  onSelectClient: any
+  profile: any
+}
+
+function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,profile}: PropsContenido) {
   const isMobile = useIsMobile()
   const [activeItem, setActiveItem] = useState<any>(null)
   // Espejo de `activeItem` para poder mirar QUE PIEZA hay abierta despues de un
@@ -192,7 +202,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
       if (e.key === 'f' && !activeItem) { e.preventDefault(); contentSearchInputRef.current?.focus() }
       if (e.key === 's' && activeItem) {
         e.preventDefault()
-        const statuses = ['borrador','pendiente','listo','publicado']
+        const statuses: ContentItem['status'][] = ['borrador','pendiente','listo','publicado']
         const curr = statuses.indexOf(activeItem.status)
         const next = statuses[(curr+1)%statuses.length]
         const prev = activeItem.status
@@ -221,7 +231,10 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
 
   const platColor = PLATAFORMA_COLOR
 
-  const cols = [
+  // `key` tipado, no string: es lo que se le pasa a changeStatus y de ahi va al
+  // PATCH. Sin el tipo, una columna nueva mal escrita ('publicada') compilaba y
+  // rebotaba contra el CHECK de la base en tiempo de ejecucion.
+  const cols: { key: ContentItem['status']; label: string; color: string }[] = [
     { key:'borrador', label:'En bruto', color:'#FFFFFF' },
     { key:'pendiente', label:'En producción', color:'#FFB020' },
     { key:'listo', label:'Listo', color:GRN },
@@ -316,7 +329,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
   const filteredAgenda = !contentSearch.trim() ? filteredByPlatform : filteredByPlatform.filter((a: any)=>a.title?.toLowerCase().includes(contentSearch.toLowerCase()))
   filteredAgendaRef.current = filteredAgenda
 
-  const changeStatus = async (item: any, newStatus: string) => {
+  const changeStatus = async (item: any, newStatus: ContentItem['status']) => {
     try {
       await data.updateAgenda(item.id, { status: newStatus })
       // El ref, no `activeItem`: aqui el closure lleva la pieza que hubiera abierta
@@ -725,7 +738,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                                   <span className="font-syne text-[7px] font-black ml-auto flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.18)',border:'1px dashed rgba(255,255,255,0.1)'}}>SIN FECHA</span>
                                 )}
                                 {(()=>{
-                                  const nextMap: Record<string,string> = {borrador:'pendiente',pendiente:'listo',listo:'publicado'}
+                                  const nextMap: Record<string, ContentItem['status']> = {borrador:'pendiente',pendiente:'listo',listo:'publicado'}
                                   const nextStatus = nextMap[item.status]
                                   const nextLabel: Record<string,string> = {pendiente:'En prod.',listo:'Listo',publicado:'Publicado'}
                                   if (!nextStatus) return null

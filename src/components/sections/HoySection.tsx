@@ -1,13 +1,25 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { nivelTarea } from '@/components/shared/helpers'
 import { BLU, RED, GRN, VIO, BORDER } from '@/components/shared/design-tokens'
 import { useIsMobile } from '@/components/shared/hooks'
 import { todayKey, localDayKey, madridHour, madridDateLabel, estadoDeadline } from '@/components/shared/helpers'
 import { getSharedAudio, playAck, isIOSDevice, matchTeamMember, splitForTTS, stopAllVoices, isSRBroken, markSRBroken } from '@/components/shared/audio'
 import LucideIcon from '@/components/shared/LucideIcon'
-import type { Task, Project, Client } from '@/types'
+import type { Task, Project, Client, NexusData} from '@/types'
 
-export default function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,isOwner,onNavigate}: any) {
+interface PropsHoy {
+  profile: any
+  data: NexusData
+  urgentCount: any
+  unreadCount: any
+  onOpenModal: any
+  showToast: any
+  isOwner: any
+  onNavigate: any
+}
+
+export default function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,isOwner,onNavigate}: PropsHoy) {
   const isMobile = useIsMobile()
   type OrbMode = 'idle'|'recording'|'thinking'|'speaking'
   const [orbMode, setOrbMode] = useState<OrbMode>('idle')
@@ -359,7 +371,7 @@ ${memLines||'  sin documentos'}`
 
       if (pendingAction.type === 'tarea') {
         const member = pendingAction.assigneeName ? matchTeamMember((data.team||[]) as any[], pendingAction.assigneeName) : null
-        await data.createTask({ text: pendingAction.text, level: pendingAction.level as any || 'high', source: 'ai', ...(member ? { assigned_to: member.id } : {}) })
+        await data.createTask({ text: pendingAction.text, level: nivelTarea(pendingAction.level), source: 'ai', ...(member ? { assigned_to: member.id } : {}) })
         creado = true
         showToast(member ? `Tarea creada y asignada a ${member.name}`
           : pendingAction.assigneeName ? `Tarea creada (sin asignar: no encontré a "${pendingAction.assigneeName}")`

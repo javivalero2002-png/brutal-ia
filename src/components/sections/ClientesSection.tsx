@@ -7,7 +7,7 @@ import { fetchWithTimeout } from '@/lib/fetch-timeout'
 import { ProgressRing } from '@/components/shared/ui'
 import LucideIcon from '@/components/shared/LucideIcon'
 import { PlatformLogo } from '@/components/PlatformLogo'
-import type { Client, Project, Task } from '@/types'
+import type { Client, Project, Task, NexusData} from '@/types'
 
 // El plan estrategico lo escribe Claude y /api/clients/[id]/ai-advice reenvia el
 // JSON parseado TAL CUAL, sin esquema que lo valide. Tipar aqui la forma que la
@@ -35,7 +35,18 @@ const normalizarRecomendaciones = (raw: unknown): Recomendacion[] =>
     }
   })
 
-export default function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner,onNavigate,onSelectProject}: any) {
+interface PropsClientes {
+  data: NexusData
+  selectedId: any
+  onSelect: any
+  onOpenModal: any
+  showToast: any
+  isOwner: any
+  onNavigate: any
+  onSelectProject: any
+}
+
+export default function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner,onNavigate,onSelectProject}: PropsClientes) {
   const isMobile = useIsMobile()
   useBackClosable(!!selectedId, () => onSelect(null))
   const [aiAdvice, setAiAdvice] = useState<Recomendacion[]|null>(null)

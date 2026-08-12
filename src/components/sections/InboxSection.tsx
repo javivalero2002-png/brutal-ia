@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import type { NexusData } from '@/types'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR } from '@/components/shared'
 import { useIsMobile, useBackClosable } from '@/components/shared'
 import { strColor, relTime, todayKey } from '@/components/shared'
@@ -57,7 +58,16 @@ function EmailBodyBlock({preview, gmailId}: {preview:string; gmailId?:string}) {
   )
 }
 
-function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHarvey}: any) {
+interface PropsInbox {
+  data: NexusData
+  showToast: any
+  profile: any
+  onNavigate: any
+  onSelectClient: any
+  onAskHarvey: any
+}
+
+function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHarvey}: PropsInbox) {
   const isMobile = useIsMobile()
   const [filter, setFilter] = useState('Todos')
   const [selected, setSelected] = useState<any>(null)

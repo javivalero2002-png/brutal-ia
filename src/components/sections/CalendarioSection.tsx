@@ -1,12 +1,20 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import type { NexusData } from '@/types'
 import { PLATAFORMA_COLOR, useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, dlDate, AMBAR } from '@/components/shared'
 // `plural` no se reexporta desde el índice de shared: se importa del módulo.
 import { plural } from '@/components/shared/helpers'
 import { PlatformLogo } from '@/components/PlatformLogo'
 
-function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
+interface PropsCalendario {
+  data: NexusData
+  profile: any
+  showToast: any
+  onOpenModal: any
+}
+
+function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalendario) {
   const isMobile = useIsMobile()
   const today = new Date()
   const [viewMonth, setViewMonth] = useState(today.getMonth())

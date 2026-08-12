@@ -3,9 +3,17 @@ import { useState, useEffect, useRef } from 'react'
 import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, todayKey, localDayKey } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
 import LucideIcon from '@/components/shared/LucideIcon'
-import type { Client } from '@/types'
+import type { Client, NexusData} from '@/types'
 
-export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: any) {
+interface PropsMemoria {
+  data: NexusData
+  memFilter: any
+  setMemFilter: any
+  onOpenModal: any
+  showToast: any
+}
+
+export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,showToast}: PropsMemoria) {
   const isMobile = useIsMobile()
   const [memSearch, setMemSearch] = useState('')
   const [expanded, setExpanded] = useState<string|null>(null)

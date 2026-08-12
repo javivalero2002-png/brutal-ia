@@ -1,8 +1,8 @@
 'use client'
 import { useState, useEffect, useRef, useMemo } from 'react'
-import type { Task, Project, Profile } from '@/types'
+import type { Task, Project, Profile, NexusData} from '@/types'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, todayKey, daysBetweenKeys, estadoDeadline } from '@/components/shared'
-import { plural } from '@/components/shared/helpers'
+import { plural, nivelTarea } from '@/components/shared/helpers'
 
 const AMB = '#FFB020'
 const PRIMAP: Record<string,{label:string,color:string}> = {
@@ -43,7 +43,13 @@ const HARVEY_SUGGESTIONS = [
   { text: 'Revisar métricas de publicaciones recientes', level: 'normal' },
 ]
 
-function HarveyTaskSuggestions({ data, onOpenModal, onCreateTask }: any) {
+interface PropsHarveyTaskSuggestions {
+  data: NexusData
+  onOpenModal: any
+  onCreateTask: any
+}
+
+function HarveyTaskSuggestions({ data, onOpenModal, onCreateTask }: PropsHarveyTaskSuggestions) {
   const [creating, setCreating] = useState<string|null>(null)
   const [created, setCreated] = useState<Set<string>>(new Set())
 
@@ -104,7 +110,28 @@ function HarveyTaskSuggestions({ data, onOpenModal, onCreateTask }: any) {
   )
 }
 
-function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,onSelectProject,initialView,initialFocus,initialGroupBy}: any) {
+interface PropsTareas {
+  data: NexusData
+  onOpenModal: any
+  showToast: any
+  isOwner: any
+  profile: any
+  onNavigate: any
+  onSelectProject: any
+  initialView: any
+  initialFocus: any
+  initialGroupBy: any
+  /**
+   * Lo pasan NexusDashboard (`setSelectedClient`) y PreviewClient, y esta seccion
+   * NO lo usa: el componente nunca lo desestructuro, asi que hacer clic en el
+   * cliente de una tarea no navega a su ficha. Estaba oculto tras el `any` de los
+   * props. Se declara para que el tipo no mienta; o se cablea o se quita de los
+   * dos llamantes.
+   */
+  onSelectClient?: (id: string) => void
+}
+
+function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,onSelectProject,initialView,initialFocus,initialGroupBy}: PropsTareas) {
   const isMobile = useIsMobile()
   const [view,           setView]           = useState<'lista'|'kanban'|'calendario'>(initialView||'lista')
   const [tabFilter,      setTabFilter]      = useState<'todas'|'hoy'|'semana'|'sin_fecha'|'completadas'>('todas')
@@ -1016,7 +1043,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
               {renderGrupo({label:"SIN FECHA", tasks:grouped.nodate, showCols:!grouped.over.length&&!grouped.today.length&&!grouped.upcoming.length})}
               {filtered.length===0 && data.tasks.length===0 && (
                 <HarveyTaskSuggestions data={data} onOpenModal={onOpenModal} onCreateTask={async(text:string,level:string)=>{
-                  try{await data.createTask({text,level,done:false});showToast('Tarea creada')}catch(err){showToast('No se pudo crear la tarea');throw err}
+                  try{await data.createTask({text,level:nivelTarea(level),done:false});showToast('Tarea creada')}catch(err){showToast('No se pudo crear la tarea');throw err}
                 }}/>
               )}
               {filtered.length===0 && data.tasks.length>0 && (

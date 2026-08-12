@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import type { NexusData } from '@/types'
 import { BLU, RED, SURFACE, SURF2, BORDER, LucideIcon, AjCard } from '@/components/shared'
 import { useIsMobile } from '@/components/shared'
 import SincronizacionSection from './SincronizacionSection'
@@ -10,7 +11,17 @@ import AutomatizacionesSection from './AutomatizacionesSection'
 import ReportesSection from './ReportesSection'
 import NotificacionesTab from './NotificacionesTab'
 
-function AjustesSection({profile,data,showToast,memFilter,setMemFilter,onOpenModal,isOwner}: any) {
+interface PropsAjustes {
+  profile: any
+  data: NexusData
+  showToast: any
+  memFilter: any
+  setMemFilter: any
+  onOpenModal: any
+  isOwner: any
+}
+
+function AjustesSection({profile,data,showToast,memFilter,setMemFilter,onOpenModal,isOwner}: PropsAjustes) {
   const isMobile = useIsMobile()
   const [ajTab, setAjTab] = useState<'perfil'|'notificaciones'|'sincronizacion'|'equipo'|'memoria'|'automatizaciones'|'reportes'>('perfil')
   const [editName, setEditName] = useState(profile?.name||'')

@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect, useRef } from 'react'
-import type { Task, Project } from '@/types'
+import type { Task, Project, NexusData} from '@/types'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, useIsMobile, dlDate, LucideIcon, todayKey } from '@/components/shared'
 
 // ── Markdown renderer (inline) ───────────────────────────────
@@ -141,7 +141,18 @@ function MarkdownMsg({ text }: { text: string }) {
   return <div className="space-y-0.5">{result}</div>
 }
 
-function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoading,showToast,onNavigate}: any) {
+interface PropsChat {
+  profile: any
+  data: NexusData
+  chatInput: any
+  setChatInput: any
+  chatLoading: any
+  setChatLoading: any
+  showToast: any
+  onNavigate: any
+}
+
+function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoading,showToast,onNavigate}: PropsChat) {
   const isMobile = useIsMobile()
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)

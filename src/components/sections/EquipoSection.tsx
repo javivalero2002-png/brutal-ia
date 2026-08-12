@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import type { Profile, Task } from '@/types'
+import type { Profile, Task, NexusData} from '@/types'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, BORDER, LucideIcon, ProgressRing, relTime, todayKey, AMBAR } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
 import { fetchWithTimeout } from '@/lib/fetch-timeout'
@@ -19,7 +19,13 @@ const esTareaDe = (t: Task, miembro: { id?: string }) =>
 const tieneResponsable = (t: Task) => !!t.assignee || !!t.co_assignee || !!t.co_assigned_to
 
 
-function EquipoSection({data, profile, showToast}: any) {
+interface PropsEquipo {
+  data: NexusData
+  profile: any
+  showToast: any
+}
+
+function EquipoSection({data, profile, showToast}: PropsEquipo) {
   const isMobile = useIsMobile()
   const [selected, setSelected] = useState<Profile|null>(null)
   // Espejo en ref: dentro de un `await` no se puede consultar `selected`, porque el

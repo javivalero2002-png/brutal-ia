@@ -5,7 +5,11 @@ import { BLU, GRN, RED, AMBAR, SURFACE, BORDER, LucideIcon, useIsMobile, relTime
 
 interface NotifItem { id: string; title: string; body?: string; url?: string; tag?: string; read: boolean; created_at: string }
 
-function NotificacionesTab({ showToast }: any) {
+interface PropsNotificaciones {
+  showToast: (mensaje: string) => void
+}
+
+function NotificacionesTab({ showToast }: PropsNotificaciones) {
   const isMobile = useIsMobile()
   const [supported, setSupported] = useState(true)
   const [needsInstall, setNeedsInstall] = useState(false)

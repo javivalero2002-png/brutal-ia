@@ -1,11 +1,18 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import type { NexusData } from '@/types'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, useIsMobile, LucideIcon, AjGroup, todayKey } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
 
 const GMAIL_STATUS_LS = 'gmail_status_cache'
-function SincronizacionSection({data, profile, showToast}: any) {
+interface PropsSincronizacion {
+  data: NexusData
+  profile: any
+  showToast: any
+}
+
+function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) {
   const isMobile = useIsMobile()
   // Arranca con el último estado conocido (cacheado) para no parpadear "sin conectar"
   const cachedStatus = (() => { try { return JSON.parse(localStorage.getItem(GMAIL_STATUS_LS) || 'null') } catch { return null } })()

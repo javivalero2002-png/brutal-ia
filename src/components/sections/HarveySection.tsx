@@ -1,9 +1,20 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { nivelTarea } from '@/components/shared/helpers'
+import type { NexusData } from '@/types'
 import { BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, AMBAR} from '@/components/shared'
 import { VIO } from '@/components/shared/design-tokens'
 
-function HarveySection({data, profile, showToast, onNavigate, preloadMessage, onClearPreload}: any) {
+interface PropsHarvey {
+  data: NexusData
+  profile: any
+  showToast: any
+  onNavigate: any
+  preloadMessage: any
+  onClearPreload: any
+}
+
+function HarveySection({data, profile, showToast, onNavigate, preloadMessage, onClearPreload}: PropsHarvey) {
   const isMobile = useIsMobile()
   type HarveyMode = 'idle'|'recording'|'thinking'|'speaking'
   const [mode, setMode] = useState<HarveyMode>('idle')
@@ -567,7 +578,7 @@ ${memLines2||'  sin documentos'}`
       const rColor = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6'][Math.floor(Math.random()*6)]
       if (pendingAction.type==='tarea') {
         const member = pendingAction.assigneeName ? matchTeamMember((data.team||[]) as any[], pendingAction.assigneeName) : null
-        await data.createTask({text:pendingAction.text, level:pendingAction.level||'high', source:'ai', ...(member ? { assigned_to: member.id } : {})})
+        await data.createTask({text:pendingAction.text, level:nivelTarea(pendingAction.level), source:'ai', ...(member ? { assigned_to: member.id } : {})})
         creado = true
         showToast(member ? `Tarea creada y asignada a ${member.name}`
           : pendingAction.assigneeName ? `Tarea creada (sin asignar: no encontré a "${pendingAction.assigneeName}")`

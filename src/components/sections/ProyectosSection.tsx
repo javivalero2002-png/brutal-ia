@@ -3,9 +3,29 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, todayKey, estadoDeadline, AMBAR } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
-import type { Project, Task, Profile } from '@/types'
+import type { Project, Task, Profile, NexusData} from '@/types'
 
-function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView,projStatusFilter,setProjStatusFilter,dragRef,selectedId,onSelect,onOpenModal,showToast,isOwner,onNavigate,onSelectClient,justCreatedId,onJustCreatedScrolled}: any) {
+interface PropsProyectos {
+  data: NexusData
+  filteredProjects: any
+  kanbanCols: any
+  projView: any
+  setProjView: any
+  projStatusFilter: any
+  setProjStatusFilter: any
+  dragRef: any
+  selectedId: any
+  onSelect: any
+  onOpenModal: any
+  showToast: any
+  isOwner: any
+  onNavigate: any
+  onSelectClient: any
+  justCreatedId: any
+  onJustCreatedScrolled: any
+}
+
+function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView,projStatusFilter,setProjStatusFilter,dragRef,selectedId,onSelect,onOpenModal,showToast,isOwner,onNavigate,onSelectClient,justCreatedId,onJustCreatedScrolled}: PropsProyectos) {
   const isMobile = useIsMobile()
   useBackClosable(!!selectedId, () => onSelect(null))
   const [editProgress, setEditProgress] = useState<number|null>(null)
@@ -747,7 +767,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.08)'}}>S CICLAR</span>
             </div>
             <div className="flex gap-1.5 flex-wrap">
-              {[{s:'plan.',l:'Planif.',c:'#FFFFFF'},{s:'activo',l:'Activo',c:GRN},{s:'urgente',l:'Urgente',c:RED},{s:'revisión',l:'Revisión',c:'#A78BFA'},{s:'completado',l:'Completado',c:GRN}].map(opt=>(
+              {([{s:'plan.',l:'Planif.',c:'#FFFFFF'},{s:'activo',l:'Activo',c:GRN},{s:'urgente',l:'Urgente',c:RED},{s:'revisión',l:'Revisión',c:'#A78BFA'},{s:'completado',l:'Completado',c:GRN}] as {s:Project['status'];l:string;c:string}[]).map(opt=>(
                 <button key={opt.s} onClick={async()=>{ try{await data.updateProject(selectedProject.id,{status:opt.s});showToast(`Estado: ${opt.l}`)}catch{showToast('Error al actualizar')} }} className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:selectedProject.status===opt.s?opt.c+'18':SURF2,border:`1px solid ${selectedProject.status===opt.s?opt.c+'50':BORDER}`,color:selectedProject.status===opt.s?opt.c:'#FFFFFF'}}>{opt.l.toUpperCase()}</button>
               ))}
             </div>

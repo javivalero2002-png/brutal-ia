@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import type { Regla } from '@/types'
+import type { Regla, NexusData} from '@/types'
 import { BLU, RED, GRN, SURFACE, BORDER, LucideIcon, useIsMobile } from '@/components/shared'
 
 const isStructured = (r: Regla) => (r.condition_text || '').trim().startsWith('{')
@@ -16,7 +16,14 @@ function relTime(iso: string | undefined): string | null {
   return new Date(iso).toLocaleDateString('es-ES',{day:'numeric',month:'short'})
 }
 
-function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
+interface PropsAutomatizaciones {
+  data: NexusData
+  onOpenModal: any
+  showToast: any
+  isOwner: any
+}
+
+function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: PropsAutomatizaciones) {
   const isMobile = useIsMobile()
   const activeCount = data.reglas.filter((r: Regla)=>r.active).length
   const totalFired = data.reglas.reduce((s: number, r: Regla)=>s+(r.trigger_count||0),0)

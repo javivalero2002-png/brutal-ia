@@ -58,6 +58,31 @@ export const dlLabel = (d?: string|null): string => {
   return t.toLocaleDateString('es-ES', {day:'numeric', month:'short'})
 }
 
+// Normaliza el nivel de una tarea que viene del MODELO, no de un formulario.
+//
+// Harvey emite `[ACCION:tarea|texto|nivel|persona]` y el nivel es literalmente lo
+// que haya escrito Claude. El prompt le pide «urgent, high, normal» en inglés
+// dentro de una conversación entera en español, así que un «urgente» es cuestión
+// de tiempo — y `tasks.level` tiene CHECK (level in ('urgent','high','normal')):
+// un valor de fuera hace que el INSERT rebote, la tarea no se cree y Harvey ya
+// haya dicho en voz alta que la creaba.
+//
+// Estaba sin validar en los dos sitios que confirman la acción, y en uno de ellos
+// el error de tipo estaba TAPADO con `as any` — por eso no se veía.
+export const NIVELES_TAREA = ['urgent', 'high', 'normal'] as const
+export type NivelTarea = (typeof NIVELES_TAREA)[number]
+
+export const nivelTarea = (crudo?: string | null): NivelTarea => {
+  const v = (crudo || '').trim().toLowerCase()
+  if (!v) return 'high'
+  if ((NIVELES_TAREA as readonly string[]).includes(v)) return v as NivelTarea
+  // Lo que el modelo escribe cuando contesta en español.
+  if (/^(urgente|urgentes|crítica|critica|máxima|maxima)$/.test(v)) return 'urgent'
+  if (/^(alta|alto|importante|prioritaria)$/.test(v)) return 'high'
+  if (/^(normal|media|medio|baja|bajo|low)$/.test(v)) return 'normal'
+  return 'high'
+}
+
 // Plural en los recuentos que la UI enseña. Sin esto salían "1 mensajes
 // marcados como leídos", "Propietario · 1 tareas" y "1 eventos": el patrón
 // `${n} cosas` estaba escrito a mano en una docena de sitios y ninguno miraba
