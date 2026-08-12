@@ -205,7 +205,23 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
     if (!activeItem || (!pendingEmoji && !pendingNote.trim())) return
     setSavingOpinion(true)
     try {
-      const existing = (() => { try { const p = JSON.parse(activeItem.feedback||'[]'); return Array.isArray(p) ? p : [] } catch { return [] } })()
+      // Se relee el feedback del SERVIDOR antes de mezclar, no el que hay en
+      // memoria.
+      //
+      // Esta columna tiene dos escritores: el equipo desde aqui y el cliente desde
+      // /review. `activeItem.feedback` es de cuando se cargo la pieza, asi que si el
+      // cliente mando su comentario mientras la tenias abierta, publicar una opinion
+      // lo BORRABA — y es justo el momento en que lo hace, porque le acabas de pasar
+      // el enlace. Es la otra mitad de la carrera que ya se corrigio en la ruta.
+      //
+      // Si la relectura falla se sigue con lo que hay: perder la opinion propia por
+      // un fallo de red seria peor, y el caso comun es que no haya cambiado nada.
+      let bruto = activeItem.feedback || '[]'
+      try {
+        const fresco = await fetch(`/api/agenda/${activeItem.id}`).then(r => r.ok ? r.json() : null)
+        if (fresco && typeof fresco.feedback === 'string') bruto = fresco.feedback
+      } catch {}
+      const existing = (() => { try { const p = JSON.parse(bruto||'[]'); return Array.isArray(p) ? p : [] } catch { return [] } })()
       const filtered = existing.filter((o: any) => o.userId !== profile?.id)
       const name = profile?.name || 'Equipo'
       const initials = profile?.initials || name.split(' ').map((n: string) => n[0]).join('').slice(0,2).toUpperCase() || 'YO'

@@ -117,6 +117,11 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   const [saving,         setSaving]         = useState(false)
   const [confirmDelete,  setConfirmDelete]  = useState(false)
   const [confirmLimpiar, setConfirmLimpiar] = useState(false)
+  // Borrar un adjunto destruye el fichero del bucket, y eso no se deshace. Era un
+  // solo toque, sin confirmar y sin decir que se llevaba tambien el archivo — y el
+  // boton esta ahora visible en tactil, asi que se roza sin querer. Mismo patron de
+  // doble toque que ya usan LIMPIAR COMPLETADAS y el borrado de tarea.
+  const [confirmAdjunto, setConfirmAdjunto] = useState<string|null>(null)
   // Subtasks
   const [subtasks,      setSubtasks]      = useState<any[]>([])
   const [subtasksLoaded,setSubtasksLoaded]= useState<string|null>(null)
@@ -1205,9 +1210,13 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                             style={{color:'rgba(255,255,255,0.75)'}}>{att.name}</a>
                           {sizeLabel&&<span className="text-[10px]" style={{color:'rgba(255,255,255,0.25)'}}>{sizeLabel}</span>}
                         </div>
-                        <button onClick={()=>deleteAttachment(att)} className="opacity-50 md:opacity-0 md:group-hover:opacity-60 transition-opacity flex-shrink-0" aria-label="Eliminar adjunto">
+                        {confirmAdjunto === att.id
+                          ? <button onClick={()=>{ deleteAttachment(att); setConfirmAdjunto(null) }} aria-label="Confirmar borrado del adjunto"
+                              className="font-syne text-[7.5px] font-black tracking-wide px-2 py-1 rounded-lg flex-shrink-0"
+                              style={{background:`${RED}18`,color:RED,border:`1px solid ${RED}40`}}>¿BORRAR ARCHIVO?</button>
+                          : <button onClick={()=>setConfirmAdjunto(att.id)} className="opacity-50 md:opacity-0 md:group-hover:opacity-60 transition-opacity flex-shrink-0" aria-label="Eliminar adjunto">
                           <LucideIcon name="trash-2" size={13} color={RED}/>
-                        </button>
+                        </button>}
                       </div>
                     )
                   })}

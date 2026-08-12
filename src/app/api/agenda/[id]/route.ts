@@ -6,6 +6,26 @@ import { NextRequest, NextResponse } from 'next/server'
 const pick = (obj: any, keys: string[]) => Object.fromEntries(Object.entries(obj || {}).filter(([k, v]) => keys.includes(k) && v !== undefined))
 
 
+// Devuelve UNA pieza. Existe para que ContenidoSection pueda releer el `feedback`
+// justo antes de escribirlo: esa columna tiene dos escritores —el equipo desde la
+// app y el cliente desde /review— y publicar una opinion partiendo de la copia en
+// memoria borraba lo que el cliente hubiera mandado mientras tanto.
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
+  const admin = await createAdminClient()
+  const { data, error } = await admin.from('content_agenda').select('*').eq('id', id).single()
+  if (error) {
+    console.error('[agenda/:id] la consulta fallo:', error.message)
+    return NextResponse.json({ error: 'No se pudo cargar la pieza' }, { status: 500 })
+  }
+  if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  return NextResponse.json(data)
+}
+
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
