@@ -89,6 +89,18 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   const [pdfBusy, setPdfBusy] = useState(false)
   const [pdfUploadPct, setPdfUploadPct] = useState<number|null>(null)
   const [pdfChat, setPdfChat] = useState<{role:'user'|'ai'; content:string}[]>([])
+  // El chat del PDF tampoco bajaba a la ultima respuesta. Mismo gemelo del scroll
+  // de ChatSection. Nombre propio: `pdfChatRef` ya existe y apunta a los DATOS del
+  // chat, no al contenedor.
+  const pdfScrollRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const c = pdfScrollRef.current
+    if (!c) return
+    const irAlFinal = () => { c.scrollTop = c.scrollHeight }
+    irAlFinal()
+    const t = setTimeout(irAlFinal, 60)
+    return () => clearTimeout(t)
+  }, [pdfChat])
   const [pdfQ, setPdfQ] = useState('')
   const [pdfChatBusy, setPdfChatBusy] = useState(false)
   const [showPdfViewer, setShowPdfViewer] = useState(false)
@@ -996,7 +1008,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                   <div className="rounded-2xl overflow-hidden" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${BORDER}`}}>
                     <div className="px-4 py-2.5 font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.25)',borderBottom:`1px solid ${BORDER}`}}>PREGUNTA AL DOCUMENTO</div>
                     {pdfChat.length>0 && (
-                      <div className="px-4 py-3 space-y-2.5 overflow-y-auto" style={{maxHeight:'220px'}}>
+                      <div ref={pdfScrollRef} className="px-4 py-3 space-y-2.5 overflow-y-auto" style={{maxHeight:'220px'}}>
                         {pdfChat.map((m,i)=>(
                           <div key={i} className={m.role==='user'?'flex justify-end':'flex justify-start'}>
                             <div className="px-3 py-2 rounded-xl font-figtree text-[12px] leading-relaxed whitespace-pre-wrap" style={m.role==='user'?{maxWidth:'85%',background:`${BLU}18`,color:'rgba(255,255,255,0.85)'}:{maxWidth:'85%',background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.7)'}}>{m.content}</div>

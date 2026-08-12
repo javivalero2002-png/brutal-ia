@@ -27,6 +27,20 @@ function EquipoSection({data, profile, showToast}: any) {
   selectedRef.current = selected
   useBackClosable(!!selected, () => setSelected(null))
   const [thread, setThread] = useState<any[]>([])
+  // El hilo baja al ultimo mensaje. No lo hacia: escribias, la respuesta se pintaba
+  // por debajo del borde y habia que arrastrar. Gemelo del scroll de ChatSection.
+  //
+  // SIN requestAnimationFrame a proposito: el navegador lo SUSPENDE cuando la
+  // pestaña no esta visible, asi que al volver a ella el scroll no se aplicaba.
+  const hiloRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const c = hiloRef.current
+    if (!c) return
+    const irAlFinal = () => { c.scrollTop = c.scrollHeight }
+    irAlFinal()
+    const t = setTimeout(irAlFinal, 60)
+    return () => clearTimeout(t)
+  }, [thread])
   const [loadingThread, setLoadingThread] = useState(false)
   const [msgBody, setMsgBody] = useState('')
   const [sending, setSending] = useState(false)
@@ -566,7 +580,7 @@ function EquipoSection({data, profile, showToast}: any) {
           </div>
 
           {/* Thread */}
-          <div className={`flex-1 overflow-y-auto ${isMobile?'px-4':'px-6'} py-4 space-y-3`}>
+          <div ref={hiloRef} className={`flex-1 overflow-y-auto ${isMobile?'px-4':'px-6'} py-4 space-y-3`}>
             <div className="font-syne text-[8.5px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.18)'}}>CONVERSACIÓN</div>
             {loadingThread && <div className="text-center py-8 text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Cargando mensajes…</div>}
             {!loadingThread && thread.length===0 && (
