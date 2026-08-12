@@ -1,112 +1,97 @@
 'use client'
+import { useEffect, useState } from 'react'
 
-export default function NexusBootScreen() {
+// Pantalla de arranque.
+//
+// Antes desaparecía en cuanto llegaba el perfil, pero el dashboard todavía tenía
+// por delante diez peticiones: se veía la carcasa vacía, los datos aparecían de
+// golpe y por el camino daba un par de saltos. De ahí la sensación de que se
+// quedaba pillado. Ahora cubre TODA la carga y solo se va cuando hay algo que
+// enseñar.
+//
+// Y la espera se usa para algo: elegir la versión del logo. No es un adorno —
+// esa elección FIJA EL TEMA de la app (insignia negra → oscuro, insignia blanca →
+// claro), que es una decisión que hay que tomar igualmente y que hasta ahora
+// estaba escondida en un icono de 14px del menú lateral.
+//
+// Solo se pregunta la PRIMERA vez. Después se recuerda y el arranque es una
+// animación de dos segundos con la insignia elegida: preguntar cada vez sería
+// convertir un detalle bonito en un peaje.
+
+type Props = {
+  /** Si es true, se pide elegir versión. Si no, solo se anima la ya elegida. */
+  pedirEleccion?: boolean
+  /** Se llama con el tema elegido. El padre lo persiste y entra. */
+  onElegir?: (tema: 'dark' | 'light') => void
+  /** Texto de lo que se está cargando, para que la espera no sea muda. */
+  estado?: string
+}
+
+export default function NexusBootScreen({ pedirEleccion = false, onElegir, estado }: Props) {
+  const [elegido, setElegido] = useState<'dark' | 'light' | null>(null)
+  const [entrando, setEntrando] = useState(false)
+
+  // Precarga las dos insignias antes de pintarlas: sin esto, la primera vez que
+  // se abre la app los dos círculos aparecen vacíos y se rellenan medio segundo
+  // después, que es justo el parpadeo que se quería quitar.
+  useEffect(() => {
+    for (const src of ['/logo-oscuro.svg', '/logo-claro.svg']) {
+      const img = new Image()
+      img.src = src
+    }
+  }, [])
+
+  const elegir = (tema: 'dark' | 'light') => {
+    if (entrando) return
+    setElegido(tema)
+    setEntrando(true)
+    // La transición se ve: 520ms es lo que tarda la insignia en crecer y el resto
+    // en desvanecerse. Entrar de golpe hace que el clic parezca no registrado.
+    setTimeout(() => onElegir?.(tema), 520)
+  }
+
   return (
-    <div style={{
-      height: '100dvh',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: '#030308',
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
-      {/* Radial glow background */}
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        background: 'radial-gradient(ellipse 600px 400px at 50% 50%, rgba(27,95,250,0.07) 0%, transparent 70%)',
-        pointerEvents: 'none',
-      }}/>
+    <div className="nx-boot">
+      <div className="nx-boot-glow" aria-hidden />
 
-      {/* Content — animated fade+rise */}
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        animation: 'bootFadeIn 0.6s cubic-bezier(0.22,1,0.36,1) both',
-      }}>
-        {/* Logo — BS monogram con borde y glow azul */}
-        <div style={{
-          width: '68px',
-          height: '68px',
-          borderRadius: '18px',
-          background: 'rgba(27,95,250,0.08)',
-          border: '1.5px solid rgba(27,95,250,0.3)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: '24px',
-          animation: 'logoPulse 2.8s ease-in-out infinite',
-          flexShrink: 0,
-        }}>
-          <span style={{
-            fontFamily: 'Syne, sans-serif',
-            fontWeight: 900,
-            fontSize: '26px',
-            color: '#1B5FFA',
-            letterSpacing: '-2px',
-            lineHeight: 1,
-            userSelect: 'none',
-          }}>BS</span>
-        </div>
+      <div className={`nx-boot-contenido ${entrando ? 'nx-boot-saliendo' : ''}`}>
+        {pedirEleccion ? (
+          <>
+            <div className="nx-boot-eyebrow">BRUTAL STUDIOS</div>
+            <h1 className="nx-boot-titulo">Elige tu versión</h1>
+            <p className="nx-boot-sub">Marca el aspecto de toda la app. Puedes cambiarlo cuando quieras.</p>
 
-        {/* Wordmark */}
-        <div style={{
-          fontFamily: 'Syne, sans-serif',
-          fontWeight: 900,
-          fontSize: '28px',
-          color: 'white',
-          letterSpacing: '-0.04em',
-          lineHeight: 1,
-          marginBottom: '6px',
-        }}>BRUTAL.IA</div>
+            <div className="nx-boot-opciones" role="group" aria-label="Elige la versión del logo">
+              {([
+                { tema: 'dark' as const, src: '/logo-oscuro.svg', label: 'OSCURA' },
+                { tema: 'light' as const, src: '/logo-claro.svg', label: 'CLARA' },
+              ]).map(o => (
+                <button
+                  key={o.tema}
+                  onClick={() => elegir(o.tema)}
+                  aria-label={`Versión ${o.label.toLowerCase()}`}
+                  aria-pressed={elegido === o.tema}
+                  className={`nx-boot-opcion ${elegido === o.tema ? 'nx-boot-elegida' : ''} ${elegido && elegido !== o.tema ? 'nx-boot-descartada' : ''}`}
+                >
+                  <img src={o.src} alt="" width={132} height={132} draggable={false} />
+                  <span className="nx-boot-label">{o.label}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="nx-boot-solo">
+            <img src="/logo-oscuro.svg" alt="Brutal Studios" width={104} height={104} className="nx-boot-latido" />
+          </div>
+        )}
 
-        <div style={{
-          fontFamily: 'Syne, sans-serif',
-          fontWeight: 700,
-          fontSize: '8.5px',
-          letterSpacing: '0.28em',
-          color: 'rgba(255,255,255,0.18)',
-          marginBottom: '44px',
-        }}>NEXUS DASHBOARD</div>
-
-        {/* Scan bar */}
-        <div style={{
-          width: '160px',
-          height: '1.5px',
-          background: 'rgba(255,255,255,0.06)',
-          borderRadius: '2px',
-          overflow: 'hidden',
-          position: 'relative',
-        }}>
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '40%',
-            height: '100%',
-            background: 'linear-gradient(90deg, transparent 0%, #1B5FFA 40%, #6fa0ff 60%, transparent 100%)',
-            animation: 'scanLoop 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-          }}/>
+        {/* El estado va SIEMPRE, también mientras se elige: así se ve que por
+            detrás está pasando algo y la elección no es lo que retrasa la entrada. */}
+        <div className="nx-boot-estado" aria-live="polite">
+          <span className="nx-boot-barra" aria-hidden><i /></span>
+          {estado || 'Preparando tu espacio…'}
         </div>
       </div>
-
-      {/* Corner marks — subtle grid reference */}
-      {[['0,0','0,0'],['100%,0','0,0'],['0,100%','0,0'],['100%,100%','0,0']].map((_,i)=>(
-        <div key={i} style={{
-          position:'absolute',
-          [i%2===0?'left':'right']:'20px',
-          [i<2?'top':'bottom']:'20px',
-          width:'16px',
-          height:'16px',
-          borderTop: i<2 ? '1px solid rgba(27,95,250,0.18)' : 'none',
-          borderBottom: i>=2 ? '1px solid rgba(27,95,250,0.18)' : 'none',
-          borderLeft: i%2===0 ? '1px solid rgba(27,95,250,0.18)' : 'none',
-          borderRight: i%2!==0 ? '1px solid rgba(27,95,250,0.18)' : 'none',
-        }}/>
-      ))}
     </div>
   )
 }

@@ -337,3 +337,120 @@ html.theme-light [style^="color: rgba(255, 255, 255, 0.45)"]:not(:has(*)),
 html.theme-light [style*="; color: rgba(255, 255, 255, 0.45)"]:not(:has(*)) { color: rgba(255, 255, 255, 0.66) !important; }
 html.theme-light [style^="color: rgba(255, 255, 255, 0.5)"]:not(:has(*)),
 html.theme-light [style*="; color: rgba(255, 255, 255, 0.5)"]:not(:has(*))  { color: rgba(255, 255, 255, 0.70) !important; }
+
+/* ── Pantalla de arranque ─────────────────────────────────────────
+   Cubre toda la carga, no solo hasta que llega el perfil, y usa la espera para
+   que el usuario elija la versión del logo — que es lo que fija el tema.
+
+   Va SIN invertir aunque el modo claro esté activo (`filter: none` más abajo):
+   aquí se están comparando las dos versiones del logo, así que invertirlas seria
+   enseñar justo lo contrario de lo que se elige. */
+.nx-boot {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: #05050B;
+  overflow: hidden;
+  padding: 24px;
+  animation: nxBootEntra 0.45s cubic-bezier(0.22,1,0.36,1) both;
+}
+html.theme-light .nx-boot { filter: invert(1) hue-rotate(180deg); }
+
+.nx-boot-glow {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 620px 420px at 50% 42%, rgba(27,95,250,0.14) 0%, transparent 68%),
+    radial-gradient(ellipse 420px 320px at 78% 80%, rgba(155,95,250,0.07) 0%, transparent 70%);
+  animation: nxBootRespira 6s ease-in-out infinite;
+}
+
+.nx-boot-contenido {
+  position: relative; display: flex; flex-direction: column; align-items: center;
+  text-align: center; max-width: 520px; width: 100%;
+  animation: nxBootSube 0.6s cubic-bezier(0.22,1,0.36,1) both;
+}
+.nx-boot-saliendo { animation: nxBootSale 0.5s cubic-bezier(0.4,0,1,1) both; }
+
+.nx-boot-eyebrow {
+  font-family: Syne, sans-serif; font-size: 8.5px; font-weight: 800;
+  letter-spacing: 4px; color: rgba(255,255,255,0.28); margin-bottom: 10px;
+}
+.nx-boot-titulo {
+  font-family: Figtree, sans-serif; font-size: 30px; font-weight: 900;
+  letter-spacing: -0.03em; color: #fff; margin-bottom: 8px; line-height: 1.05;
+}
+.nx-boot-sub {
+  font-size: 13px; color: rgba(255,255,255,0.34); margin-bottom: 34px;
+  max-width: 300px; line-height: 1.5;
+}
+
+.nx-boot-opciones { display: flex; gap: 22px; margin-bottom: 40px; }
+
+.nx-boot-opcion {
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  background: none; border: none; cursor: pointer; padding: 6px;
+  border-radius: 24px;
+  transition: transform 0.35s cubic-bezier(0.22,1,0.36,1), opacity 0.35s ease;
+}
+.nx-boot-opcion img {
+  border-radius: 50%;
+  /* El aro no es decorativo: sobre fondo casi negro, la insignia oscura se
+     confundiría con el fondo y no se veria que hay dos opciones. */
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.10), 0 18px 44px rgba(0,0,0,0.55);
+  transition: box-shadow 0.35s ease, transform 0.35s cubic-bezier(0.22,1,0.36,1);
+}
+.nx-boot-opcion:hover { transform: translateY(-6px); }
+.nx-boot-opcion:hover img { box-shadow: 0 0 0 2px rgba(27,95,250,0.55), 0 22px 54px rgba(27,95,250,0.22); }
+.nx-boot-opcion:focus-visible { outline: none; }
+.nx-boot-opcion:focus-visible img { box-shadow: 0 0 0 3px rgba(27,95,250,0.8), 0 22px 54px rgba(27,95,250,0.3); }
+
+.nx-boot-label {
+  font-family: Syne, sans-serif; font-size: 8.5px; font-weight: 800;
+  letter-spacing: 3px; color: rgba(255,255,255,0.32);
+}
+
+/* La elegida crece y la otra se aparta: el clic se ve, en vez de que la pantalla
+   salte sin más y parezca que no se registró. */
+.nx-boot-elegida { transform: scale(1.14); }
+.nx-boot-elegida img { box-shadow: 0 0 0 2px rgba(27,95,250,0.75), 0 26px 64px rgba(27,95,250,0.3); }
+.nx-boot-descartada { opacity: 0; transform: scale(0.82) translateY(10px); }
+
+.nx-boot-solo { margin-bottom: 34px; }
+.nx-boot-latido {
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.10), 0 18px 44px rgba(0,0,0,0.55);
+  animation: nxBootLatido 1.9s ease-in-out infinite;
+}
+
+.nx-boot-estado {
+  display: flex; align-items: center; gap: 12px;
+  font-family: Syne, sans-serif; font-size: 8.5px; font-weight: 800;
+  letter-spacing: 2.5px; color: rgba(255,255,255,0.26);
+}
+.nx-boot-barra {
+  display: block; width: 74px; height: 2px; border-radius: 2px;
+  background: rgba(255,255,255,0.07); overflow: hidden;
+}
+.nx-boot-barra i {
+  display: block; height: 100%; width: 40%; border-radius: 2px;
+  background: linear-gradient(90deg, transparent, #1B5FFA, transparent);
+  animation: nxBootBarra 1.25s ease-in-out infinite;
+}
+
+@keyframes nxBootEntra { from { opacity: 0 } to { opacity: 1 } }
+@keyframes nxBootSube  { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }
+@keyframes nxBootSale  { to { opacity: 0; transform: scale(1.06) } }
+@keyframes nxBootBarra { 0% { transform: translateX(-100%) } 100% { transform: translateX(285%) } }
+@keyframes nxBootRespira { 0%,100% { opacity: 0.75 } 50% { opacity: 1 } }
+@keyframes nxBootLatido { 0%,100% { transform: scale(1) } 50% { transform: scale(1.055) } }
+
+@media (max-width: 420px) {
+  .nx-boot-opciones { gap: 14px; }
+  .nx-boot-opcion img { width: 112px; height: 112px; }
+  .nx-boot-titulo { font-size: 25px; }
+}
+
+/* Quien pide menos movimiento no deberia recibir una pantalla que late y respira. */
+@media (prefers-reduced-motion: reduce) {
+  .nx-boot, .nx-boot-contenido, .nx-boot-glow, .nx-boot-latido, .nx-boot-barra i { animation: none; }
+  .nx-boot-opcion, .nx-boot-opcion img { transition: none; }
+}

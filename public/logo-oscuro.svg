@@ -1,0 +1,14 @@
+<!-- Insignia BRUTAL STUDIOS, version para fondo oscuro: circulo negro, logo en blanco.
+     Es la que el usuario elige al entrar; esa eleccion fija el tema de la app.
+     Las proporciones siguen la marca: BRU y TAL apilados y pegados, y STUDIOS
+     encajado al margen derecho ENTRE las dos lineas, no sobre ellas. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="Brutal Studios">
+  <circle cx="100" cy="100" r="100" fill="#0A0A0F"/>
+  <g fill="#FFFFFF" font-family="Syne, 'Arial Black', Impact, sans-serif" font-weight="800" letter-spacing="-1.5">
+    <text x="86" y="96"  text-anchor="middle" font-size="44">BRU</text>
+    <text x="86" y="140" text-anchor="middle" font-size="44">TAL</text>
+  </g>
+  <rect x="116" y="82" width="54" height="14" rx="1" fill="#FFFFFF"/>
+  <text x="143" y="92" text-anchor="middle" font-size="8.5" letter-spacing="1.6"
+        font-family="Syne, 'Arial Black', Impact, sans-serif" font-weight="800" fill="#0A0A0F">STUDIOS</text>
+</svg>
