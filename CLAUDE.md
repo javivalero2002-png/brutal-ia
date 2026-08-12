@@ -86,6 +86,41 @@ hex. Prioriza precisión sobre cobertura: lo que no puede resolver se lo calla.
 
 Bases hex disponibles en `design-tokens.ts`: `BLU`, `RED`, `GRN`, `AMBAR`.
 
+## El modo claro es un filtro invertido, no un tema
+
+`html.theme-light body` lleva `filter: invert(1) hue-rotate(180deg)`. Funciona
+para grises y blancos, pero **hunde los colores de marca**: están elegidos para
+fondo oscuro y al invertirse salen claros sobre blanco. Medido: rojo 4,26 → 2,17
+· verde 8,64 → 3,10 · azul 3,81 → 2,70, con AA en 4,5.
+
+Dos cosas que parecen la solución y no lo son:
+
+**Ajustar los parámetros del filtro.** Probados `contrast`/`brightness`/
+`saturate` en todo su rango útil; el mejor caso deja el peor color en 2,46.
+Oscurecer el color oscurece también el fondo, así que la razón entre ambos
+apenas se mueve.
+
+**Declarar un color pre-compensado**, más claro, para que la inversión lo
+devuelva oscuro. `hue-rotate(180deg)` **no es una rotación de tono**: es una
+aproximación matricial que destruye el matiz en colores saturados. Un azul
+`#467DFB` sale **verde oliva `#518D02`**, y un violeta sale marrón.
+
+Lo único que funciona es **cancelar el filtro** en ese elemento
+(`filter: invert(1) hue-rotate(180deg)`, que es lo que hace `.nx-noinvert`) y
+declararle una variante oscura. Es lo que hay al final de `globals.css`, con
+`src/lib/__tests__/modoClaro.test.ts` cubriéndolo.
+
+Ojo con la forma del selector, que es donde se falla: `rgb(` **no** casa
+`rgba(`, son dos selectores distintos. Y el de opacidad va sin paréntesis de
+cierre para casar cualquier alfa, mientras que el de los grises lo lleva
+**obligatoriamente**, porque ahí el alfa es justo lo que hay que distinguir
+(`0.3` casaría `0.35`). Son reglas opuestas y conviven a diez líneas.
+
+Queda sin arreglar, medido y a propósito: el anillo del orbe de Harvey (2,70 en
+claro, 3,80 en oscuro, el mínimo son 3,0). Arreglarlo pide cancelar el filtro en
+todo el botón, y entonces el icono blanco de dentro se vuelve invisible sobre
+claro — hay que tocar el componente, no el CSS.
+
 ## El service worker sirve código viejo en desarrollo
 
 Si un cambio no aparece en el navegador pero **sí está en el HTML servido**
