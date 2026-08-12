@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { textOf } from '@/lib/aiText'
+import { sanearHistorial } from './historialIA'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -295,10 +296,13 @@ Responde siempre en español. Sé directo, concreto y profesional. Formato markd
   const userContent = sanitize(userMessage) + formatSearchContext(results)
 
   const messages: Anthropic.MessageParam[] = [
-    ...history.slice(-10).map(h => ({
+    // sanearHistorial: aquí el historial ya viene emparejado desde la base de
+    // datos y no debería empezar en `assistant`, pero eso depende de que otro
+    // fichero siga guardando los turnos de dos en dos. Es una red barata.
+    ...sanearHistorial(history.slice(-10).map(h => ({
       role: (h.role === 'ai' ? 'assistant' : 'user') as 'user' | 'assistant',
       content: h.content
-    })),
+    }))),
     { role: 'user', content: userContent }
   ]
 

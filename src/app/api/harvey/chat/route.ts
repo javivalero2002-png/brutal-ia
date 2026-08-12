@@ -3,6 +3,7 @@ import { todayKey } from '@/components/shared/helpers'
 import { webSearch, needsWebSearch, formatSearchContextVoice } from '@/lib/ai'
 import { checkHarveyRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
+import { sanearHistorial } from '@/lib/historialIA'
 
 // Chat + búsqueda web + reintentos de modelo pueden superar los 10s por defecto
 export const maxDuration = 60
@@ -109,13 +110,25 @@ export async function POST(request: NextRequest) {
   if (apiKey) {
     const userContent = String(message) + formatSearchContextVoice(searchResults)
 
-    const messages = [
-      ...((history || []).map((h: {role: string; text: string}) => ({
-        role: h.role === 'harvey' ? 'assistant' : 'user',
-        content: h.text,
-      }))),
-      { role: 'user', content: userContent },
-    ]
+    // El historial se SANEA antes de mandarlo. La API de Anthropic exige que el
+    // primer mensaje sea `user`, y aquí no lo era casi nunca: la conversación
+    // arranca con el saludo de Harvey, así que un `slice(-10)` del cliente empieza
+    // en un mensaje suyo mientras la conversación sea corta.
+    //
+    // Lo que pasaba entonces no era un error visible, que sería lo de menos: la
+    // llamada devolvía 400, se caía al `localFallback` y el cliente pintaba —y
+    // LEÍA EN VOZ ALTA— una frase enlatada como si la hubiera pensado Harvey. Las
+    // primeras preguntas de cada día, todos los días, en la sección estrella.
+    //
+    // Esta misma corrección ya existía en /api/chat, con su comentario explicando
+    // el 502. Va aquí en el SERVIDOR, y no solo en el cliente, para que valga
+    // también para cualquier futuro llamante que se despiste.
+    const previos = sanearHistorial((history || []).map((h: {role: string; text: string}) => ({
+      role: (h.role === 'harvey' ? 'assistant' : 'user') as 'user' | 'assistant',
+      content: String(h.text ?? ''),
+    })))
+
+    const messages = [...previos, { role: 'user', content: userContent }]
 
     const systemPrompt = `Eres Harvey, la inteligencia artificial ejecutiva de Brutal Studios. Tu voz es serena, precisa y con autoridad. Como JARVIS para una agencia creativa.
 

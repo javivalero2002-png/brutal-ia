@@ -288,7 +288,13 @@ ${memLines2||'  sin documentos'}`
     return suggestions.slice(0, 3)
   }
 
-  const askHarvey = async (userText: string) => {
+  // `historial` llega como parametro en vez de leerse de `conversation`.
+  // Todos los llamantes hacen `setConversation(prev => [...prev, {user}])` y acto
+  // seguido llaman aqui, en el MISMO handler: el estado todavia no se ha
+  // actualizado, asi que `conversation` era el de antes de la pregunta y siempre
+  // le faltaba el ultimo turno. Ademas empezaba en el saludo de Harvey, que es lo
+  // que hacia que Anthropic devolviera 400.
+  const askHarvey = async (userText: string, historial?: Array<{role:'user'|'harvey',text:string,searched?:boolean,ts?:string}>) => {
     const run = ++voiceRunRef.current
     setMode('thinking')
     setFollowUps([])
@@ -297,7 +303,7 @@ ${memLines2||'  sin documentos'}`
     try {
       const res = await fetch('/api/harvey/chat', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ message:userText, context:buildContext(), history:conversation.slice(-10), stream:true }),
+        body: JSON.stringify({ message:userText, context:buildContext(), history:(historial ?? conversation).slice(-10), stream:true }),
         signal: AbortSignal.timeout(60000),
       })
       if (!aliveRef.current || run !== voiceRunRef.current) { setIsSearching(false); return }
@@ -305,6 +311,7 @@ ${memLines2||'  sin documentos'}`
 
       let reply = ''
       let searched = false
+      let degradado = false
       let prefetch: { text: string; promise: Promise<Response> } | undefined
       const ct = res.headers.get('content-type') || ''
       if (res.body && ct.includes('text/plain')) {
@@ -334,6 +341,11 @@ ${memLines2||'  sin documentos'}`
         const json = await res.json()
         reply = (json.reply as string) || ''
         searched = !!json.searched
+        // El servidor marca `fallback: true` cuando NO ha hablado con Claude y
+        // devuelve una frase enlatada. Ese campo se ignoraba: la frase se pintaba
+        // —y se leia en voz alta— como si la hubiera pensado Harvey, que es la
+        // peor forma de fallar que tiene esta seccion. Ahora se dice.
+        degradado = !!json.fallback
       }
       if (!aliveRef.current || run !== voiceRunRef.current) { setIsSearching(false); return }
       reply = reply.trim()
@@ -358,7 +370,12 @@ ${memLines2||'  sin documentos'}`
       }
 
       setIsSearching(false)
-      setConversation(prev=>[...prev,{role:'harvey',text:reply,searched,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}])
+      // Si la respuesta viene del fallback local, se dice. Callarlo era hacer pasar
+      // por Harvey una frase enlatada, y encima leerla en voz alta con su voz.
+      const texto = degradado
+        ? `${reply}\n\n(No he podido conectar con mi cerebro ahora mismo — esto es lo que tengo guardado. Vuelve a preguntarme en un momento.)`
+        : reply
+      setConversation(prev=>[...prev,{role:'harvey',text:texto,searched,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}])
       setFollowUps(generateFollowUps(userText, reply))
       await speak(reply, prefetch)
     } catch (err: any) {
@@ -818,7 +835,7 @@ ${memLines2||'  sin documentos'}`
         {followUps.length > 0 && mode === 'idle' && !pendingAction && (
           <div className="flex flex-wrap gap-2 justify-start pt-1 animate-fadeUp">
             {followUps.map((f,i)=>(
-              <button key={i} onClick={()=>{ setFollowUps([]); setConversation(prev=>[...prev,{role:'user',text:f,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}]); askHarvey(f) }}
+              <button key={i} onClick={()=>{ setFollowUps([]); const nuevo=[...conversation,{role:'user' as const,text:f,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}]; setConversation(nuevo); askHarvey(f,nuevo) }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all hover:opacity-80"
                 style={{background:'rgba(27,95,250,0.08)',border:'1px solid rgba(27,95,250,0.18)',color:'rgba(255,255,255,0.5)'}}>
                 <LucideIcon name="corner-down-right" size={9} color={BLU}/>
@@ -864,7 +881,7 @@ ${memLines2||'  sin documentos'}`
         <div className="flex gap-2 mb-3 flex-wrap">
           {quickActions.map((a,i)=>(
             <button key={i} disabled={mode!=='idle'}
-              onClick={()=>{ setConversation(prev=>[...prev,{role:'user',text:a.t,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}]); askHarvey(a.t) }}
+              onClick={()=>{ const nuevo=[...conversation,{role:'user' as const,text:a.t,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}]; setConversation(nuevo); askHarvey(a.t,nuevo) }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all hover:opacity-80 disabled:opacity-25"
               style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.45)'}}>
               <LucideIcon name={a.icon} size={10} color={a.c}/>
@@ -916,8 +933,9 @@ ${memLines2||'  sin documentos'}`
             const txt = textInput.trim()
             if (!txt || mode !== 'idle') return
             setTextInput('')
-            setConversation(prev=>[...prev,{role:'user',text:txt,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}])
-            askHarvey(txt)
+            const nuevo=[...conversation,{role:'user' as const,text:txt,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}]
+            setConversation(nuevo)
+            askHarvey(txt,nuevo)
           }} className="flex-1 flex items-center gap-2.5 px-4 py-3 rounded-2xl" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${mode!=='idle'?'rgba(27,95,250,0.25)':BORDER}`,transition:'border-color 0.2s'}}>
             <input
               value={textInput}

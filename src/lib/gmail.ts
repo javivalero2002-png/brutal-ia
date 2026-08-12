@@ -156,6 +156,46 @@ export async function getCalendarEvents(refreshToken: string, monthsAhead = 2) {
   return allEvents.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
 }
 
+// Calcula el tramo `start`/`end` que espera la API de Google.
+//
+// Existe como función porque este cálculo estaba escrito DOS veces —una al crear
+// y otra al editar— y solo se arregló una. El resultado fue que crear un evento a
+// las 10:00 funcionaba y editarle el título lo movía a las 12:00, sumando otras
+// dos horas en cada edición. Un cálculo escrito dos veces se arregla una vez.
+//
+// Las dos trampas, que son distintas y se dan a la vez:
+//
+// 1. `toISOString()` añade la 'Z'. Google respeta el offset explícito e IGNORA el
+//    campo `timeZone`, así que las 10:00 se guardan como 10:00 UTC = 12:00 en
+//    Madrid. Por eso el dateTime va SIN zona y la zona va aparte.
+// 2. `new Date('2026-08-20T10:00:00')` se interpreta en la zona del SERVIDOR, que
+//    en Vercel es UTC. Por eso las horas se manejan como minutos desde medianoche
+//    y nunca se construye un Date con la hora local dentro.
+export function tramoHorario(date: string, time: string, durationMinutes: number) {
+  const [h, m] = time.split(':').map(Number)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const inicioMin = h * 60 + m
+  const finMin = inicioMin + durationMinutes
+  // El fin puede caer al día siguiente (p. ej. 23:30 + 60 min).
+  const salto = Math.floor(finMin / 1440)
+  const diaFin = new Date(`${date}T00:00:00Z`)
+  diaFin.setUTCDate(diaFin.getUTCDate() + salto)
+  return {
+    start: { dateTime: `${date}T${pad(h)}:${pad(m)}:00`, timeZone: 'Europe/Madrid' },
+    end: {
+      dateTime: `${diaFin.toISOString().slice(0, 10)}T${pad(Math.floor((finMin % 1440) / 60))}:${pad(finMin % 60)}:00`,
+      timeZone: 'Europe/Madrid',
+    },
+  }
+}
+
+/** Tramo de día completo. La 'Z' es obligatoria por el mismo motivo que arriba. */
+export function tramoDiaCompleto(date: string) {
+  const siguiente = new Date(`${date}T00:00:00Z`)
+  siguiente.setUTCDate(siguiente.getUTCDate() + 1)
+  return { start: { date }, end: { date: siguiente.toISOString().slice(0, 10) } }
+}
+
 export async function createCalendarEvent(refreshToken: string, opts: {
   title: string
   date: string        // YYYY-MM-DD
@@ -168,33 +208,10 @@ export async function createCalendarEvent(refreshToken: string, opts: {
   oauth2Client.setCredentials({ refresh_token: refreshToken })
   const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
 
-  let start: any, end: any
-  if (opts.time) {
-    // Formato SIN zona ("2026-08-10T14:00:00") para que mande `timeZone`.
-    // Antes se usaba toISOString(), que añade la 'Z': Google respeta el offset
-    // explícito e IGNORA timeZone, así que un evento a las 14:00 se creaba a las
-    // 14:00 UTC = 16:00 en Madrid. Dos horas tarde en verano, una en invierno.
-    // Además `new Date('...T14:00')` se interpretaba en la zona del SERVIDOR
-    // (UTC en Vercel), no en la de Madrid: doble error en el mismo cálculo.
-    const [h, m] = opts.time.split(':').map(Number)
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const startMin = h * 60 + m
-    const endMin = startMin + (opts.durationMinutes ?? 60)
-    // El fin puede caer al día siguiente (p. ej. 23:30 + 60 min).
-    const dayShift = Math.floor(endMin / 1440)
-    const endDay = new Date(`${opts.date}T00:00:00Z`)
-    endDay.setUTCDate(endDay.getUTCDate() + dayShift)
-    start = { dateTime: `${opts.date}T${pad(h)}:${pad(m)}:00`, timeZone: 'Europe/Madrid' }
-    end   = { dateTime: `${endDay.toISOString().slice(0, 10)}T${pad(Math.floor((endMin % 1440) / 60))}:${pad(endMin % 60)}:00`, timeZone: 'Europe/Madrid' }
-  } else {
-    // Con la Z explicita, igual que el calculo de arriba: sin ella la fecha se
-    // interpreta en la zona del SERVIDOR y solo sale bien porque Vercel es UTC.
-    const nextDay = new Date(opts.date + 'T00:00:00Z')
-    nextDay.setUTCDate(nextDay.getUTCDate() + 1)
-    const nextDayStr = nextDay.toISOString().slice(0, 10)
-    start = { date: opts.date }
-    end   = { date: nextDayStr }
-  }
+  const tramo = opts.time
+    ? tramoHorario(opts.date, opts.time, opts.durationMinutes ?? 60)
+    : tramoDiaCompleto(opts.date)
+  const { start, end } = tramo
 
   const { data } = await calendar.events.insert({
     calendarId: 'primary',
@@ -237,17 +254,20 @@ export async function updateCalendarEvent(refreshToken: string, eventId: string,
   if (opts.title) patchBody.summary = opts.title
   if (opts.date) {
     if (opts.time) {
-      const startDT = new Date(`${opts.date}T${opts.time}:00`)
-      const origDuration = existing.end?.dateTime && existing.start?.dateTime
-        ? new Date(existing.end.dateTime).getTime() - new Date(existing.start.dateTime).getTime()
-        : 3600000
-      patchBody.start = { dateTime: startDT.toISOString(), timeZone: 'Europe/Madrid' }
-      patchBody.end = { dateTime: new Date(startDT.getTime() + origDuration).toISOString(), timeZone: 'Europe/Madrid' }
+      // La duración se conserva de lo que ya había. Es una RESTA de dos instantes,
+      // así que no le afecta la zona horaria: los dos extremos se interpretan con
+      // el mismo offset y este se cancela. Lo que sí importaba era no reconstruir
+      // el inicio a partir de un Date, y de eso se encarga tramoHorario().
+      const duracionMin = existing.end?.dateTime && existing.start?.dateTime
+        ? Math.round((new Date(existing.end.dateTime).getTime() - new Date(existing.start.dateTime).getTime()) / 60000)
+        : 60
+      const tramo = tramoHorario(opts.date, opts.time, duracionMin)
+      patchBody.start = tramo.start
+      patchBody.end = tramo.end
     } else {
-      const nextDay = new Date(opts.date + 'T00:00:00')
-      nextDay.setDate(nextDay.getDate() + 1)
-      patchBody.start = { date: opts.date }
-      patchBody.end = { date: nextDay.toISOString().slice(0, 10) }
+      const tramo = tramoDiaCompleto(opts.date)
+      patchBody.start = tramo.start
+      patchBody.end = tramo.end
     }
   }
   const { data } = await calendar.events.patch({ calendarId: 'primary', eventId, requestBody: patchBody })

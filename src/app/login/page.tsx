@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { mensajeDeAcceso } from '@/lib/mensajesAuth'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -35,18 +36,27 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
-    const supabase = createClient()
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password })
+    // El try/catch no es decorativo: signInWithPassword solo devuelve { error }
+    // para los errores de auth que reconoce, y vuelve a lanzar el resto. Sin él,
+    // uno de esos dejaría `loading` en true y el botón girando para siempre, sin
+    // ningún mensaje — el peor estado posible en la pantalla de acceso.
+    try {
+      const supabase = createClient()
+      const { error: err } = await supabase.auth.signInWithPassword({ email, password })
 
-    if (err) {
-      setError(err.message === 'Invalid login credentials'
-        ? 'Email o contraseña incorrectos'
-        : err.message)
+      if (err) {
+        console.error('[login]', err.message)
+        setError(mensajeDeAcceso(err.message))
+        setLoading(false)
+        return
+      }
+
+      router.push('/dashboard')
+    } catch (err: any) {
+      console.error('[login]', err)
+      setError(mensajeDeAcceso(err?.message || ''))
       setLoading(false)
-      return
     }
-
-    router.push('/dashboard')
   }
 
   const s = {

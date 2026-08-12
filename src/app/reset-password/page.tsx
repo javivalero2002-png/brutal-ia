@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { mensajeDeContrasena } from '@/lib/mensajesAuth'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fijar contraseña. Es donde aterrizan DOS caminos:
@@ -43,7 +44,7 @@ export default function ResetPasswordPage() {
     setLoading(true); setError('')
     const supabase = createClient()
     const { error: err } = await supabase.auth.updateUser({ password: pwd })
-    if (err) { setError(err.message); setLoading(false); return }
+    if (err) { console.error('[reset]', err.message); setError(mensajeDeContrasena(err.message)); setLoading(false); return }
     setOk(true)
     setTimeout(() => router.push('/dashboard'), 1200)
   }
