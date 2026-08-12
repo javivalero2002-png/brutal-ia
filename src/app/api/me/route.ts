@@ -11,9 +11,18 @@ export async function GET(request: NextRequest) {
   if (authErr || !user) return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
 
   // 1. Try to find profile by user ID (normal case)
+  // Allowlist explicita de columnas, nunca el comodin. La tabla profiles guarda
+  // gmail_refresh_token y gmail_colabs_refresh_token, y con el asterisco viajaban
+  // al navegador en cada arranque de la app: quedaban en el estado de React, en la
+  // pestaña de red de las devtools y en cualquier volcado de sesion. Un refresh
+  // token da acceso COMPLETO al Gmail de esa persona y no caduca solo.
+  //
+  // Nadie en el cliente los lee (comprobado), asi que solo eran exposicion.
+  // (El comentario no escribe el patron prohibido: el test que lo persigue escanea
+  // el fichero como texto y no distingue codigo de prosa.)
   const { data: profile } = await admin
     .from('profiles')
-    .select('*')
+    .select('id, email, name, role, avatar_color, initials, gmail_connected, gmail_account, gmail_colabs_connected, gmail_colabs_account')
     .eq('id', user.id)
     .single()
 
@@ -26,7 +35,7 @@ export async function GET(request: NextRequest) {
   if (user.email) {
     const { data: existingByEmail } = await admin
       .from('profiles')
-      .select('*')
+      .select('id, email, name, role, avatar_color, initials, gmail_connected, gmail_account, gmail_colabs_connected, gmail_colabs_account')
       .eq('email', user.email)
       .single()
 

@@ -70,7 +70,10 @@ describe('rutas API · nadie puede ascenderse a owner', () => {
   })
 
   it.each(escribenProfiles.map(f => [nombre(f), f]))('%s no mete `role` sin comprobar quién llama', (_n, f) => {
-    const s = leer(f)
+    // Las listas de columnas de un .select() se quitan antes de mirar: un select no
+    // escribe nada, y nombrar `role` ahi es lo normal. Sin esto, poner una allowlist
+    // explicita —que es justo lo que se quiere— disparaba este test.
+    const s = leer(f).replace(/\.select\(['"][^'"]*['"]\)/g, '.select()')
     const tocaRole = /\brole\b\s*[,:]/.test(s)
     if (!tocaRole) return
     // Si toca el rol, la ruta tiene que exigir owner. admin/team lo hace con
@@ -215,6 +218,54 @@ describe('rutas API · un fallo de consulta no se disfraza de lista vacia', () =
         // Se permite si es el caso de tabla ausente Y hay otra rama que si falla.
         const soloTablaAusente = /42P01/.test(bloque) && /status:\s*500/.test(bloque)
         if (!soloTablaAusente) culpables.push(`${nombre(f)}: devuelve [] dentro de if (error) sin distinguir 42P01`)
+      }
+    }
+    expect(culpables).toEqual([])
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ningun secreto puede viajar al navegador.
+//
+// La tabla `profiles` guarda gmail_refresh_token y gmail_colabs_refresh_token. Un
+// refresh token da acceso COMPLETO al Gmail de esa persona y no caduca solo.
+//
+// GET /api/me hacia select('*') y devolvia el perfil entero: el token quedaba en el
+// estado de React, en la pestaña de red de las devtools y en cualquier volcado de
+// sesion. GET /api/admin/team era peor — select('*') sobre TODOS los perfiles
+// entregaba los tokens de las siete personas en una sola respuesta.
+//
+// El asterisco es el problema: escribirlo no dice que columnas hay, asi que el dia
+// que se añade una columna sensible se filtra sola.
+describe('rutas API · los secretos no salen al cliente', () => {
+  const SECRETOS = ['gmail_refresh_token', 'gmail_colabs_refresh_token']
+
+  it('ninguna ruta hace select(*) sobre profiles', () => {
+    const culpables: string[] = []
+    for (const f of TODAS) {
+      const s = leer(f)
+      // .from('profiles') ... .select('*')  — en una linea o en varias
+      for (const m of s.matchAll(/from\(['"]profiles['"]\)[\s\S]{0,60}?\.select\((['"])\*\1\)/g)) {
+        culpables.push(`${nombre(f)}: ${m[0].replace(/\s+/g, ' ').slice(0, 60)}`)
+      }
+    }
+    expect(culpables).toEqual([])
+  })
+
+  // La segunda mitad: aunque no sea con asterisco, un select explicito tampoco
+  // puede nombrar una columna de token.
+  it('ningun select nombra un token de refresco', () => {
+    const culpables: string[] = []
+    for (const f of TODAS) {
+      const s = leer(f)
+      for (const m of s.matchAll(/\.select\(['"]([^'"]*)['"]\)/g)) {
+        for (const secreto of SECRETOS) {
+          if (!m[1].includes(secreto)) continue
+          // Las rutas que SI necesitan el token para hablar con Google lo leen y lo
+          // usan en el servidor; se permiten solo si no devuelven ese objeto tal cual.
+          const devuelveDirecto = new RegExp(`NextResponse\\.json\\(\\s*(profile|profiles|data)\\b`).test(s)
+          if (devuelveDirecto) culpables.push(`${nombre(f)}: select con ${secreto} y devuelve el objeto entero`)
+        }
       }
     }
     expect(culpables).toEqual([])

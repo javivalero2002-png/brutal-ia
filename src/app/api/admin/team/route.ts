@@ -24,7 +24,9 @@ export async function GET() {
   if (!ctx) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { admin } = ctx
-  const { data: profiles } = await admin.from('profiles').select('*')
+  // Igual que en /api/me, y aqui es peor: con el asterisco esta ruta devolvia los
+  // refresh tokens de Gmail de LAS SIETE PERSONAS en una sola respuesta.
+  const { data: profiles } = await admin.from('profiles').select('id, email, name, role, avatar_color, initials, gmail_connected, gmail_account, gmail_colabs_connected, gmail_colabs_account')
     .ilike('email', '%@brutalstudios.es')
     .order('role', { ascending: false })
   return NextResponse.json(profiles || [])
