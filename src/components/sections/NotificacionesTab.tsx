@@ -125,13 +125,13 @@ function NotificacionesTab({ showToast }: any) {
           ))}
         </div>
 
-        {!supported ? (
-          <div className="mt-5 px-4 py-3 rounded-xl text-[12px]" style={{background:'rgba(255,176,32,0.07)',border:'1px solid rgba(255,176,32,0.18)',color:'rgba(255,176,32,0.85)'}}>
-            Este navegador no soporta notificaciones push.
-          </div>
-        ) : needsInstall ? (
+        {needsInstall ? (
           <div className="mt-5 px-4 py-3 rounded-xl text-[12px] leading-relaxed" style={{background:'rgba(27,95,250,0.06)',border:'1px solid rgba(27,95,250,0.18)',color:'rgba(160,190,255,0.85)'}}>
             En iPhone, primero instala la app: <b>Compartir → Añadir a pantalla de inicio</b>, ábrela desde el icono y vuelve aquí para activar.
+          </div>
+        ) : !supported ? (
+          <div className="mt-5 px-4 py-3 rounded-xl text-[12px]" style={{background:'rgba(255,176,32,0.07)',border:'1px solid rgba(255,176,32,0.18)',color:'rgba(255,176,32,0.85)'}}>
+            Este navegador no soporta notificaciones push.
           </div>
         ) : (
           <div className="mt-6 flex items-center gap-3 flex-wrap">
