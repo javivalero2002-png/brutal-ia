@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseRuleConfig, AUTO_MARK } from '@/lib/automations'
-import { dlDate, todayKey, localDayKey } from '@/components/shared/helpers'
+import { dlDate, todayKey, localDayKey, estadoDeadline } from '@/components/shared/helpers'
 import { splitForTTS } from '@/components/shared/audio'
 import { needsWebSearch } from '@/lib/ai'
 
@@ -120,5 +120,54 @@ describe('needsWebSearch — cuándo Harvey busca en internet', () => {
     expect(needsWebSearch('resume mis emails sin leer')).toBe(false)
     expect(needsWebSearch('¿cómo va el proyecto de Zara?')).toBe(false)
     expect(needsWebSearch('dame el briefing')).toBe(false)
+  })
+})
+
+describe('deadline: los dias no dependen de la hora a la que mires', () => {
+
+  const enDias = (n: number) => {
+    const d = new Date(`${todayKey()}T00:00:00Z`)
+    d.setUTCDate(d.getUTCDate() + n)
+    return d.toISOString().slice(0, 10)
+  }
+
+  // El bug: dlDate() devolvia el deadline a las 23:59:59, asi que a las 09:00 del
+  // dia en que vencia la resta daba 0,62 -> Math.round -> 1 -> "+1d" para algo que
+  // vencia HOY. La rama de 'HOY' solo se alcanzaba a partir de las ~12:00.
+  it('lo que vence hoy dice HOY, sea la hora que sea', () => {
+    expect(estadoDeadline(enDias(0))!.etiqueta).toBe('HOY')
+    expect(estadoDeadline(enDias(0))!.dias).toBe(0)
+    expect(estadoDeadline(enDias(0))!.vencido).toBe(false)
+  })
+
+  it('manana es +1d y pasado +2d', () => {
+    expect(estadoDeadline(enDias(1))!.etiqueta).toBe('+1d')
+    expect(estadoDeadline(enDias(2))!.etiqueta).toBe('+2d')
+  })
+
+  // Con Math.abs, lo vencido AYER daba Math.round(0,37) = 0 y salia "−0d".
+  it('lo vencido ayer no dice −0d', () => {
+    const ayer = estadoDeadline(enDias(-1))!
+    expect(ayer.etiqueta).toBe('−1d')
+    expect(ayer.etiquetaLarga).toBe('hace 1d')
+    expect(ayer.vencido).toBe(true)
+  })
+
+  it('«pronto» es de hoy a siete dias, y no incluye lo vencido', () => {
+    expect(estadoDeadline(enDias(0))!.pronto).toBe(true)
+    expect(estadoDeadline(enDias(7))!.pronto).toBe(true)
+    expect(estadoDeadline(enDias(8))!.pronto).toBe(false)
+    expect(estadoDeadline(enDias(-1))!.pronto).toBe(false)
+  })
+
+  it('sin deadline o TBD devuelve null en vez de inventarse un dia', () => {
+    expect(estadoDeadline(null)).toBeNull()
+    expect(estadoDeadline(undefined)).toBeNull()
+    expect(estadoDeadline('')).toBeNull()
+    expect(estadoDeadline('TBD')).toBeNull()
+  })
+
+  it('acepta un deadline con hora, quedandose con el dia', () => {
+    expect(estadoDeadline(`${enDias(3)}T17:30:00Z`)!.etiqueta).toBe('+3d')
   })
 })

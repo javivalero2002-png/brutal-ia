@@ -83,3 +83,34 @@ export const videoEmbed = (url: string) => {
   if (vm) return `https://player.vimeo.com/video/${vm[1]}`
   return null
 }
+
+// Estado de un deadline en DÍAS, no en instantes.
+//
+// Existía tres veces escrito a mano en ProyectosSection, siempre así:
+//
+//     Math.round(Math.abs(dlDate(p.deadline).getTime() - Date.now()) / 86400000)
+//
+// y estaba mal las tres. dlDate() devuelve el deadline a las 23:59:59, así que a
+// las 09:00 del día en que vence la resta da 0,62 días → Math.round → 1 → la UI
+// decía "+1d" para algo que vencía HOY. La rama de 'HOY' solo se alcanzaba a
+// partir de las ~12:00. Y con Math.abs, un proyecto vencido AYER daba
+// Math.round(0,37) = 0 y salía "−0d".
+//
+// O sea: antes de mediodía todos los contadores de la sección iban desplazados un
+// día entero, todos los días.
+//
+// Un deadline es un DÍA, no un instante — la misma regla que ya cubre
+// src/lib/automations.ts. Comparando claves de día la hora deja de importar.
+export function estadoDeadline(deadline?: string|null): {
+  dias: number; vencido: boolean; pronto: boolean; etiqueta: string; etiquetaLarga: string
+} | null {
+  if (!deadline || deadline === 'TBD') return null
+  const dias = daysBetweenKeys(todayKey(), deadline.slice(0, 10))
+  return {
+    dias,
+    vencido: dias < 0,
+    pronto: dias >= 0 && dias <= 7,
+    etiqueta: dias === 0 ? 'HOY' : dias < 0 ? `−${-dias}d` : `+${dias}d`,
+    etiquetaLarga: dias === 0 ? 'HOY' : dias < 0 ? `hace ${-dias}d` : `en ${dias}d`,
+  }
+}

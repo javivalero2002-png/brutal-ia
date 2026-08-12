@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, todayKey, AMBAR } from '@/components/shared'
+import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, todayKey, estadoDeadline, AMBAR } from '@/components/shared'
 import type { Project, Task, Profile } from '@/types'
 
 function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView,projStatusFilter,setProjStatusFilter,dragRef,selectedId,onSelect,onOpenModal,showToast,isOwner,onNavigate,onSelectClient,justCreatedId,onJustCreatedScrolled}: any) {
@@ -489,10 +489,8 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                       </div>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {p.deadline && p.deadline!=='TBD' && (()=>{
-                          const dOver = dlDate(p.deadline)<new Date()
-                          const dSoon = !dOver && dlDate(p.deadline)<new Date(Date.now()+7*24*3600*1000)
-                          const diffDays = Math.round(Math.abs(dlDate(p.deadline).getTime()-Date.now())/(1000*60*60*24))
-                          const dLabel = dOver ? `−${diffDays}d` : diffDays===0 ? 'HOY' : `+${diffDays}d`
+                          const dl = estadoDeadline(p.deadline)!
+                          const dOver = dl.vencido, dSoon = dl.pronto, dLabel = dl.etiqueta
                           return <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.12)':'rgba(255,255,255,0.04)',color:dOver?RED:dSoon?AMBAR:'rgba(255,255,255,0.3)'}}>{dLabel}</span>
                         })()}
                         {(()=>{ const n=data.tasks.filter((t:Task)=>t.project_id===p.id&&!t.done).length; if(n>0) return <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.65)'}}>{n} tareas</span>; if(p.status!=='completado'&&p.status!=='plan.') return <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,176,32,0.07)',color:'rgba(255,176,32,0.5)'}}>sin tareas</span>; return null })()}
@@ -548,10 +546,8 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               {showCover && <div className="flex-1 min-w-0"/>}
               {!showCover && <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full flex-shrink-0" style={{background:statusColor(p.status)+'14',color:statusColor(p.status)}}>{statusLabel(p.status)}</span>}
               {p.deadline && p.deadline!=='TBD' && (()=>{
-                const dOver = dlDate(p.deadline)<new Date()
-                const dSoon = !dOver && dlDate(p.deadline)<new Date(Date.now()+7*24*3600*1000)
-                const diffDays = Math.round(Math.abs(dlDate(p.deadline).getTime()-Date.now())/(1000*60*60*24))
-                const dLabel = dOver ? `−${diffDays}d` : diffDays===0 ? 'HOY' : `${diffDays}d`
+                const dl = estadoDeadline(p.deadline)!
+                const dOver = dl.vencido, dSoon = dl.pronto, dLabel = dl.etiqueta
                 return <span className="font-syne text-[9px] font-black flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?AMBAR:'rgba(255,255,255,0.28)'}}>{dLabel}</span>
               })()}
               {(()=>{ const n=data.tasks.filter((t:Task)=>t.project_id===p.id&&!t.done).length; if(n>0) return <span className="font-syne text-[7.5px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(27,95,250,0.08)',color:'rgba(100,140,255,0.55)'}}>{n}t</span>; if(p.status!=='completado'&&p.status!=='plan.') return <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(255,176,32,0.07)',color:'rgba(255,176,32,0.5)'}}>SIN TAREAS</span>; return null })()}
@@ -616,12 +612,8 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                     <span className="text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin cliente</span>
                   )}
                   {selectedProject.deadline&&selectedProject.deadline!=='TBD'&&(()=>{
-                    const dl = dlDate(selectedProject.deadline)
-                    const dOver = dl < new Date()
-                    const dSoon = !dOver && dl < new Date(Date.now()+7*24*3600*1000)
-                    const diffMs = dl.getTime() - Date.now()
-                    const diffDays = Math.round(Math.abs(diffMs)/(1000*60*60*24))
-                    const daysLabel = dOver ? `hace ${diffDays}d` : diffDays === 0 ? 'HOY' : `en ${diffDays}d`
+                    const dl = estadoDeadline(selectedProject.deadline)!
+                    const dOver = dl.vencido, dSoon = dl.pronto, daysLabel = dl.etiquetaLarga
                     return (
                       <span className="flex items-center gap-1.5 font-syne text-[8px] font-black px-2 py-1 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'rgba(255,255,255,0.04)',color:dOver?RED:dSoon?AMBAR:'rgba(255,255,255,0.3)'}}>
                         {dOver&&'⚠ '}Deadline {fmtDate(selectedProject.deadline)}
