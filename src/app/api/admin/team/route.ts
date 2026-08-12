@@ -1,5 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { PUSH_ROW } from '@/lib/push'
 
 // Only the owner can call these endpoints
 async function requireOwner() {
@@ -65,11 +66,8 @@ export async function POST(request: NextRequest) {
     // serlo por corregir una errata, y la respuesta decia ok:true.
     //
     // Cambiar de rol tiene que ser una accion deliberada, no un efecto colateral
-    // de un alta. El resto de campos (nombre, iniciales, color) si son lo que se
-    // esta editando.
-    // El rol solo se toca si el cliente lo pide EXPLICITAMENTE con cambiarRol.
-    // Sin esa condicion, `role = 'member'` (el valor por defecto de la linea de
-    // arriba) se colaba en cada actualizacion.
+    // de un alta: solo se toca si el cliente lo pide con `cambiarRol`. El resto de
+    // campos (nombre, iniciales, color) si son lo que se esta editando.
     const campos: Record<string, string> = { name, initials: rawInitials, avatar_color: color }
     if (cambiarRol && (role === 'owner' || role === 'member')) campos.role = role
     const { error: updErr } = await admin.from('profiles').update(campos).eq('id', existingProfile.id)
@@ -166,6 +164,30 @@ export async function DELETE(request: NextRequest) {
 
   const { error: authErr } = await admin.auth.admin.deleteUser(profile.id)
   if (authErr) return NextResponse.json({ error: authErr.message }, { status: 500 })
+
+  // La suscripcion push se borra TAMBIEN, y antes que el perfil.
+  //
+  // Vive en `reglas` con name = PUSH_ROW y created_by = el usuario (ver
+  // src/lib/push.ts). Al dar de baja a alguien solo se borraba su cuenta de auth y
+  // su perfil: la fila de la suscripcion sobrevivia, y sendPushToAll la sigue
+  // seleccionando por `name` sin mirar si ese created_by aun existe. Resultado:
+  // quien ya no esta en el equipo seguia recibiendo en su movil los avisos de
+  // correo de CLIENTES, con remitente y asunto en la notificacion del sistema.
+  //
+  // Va antes del delete del perfil para que un fallo no deje la suscripcion
+  // huerfana sin cuenta a la que asociarla.
+  const { error: pushErr } = await admin
+    .from('reglas')
+    .delete()
+    .eq('name', PUSH_ROW)
+    .eq('created_by', profile.id)
+  if (pushErr) {
+    console.error('[team] no se pudo borrar la suscripcion push de', profile.id, '—', pushErr.message)
+    return NextResponse.json(
+      { error: 'No se pudo retirar la suscripción de avisos. La cuenta NO se ha dado de baja.' },
+      { status: 500 },
+    )
+  }
 
   await admin.from('profiles').delete().eq('id', profile.id)
   return NextResponse.json({ ok: true })

@@ -343,7 +343,19 @@ async function ejecutarReglas(
 
   // Snapshot de datos (una sola vez)
   const snapshot = await Promise.all([
-    admin.from('inbox_messages').select('id,subject,from_name,from_email,ai_client,ai_urgency,is_read,received_at').order('received_at', { ascending: false }).limit(200),
+    // SOLO el buzon compartido. Antes esta consulta no filtraba nada, asi que el
+    // motor leia el Gmail PERSONAL de cada miembro del equipo —asunto, remitente y
+    // cliente detectado— y lo convertia en tareas y avisos que ve todo el mundo.
+    //
+    // Que una regla salte por un correo del banco, del medico o de una entrevista
+    // que alguien tiene en su cuenta personal, y que eso aparezca como tarea del
+    // equipo o llegue como push a los siete, no es lo que nadie espera al conectar
+    // su Gmail para no perderse los correos de clientes.
+    //
+    // El buzon compartido si es correspondencia de empresa, y es para lo que
+    // existen las reglas. ESTO ESTRECHA EL COMPORTAMIENTO a proposito: una regla
+    // que hoy salte por un correo personal dejara de hacerlo.
+    admin.from('inbox_messages').select('id,subject,from_name,from_email,ai_client,ai_urgency,is_read,received_at').eq('shared', true).order('received_at', { ascending: false }).limit(200),
     admin.from('tasks').select('id,text,done,due_date,project_id,client_id,notes'),
     admin.from('projects').select('id,name,status,deadline,client_id'),
     admin.from('clients').select('id,name'),
