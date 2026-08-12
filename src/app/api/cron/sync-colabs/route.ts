@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { syncColabsInbox, syncPersonalInbox } from '@/lib/colabsSync'
 import { runAutomations } from '@/lib/automations'
 import { madridHour } from '@/components/shared/helpers'
+import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Analizar varios buzones con IA puede superar los 10s por defecto
@@ -106,29 +107,76 @@ export async function GET(request: NextRequest) {
   // Para un estudio en la UE, además, guardar correspondencia de clientes sin
   // plazo es exposición de RGPD (art. 5.1.e).
   // Los emails SIN LEER no se tocan nunca.
+  //
+  // El disparo va por CERROJO DE DÍA, no por «la hora 4 en punto».
+  //
+  // Antes la condición era `getUTCHours() === 4`, y eso tiene una única
+  // oportunidad al día: si esa ejecución concreta no llega hasta aquí, la purga
+  // se salta el día entero y sin dejar rastro. Formas de perderla, todas reales:
+  //   · la función se mata a los 60s de Hobby antes de esta línea — el
+  //     presupuesto de 38s solo acota los buzones, runAutomations va sin tope;
+  //   · el cron de esa hora no se dispara (despliegue en curso, fallo de plataforma);
+  //   · se retrasa cruzando la hora, y entonces getUTCHours() ya no vale 4.
+  // Y el modo de fallo es justo el que este código venía a evitar: las tablas
+  // crecen sin que nadie lo note, porque ningún otro sitio las borra.
+  //
+  // Con el cerrojo, la purga la hace la PRIMERA ejecución del día que llegue aquí,
+  // y si falla se suelta para que lo reintente la siguiente hora. Se conserva la
+  // preferencia por la madrugada (>= 04:00 UTC) porque es cuando menos molesta,
+  // pero ahora es un suelo, no una cita exacta: quedan 20 ejecuciones de margen.
+  //
+  // La clave va en día UTC y no de Madrid, al revés que el resto del repo. Aquí no
+  // hay lógica de negocio —esto no es un deadline que ve un usuario— sino un
+  // calendario de mantenimiento anclado al mismo reloj que la condición horaria.
+  // Mezclar día de Madrid con hora UTC haría que la purga corriera dos veces en la
+  // franja en que no coinciden.
   let retention: Record<string, number> | { error: string } | null = null
-  if (new Date().getUTCHours() === 4) {
-    try {
-      const purge = async (table: string, col: string, days: number) => {
-        const cutoff = new Date(Date.now() - days * 86400000).toISOString()
-        // El count va como opción del delete(), no en un .select() posterior.
-        let q = admin.from(table).delete({ count: 'exact' }).lt(col, cutoff)
-        if (table === 'inbox_messages') q = q.eq('is_read', true)
-        const { error, count } = await q
-        if (error) throw new Error(`${table}: ${error.message}`)
-        return count || 0
+  const ahoraUTC = new Date()
+  if (ahoraUTC.getUTCHours() >= 4) {
+    // El día se compone con los getters UTC explícitos en vez de recortar los diez
+    // primeros caracteres del ISO. Da lo mismo, pero deja la intención por escrito:
+    // recortar un ISO es justo la forma del bug de zona horaria que hay tests para
+    // impedir, y «aquí sí quiero UTC» es lo que dice todo el que lo introduce sin
+    // querer. (El comentario tampoco nombra esa llamada: el test que la persigue
+    // escanea el texto del fichero y no distingue código de prosa.)
+    const dia = [
+      ahoraUTC.getUTCFullYear(),
+      String(ahoraUTC.getUTCMonth() + 1).padStart(2, '0'),
+      String(ahoraUTC.getUTCDate()).padStart(2, '0'),
+    ].join('-')
+    const clave = `retencion-${dia}`
+    // 25h: más que un día, para que el cerrojo del día siga vigente hasta que la
+    // clave del día siguiente lo sustituya.
+    const cerrojo = await acquireLock(admin, clave, 25 * 3600_000)
+    if (cerrojo.adquirido) {
+      try {
+        const purge = async (table: string, col: string, days: number) => {
+          const cutoff = new Date(Date.now() - days * 86400000).toISOString()
+          // El count va como opción del delete(), no en un .select() posterior.
+          let q = admin.from(table).delete({ count: 'exact' }).lt(col, cutoff)
+          if (table === 'inbox_messages') q = q.eq('is_read', true)
+          const { error, count } = await q
+          if (error) throw new Error(`${table}: ${error.message}`)
+          return count || 0
+        }
+        retention = {
+          inbox_messages: await purge('inbox_messages', 'received_at', 180),
+          notification_log: await purge('notification_log', 'created_at', 30),
+          chat_messages: await purge('chat_messages', 'created_at', 90),
+          rate_limits: await purge('rate_limits', 'window_start', 1),
+          push_rate_limits: await purge('push_rate_limits', 'last_sent', 1),
+          // La propia tabla de cerrojos: una fila por día se acumularía para
+          // siempre. Los vigentes no se tocan, y el de hoy caduca en 25h.
+          job_locks: await purge('job_locks', 'expires_at', 0),
+        }
+      } catch (err: any) {
+        // No tumba el cron: el sync de emails es más importante que la poda.
+        // Se suelta el cerrojo para que la purga se reintente en la hora
+        // siguiente en vez de perderse hasta mañana.
+        console.error('[cron] retención falló:', err?.message)
+        if (!cerrojo.degradado) await releaseLock(admin, clave, cerrojo.holder)
+        retention = { error: err?.message || 'error' }
       }
-      retention = {
-        inbox_messages: await purge('inbox_messages', 'received_at', 180),
-        notification_log: await purge('notification_log', 'created_at', 30),
-        chat_messages: await purge('chat_messages', 'created_at', 90),
-        rate_limits: await purge('rate_limits', 'window_start', 1),
-        push_rate_limits: await purge('push_rate_limits', 'last_sent', 1),
-      }
-    } catch (err: any) {
-      // No tumba el cron: el sync de emails es más importante que la poda.
-      console.error('[cron] retención falló:', err?.message)
-      retention = { error: err?.message || 'error' }
     }
   }
 
