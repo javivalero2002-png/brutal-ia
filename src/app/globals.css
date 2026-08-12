@@ -162,92 +162,147 @@ html.theme-light ::-webkit-scrollbar-track { background: rgba(0,0,0,0.03); }
         azul de marca     3,81          2,70             4,5
 
    No es cuestión de ajustar el filtro: probadas contrast/brightness/saturate en
-   todo su rango útil, el mejor caso deja el peor color en 2,46. Oscurecer el
-   color oscurece también el fondo, así que la razón entre ambos apenas se mueve.
+   todo su rango útil, el mejor caso deja el peor color en 2,46. Y pre-compensar
+   tampoco vale: hue-rotate(180deg) no es una rotación de tono, destruye el matiz
+   (un azul más claro sale VERDE OLIVA). Lo único que funciona es cancelar el
+   filtro aquí y declarar la variante oscura.
 
-   La salida es contra-invertir SOLO estos elementos —así se pintan con el color
-   que se declara aquí— y declarar la variante oscura, pensada para fondo claro.
-   Los once colores se recogieron recorriendo la app en claro y midiendo, no de
-   memoria: la primera lista tenía cuatro y se dejaba siete fuera. La variante
-   oscura de cada uno está calculada bajando luminosidad hasta pasar AA con 5,0
-   contra el fondo de tarjeta más oscuro que existe (235,249,249), no contra
-   blanco puro — así queda margen para las tarjetas teñidas.
+   ⚠️ LA DECLARACIÓN VA ANCLADA, y esto es lo delicado de todo el bloque.
+   Buscar la propiedad sin anclarla parece inofensivo y no lo es: casa como subcadena
+   dentro de `caret-color:`, `border-color:`, `background-color:`,
+   `outline-color:` y `text-decoration-color:`, porque TODAS terminan en «color».
+   El buscador de Tareas lleva `caretColor: BLU`, asi que recibia el contrafiltro
+   entero: su fondo oscuro se quedaba oscuro y salia una CAJA NEGRA en pleno modo
+   claro. Y como `filter` afecta a todo el subárbol, cualquier contenedor que
+   casara arrastraba consigo su texto — títulos blancos sobre fondo claro,
+   invisibles.
+   Por eso cada color lleva las dos formas ancladas: al principio del atributo, y
+   justo detrás de un punto y coma. Son los dos únicos sitios donde «color» es la
+   propiedad de verdad y no la cola de otra. (El comentario no las escribe
+   literalmente: el test que persigue este fallo escanea el fichero como texto y no
+   distingue código de prosa.)
 
-   Cada color lleva CUATRO selectores porque llega al DOM de cuatro formas, y
-   dejarse una es dejarse textos sin arreglar (con una sola forma se quedaban
-   fuera 53 de 138, medidos en el navegador):
-     · `color: rgb(27, 95, 250)`      — opaco, normalizado por React
-     · `color: rgba(27, 95, 250, .8)` — con opacidad, de `BLU + 'CC'`
-     · `color:#1B5FFA` / `#1b5ffa`    — hex de plantillas, en ambas cajas
-   Ojo con el de opacidad: va sin el paréntesis de cierre para casar cualquier
-   alfa, y `rgb(` NO casa `rgba(` — son selectores distintos, no uno más corto. */
-html.theme-light [style*="color: rgb(27, 95, 250)"],
-html.theme-light [style*="color: rgba(27, 95, 250"],
-html.theme-light [style*="color:#1B5FFA"],
-html.theme-light [style*="color:#1b5ffa"] { filter: invert(1) hue-rotate(180deg); color: #0E57FF !important; }
+   El `:not(:has(*))` es la segunda red: aunque algo casara, solo se contra-invierte
+   si NO tiene hijos, así que ningún subárbol puede venirse detrás.
 
-html.theme-light [style*="color: rgb(229, 29, 42)"],
-html.theme-light [style*="color: rgba(229, 29, 42"],
-html.theme-light [style*="color:#E51D2A"],
-html.theme-light [style*="color:#e51d2a"] { filter: invert(1) hue-rotate(180deg); color: #D40C19 !important; }
+   Cubierto por src/lib/__tests__/modoClaro.test.ts. */
 
-html.theme-light [style*="color: rgb(34, 197, 94)"],
-html.theme-light [style*="color: rgba(34, 197, 94"],
-html.theme-light [style*="color:#22C55E"],
-html.theme-light [style*="color:#22c55e"] { filter: invert(1) hue-rotate(180deg); color: #0E7A36 !important; }
+html.theme-light [style^="color: rgb(27, 95, 250)"]:not(:has(*)),
+html.theme-light [style*="; color: rgb(27, 95, 250)"]:not(:has(*)),
+html.theme-light [style^="color: rgba(27, 95, 250"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(27, 95, 250"]:not(:has(*)),
+html.theme-light [style^="color:#1B5FFA"]:not(:has(*)),
+html.theme-light [style*="; color:#1B5FFA"]:not(:has(*)),
+html.theme-light [style^="color:#1b5ffa"]:not(:has(*)),
+html.theme-light [style*="; color:#1b5ffa"]:not(:has(*)) { filter: invert(1) hue-rotate(180deg); color: #0E57FF !important; }
 
-html.theme-light [style*="color: rgb(255, 176, 32)"],
-html.theme-light [style*="color: rgba(255, 176, 32"],
-html.theme-light [style*="color:#FFB020"],
-html.theme-light [style*="color:#ffb020"] { filter: invert(1) hue-rotate(180deg); color: #925F00 !important; }
+html.theme-light [style^="color: rgb(229, 29, 42)"]:not(:has(*)),
+html.theme-light [style*="; color: rgb(229, 29, 42)"]:not(:has(*)),
+html.theme-light [style^="color: rgba(229, 29, 42"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(229, 29, 42"]:not(:has(*)),
+html.theme-light [style^="color:#E51D2A"]:not(:has(*)),
+html.theme-light [style*="; color:#E51D2A"]:not(:has(*)),
+html.theme-light [style^="color:#e51d2a"]:not(:has(*)),
+html.theme-light [style*="; color:#e51d2a"]:not(:has(*)) { filter: invert(1) hue-rotate(180deg); color: #D40C19 !important; }
 
-html.theme-light [style*="color: rgb(249, 115, 22)"],
-html.theme-light [style*="color: rgba(249, 115, 22"],
-html.theme-light [style*="color:#F97316"],
-html.theme-light [style*="color:#f97316"] { filter: invert(1) hue-rotate(180deg); color: #B34900 !important; }
+html.theme-light [style^="color: rgb(34, 197, 94)"]:not(:has(*)),
+html.theme-light [style*="; color: rgb(34, 197, 94)"]:not(:has(*)),
+html.theme-light [style^="color: rgba(34, 197, 94"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(34, 197, 94"]:not(:has(*)),
+html.theme-light [style^="color:#22C55E"]:not(:has(*)),
+html.theme-light [style*="; color:#22C55E"]:not(:has(*)),
+html.theme-light [style^="color:#22c55e"]:not(:has(*)),
+html.theme-light [style*="; color:#22c55e"]:not(:has(*)) { filter: invert(1) hue-rotate(180deg); color: #0E7A36 !important; }
 
-html.theme-light [style*="color: rgb(245, 158, 11)"],
-html.theme-light [style*="color: rgba(245, 158, 11"],
-html.theme-light [style*="color:#F59E0B"],
-html.theme-light [style*="color:#f59e0b"] { filter: invert(1) hue-rotate(180deg); color: #945D00 !important; }
+html.theme-light [style^="color: rgb(255, 176, 32)"]:not(:has(*)),
+html.theme-light [style*="; color: rgb(255, 176, 32)"]:not(:has(*)),
+html.theme-light [style^="color: rgba(255, 176, 32"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(255, 176, 32"]:not(:has(*)),
+html.theme-light [style^="color:#FFB020"]:not(:has(*)),
+html.theme-light [style*="; color:#FFB020"]:not(:has(*)),
+html.theme-light [style^="color:#ffb020"]:not(:has(*)),
+html.theme-light [style*="; color:#ffb020"]:not(:has(*)) { filter: invert(1) hue-rotate(180deg); color: #925F00 !important; }
 
-html.theme-light [style*="color: rgb(16, 185, 129)"],
-html.theme-light [style*="color: rgba(16, 185, 129"],
-html.theme-light [style*="color:#10B981"],
-html.theme-light [style*="color:#10b981"] { filter: invert(1) hue-rotate(180deg); color: #047952 !important; }
+html.theme-light [style^="color: rgb(249, 115, 22)"]:not(:has(*)),
+html.theme-light [style*="; color: rgb(249, 115, 22)"]:not(:has(*)),
+html.theme-light [style^="color: rgba(249, 115, 22"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(249, 115, 22"]:not(:has(*)),
+html.theme-light [style^="color:#F97316"]:not(:has(*)),
+html.theme-light [style*="; color:#F97316"]:not(:has(*)),
+html.theme-light [style^="color:#f97316"]:not(:has(*)),
+html.theme-light [style*="; color:#f97316"]:not(:has(*)) { filter: invert(1) hue-rotate(180deg); color: #B34900 !important; }
 
-html.theme-light [style*="color: rgb(139, 92, 246)"],
-html.theme-light [style*="color: rgba(139, 92, 246"],
-html.theme-light [style*="color:#8B5CF6"],
-html.theme-light [style*="color:#8b5cf6"] { filter: invert(1) hue-rotate(180deg); color: #773BFF !important; }
+html.theme-light [style^="color: rgb(245, 158, 11)"]:not(:has(*)),
+html.theme-light [style*="; color: rgb(245, 158, 11)"]:not(:has(*)),
+html.theme-light [style^="color: rgba(245, 158, 11"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(245, 158, 11"]:not(:has(*)),
+html.theme-light [style^="color:#F59E0B"]:not(:has(*)),
+html.theme-light [style*="; color:#F59E0B"]:not(:has(*)),
+html.theme-light [style^="color:#f59e0b"]:not(:has(*)),
+html.theme-light [style*="; color:#f59e0b"]:not(:has(*)) { filter: invert(1) hue-rotate(180deg); color: #945D00 !important; }
 
-html.theme-light [style*="color: rgb(236, 72, 153)"],
-html.theme-light [style*="color: rgba(236, 72, 153"],
-html.theme-light [style*="color:#EC4899"],
-html.theme-light [style*="color:#ec4899"] { filter: invert(1) hue-rotate(180deg); color: #CE0A6B !important; }
+html.theme-light [style^="color: rgb(16, 185, 129)"]:not(:has(*)),
+html.theme-light [style*="; color: rgb(16, 185, 129)"]:not(:has(*)),
+html.theme-light [style^="color: rgba(16, 185, 129"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(16, 185, 129"]:not(:has(*)),
+html.theme-light [style^="color:#10B981"]:not(:has(*)),
+html.theme-light [style*="; color:#10B981"]:not(:has(*)),
+html.theme-light [style^="color:#10b981"]:not(:has(*)),
+html.theme-light [style*="; color:#10b981"]:not(:has(*)) { filter: invert(1) hue-rotate(180deg); color: #047952 !important; }
 
-html.theme-light [style*="color: rgb(193, 53, 132)"],
-html.theme-light [style*="color: rgba(193, 53, 132"],
-html.theme-light [style*="color:#C13584"],
-html.theme-light [style*="color:#c13584"] { filter: invert(1) hue-rotate(180deg); color: #BF2A7E !important; }
+html.theme-light [style^="color: rgb(139, 92, 246)"]:not(:has(*)),
+html.theme-light [style*="; color: rgb(139, 92, 246)"]:not(:has(*)),
+html.theme-light [style^="color: rgba(139, 92, 246"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(139, 92, 246"]:not(:has(*)),
+html.theme-light [style^="color:#8B5CF6"]:not(:has(*)),
+html.theme-light [style*="; color:#8B5CF6"]:not(:has(*)),
+html.theme-light [style^="color:#8b5cf6"]:not(:has(*)),
+html.theme-light [style*="; color:#8b5cf6"]:not(:has(*)) { filter: invert(1) hue-rotate(180deg); color: #773BFF !important; }
 
-html.theme-light [style*="color: rgb(100, 149, 255)"],
-html.theme-light [style*="color: rgba(100, 149, 255"],
-html.theme-light [style*="color:#6495FF"],
-html.theme-light [style*="color:#6495ff"] { filter: invert(1) hue-rotate(180deg); color: #0B58FF !important; }
+html.theme-light [style^="color: rgb(236, 72, 153)"]:not(:has(*)),
+html.theme-light [style*="; color: rgb(236, 72, 153)"]:not(:has(*)),
+html.theme-light [style^="color: rgba(236, 72, 153"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(236, 72, 153"]:not(:has(*)),
+html.theme-light [style^="color:#EC4899"]:not(:has(*)),
+html.theme-light [style*="; color:#EC4899"]:not(:has(*)),
+html.theme-light [style^="color:#ec4899"]:not(:has(*)),
+html.theme-light [style*="; color:#ec4899"]:not(:has(*)) { filter: invert(1) hue-rotate(180deg); color: #CE0A6B !important; }
 
-/* TikTok trae su propia paleta de marca y solo aparece en Contenido, así que se
-   escapó de la primera barrida: hay que recorrer TODAS las secciones, no una
-   muestra. */
-html.theme-light [style*="color: rgb(255, 0, 80)"],
-html.theme-light [style*="color: rgba(255, 0, 80"],
-html.theme-light [style*="color:#FF0050"],
-html.theme-light [style*="color:#ff0050"] { filter: invert(1) hue-rotate(180deg); color: #D40042 !important; }
+html.theme-light [style^="color: rgb(193, 53, 132)"]:not(:has(*)),
+html.theme-light [style*="; color: rgb(193, 53, 132)"]:not(:has(*)),
+html.theme-light [style^="color: rgba(193, 53, 132"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(193, 53, 132"]:not(:has(*)),
+html.theme-light [style^="color:#C13584"]:not(:has(*)),
+html.theme-light [style*="; color:#C13584"]:not(:has(*)),
+html.theme-light [style^="color:#c13584"]:not(:has(*)),
+html.theme-light [style*="; color:#c13584"]:not(:has(*)) { filter: invert(1) hue-rotate(180deg); color: #BF2A7E !important; }
 
-html.theme-light [style*="color: rgb(0, 242, 234)"],
-html.theme-light [style*="color: rgba(0, 242, 234"],
-html.theme-light [style*="color:#00F2EA"],
-html.theme-light [style*="color:#00f2ea"] { filter: invert(1) hue-rotate(180deg); color: #007773 !important; }
+html.theme-light [style^="color: rgb(100, 149, 255)"]:not(:has(*)),
+html.theme-light [style*="; color: rgb(100, 149, 255)"]:not(:has(*)),
+html.theme-light [style^="color: rgba(100, 149, 255"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(100, 149, 255"]:not(:has(*)),
+html.theme-light [style^="color:#6495FF"]:not(:has(*)),
+html.theme-light [style*="; color:#6495FF"]:not(:has(*)),
+html.theme-light [style^="color:#6495ff"]:not(:has(*)),
+html.theme-light [style*="; color:#6495ff"]:not(:has(*)) { filter: invert(1) hue-rotate(180deg); color: #0B58FF !important; }
+
+html.theme-light [style^="color: rgb(255, 0, 80)"]:not(:has(*)),
+html.theme-light [style*="; color: rgb(255, 0, 80)"]:not(:has(*)),
+html.theme-light [style^="color: rgba(255, 0, 80"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(255, 0, 80"]:not(:has(*)),
+html.theme-light [style^="color:#FF0050"]:not(:has(*)),
+html.theme-light [style*="; color:#FF0050"]:not(:has(*)),
+html.theme-light [style^="color:#ff0050"]:not(:has(*)),
+html.theme-light [style*="; color:#ff0050"]:not(:has(*)) { filter: invert(1) hue-rotate(180deg); color: #D40042 !important; }
+
+html.theme-light [style^="color: rgb(0, 242, 234)"]:not(:has(*)),
+html.theme-light [style*="; color: rgb(0, 242, 234)"]:not(:has(*)),
+html.theme-light [style^="color: rgba(0, 242, 234"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(0, 242, 234"]:not(:has(*)),
+html.theme-light [style^="color:#00F2EA"]:not(:has(*)),
+html.theme-light [style*="; color:#00F2EA"]:not(:has(*)),
+html.theme-light [style^="color:#00f2ea"]:not(:has(*)),
+html.theme-light [style*="; color:#00f2ea"]:not(:has(*)) { filter: invert(1) hue-rotate(180deg); color: #007773 !important; }
 
 /* ── Texto secundario tenue en modo claro ────────────────────────
    Medido en los dos modos sobre los mismos elementos:
@@ -272,8 +327,13 @@ html.theme-light [style*="color:#00f2ea"] { filter: invert(1) hue-rotate(180deg)
    OJO: aquí el paréntesis de cierre es OBLIGATORIO, al revés que en los colores
    de marca de arriba. Sin él, `0.3` casaría también `0.35` y `0.3` ganaría por
    orden de aparición. */
-html.theme-light [style*="color: rgba(255, 255, 255, 0.3)"]  { color: rgba(255, 255, 255, 0.54) !important; }
-html.theme-light [style*="color: rgba(255, 255, 255, 0.35)"] { color: rgba(255, 255, 255, 0.58) !important; }
-html.theme-light [style*="color: rgba(255, 255, 255, 0.4)"]  { color: rgba(255, 255, 255, 0.62) !important; }
-html.theme-light [style*="color: rgba(255, 255, 255, 0.45)"] { color: rgba(255, 255, 255, 0.66) !important; }
-html.theme-light [style*="color: rgba(255, 255, 255, 0.5)"]  { color: rgba(255, 255, 255, 0.70) !important; }
+html.theme-light [style^="color: rgba(255, 255, 255, 0.3)"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(255, 255, 255, 0.3)"]:not(:has(*))  { color: rgba(255, 255, 255, 0.54) !important; }
+html.theme-light [style^="color: rgba(255, 255, 255, 0.35)"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(255, 255, 255, 0.35)"]:not(:has(*)) { color: rgba(255, 255, 255, 0.58) !important; }
+html.theme-light [style^="color: rgba(255, 255, 255, 0.4)"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(255, 255, 255, 0.4)"]:not(:has(*))  { color: rgba(255, 255, 255, 0.62) !important; }
+html.theme-light [style^="color: rgba(255, 255, 255, 0.45)"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(255, 255, 255, 0.45)"]:not(:has(*)) { color: rgba(255, 255, 255, 0.66) !important; }
+html.theme-light [style^="color: rgba(255, 255, 255, 0.5)"]:not(:has(*)),
+html.theme-light [style*="; color: rgba(255, 255, 255, 0.5)"]:not(:has(*))  { color: rgba(255, 255, 255, 0.70) !important; }

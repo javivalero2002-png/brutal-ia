@@ -25,7 +25,7 @@ const BLOQUE_GRIS = CSS.slice(CSS.indexOf('Texto secundario tenue en modo claro'
 
 function coloresDelBloque(): Array<[number, number, number]> {
   const vistos = new Map<string, [number, number, number]>()
-  for (const m of BLOQUE.matchAll(/\[style\*="color: rgb\((\d+), (\d+), (\d+)\)"\]/g)) {
+  for (const m of BLOQUE.matchAll(/\[style\^="color: rgb\((\d+), (\d+), (\d+)\)"\]/g)) {
     vistos.set(m[1] + m[2] + m[3], [+m[1], +m[2], +m[3]])
   }
   return [...vistos.values()]
@@ -39,36 +39,58 @@ describe('modo claro: contraste de los colores de marca', () => {
 
   // Cada color llega al DOM de cuatro formas distintas y basta olvidar una para
   // dejar textos sin arreglar. Con solo `rgb(...)` se quedaban fuera 53 de 138.
-  it('cada color cubre las cuatro formas en que llega al DOM', () => {
+  // La regla que de verdad importa, y la que fallo en produccion.
+  //
+  // `[style*="color: rgb(...)"]` parece inofensivo y no lo es: casa como SUBCADENA
+  // dentro de caret-color, border-color, background-color, outline-color y
+  // text-decoration-color, porque todas terminan en «color». El buscador de Tareas
+  // lleva caretColor: BLU, asi que recibia el contrafiltro entero y salia una CAJA
+  // NEGRA en pleno modo claro. Y como `filter` afecta al subarbol, cualquier
+  // contenedor que casara arrastraba su texto: titulos blancos sobre fondo claro,
+  // invisibles.
+  it('ningun selector casa color como subcadena de otra propiedad', () => {
+    const sinAnclar: string[] = []
+    for (const bloque of [BLOQUE, BLOQUE_GRIS]) {
+      for (const m of bloque.matchAll(/\[style([\^*])="([^"]*)"\]/g)) {
+        const [, operador, valor] = m
+        const anclado = (operador === '^' && valor.startsWith('color:')) ||
+                        (operador === '*' && valor.startsWith('; color:'))
+        if (!anclado) sinAnclar.push(`[style${operador}="${valor}"]`)
+      }
+    }
+    expect(sinAnclar).toEqual([])
+  })
+
+  // Segunda red: aunque algo casara, no puede arrastrar a sus hijos.
+  it('el contrafiltro solo se aplica a elementos sin hijos', () => {
+    for (const m of BLOQUE.matchAll(/html\.theme-light (\[style[^\]]*\])(:not\(:has\(\*\)\))?/g)) {
+      expect(m[2], `selector sin :not(:has(*)): ${m[1]}`).toBeTruthy()
+    }
+  })
+
+  it('cada color cubre las formas en que llega al DOM', () => {
     const faltan: string[] = []
     for (const [r, g, b] of coloresDelBloque()) {
       const hex = '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('').toUpperCase()
-      const formas = [
-        `[style*="color: rgb(${r}, ${g}, ${b})"]`,   // opaco, normalizado por React
-        `[style*="color: rgba(${r}, ${g}, ${b}"]`,   // con opacidad, de `BLU + 'CC'`
-        `[style*="color:${hex}"]`,                    // hex de plantilla, mayúsculas
-        `[style*="color:${hex.toLowerCase()}"]`,      // y minúsculas
-      ]
-      for (const f of formas) if (!BLOQUE.includes(f)) faltan.push(f)
+      for (const f of [
+        `[style^="color: rgb(${r}, ${g}, ${b})"]`,
+        `[style*="; color: rgb(${r}, ${g}, ${b})"]`,
+        `[style^="color: rgba(${r}, ${g}, ${b}"]`,
+        `[style*="; color: rgba(${r}, ${g}, ${b}"]`,
+        `[style^="color:${hex}"]`,
+        `[style*="; color:${hex}"]`,
+      ]) if (!BLOQUE.includes(f)) faltan.push(f)
     }
     expect(faltan).toEqual([])
   })
 
-  // `rgb(` no casa `rgba(`: son dos selectores, no uno más corto. Acortar el de
-  // opacidad quitándole el parentesis de cierre al de rgb() parecía que valía
-  // para ambos, y no vale — de ahi que el de rgba vaya explicito arriba.
-  it('el selector con opacidad va sin parentesis de cierre', () => {
-    for (const m of BLOQUE.matchAll(/\[style\*="color: rgba\(([^"]*)"\]/g)) {
-      expect(m[1]).not.toContain(')')
-    }
-  })
-
-  // Y aqui al reves, que es lo que hace facil equivocarse. En los grises el alfa
-  // ES el valor a distinguir: sin el parentesis, `0.3` casaria tambien `0.35`,
-  // `0.3` ganaria por orden de aparicion y los cinco niveles de jerarquia se
-  // colapsarian en uno.
+  // En los grises el alfa ES el valor a distinguir: sin el parentesis de cierre,
+  // `0.3` casaria tambien `0.35`, ganaria por orden de aparicion y los cinco
+  // niveles de jerarquia se colapsarian en uno. Es la regla CONTRARIA a la de los
+  // colores de marca, que van sin cierre para casar cualquier alfa, y conviven a
+  // veinte lineas de distancia.
   it('los grises SI llevan parentesis de cierre, al reves que los de marca', () => {
-    const reglas = [...BLOQUE_GRIS.matchAll(/\[style\*="color: rgba\(([^"]*)"\]/g)]
+    const reglas = [...BLOQUE_GRIS.matchAll(/\[style[\^*]="(?:; )?color: rgba\(([^"]*)"\]/g)]
     expect(reglas.length).toBeGreaterThanOrEqual(5)
     for (const m of reglas) expect(m[1]).toContain(')')
   })
