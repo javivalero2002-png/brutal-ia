@@ -88,6 +88,21 @@ type Section = 'hoy'|'inbox'|'tareas'|'clientes'|'proyectos'|'contenido'|'calend
 
 interface Props { profile: Profile }
 
+// El tema va en cookie para que el servidor pueda pintarlo en el HTML inicial y
+// no haya destello. Se sigue escribiendo localStorage por si queda alguna pestaña
+// vieja abierta; la cookie es la que manda.
+//
+// Sin `Secure` a propósito: en desarrollo se sirve por http y con Secure el
+// navegador descartaría la cookie en silencio, dejando el destello que se acaba
+// de quitar. No lleva nada sensible: dice si el tema es claro.
+function guardarTema(claro: boolean) {
+  const valor = claro ? 'light' : 'dark'
+  try { localStorage.setItem('nx_theme', valor) } catch {}
+  try {
+    document.cookie = `nx_theme=${valor}; path=/; max-age=31536000; samesite=lax`
+  } catch {}
+}
+
 export default function NexusDashboard({ profile }: Props) {
   const data = useNexusData(profile, (msg) => {
     const sender = msg.from_name || 'Alguien'
@@ -109,12 +124,21 @@ export default function NexusDashboard({ profile }: Props) {
   }
   const isMobile = useIsMobile()
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  // El estado inicial se lee del DOM, no de localStorage: el layout ya ha puesto
+  // la clase leyendo la cookie en el servidor, así que aquí solo hay que
+  // reflejarla. Arrancar en `false` haría que el botón mostrara "oscuro" durante
+  // un instante estando en claro.
   const [lightMode, setLightMode] = useState(false)
   useEffect(() => {
+    const yaEnClaro = document.documentElement.classList.contains('theme-light')
+    if (yaEnClaro) { setLightMode(true); return }
+    // Migración: quien tuviera el tema en localStorage de antes no tiene cookie
+    // todavía. Se pasa aquí y a partir de la siguiente carga ya no hay destello.
     try {
       if (localStorage.getItem('nx_theme') === 'light') {
         setLightMode(true)
         document.documentElement.classList.add('theme-light')
+        guardarTema(true)
       }
     } catch {}
   }, [])
@@ -122,7 +146,7 @@ export default function NexusDashboard({ profile }: Props) {
     setLightMode(v => {
       const next = !v
       document.documentElement.classList.toggle('theme-light', next)
-      try { localStorage.setItem('nx_theme', next ? 'light' : 'dark') } catch {}
+      guardarTema(next)
       return next
     })
   }
