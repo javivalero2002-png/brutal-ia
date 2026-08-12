@@ -924,7 +924,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                   {pdfAnalysis.risks?.length>0 && (
                     <div className="rounded-2xl p-4" style={{background:'rgba(229,29,42,0.04)',border:'1px solid rgba(229,29,42,0.12)'}}>
                       <div className="flex items-center gap-2 mb-3">
-                        <LucideIcon name="triangle-alert" size={11} color="rgba(229,29,42,0.6)"/>
+                        <LucideIcon name="alert-triangle" size={11} color="rgba(229,29,42,0.6)"/>
                         <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(229,29,42,0.5)'}}>RIESGOS IDENTIFICADOS</span>
                       </div>
                       <div className="space-y-2">

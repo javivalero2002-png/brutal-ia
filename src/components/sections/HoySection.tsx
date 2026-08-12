@@ -697,7 +697,7 @@ ${memLines||'  sin documentos'}`
                             <div className="font-syne text-[7px] font-black tracking-widest pt-2 pb-0.5" style={{color:'rgba(255,255,255,0.18)'}}>PRÓXIMOS DÍAS</div>
                             {upcoming3.map((t:any)=>(
                               <button key={t.id} onClick={()=>onNavigate?.('tareas')} className="flex items-center gap-3 py-2 w-full text-left transition-all hover:opacity-80">
-                                <LucideIcon name="circle-check" size={14} color={t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.9)':BLU}/>
+                                <LucideIcon name="check-circle" size={14} color={t.level==='urgent'?RED:t.level==='high'?'rgba(255,176,32,0.9)':BLU}/>
                                 <span className="font-figtree flex-1 truncate" style={{fontSize:'13px',color:'rgba(255,255,255,0.48)'}}>{t.text}</span>
                                 <span className="font-syne text-[8px] font-black flex-shrink-0" style={{color:'rgba(255,255,255,0.22)'}}>{new Date(t.due_date+'T12:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</span>
                               </button>

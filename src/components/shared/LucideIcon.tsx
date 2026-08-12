@@ -90,10 +90,29 @@ const icons: Record<string,string> = {
   'user-check':'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm7 2 2 2 4-4',
   'file-text':'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
   house:'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9zM9 22V12h6v10',
+  archive:'M2 4h20v4H2zM4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4',
+  'archive-restore':'M2 4h20v4H2zM4 8v11a2 2 0 0 0 2 2h3M20 8v11a2 2 0 0 1-2 2h-3M12 20v-8M9 15l3-3 3 3',
+  'calendar-plus':'M19 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7M16 2v4M8 2v4M3 10h18M16 19h6M19 16v6',
+  camera:'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  coffee:'M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4zM6 1v3M10 1v3M14 1v3',
+  euro:'M4 10h12M4 14h9M19 6a7.7 7.7 0 0 0-5.2-2A7.9 7.9 0 0 0 6 12c0 4.4 3.5 8 7.8 8 2 0 3.8-.8 5.2-2',
+  'grid-2x2':'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM12 3v18M3 12h18',
+  key:'M21 2l-2 2M11.4 11.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8zM11.4 11.6L15.5 7.5M15.5 7.5l3 3L22 7l-3-3',
+  list:'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+  lock:'M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2zM7 11V7a5 5 0 0 1 10 0v4',
+  'sliders-horizontal':'M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4',
 }
 
 export default function LucideIcon({ name, size=16, color='currentColor' }: {name:string;size?:number;color?:string}) {
   const d = icons[name]
+  // Un nombre que no existe pintaba un <svg> vacio: un hueco del tamaño correcto,
+  // sin error, sin nada en consola. Trece iconos vivieron asi, incluido el de la
+  // sexta pestaña de la barra inferior del movil, en pantalla en TODAS las
+  // secciones del iPhone. En desarrollo se avisa; en produccion no, para no
+  // ensuciar la consola del equipo por un icono.
+  if (!d && process.env.NODE_ENV !== 'production') {
+    console.warn(`[LucideIcon] no existe el icono «${name}» — se pintara un hueco vacio`)
+  }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
       {d && <path d={d}/>}

@@ -370,7 +370,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
                             {e.type==='content'&&e.raw?.cover_url
                               ? <SafeImg src={e.raw.cover_url} className="w-5 h-5 object-cover flex-shrink-0"/>
                               : e.type==='task'
-                                ? <span className="flex-shrink-0 ml-1"><LucideIcon name="circle-check" size={9} color={e.color}/></span>
+                                ? <span className="flex-shrink-0 ml-1"><LucideIcon name="check-circle" size={9} color={e.color}/></span>
                                 : e.type==='gcal'
                                   ? <span className="flex-shrink-0 ml-1"><LucideIcon name="calendar" size={8} color={e.color}/></span>
                                   : <div className="w-1 h-1 rounded-full flex-shrink-0 ml-1.5" style={{background:e.color}}/>
@@ -414,7 +414,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: any) {
                                 {e.type==='content'
                                   ? <><PlatformLogo platform={e.raw?.platform} size={9}/><span className="font-syne text-[7px] font-black tracking-wide" style={{color:e.color+'cc'}}>{e.raw?.platform}</span></>
                                   : e.type==='task'
-                                    ? <><LucideIcon name="circle-check" size={8} color={e.color}/><span className="font-syne text-[7px] font-black tracking-wide" style={{color:e.color+'cc'}}>{e.raw?.level==='urgent'?'URGENTE':e.raw?.level==='high'?'MEDIA':'TAREA'}</span></>
+                                    ? <><LucideIcon name="check-circle" size={8} color={e.color}/><span className="font-syne text-[7px] font-black tracking-wide" style={{color:e.color+'cc'}}>{e.raw?.level==='urgent'?'URGENTE':e.raw?.level==='high'?'MEDIA':'TAREA'}</span></>
                                     : <span className="font-syne text-[7px] font-black tracking-wide" style={{color:e.color+'cc'}}>{e.type==='gcal'?'GCAL':e.type==='project'?'PROY.':'—'}</span>
                                 }
                               </div>
