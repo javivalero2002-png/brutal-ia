@@ -91,7 +91,14 @@ export default function CreateModal({ modal, onClose, mf, setMf, saving, onSave,
   if (!m) return null
 
   const platC: Record<string, string> = { TikTok:'#ff0050', Instagram:'#C13584', LinkedIn:'#0A66C2', YouTube:'#FF0000', Twitter:'#1DA1F2', Pinterest:'#E60023' }
-  const catC: Record<string, string> = { Clientes:BLU, Procesos:'rgba(255,176,32,0.9)', Decisiones:'rgba(229,29,42,0.9)', Aprendizajes:'rgba(34,197,94,0.9)', General:'rgba(167,139,250,0.8)' }
+  // HEX de 6 dígitos, obligatorio: abajo se les concatena la opacidad (cc+'18',
+  // cc+'55'). Con rgba() salía `rgba(255,176,32,0.9)18`, que el navegador DESCARTA
+  // entero, sin error y sin nada en consola. Resultado: cuatro de las cinco
+  // categorías se pintaban sin fondo ni borde al seleccionarlas y no se distinguía
+  // cuál estaba elegida. Solo funcionaba «Clientes», que ya usaba un hex.
+  // Es la trampa que documenta CLAUDE.md; el script de prebuild no la caza aquí
+  // porque prioriza precisión y se calla lo que no puede resolver.
+  const catC: Record<string, string> = { Clientes:BLU, Procesos:AMBAR, Decisiones:RED, Aprendizajes:GRN, General:'#A78BFA' }
 
   return (
     <div onClick={onClose} className="fixed inset-0 z-[100] flex items-center justify-center" style={{background:'rgba(2,2,10,0.8)',backdropFilter:'blur(8px)',touchAction:'none'}}>

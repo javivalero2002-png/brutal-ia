@@ -155,14 +155,25 @@ export async function syncColabsInbox(
     const first = newUnread[0]
     const anyUrgent = newUnread.some(m => m.urgent)
     if (await canSendPush(admin, 'company')) {
-      sendPushToAll(admin, {
-        title: anyUrgent ? `🔴 URGENTE · Colabs · ${first.from_name}`
-          : newUnread.length === 1 ? `📩 Colabs · ${first.from_name}` : `📩 Colabs · ${newUnread.length} emails nuevos`,
-        body: newUnread.length === 1 ? first.subject : `${first.from_name}: ${first.subject} y ${newUnread.length - 1} más`,
-        url: '/dashboard',
-        tag: 'colabs-sync',
-        urgent: anyUrgent,
-      }).catch(() => {})
+      // CON await, igual que en /api/gmail/sync y por lo mismo. Sin el, el envio
+      // quedaba pendiente al devolver la funcion y en serverless eso es una
+      // loteria: la instancia se congela o se recicla, y a sendPushToAll aun le
+      // quedaban una consulta a reglas, un insert en notification_log y las
+      // llamadas a web-push. Lo grave es que canSendPush() YA ha escrito last_sent,
+      // asi que la ventana de 90s se consume igual: el aviso no se reintenta, se
+      // pierde. Y este es el del buzon COMPARTIDO, que avisa a los siete.
+      try {
+        await sendPushToAll(admin, {
+          title: anyUrgent ? `🔴 URGENTE · Colabs · ${first.from_name}`
+            : newUnread.length === 1 ? `📩 Colabs · ${first.from_name}` : `📩 Colabs · ${newUnread.length} emails nuevos`,
+          body: newUnread.length === 1 ? first.subject : `${first.from_name}: ${first.subject} y ${newUnread.length - 1} más`,
+          url: '/dashboard',
+          tag: 'colabs-sync',
+          urgent: anyUrgent,
+        })
+      } catch (err) {
+        console.error('[colabs] el push fallo:', err)
+      }
     }
   }
 
@@ -255,15 +266,21 @@ export async function syncPersonalInbox(
   if (newUnread.length > 0) {
     const first = newUnread[0]
     const anyUrgent = newUnread.some(m => m.urgent)
+    // Mismo caso que el de arriba: sin await el envio se pierde en cuanto la
+    // instancia se congela, y la ventana de 90s ya esta gastada.
     if (await canSendPush(admin, profile.id)) {
-      sendPushToUser(admin, profile.id, {
-        title: anyUrgent ? `🔴 URGENTE · ${first.from_name}`
-          : newUnread.length === 1 ? `📩 ${first.from_name}` : `📩 ${newUnread.length} emails nuevos`,
-        body: newUnread.length === 1 ? first.subject : `${first.from_name}: ${first.subject} y ${newUnread.length - 1} más`,
-        url: '/dashboard',
-        tag: 'gmail-personal',
-        urgent: anyUrgent,
-      }).catch(() => {})
+      try {
+        await sendPushToUser(admin, profile.id, {
+          title: anyUrgent ? `🔴 URGENTE · ${first.from_name}`
+            : newUnread.length === 1 ? `📩 ${first.from_name}` : `📩 ${newUnread.length} emails nuevos`,
+          body: newUnread.length === 1 ? first.subject : `${first.from_name}: ${first.subject} y ${newUnread.length - 1} más`,
+          url: '/dashboard',
+          tag: 'gmail-personal',
+          urgent: anyUrgent,
+        })
+      } catch (err) {
+        console.error('[sync personal] el push fallo:', err)
+      }
     }
   }
 

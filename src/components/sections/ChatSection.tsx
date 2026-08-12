@@ -143,7 +143,6 @@ function MarkdownMsg({ text }: { text: string }) {
 
 function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoading,showToast,onNavigate}: any) {
   const isMobile = useIsMobile()
-  const bottomRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [copiedId, setCopiedId] = useState<string|null>(null)
@@ -275,9 +274,16 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
       </div>
 
       {/* Messages / Empty state */}
-      <div className="flex-1 overflow-y-auto">
+      {/* El ref va AQUI, en el contenedor que scrollea de verdad y que existe en
+          las dos ramas. Estaba puesto en el div del estado vacio: en cuanto habia
+          un mensaje esa rama se desmontaba, scrollRef.current quedaba a null para
+          siempre y el efecto de autoscroll salia por su early-return. El chat no
+          bajaba al ultimo mensaje NUNCA — habia que arrastrar a mano cada
+          respuesta, y en el movil peor, porque el teclado se come media pantalla y
+          la vista se queda anclada arriba. */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
         {isEmpty ? (
-          <div ref={scrollRef} className="flex flex-col h-full overflow-y-auto px-5 py-6 gap-4">
+          <div className="flex flex-col h-full px-5 py-6 gap-4">
             {/* Hero */}
             <div className="flex items-center gap-3 mb-1">
               <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden p-2" style={{background:'rgba(27,95,250,0.1)',border:'1px solid rgba(27,95,250,0.2)'}}>
@@ -460,7 +466,6 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
                 </div>
               </div>
             )}
-            <div ref={bottomRef}/>
           </div>
         )}
       </div>
