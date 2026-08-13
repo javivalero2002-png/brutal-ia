@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
+import { firmarCampos } from '@/lib/storageFirmado'
 import { borrarFicherosDeAdjuntos } from '@/lib/taskAttachments'
 import { getAuthCtx, canAccessTask } from '@/lib/authz'
 import { NextRequest, NextResponse } from 'next/server'
@@ -15,7 +16,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .order('created_at', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data || [])
+  // El bucket es privado: lo guardado es un identificador, no una URL que
+  // funcione. Se firma justo antes de salir. Ver src/lib/storageFirmado.ts.
+  return NextResponse.json(await firmarCampos(ctx.admin, data, ['url']))
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -35,7 +38,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  // Firmada: esta fila se añade a la lista de adjuntos y se pinta al momento.
+  return NextResponse.json(await firmarCampos(ctx.admin, data, ['url']))
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

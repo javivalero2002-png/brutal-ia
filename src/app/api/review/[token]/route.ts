@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
+import { firmarCampos } from '@/lib/storageFirmado'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Public endpoint — no auth required (token = agenda item ID)
@@ -15,7 +16,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
 
   if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  return NextResponse.json(data)
+  // El bucket es privado: lo guardado es un identificador, no una URL que
+  // funcione. Se firma justo antes de salir. Ver src/lib/storageFirmado.ts.
+  return NextResponse.json(await firmarCampos(admin, data, ['cover_url', 'video_url']))
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {

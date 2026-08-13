@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { firmarCampos } from '@/lib/storageFirmado'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Solo columnas conocidas: campos desconocidos no deben tumbar la petición
@@ -18,7 +19,9 @@ export async function GET() {
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  // El bucket es privado: lo guardado es un identificador, no una URL que
+  // funcione. Se firma justo antes de salir. Ver src/lib/storageFirmado.ts.
+  return NextResponse.json(await firmarCampos(admin, data, ['cover_url', 'pdf_url']))
 }
 
 export async function POST(request: NextRequest) {

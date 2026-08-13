@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { firmarCampos } from '@/lib/storageFirmado'
 import { getAuthCtx, projectExists } from '@/lib/authz'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -21,7 +22,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     .from('projects').update({ ...pick(body, ['name','client_id','status','progress','deadline','color','cover_url','pdf_url','pdf_analysis']), updated_at: new Date().toISOString() })
     .eq('id', id).select('*, client:clients(id,name,initials,color)').single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  // El bucket es privado: lo guardado es un identificador, no una URL que
+  // funcione. Se firma justo antes de salir. Ver src/lib/storageFirmado.ts.
+  return NextResponse.json(await firmarCampos(ctx.admin, data, ['cover_url', 'pdf_url']))
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

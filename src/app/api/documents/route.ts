@@ -1,4 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { firmarUrl } from '@/lib/storageFirmado'
+import { rutaDeStorage } from '@/lib/taskAttachments'
 import { checkAiRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
@@ -20,6 +22,28 @@ const MAX_BYTES = 20 * 1024 * 1024
 
 // Sube un PDF a Supabase Storage y genera un resumen con Haiku (barato).
 // Deduplica por hash SHA-256: el mismo archivo nunca se sube dos veces.
+/**
+ * Descarga un fichero del Storage por su identificador, con el service role.
+ *
+ * Sustituye a `fetch(urlPublica)`. Dos motivos, y el segundo es el bueno:
+ *   · con el bucket cerrado esa URL devuelve 400, asi que dejaria de funcionar;
+ *   · y sobre todo, quita del medio un `fetch()` del SERVIDOR a una URL que llega
+ *     en el body. Eso era una primitiva de lectura con canal de salida —esta ruta
+ *     devuelve el resumen que Claude hace de lo descargado— que habia que
+ *     defender con isOwnStorageUrl(). Bajando por la API de Storage no hay
+ *     peticion saliente que envenenar: se pide un objeto por su ruta, y punto.
+ */
+async function bajarDelStorage(admin: any, url: string): Promise<Buffer | null> {
+  const r = rutaDeStorage(url)
+  if (!r) return null
+  const { data, error } = await admin.storage.from(r.bucket).download(r.path)
+  if (error || !data) {
+    console.error('[storage] no se pudo descargar', r.path, '—', error?.message)
+    return null
+  }
+  return Buffer.from(await data.arrayBuffer())
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -45,11 +69,10 @@ export async function POST(request: NextRequest) {
     filename = name || 'documento.pdf'
     publicUrl = url
     // Descargar para generar el resumen con Claude
-    try {
-      const resp = await fetch(url, { signal: AbortSignal.timeout(30_000) })
-      if (!resp.ok) return NextResponse.json({ error: 'No se pudo leer el archivo subido' }, { status: 502 })
-      buffer = Buffer.from(await resp.arrayBuffer())
-    } catch { return NextResponse.json({ error: 'Error descargando el documento' }, { status: 502 }) }
+    const admin0 = await createAdminClient()
+    const bajado = await bajarDelStorage(admin0, url)
+    if (!bajado) return NextResponse.json({ error: 'No se pudo leer el archivo subido' }, { status: 502 })
+    buffer = bajado
   } else {
     // Opción B (legacy): FormData con el archivo
     const formData = await request.formData()
@@ -60,7 +83,9 @@ export async function POST(request: NextRequest) {
     filename = file.name
     buffer = Buffer.from(await file.arrayBuffer())
 
-    await admin.storage.createBucket(BUCKET, { public: true, fileSizeLimit: MAX_BYTES }).then(() => {}, () => {})
+    // public:false — si el bucket se borrara, recrearlo ABIERTO devolveria los
+  // contratos y presupuestos a la intemperie. Ver src/lib/storageFirmado.ts.
+  await admin.storage.createBucket(BUCKET, { public: false, fileSizeLimit: MAX_BYTES }).then(() => {}, () => {})
     const hash = createHash('sha256').update(buffer).digest('hex').slice(0, 16)
     const path = `docs/${hash}.pdf`
     const { data: existing } = await admin.storage.from(BUCKET).list('docs', { search: `${hash}.pdf` })
@@ -93,5 +118,15 @@ export async function POST(request: NextRequest) {
     summary = 'Documento subido. (No se pudo generar el resumen automático.)'
   }
 
+  // Se devuelve la forma PUBLICA, no una firmada, y es deliberado: MemoriaSection
+  // guarda este valor dentro del texto de la nota ("📎 Documento: <url>"), asi que
+  // una URL firmada quedaria escrita ahi y caducaria en una hora.
+  //
+  // PENDIENTE: por eso mismo, los enlaces de documentos de Memoria son lo unico
+  // que NO sobrevive al cierre del bucket — viven dentro de un campo de texto
+  // libre, y firmarlos al leer exigiria parsear la nota. La solucion buena es una
+  // ruta /api/archivo que compruebe la sesion y redirija a una firma fresca; el
+  // enlace guardado pasaria a ser estable Y protegido. Hasta entonces, NO cerrar
+  // el bucket.
   return NextResponse.json({ url: publicUrl, name: filename, summary })
 }

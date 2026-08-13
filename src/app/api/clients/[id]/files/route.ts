@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { firmarUrl } from '@/lib/storageFirmado'
 import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 
@@ -19,7 +20,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  const result = (files || []).map(f => {
+  // En paralelo: firmar en serie una carpeta con 30 ficheros añadiria segundos a
+  // la respuesta, y esta lista se pide cada vez que se abre una ficha de cliente.
+  const result = await Promise.all((files || []).map(async f => {
     const displayName = f.name.replace(/^\d{13}-/, '')
     const path = `client-files/${id}/${f.name}`
     return {
@@ -28,9 +31,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       size: f.metadata?.size || 0,
       type: f.metadata?.mimetype || '',
       created_at: f.created_at,
-      url: admin.storage.from(BUCKET).getPublicUrl(path).data.publicUrl,
+      url: await firmarUrl(admin, admin.storage.from(BUCKET).getPublicUrl(path).data.publicUrl),
     }
-  })
+  }))
   return NextResponse.json(result)
 }
 
@@ -48,7 +51,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (file.size > MAX_BYTES) return NextResponse.json({ error: 'Archivo demasiado grande (máx. 10MB)' }, { status: 413 })
 
   const admin = await createAdminClient()
-  await admin.storage.createBucket(BUCKET, { public: true }).then(() => {}, () => {})
+  // public:false — si el bucket se borrara, recrearlo ABIERTO devolveria los
+  // contratos y presupuestos a la intemperie. Ver src/lib/storageFirmado.ts.
+  await admin.storage.createBucket(BUCKET, { public: false }).then(() => {}, () => {})
 
   const safeName = file.name.replace(/[^a-zA-Z0-9._\-\s]/g, '_').replace(/\s+/g, '_').slice(0, 120)
   // Sufijo aleatorio: evita colisiones si 6 usuarios suben el mismo archivo al mismo cliente a la vez
@@ -61,7 +66,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   })
   if (ue) return NextResponse.json({ error: ue.message }, { status: 500 })
 
-  const url = admin.storage.from(BUCKET).getPublicUrl(path).data.publicUrl
+  const url = await firmarUrl(admin, admin.storage.from(BUCKET).getPublicUrl(path).data.publicUrl)
   return NextResponse.json({ name: file.name, path, size: file.size, type: file.type, url })
 }
 

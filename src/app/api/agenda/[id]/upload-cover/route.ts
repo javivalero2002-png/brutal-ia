@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { firmarUrl, firmarCampos } from '@/lib/storageFirmado'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Reutilizamos el bucket que ya existe (la creación automática de buckets no funciona en el plan actual)
@@ -22,7 +23,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   // Asegurar bucket (idempotente: si ya existe, ignoramos el error y seguimos)
-  await admin.storage.createBucket(BUCKET, { public: true, fileSizeLimit: MAX_BYTES }).then(()=>{}, ()=>{})
+  // public:false — si el bucket se borrara, recrearlo ABIERTO devolveria los
+  // contratos y presupuestos a la intemperie. Ver src/lib/storageFirmado.ts.
+  await admin.storage.createBucket(BUCKET, { public: false, fileSizeLimit: MAX_BYTES }).then(()=>{}, ()=>{})
 
   const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
   const path = `covers/${id}/${Date.now()}.${ext}`
@@ -44,6 +47,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .select('*, client:clients(id,name,initials,color)')
     .single()
 
-  if (error) return NextResponse.json({ url: publicUrl, item: null, warning: /cover_url|column/i.test(error.message) ? 'Imagen subida a la nube, pero no persiste: falta la columna cover_url (ejecuta migration_content_cover.sql en Supabase).' : error.message })
-  return NextResponse.json({ url: publicUrl, item: data })
+  // Se GUARDA la forma publica (es el identificador) pero se DEVUELVE firmada:
+  // con el bucket cerrado, la publica ya no pinta nada.
+  const urlParaVer = await firmarUrl(admin, publicUrl)
+  if (error) return NextResponse.json({ url: urlParaVer, item: null, warning: /cover_url|column/i.test(error.message) ? 'Imagen subida a la nube, pero no persiste: falta la columna cover_url (ejecuta migration_content_cover.sql en Supabase).' : error.message })
+  return NextResponse.json({ url: urlParaVer, item: await firmarCampos(admin, data, ['cover_url','video_url']) })
 }
