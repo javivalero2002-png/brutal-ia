@@ -161,6 +161,28 @@ describe('cliente · toda respuesta de la API se comprueba antes de usarla', () 
 // `as any` — por eso vivió tanto. El molde es siempre el mismo: silenciar al
 // compilador justo donde el dato viene de fuera y nadie lo valida.
 
+// ── 6. La URL de la app ──────────────────────────────────────────────────────
+//
+// `https://brutalstudios-ia.vercel.app` estaba escrita a mano en cuatro sitios, y
+// tres de ellos son texto que LEE una persona: las instrucciones que se le mandan
+// a un compañero nuevo para que entre, y la URL del webhook que se copia y se pega
+// en el panel de Meta.
+//
+// El día que la app tenga dominio propio, esos textos pasan a mentir sin que nada
+// falle: nadie ve un error, simplemente el compañero no puede entrar. Por eso vive
+// en src/lib/appUrl.ts y se deriva de NEXT_PUBLIC_APP_URL.
+
+describe('la URL de la app vive en un solo sitio', () => {
+  it('nadie vuelve a escribir el dominio de despliegue a mano', () => {
+    const malos = TS
+      .filter(f => f !== 'src/lib/appUrl.ts')
+      .flatMap(f => leer(f).split('\n').map((l, i) => ({ f, i: i + 1, l })))
+      .filter(({ l }) => /brutalstudios[a-z0-9-]*\.vercel\.app/.test(l) && !/^\s*(\/\/|\*)/.test(l))
+    expect(malos.map(u => `${u.f}:${u.i}`),
+      'Dominio escrito a mano: usa APP_URL / APP_HOST / rutaApp de @/lib/appUrl').toEqual([])
+  })
+})
+
 describe('uniones con CHECK en la base · nadie las silencia con `as any`', () => {
   it('ni el nivel de una tarea ni el estado de un proyecto se castean', () => {
     const malos = TS.flatMap(f => leer(f).split('\n').map((l, i) => ({ f, i: i + 1, l })))

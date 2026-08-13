@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { APP_URL } from '@/lib/appUrl'
 import { NextRequest, NextResponse } from 'next/server'
 import { PUSH_ROW } from '@/lib/push'
 
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
   if (profileErr) return NextResponse.json({ error: profileErr.message }, { status: 500 })
 
   // Generate a password-reset link so the new member can set their own password
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://brutalstudios-ia.vercel.app'
+  const appUrl = APP_URL
   let inviteLink: string | null = null
   try {
     const { data: linkData } = await admin.auth.admin.generateLink({
@@ -136,7 +137,7 @@ export async function PATCH(request: NextRequest) {
   if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
 
   if (action === 'regenerate_invite') {
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://brutalstudios-ia.vercel.app'
+    const appUrl = APP_URL
     let inviteLink: string | null = null
     try {
       const { data: linkData } = await admin.auth.admin.generateLink({
