@@ -69,6 +69,11 @@ export async function POST(request: NextRequest) {
   const { data, error } = await admin.from('inbox_messages').insert({
     user_id: to_user_id,
     source: 'internal',
+    // `from_user_id` es la identidad REAL del remitente; `from_name` se queda solo
+    // para mostrar. Emparejar hilos por nombre era el agujero: profiles.name no es
+    // unique y cualquiera se lo cambia, asi que renombrandote como un compañero
+    // podias leer sus DM con un tercero.
+    from_user_id: user.id,
     from_name: fromName,
     subject: subject || '(sin asunto)',
     body_preview: body.slice(0, 500),

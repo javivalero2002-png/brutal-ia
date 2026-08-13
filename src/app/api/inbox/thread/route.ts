@@ -3,8 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 // GET /api/inbox/thread?withUserId=X
 // Devuelve la conversacion interna entre quien llama y otro miembro del equipo.
-// EquipoSection sigue mandando `withName` en la URL, pero aqui se IGNORA a
-// proposito: ver el bloque de abajo.
+// El emparejado va por `from_user_id` desde la migracion 20260813: ver abajo.
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -41,51 +40,36 @@ export async function GET(req: NextRequest) {
   // NO se aplicaba, con lo que la ruta listaba TODOS los mensajes internos
   // recibidos por `withUserId`, vinieran de quien vinieran. Degradar aqui es
   // abrir la bandeja de otro, asi que se corta con 500.
-  const { data: perfiles, error: perfilesErr } = await admin.from('profiles').select('id,name')
-  if (perfilesErr || !perfiles) {
-    console.error('[inbox/thread] no se pudieron leer los perfiles:', perfilesErr?.message)
-    return NextResponse.json({ error: 'No se pudo identificar tu perfil' }, { status: 500 })
+  // Que el otro exista de verdad, y nada mas. El nombre ya NO decide que filas se
+  // leen: para eso esta `from_user_id` desde la migracion 20260813.
+  const { data: otro, error: otroErr } = await admin
+    .from('profiles').select('id').eq('id', withUserId).maybeSingle()
+  if (otroErr) {
+    console.error('[inbox/thread] no se pudo comprobar el perfil:', otroErr.message)
+    return NextResponse.json({ error: 'No se pudo cargar la conversación' }, { status: 500 })
   }
+  if (!otro) return NextResponse.json({ error: 'Compañero no encontrado' }, { status: 404 })
 
-  const limpia = (s: string | null | undefined) => (s || '').trim()
-  const miNombre = limpia(perfiles.find(p => p.id === user.id)?.name)
-  // El nombre del otro sale de la BD por su id, NO del `withName` de la URL: lo
-  // de la URL lo escribe el cliente y aqui decide que filas se leen.
-  const nombreOtro = limpia(perfiles.find(p => p.id === withUserId)?.name)
-
-  if (!miNombre) {
-    console.error('[inbox/thread] el perfil del llamante no tiene nombre:', user.id)
-    return NextResponse.json({ error: 'No se pudo identificar tu perfil' }, { status: 500 })
-  }
-  if (!nombreOtro) return NextResponse.json({ error: 'Compañero no encontrado' }, { status: 404 })
-
-  // Sin mayusculas ni espacios a proposito: para el filtro de abajo "Pablo" y
-  // "pablo " son valores distintos, pero como identidad son la misma persona y
-  // basta con que dos perfiles lo hayan compartido un rato para que queden
-  // mensajes cruzados. Aqui interesa detectar la ambigüedad, no casar filas.
-  const homonimos = (n: string) =>
-    perfiles.filter(p => limpia(p.name).toLowerCase() === n.toLowerCase()).length > 1
-  if (homonimos(miNombre) || homonimos(nombreOtro)) {
-    console.error('[inbox/thread] dos perfiles con el mismo nombre: hilo ambiguo, no se sirve')
-    return NextResponse.json(
-      { error: 'Hay dos personas con el mismo nombre en el equipo: cambiad uno para poder abrir la conversación' },
-      { status: 409 },
-    )
-  }
-
-  // El nombre COMPLETO y exacto, no el de pila con ilike.
+  // Se empareja por `from_user_id`, no por `from_name`.
   //
-  // Antes era `ilike('from_name', '%' + primerNombre + '%')`. Con dos cuentas que
-  // empiezan igual —ahora mismo hay una "Javi" y una "Javi Valero"— los dos hilos
-  // se mezclaban: en la conversacion con una veias los mensajes de la otra. Leer
-  // mensajes de un companero creyendo que son de otro es de lo peor que puede
-  // hacer esta seccion.
+  // Emparejar por nombre era el agujero de esta ruta: `profiles.name` no es unique
+  // y cualquiera se lo cambia con PATCH /api/profile, asi que renombrandote como un
+  // compañero esta consulta te devolvia los DM que EL le habia mandado a un
+  // tercero. El 2026-08-13 se tapo lo tapable sin esquema (cortar con 409 ante
+  // homonimos, impedir nombres repetidos), pero quedaba vivo un caso: un nombre
+  // liberado por un renombrado antiguo seguia casando los mensajes historicos.
+  //
+  // SIN respaldo por nombre a proposito. Una fila sin `from_user_id` simplemente no
+  // aparece, y eso es lo correcto: mantener el respaldo seria mantener el agujero
+  // para justo las filas que lo sufren. Se verifico antes de migrar que
+  // `inbox_messages` tenia CERO filas con source='internal', asi que no se pierde
+  // ningun mensaje real.
   const receivedQuery = admin
     .from('inbox_messages')
     .select('*')
     .eq('user_id', user.id)
     .eq('source', 'internal')
-    .eq('from_name', nombreOtro)
+    .eq('from_user_id', withUserId)
     .order('received_at', { ascending: true })
 
   const sentQuery = admin
@@ -93,7 +77,7 @@ export async function GET(req: NextRequest) {
     .select('*')
     .eq('user_id', withUserId)
     .eq('source', 'internal')
-    .eq('from_name', miNombre)
+    .eq('from_user_id', user.id)
     .order('received_at', { ascending: true })
 
   const [recibidos, enviados] = await Promise.all([receivedQuery, sentQuery])

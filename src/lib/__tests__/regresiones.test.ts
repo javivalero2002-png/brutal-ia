@@ -249,6 +249,42 @@ describe('Gmail · la detección de conexión rota vive en un solo sitio', () =>
   })
 })
 
+// ── 9. La identidad del remitente de un DM ───────────────────────────────────
+//
+// `inbox_messages.from_name` es para MOSTRAR. La identidad es `from_user_id`.
+//
+// Emparejar hilos por nombre fue el agujero mas grave de la auditoria:
+// `profiles.name` no es unique y cualquiera se lo cambia con PATCH /api/profile,
+// asi que renombrandote como un compañero, GET /api/inbox/thread te devolvia los
+// DM que EL le habia mandado a un tercero. Se cerro del todo con la columna
+// `from_user_id` (migracion 20260813).
+
+describe('mensajes directos · el hilo se empareja por id, nunca por nombre', () => {
+  const THREAD = 'src/app/api/inbox/thread/route.ts'
+
+  it('la ruta del hilo existe (el test no se ha quedado sin objetivo)', () => {
+    expect(TS).toContain(THREAD)
+  })
+
+  it('ningun filtro de la consulta usa from_name', () => {
+    const malos = leer(THREAD).split('\n').map((l, i) => ({ i: i + 1, l }))
+      .filter(({ l }) => /\.eq\(\s*['"]from_name['"]|ilike\(\s*['"]from_name['"]/.test(l))
+    expect(malos.map(u => `${THREAD}:${u.i}`),
+      'El hilo vuelve a emparejar por nombre: usa from_user_id').toEqual([])
+  })
+
+  it('filtra por from_user_id en las dos direcciones', () => {
+    const src = leer(THREAD)
+    expect((src.match(/\.eq\(\s*['"]from_user_id['"]/g) || []).length,
+      'Faltan filtros por from_user_id (deben ser dos: recibidos y enviados)').toBe(2)
+  })
+
+  it('quien envia un DM guarda su id, no solo su nombre', () => {
+    expect(/from_user_id:\s*user\.id/.test(leer('src/app/api/inbox/route.ts')),
+      'POST /api/inbox no guarda from_user_id: los hilos nuevos saldrian vacios').toBe(true)
+  })
+})
+
 describe('uniones con CHECK en la base · nadie las silencia con `as any`', () => {
   it('ni el nivel de una tarea ni el estado de un proyecto se castean', () => {
     const malos = TS.flatMap(f => leer(f).split('\n').map((l, i) => ({ f, i: i + 1, l })))

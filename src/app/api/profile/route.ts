@@ -42,9 +42,11 @@ export async function PATCH(request: Request) {
     // ÉL había mandado a un tercero — la conversación privada de otros dos, con
     // dos líneas de curl.
     //
-    // La ruta del hilo ya se niega a servir un emparejamiento ambiguo (409), pero
-    // eso deja la sección rota para dos personas inocentes. Aquí se corta el
-    // duplicado en el origen: es el único sitio por el que se puede crear.
+    // Desde la migración 20260813 el hilo empareja por `from_user_id`, así que un
+    // nombre repetido ya NO puede cruzar conversaciones: esto dejó de ser una
+    // barrera de seguridad. Se mantiene por claridad —dos "Pablo" en una lista de
+    // siete es confuso en el inbox, en las menciones y al asignar tareas— pero si
+    // algún día estorba, quitarlo ya no abre nada.
     //
     // Sin acentos ni mayúsculas: "Pablo" y "pablo " tienen que chocar, porque como
     // identidad son la misma persona aunque como filtro SQL no lo sean.
