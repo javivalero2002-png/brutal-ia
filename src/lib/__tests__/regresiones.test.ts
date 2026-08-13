@@ -955,3 +955,40 @@ describe('la interfaz no dice cosas que no son', () => {
     expect(/cambios/.test(cuerpo), 'no construye el diff de campos tocados').toBe(true)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dos errores MIOS de la tanda del 2026-08-13, los dos de la misma familia:
+// anadir una comprobacion y cambiar de paso la semantica de al lado.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
+  // Los turnos del chat son SECUENCIALES a proposito —lo dice el comentario justo
+  // encima— para que `created_at` difiera y el orden quede determinado. Al anadir
+  // la comprobacion de error se pusieron en Promise.all, y entonces la respuesta
+  // puede leerse antes que la pregunta.
+  it('los dos turnos del chat se escriben en orden', () => {
+    const C = leerCodigo('src/app/api/chat/route.ts')
+    // Anclado a los INSERT, no al primer `chat_messages` del fichero — ese es el
+    // SELECT del historial y queda lejos, asi que la ventana no llegaba y la regla
+    // pasaba en verde con los inserts en paralelo. Comprobado por mutacion.
+    const idx: number[] = []
+    const re = /from\('chat_messages'\)\.insert\(/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(C))) idx.push(m.index)
+    expect(idx.length, 'ya no hay dos inserts de turno: revisa esta regla').toBe(2)
+    const bloque = C.slice(Math.max(0, idx[0] - 260), idx[1] + 160)
+    expect(/Promise\.all/.test(bloque),
+      'los inserts del chat vuelven a ir en paralelo: created_at puede coincidir y el orden se pierde').toBe(false)
+  })
+
+  // El `count` de un UPDATE solo se rellena si PostgREST devuelve `content-range`.
+  // Escribir `!count` en vez de `count === 0` convierte un chequeo defensivo en una
+  // rotura total: si la cabecera no llega, la conexion de Gmail falla SIEMPRE, para
+  // todo el mundo.
+  it('el count de un update solo corta cuando es 0 de verdad', () => {
+    const CB = leerCodigo('src/app/api/gmail/callback/route.ts')
+    expect(/\|\|\s*!filas/.test(CB),
+      'usa !count: si PostgREST no manda content-range, count es null y esto rompe la conexión de Gmail para todos').toBe(false)
+    expect((CB.match(/filas\w*\s*===\s*0/g) || []).length,
+      'alguna rama no comprueba el count de forma segura').toBe(2)
+  })
+})

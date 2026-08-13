@@ -93,10 +93,16 @@ export async function POST(request: NextRequest) {
   // El error se mira. supabase-js NO lanza: sin recogerlo, un fallo de escritura
   // devolvia la respuesta al usuario igualmente y el historial se quedaba sin ese
   // turno — al recargar, la conversacion aparece con un hueco y nadie sabe por que.
-  const [{ error: errUser }, { error: errIa }] = await Promise.all([
-    admin.from('chat_messages').insert({ user_id: user.id, role: 'user', content: message }),
-    admin.from('chat_messages').insert({ user_id: user.id, role: 'ai', content: reply }),
-  ])
+  //
+  // SECUENCIALES, no en paralelo. Lo puse con Promise.all al anadir la comprobacion
+  // de error y eso rompia justo lo que dice el comentario de aqui arriba: si los dos
+  // INSERT salen a la vez, `created_at` puede coincidir al milisegundo y el orden de
+  // la conversacion deja de estar determinado — la respuesta puede leerse antes que
+  // la pregunta. Anadir una comprobacion no puede cambiar la semantica de al lado.
+  const { error: errUser } = await admin
+    .from('chat_messages').insert({ user_id: user.id, role: 'user', content: message })
+  const { error: errIa } = await admin
+    .from('chat_messages').insert({ user_id: user.id, role: 'ai', content: reply })
   if (errUser || errIa) console.error('[chat] no se pudo guardar el turno:', (errUser || errIa)?.message)
 
   return NextResponse.json({ reply, searched })

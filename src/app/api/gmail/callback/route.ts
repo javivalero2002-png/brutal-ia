@@ -113,6 +113,14 @@ export async function GET(request: NextRequest) {
     //
     // `count` ademas de `error`: un update que no casa ninguna fila NO es error
     // —devuelve error null— y dejaba el mismo anuncio falso por otra puerta.
+    //
+    // `=== 0` y NO `!filas`, que es lo que puse primero y estaba mal. El `count`
+    // solo se rellena si PostgREST devuelve la cabecera `content-range`
+    // (postgrest-js: `if (countHeader && contentRange && contentRange.length > 1)`).
+    // Si algun dia no llega, `count` es null y `!count` seria true: romperia la
+    // conexion de Gmail para TODO EL MUNDO, siempre. Una comprobacion defensiva que
+    // puede tumbar el camino bueno es peor que el hueco que tapa. Asi solo corta
+    // cuando la base dice explicitamente que no toco ninguna fila.
     const { error: errColabs, count: filasColabs } = await supabase
       .from('profiles')
       .update({
@@ -121,7 +129,7 @@ export async function GET(request: NextRequest) {
         gmail_colabs_account: email,
       }, { count: 'exact' })
       .eq('id', userId)
-    if (errColabs || !filasColabs) {
+    if (errColabs || filasColabs === 0) {
       console.error('[gmail] no se pudo guardar el token de colabs:', errColabs?.message ?? 'ninguna fila actualizada')
       return done(`${base}/dashboard?gmail=error`)
     }
@@ -138,7 +146,7 @@ export async function GET(request: NextRequest) {
       gmail_account: email,
     }, { count: 'exact' })
     .eq('id', userId)
-  if (errPersonal || !filasPersonal) {
+  if (errPersonal || filasPersonal === 0) {
     console.error('[gmail] no se pudo guardar el token personal:', errPersonal?.message ?? 'ninguna fila actualizada')
     return done(`${base}/dashboard?gmail=error`)
   }
