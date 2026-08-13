@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { esTokenMuerto, esConexionRota } from '@/lib/gmailAuth'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
 import { analyzeEmail, EmailAnalysis } from '@/lib/ai'
@@ -11,8 +12,34 @@ type SyncResult =
   // `insertFailures` sale al exterior a propósito: con los inserts fallando el
   // resultado es `synced: 0` sobre 20 revisados, que desde fuera es idéntico a
   // "no había nada nuevo". Es el recuento el que distingue las dos cosas.
-  | { ok: true; synced: number; total: number; account: string; aiFailures?: number; insertFailures?: number }
+  | { ok: true; synced: number; total: number; account: string; aiFailures?: number; insertFailures?: number; saltado?: boolean }
   | { ok: false; error: string; code?: number; details?: unknown }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Un cerrojo por buzón, y hace falta de verdad.
+//
+// Medido en los logs de producción del 2026-08-13: `/api/gmail/colabs-sync` se
+// llamó 4 veces en 12 minutos. No es un bug del freno —cada navegador se frena a
+// sí mismo 15 minutos con localStorage— es que el freno es POR DISPOSITIVO y el
+// buzón es UNO. Siete personas con la app abierta son siete relojes distintos
+// sincronizando el mismo correo, más el cron de la hora en punto, que tampoco
+// pedía cerrojo: el de sync-colabs solo cubre la purga diaria de retención.
+//
+// Lo que cuesta cuando dos se solapan: el dedup lee los `gmail_id` ya guardados
+// ANTES del bucle y luego analiza y escribe uno a uno. Entre esa lectura y el
+// insert de un email cabe otra ejecución entera, así que las dos mandan el MISMO
+// correo a Claude y las dos lo pagan. Y si `inbox_messages.gmail_id` no tiene
+// UNIQUE en producción —no hay DDL de esa tabla en ningún .sql del repo, es una
+// de las que CLAUDE.md avisa que están sin reconciliar— las dos lo insertan, y
+// el equipo entero ve el correo duplicado.
+//
+// El cerrojo es el mismo que ya usan el motor de automatizaciones y la purga:
+// se apoya en la PK de Postgres, así que no hay ventana entre comprobar y tomar.
+// TTL de 90 s: el presupuesto interno son 25 s y el tope de la función 60 s, de
+// modo que una instancia que Vercel corte a los 60 s libera sola 30 s después.
+// ─────────────────────────────────────────────────────────────────────────────
+const TTL_CERROJO_MS = 90_000
 
 /**
  * Sincroniza el buzón COMPARTIDO de colaboraciones.
@@ -21,6 +48,24 @@ type SyncResult =
  * de modo que aparecen para todo el equipo. Idempotente por `gmail_id`.
  */
 export async function syncColabsInbox(
+  admin: SupabaseClient,
+  opts: { triggeredBy?: string; max?: number } = {}
+): Promise<SyncResult> {
+  const cerrojo = await acquireLock(admin, 'sync-colabs', TTL_CERROJO_MS)
+  // `adquirido: false` es contención real: otra instancia lo está haciendo AHORA.
+  // No es un error —el trabajo se está haciendo— así que sale `ok` con `saltado`,
+  // y quien lo llamó decide qué contarle al usuario. Devolver un fallo aquí
+  // pintaría de rojo una sincronización que en realidad va bien.
+  if (!cerrojo.adquirido) return { ok: true, synced: 0, total: 0, account: '', saltado: true }
+  try {
+    return await syncColabsInboxSinCerrojo(admin, opts)
+  } finally {
+    // Solo si es NUESTRO. Con `degradado` (la tabla no existe) no se tomó nada.
+    if (!cerrojo.degradado) await releaseLock(admin, 'sync-colabs', cerrojo.holder)
+  }
+}
+
+async function syncColabsInboxSinCerrojo(
   admin: SupabaseClient,
   opts: { triggeredBy?: string; max?: number } = {}
 ): Promise<SyncResult> {
@@ -211,6 +256,23 @@ export async function syncColabsInbox(
  * llegan y notifican aunque nadie tenga la app abierta). Idempotente por gmail_id.
  */
 export async function syncPersonalInbox(
+  admin: SupabaseClient,
+  profile: { id: string; gmail_refresh_token: string | null }
+): Promise<SyncResult> {
+  // Por usuario y no global: son buzones distintos y no compiten entre sí. Lo que
+  // sí compite es la MISMA persona en el portátil y en el móvil —dos localStorage,
+  // dos relojes— y el cron, que recorre todos los perfiles conectados.
+  const clave = `sync-personal-${profile.id}`
+  const cerrojo = await acquireLock(admin, clave, TTL_CERROJO_MS)
+  if (!cerrojo.adquirido) return { ok: true, synced: 0, total: 0, account: '', saltado: true }
+  try {
+    return await syncPersonalInboxSinCerrojo(admin, profile)
+  } finally {
+    if (!cerrojo.degradado) await releaseLock(admin, clave, cerrojo.holder)
+  }
+}
+
+async function syncPersonalInboxSinCerrojo(
   admin: SupabaseClient,
   profile: { id: string; gmail_refresh_token: string | null }
 ): Promise<SyncResult> {

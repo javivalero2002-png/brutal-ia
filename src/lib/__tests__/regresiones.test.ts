@@ -484,3 +484,58 @@ describe('calendario · escribir donde de verdad está el evento', () => {
     expect(veces, `CalendarEvent declarado en: ${veces.join(', ')}`).toHaveLength(1)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sincronizar un buzón cuesta dinero, así que no puede correr dos veces a la vez.
+//
+// Encontrado el 2026-08-13 en los logs de producción, no leyendo código:
+// /api/gmail/colabs-sync se llamó 4 veces en 12 minutos. El freno del cliente
+// funciona —15 min— pero vive en localStorage, o sea que es POR DISPOSITIVO,
+// y el buzón de colabs es UNO para las siete personas. Más el cron de la hora en
+// punto, que tampoco pedía cerrojo: el de sync-colabs solo cubre la purga diaria.
+//
+// Al solaparse dos, el dedup no salva: lee los gmail_id guardados ANTES del bucle
+// y luego analiza e inserta uno a uno, así que entre la lectura y el insert cabe
+// otra ejecución entera. Las dos mandan el mismo correo a Claude y las dos pagan.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('sincronizar un buzón · nunca dos a la vez', () => {
+  // Vale para el codigo que se escriba manana: quien analice correo con Claude
+  // tiene que pedir cerrojo, sea una copia nueva o una que ya existe.
+  const ANALIZAN = TS.filter(f => /\banalyzeEmail\s*\(/.test(leer(f)) && !f.endsWith('src/lib/ai.ts'))
+
+  it('hay ficheros que revisar', () => {
+    expect(ANALIZAN.length).toBeGreaterThan(1)
+  })
+
+  it('todo el que analiza correo con Claude toma cerrojo', () => {
+    const sinCerrojo = ANALIZAN.filter(f => !/acquireLock\s*\(/.test(leer(f)))
+    expect(sinCerrojo,
+      'Analiza correo con Claude sin cerrojo: dos ejecuciones solapadas pagan el mismo email dos veces').toEqual([])
+  })
+
+  it('y lo suelta', () => {
+    const sinSoltar = ANALIZAN.filter(f => !/releaseLock\s*\(/.test(leer(f)))
+    expect(sinSoltar, 'Toma el cerrojo y no lo suelta: el buzón se queda bloqueado hasta que caduque').toEqual([])
+  })
+
+  // La parte que de verdad hace que funcione, y la que se rompe sola: sincronizar
+  // un buzon personal esta escrito DOS veces —la ruta que dispara el navegador y
+  // syncPersonalInbox, que dispara el cron—. Solo se excluyen si usan la MISMA
+  // clave. Dos claves distintas es tener cerrojo y seguir teniendo el problema.
+  it('las dos copias del sync personal comparten clave de cerrojo', () => {
+    const clave = /sync-personal-\$\{[a-zA-Z.]+\}/
+    const RUTA = leer('src/app/api/gmail/sync/route.ts')
+    const LIB = leer('src/lib/colabsSync.ts')
+    expect(clave.test(RUTA), 'la ruta no usa la clave sync-personal-<id>').toBe(true)
+    expect(clave.test(LIB), 'colabsSync no usa la clave sync-personal-<id>').toBe(true)
+  })
+
+  it('un sync saltado no se cuenta como sincronizado', () => {
+    // `saltado` tiene que llegar hasta arriba. Si se queda por el camino, la
+    // respuesta es `synced: 0, total: 0`, que es identica a "no habia correo".
+    expect(/saltado/.test(leer('src/lib/colabsSync.ts')), 'colabsSync no marca los saltados').toBe(true)
+    expect(/saltado/.test(leer('src/app/api/gmail/colabs-sync/route.ts')), 'la ruta de colabs se come el saltado').toBe(true)
+    expect(/saltado/.test(leer('src/hooks/useNexusData.ts')), 'el cliente no distingue saltado de vacío').toBe(true)
+    expect(/saltado/.test(leer('src/app/api/cron/sync-colabs/route.ts')), 'el cron cuenta un saltado como sincronizado').toBe(true)
+  })
+})

@@ -206,7 +206,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     } catch { return { ok: false, noScope: false } }
   }, [])
 
-  const syncGmail = useCallback(async (): Promise<{synced:number;total:number;insertFailures?:number}> => {
+  const syncGmail = useCallback(async (): Promise<{synced:number;total:number;insertFailures?:number;saltado?:boolean}> => {
     if (!profile?.gmail_connected) throw new Error('Gmail no conectado')
     setSyncing(true)
     setSyncResult(null)
@@ -218,6 +218,13 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
       // Claude y luego NO se pudieron guardar. Sin mirarlo, "0 emails nuevos (20
       // revisados)" se lee como "no había nada" cuando en realidad no se guardó
       // nada — y el cron los reanaliza, y se vuelve a pagar, cada hora.
+      // Otra instancia lo esta haciendo ahora mismo (el cerrojo de job_locks).
+      // Decirlo, en vez de "0 emails nuevos (0 revisados)", que se lee como que
+      // el buzon estaba vacio.
+      if (result.saltado) {
+        setSyncResult({ ok: true, message: 'Ya se estaba sincronizando — los mensajes llegan solos' })
+        return result
+      }
       const fallos = result.insertFailures ?? 0
       setSyncResult({
         ok: fallos === 0,

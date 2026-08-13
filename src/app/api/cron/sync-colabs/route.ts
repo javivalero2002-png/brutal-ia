@@ -73,10 +73,15 @@ export async function GET(request: NextRequest) {
   // conectado el buzón compartido — y un rojo permanente se ignora enseguida.
   const NOT_CONNECTED = new Set(['Colaboraciones not connected', 'not connected'])
 
-  type Outcome = { mailbox: string; ok: boolean; synced?: number; insertFailures?: number; error?: string; terminal?: boolean }
+  type Outcome = { mailbox: string; ok: boolean; synced?: number; insertFailures?: number; error?: string; terminal?: boolean; saltado?: boolean }
   const outcomes: Outcome[] = []
 
   const record = (mailbox: string, r: any) => {
+    // Saltado por el cerrojo: otra instancia lo estaba haciendo. No es un fallo,
+    // pero tampoco es "sincronizado": si el cerrojo se quedara atascado, contarlo
+    // como verde dejaria al cron diciendo que todo va bien mientras no entra ni un
+    // correo. Se anota aparte para que se vea en el resultado del cron.
+    if (r.ok && r.saltado) { outcomes.push({ mailbox, ok: true, saltado: true, synced: 0 }); return }
     if (r.ok) {
       // ok:true con inserts fallidos NO es verde. El análisis con Claude ocurre
       // ANTES del insert: si el insert falla, el gmail_id no se guarda y la

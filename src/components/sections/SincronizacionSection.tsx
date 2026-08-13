@@ -154,6 +154,15 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
     try {
       const res = await fetch('/api/gmail/colabs-sync', { method: 'POST' })
       const result = await res.json()
+      if (res.ok && result.saltado) {
+        // El cerrojo lo tiene otra instancia: el buzon SE ESTA sincronizando. No se
+        // toca `lastColabs` —no ha pasado nada aqui— y no se dice "0 nuevos", que se
+        // leeria como que no habia correo.
+        setSyncResultMsg({ok:true, text:'Ya se estaba sincronizando', account:'colabs'})
+        showToast('Colaboraciones — ya se estaba sincronizando, los mensajes llegan solos')
+        await data.reloadInbox?.()
+        return true
+      }
       if (res.ok) {
         const now = new Date().toISOString()
         setLastColabs(now)

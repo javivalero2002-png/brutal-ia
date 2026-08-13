@@ -2,6 +2,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { codigoDeFallo } from '@/lib/gmailAuth'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
 import { analyzeEmail, EmailAnalysis } from '@/lib/ai'
+import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { NextResponse } from 'next/server'
 import { sendPushToUser, sendPushToAll, canSendPush } from '@/lib/push'
 import { localDayKey } from '@/components/shared/helpers'
@@ -29,6 +30,25 @@ export async function POST() {
   if (!profile?.gmail_connected || !profile.gmail_refresh_token) {
     return NextResponse.json({ error: 'Gmail not connected' }, { status: 400 })
   }
+
+  // MISMA clave que syncPersonalInbox de src/lib/colabsSync.ts, y a proposito.
+  //
+  // Sincronizar un buzon personal esta escrito DOS veces: aqui (lo que dispara el
+  // navegador) y alli (lo que dispara el cron). Fusionarlas es un refactor de 250
+  // lineas que no toca hacer hoy; compartir la clave del cerrojo cuesta esto y ya
+  // impide lo que importa: que las dos copias corran a la vez sobre el mismo
+  // buzon, analicen los mismos correos y los paguen dos veces.
+  //
+  // El freno de 15 min del cliente es por DISPOSITIVO (localStorage): la misma
+  // persona en el portatil y en el movil son dos relojes distintos. En los logs de
+  // produccion del 2026-08-13 esta ruta se llamo 4 veces en 12 minutos.
+  const claveCerrojo = `sync-personal-${user.id}`
+  const cerrojo = await acquireLock(admin, claveCerrojo, 90_000)
+  if (!cerrojo.adquirido) {
+    // 200 y no un error: el trabajo SE ESTA HACIENDO, solo que en otra instancia.
+    return NextResponse.json({ synced: 0, total: 0, account: '', saltado: true })
+  }
+  try {
 
   const { data: clientsData } = await admin.from('clients').select('name')
   const knownClients = (clientsData || []).map(c => c.name)
@@ -246,4 +266,7 @@ export async function POST() {
   // verdad ("revisados 20, guardados 0") en vez de dar por bueno un synced: 0 que
   // es indistinguible de "no había emails nuevos".
   return NextResponse.json({ synced: newCount, total: emails.length, account: gmailAccount, shared: isCompanyAccount, aiFailures, insertFailures })
+  } finally {
+    if (!cerrojo.degradado) await releaseLock(admin, claveCerrojo, cerrojo.holder)
+  }
 }
