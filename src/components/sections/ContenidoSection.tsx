@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { rutaApp } from '@/lib/appUrl'
 import type { NexusData, ContentItem } from '@/types'
 import { PLATAFORMA_COLOR, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, todayKey } from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
@@ -1148,7 +1149,12 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                     el propio id de la pieza. */}
                 <button
                   onClick={()=>{
-                    const url = `${window.location.origin}/review/${activeItem.id}`
+                    // rutaApp y NO window.location.origin: este enlace se le manda a un
+                    // CLIENTE, y con origin salia el dominio por el que hubiera entrado
+                    // quien lo copia. Como el equipo tiene la PWA instalada desde
+                    // brutalstudios-ia.vercel.app y la app vive ahora en brutalia.tech,
+                    // el mismo boton daba una URL u otra segun la persona.
+                    const url = rutaApp(`/review/${activeItem.id}`)
                     navigator.clipboard.writeText(url)
                       .then(()=>showToast('Enlace de revisión copiado — mándaselo al cliente'))
                       .catch(()=>showToast(url))

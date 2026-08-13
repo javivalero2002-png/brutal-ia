@@ -191,6 +191,40 @@ describe('la URL de la app vive en un solo sitio', () => {
 // genérico, y `gmail_connected` seguía en true — la pantalla decía «CONECTADO»
 // sobre un buzón que llevaba días sin sincronizar.
 
+// ── 8. Enlaces que salen de la app ───────────────────────────────────────────
+//
+// `window.location.origin` da el dominio por el que ha entrado QUIEN mira, no el
+// de la app. El enlace de revisión que se le manda a un cliente se construía así,
+// y como el equipo tiene la PWA instalada desde brutalstudios-ia.vercel.app y la
+// app vive en brutalia.tech, el mismo botón daba una URL distinta según la
+// persona que lo pulsara.
+//
+// La excepción legítima es «vuelve donde estabas» —el redirect del reset de
+// contraseña—, que sí debe respetar el origen del usuario.
+
+describe('enlaces para terceros · siempre el dominio canónico', () => {
+  const EXCEPCIONES: Record<string, string> = {
+    'src/app/login/page.tsx':
+      'El redirectTo del reset de contraseña debe devolver al usuario al dominio por el que ENTRÓ, ' +
+      'no al canónico. Los dos están en la allowlist de Supabase, así que funciona desde cualquiera.',
+  }
+
+  it('ningún enlace compartible se construye con window.location.origin', () => {
+    const malos = CLIENTE
+      .filter(f => !(f in EXCEPCIONES))
+      .flatMap(f => leer(f).split('\n').map((l, i) => ({ f, i: i + 1, l })))
+      .filter(({ l }) => /window\.location\.origin/.test(l) && !/^\s*(\/\/|\*)/.test(l))
+    expect(malos.map(u => `${u.f}:${u.i}`),
+      'Enlace atado al dominio de quien navega: usa rutaApp() de @/lib/appUrl').toEqual([])
+  })
+
+  it('las excepciones anotadas siguen existiendo', () => {
+    const fantasmas = Object.keys(EXCEPCIONES)
+      .filter(f => !CLIENTE.includes(f) || !/window\.location\.origin/.test(leer(f)))
+    expect(fantasmas, 'Excepción que ya no hace falta: quítala').toEqual([])
+  })
+})
+
 describe('Gmail · la detección de conexión rota vive en un solo sitio', () => {
   /** Cada excepción, con su motivo. Si sobra, el test de abajo lo canta. */
   const EXCEPCIONES: Record<string, string> = {
