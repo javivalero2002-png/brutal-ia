@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
+import { SECCIONES, esSeccion, type Section } from '@/components/shared/secciones'
 import dynamic from 'next/dynamic'
 import { useNexusData } from '@/hooks/useNexusData'
 import type { Profile, Task, Project, Client } from '@/types'
@@ -9,7 +10,7 @@ import { PlatformLogo } from '@/components/PlatformLogo'
 import CreateModal from '@/components/CreateModal'
 
 import { BLU, RED, GRN, AMBAR, SURFACE, SURF2, BORDER, ACCENT_COLORS } from '@/components/shared/design-tokens'
-import { useIsMobile } from '@/components/shared/hooks'
+import { useIsMobile, useBackClosable } from '@/components/shared/hooks'
 import { dlDate, todayKey, localDayKey, daysBetweenKeys } from '@/components/shared/helpers'
 import { construirKanbanCols } from '@/components/shared/kanban'
 import LucideIcon from '@/components/shared/LucideIcon'
@@ -86,14 +87,8 @@ function precargarSecciones() {
   }
   siguiente()
 }
-// La lista es la fuente de verdad y el tipo se deriva de ella, no al revés: hace
-// falta poder validar en tiempo de ejecución lo que llega por `?s=` (los atajos
-// de la PWA), y una unión de tipos no existe en tiempo de ejecución. Escribir
-// las dos por separado invita a que se desincronicen.
-const SECCIONES = ['hoy','inbox','tareas','clientes','proyectos','contenido','calendario','memoria','automatizaciones','chat','equipo','reportes','ajustes','harvey'] as const
-type Section = typeof SECCIONES[number]
-const esSeccion = (v: string | null): v is Section =>
-  !!v && (SECCIONES as readonly string[]).includes(v)
+// SECCIONES / Section / esSeccion viven en shared/secciones.ts: las secciones
+// necesitan el tipo para declarar `onNavigate` y no pueden importarlo de aqui.
 
 interface Props { profile: Profile; initialSection?: string }
 
@@ -352,6 +347,25 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   const modalRef = useRef<string|null>(null)
   const mfRef = useRef<Record<string,string>>({})
 
+  // El modal de creación ocupa la pantalla entera en móvil, así que el ATRÁS
+  // parece que debería cerrarlo — y en su lugar te sacaba de la app, perdiendo
+  // el formulario. Las seis secciones con panel a pantalla completa ya lo tenían;
+  // el modal, que es el que más se abre, no.
+  //
+  // Con el mismo aviso que Escape y que el fondo: si hay algo escrito, el atrás
+  // no cierra. El hook repone la entrada de historial cuando se veta.
+  useBackClosable(
+    !!modal,
+    () => setModal(null),
+    () => {
+      if (!Object.values(mfRef.current).some(v => (v || '').trim())) return true
+      setToast('Tienes cambios sin guardar — usa Cancelar para descartarlos')
+      setTimeout(() => setToast(null), 3000)
+      return false
+    },
+  )
+
+
   // Abrir un modal SIEMPRE limpia los campos. Antes solo lo hacía el menú rápido:
   // las secciones reciben `setModal` tal cual como `onOpenModal`, así que abrir
   // "Cliente" tras haber escrito en "Proyecto" arrastraba los campos del anterior
@@ -426,9 +440,6 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   useEffect(() => {
     const NAV: Record<string, Section> = { h:'hoy', t:'tareas', i:'inbox', c:'clientes', p:'proyectos', k:'contenido', a:'calendario', m:'memoria', e:'equipo', r:'reportes', s:'ajustes', v:'automatizaciones', n:'chat', y:'harvey' }
     const handler = (e: KeyboardEvent) => {
-      // Con un modal abierto el foco esta en BODY, asi que la guarda por tagName
-      // de mas abajo no protege: escribir en el formulario ejecutaba estos atajos.
-      if (hayModalAbierto()) return
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(true); setSearchQuery(''); setSearchIdx(-1); return }
       if (e.key === 'Escape') {
         if (showShortcutsRef.current) { setShowShortcuts(false); return }
@@ -443,6 +454,13 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
         setModal(null)
         return
       }
+      // A partir de aqui van los atajos de una sola letra (?, g+tecla). Con un modal
+      // abierto el foco puede estar en BODY, y entonces la guarda por tagName de la
+      // linea siguiente no protege: escribir en el formulario los ejecutaba.
+      //
+      // La guarda va AQUI y no arriba a proposito: Escape y Cmd+K tienen que seguir
+      // funcionando con el modal abierto — Escape es justo lo que lo cierra.
+      if (hayModalAbierto()) return
       const tag = (e.target as HTMLElement)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       if (e.key === '?' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); setShowShortcuts(s => !s); return }
@@ -951,7 +969,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
           {section === 'automatizaciones' && <SectionErrorBoundary section="automatizaciones"><AutomatizacionesSection data={data} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} /></SectionErrorBoundary>}
           {section === 'chat' && <SectionErrorBoundary section="chat"><ChatSection profile={profile} data={data} chatInput={chatInput} setChatInput={setChatInput} chatLoading={chatLoading} setChatLoading={setChatLoading} showToast={showToast} onNavigate={setSection} /></SectionErrorBoundary>}
           {section === 'harvey' && <SectionErrorBoundary section="harvey"><HarveySection data={data} profile={profile} showToast={showToast} onNavigate={setSection} preloadMessage={harveyPreload} onClearPreload={()=>setHarveyPreload(null)} /></SectionErrorBoundary>}
-          {section === 'ajustes' && <SectionErrorBoundary section="ajustes"><AjustesSection profile={profile} data={data} showToast={showToast} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={openModal} isOwner={isOwner} /></SectionErrorBoundary>}
+          {section === 'ajustes' && <SectionErrorBoundary section="ajustes"><AjustesSection profile={profile} data={data} showToast={showToast} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={openModal} isOwner={isOwner} onNavigate={setSection} /></SectionErrorBoundary>}
         </div>
 
         {/* Tab bar inferior móvil */}
@@ -1074,6 +1092,18 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
         <CreateModal
           modal={modal}
           onClose={() => setModal(null)}
+          // El clic en el FONDO pasa por la misma comprobacion que Escape. Cancelar y
+          // la X siguen usando onClose, que descarta a proposito: ahi el usuario ha
+          // dicho explicitamente que no lo quiere. El fondo, no — es el gesto que se
+          // hace sin querer, y se llevaba el formulario entero sin avisar.
+          onDismiss={() => {
+            if (Object.values(mfRef.current).some(v => (v || '').trim())) {
+              setToast('Tienes cambios sin guardar — usa Cancelar para descartarlos')
+              setTimeout(() => setToast(null), 3000)
+              return
+            }
+            setModal(null)
+          }}
           mf={mf}
           setMf={setMf}
           saving={modalSaving}

@@ -7,6 +7,7 @@ import type { NexusData, ContentItem } from '@/types'
 import { PLATAFORMA_COLOR, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, todayKey } from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
 import BocetoPanel from '@/components/BocetoPanel'
+import type { IrASeccion } from '@/components/shared/secciones'
 
 // El PATCH de /api/agenda/[id] reintenta sin las columnas que falten en la BD y
 // devuelve `__dropped` con sus nombres. Aqui se traducen a lo que el usuario ve en
@@ -31,7 +32,7 @@ interface PropsContenido {
   data: NexusData
   onOpenModal: any
   showToast: any
-  onNavigate: any
+  onNavigate: IrASeccion
   onSelectClient: any
   profile: any
 }

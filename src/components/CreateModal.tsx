@@ -60,7 +60,10 @@ function fields(type: string, team: Profile[]) {
 
 interface CreateModalProps {
   modal: string
+  /** Cancelar y la X: descartan a proposito. */
   onClose: () => void
+  /** Clic en el fondo: puede ser sin querer, asi que avisa si hay algo escrito. */
+  onDismiss?: () => void
   mf: Record<string, string>
   setMf: React.Dispatch<React.SetStateAction<Record<string, string>>>
   saving: boolean
@@ -87,7 +90,7 @@ const ACTIONS = [
   { v:'notify_owner', icon:'user',         label:'Avisarme a mí',     desc:'Notificación push solo para ti' },
 ] as const
 
-export default function CreateModal({ modal, onClose, mf, setMf, saving, onSave, team, clients = [] }: CreateModalProps) {
+export default function CreateModal({ modal, onClose, onDismiss, mf, setMf, saving, onSave, team, clients = [] }: CreateModalProps) {
   const isMobile = useIsMobile()
   const m = meta[modal]
   if (!m) return null
@@ -117,7 +120,7 @@ export default function CreateModal({ modal, onClose, mf, setMf, saving, onSave,
 
 
   return (
-    <div onClick={onClose} className="fixed inset-0 z-[100] flex items-center justify-center" style={{background:'rgba(2,2,10,0.8)',backdropFilter:'blur(8px)',touchAction:'none'}}>
+    <div onClick={onDismiss ?? onClose} className="fixed inset-0 z-[100] flex items-center justify-center" style={{background:'rgba(2,2,10,0.8)',backdropFilter:'blur(8px)',touchAction:'none'}}>
       <div
         ref={primerCampoRef}
         role="dialog"

@@ -4,6 +4,7 @@ import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { Task, Project, Profile, NexusData} from '@/types'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, todayKey, daysBetweenKeys, estadoDeadline } from '@/components/shared'
 import { plural, nivelTarea } from '@/components/shared/helpers'
+import type { IrASeccion } from '@/components/shared/secciones'
 
 const AMB = '#FFB020'
 const PRIMAP: Record<string,{label:string,color:string}> = {
@@ -117,7 +118,7 @@ interface PropsTareas {
   showToast: any
   isOwner: any
   profile: any
-  onNavigate: any
+  onNavigate: IrASeccion
   onSelectProject: any
   initialView: any
   initialFocus: any
@@ -208,9 +209,35 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
     return ()=>window.removeEventListener('keydown', h)
   }, [activeTask, onOpenModal])
 
+  // Los campos del panel, en un solo sitio: `openTask` los carga y `hayCambios`
+  // los compara. Escritos dos veces se desincronizan, y el que se olvide en la
+  // comparacion es un campo cuyos cambios se pierden sin avisar.
+  const camposEditables = (t: Task) => ({
+    text:t.text, level:t.level, assigned_to:t.assigned_to, co_assigned_to:t.co_assigned_to,
+    done:t.done, due_date:t.due_date, project_id:t.project_id, notes:t.notes,
+  })
+
+  // ¿Hay algo escrito en el panel que no este guardado?
+  //
+  // El panel es un formulario que NO guarda solo, y pinchar otra tarea lo
+  // recargaba entero: las notas que acabaras de escribir desaparecian sin aviso
+  // y sin forma de recuperarlas. Es la clase de perdida que el usuario ni
+  // atribuye a un bug — cree que no lo escribio.
+  const hayCambios = (): boolean => {
+    if (!activeTask) return false
+    const guardado = camposEditables(activeTask) as Record<string, unknown>
+    return Object.keys(guardado).some(k => (editing as Record<string, unknown>)[k] !== guardado[k])
+  }
+
   const openTask = (t: Task) => {
+    // Solo avisa al CAMBIAR de tarea. Volver a pinchar la que ya esta abierta no
+    // recarga nada, asi que no hay nada que perder.
+    if (activeTask && activeTask.id !== t.id && hayCambios()) {
+      showToast('Tienes cambios sin guardar en esta tarea')
+      return
+    }
     setActiveTask(t)
-    setEditing({text:t.text,level:t.level,assigned_to:t.assigned_to,co_assigned_to:t.co_assigned_to,done:t.done,due_date:t.due_date,project_id:t.project_id,notes:t.notes})
+    setEditing(camposEditables(t))
     setConfirmDelete(false)
   }
   const saveTask = async () => {

@@ -3,18 +3,11 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Client, Project, Task, InboxMessage, MemoriaEntry, ContentItem, Regla, ChatMessage, Profile } from '@/types'
 
-export interface CalendarEvent {
-  id: string
-  title: string
-  start: string
-  end: string
-  allDay: boolean
-  location?: string
-  description?: string
-  colorId?: string
-  htmlLink?: string
-  hangoutLink?: string
-}
+// Estaba declarado aquí Y en src/types, byte a byte igual. Esa es exactamente la
+// forma en que este proyecto se hace daño: se añade un campo a una copia, la otra
+// se queda atrás y tsc no ve nada porque las dos son estructuralmente válidas.
+import type { CalendarEvent } from '@/types'
+export type { CalendarEvent }
 
 async function apiFetch(url: string, opts?: RequestInit) {
   const res = await fetch(url, opts)

@@ -106,11 +106,19 @@ export async function getCalendarEvents(refreshToken: string, monthsAhead = 2) {
   // Get all selected calendars — requires calendar.readonly scope.
   // Falls back to ['primary'] if token only has calendar.events (older tokens).
   let calendarIds: string[] = []
+  const escribibles: Record<string, boolean> = {}
   try {
     const { data: calList } = await calendar.calendarList.list({ minAccessRole: 'reader' })
     calendarIds = (calList.items || [])
       .filter((c: any) => c.selected !== false)
       .map((c: any) => c.id as string)
+    // Quien puede ESCRIBIR en cada uno. Un calendario compartido en modo lectura
+    // —el de un cliente, el de festivos— se lista igual que el propio, y sus
+    // eventos salían con los mismos botones de EDITAR y ELIMINAR. Google
+    // devuelve 403 y el usuario ve "Error eliminando evento" sin saber por qué.
+    for (const c of calList.items || []) {
+      if (c.id) escribibles[c.id] = c.accessRole === 'owner' || c.accessRole === 'writer'
+    }
   } catch {}
   if (!calendarIds.length) calendarIds.push('primary')
 
@@ -128,8 +136,13 @@ export async function getCalendarEvents(refreshToken: string, monthsAhead = 2) {
     )
   )
 
-  const mapEvent = (e: any) => ({
+  // De qué calendario sale cada evento. Sin esto, editar o borrar iba SIEMPRE
+  // contra 'primary': los eventos de cualquier otro calendario daban 404 al
+  // intentar tocarlos, con los botones perfectamente visibles.
+  const mapEvent = (e: any, calId: string) => ({
     id: e.id,
+    calendarId: calId,
+    editable: escribibles[calId] ?? (calId === 'primary'),
     title: e.summary || '(sin título)',
     start: e.start?.dateTime || e.start?.date || '',
     end: e.end?.dateTime || e.end?.date || '',
@@ -144,12 +157,12 @@ export async function getCalendarEvents(refreshToken: string, monthsAhead = 2) {
   // Merge, deduplicate and sort
   const seen = new Set<string>()
   const allEvents: ReturnType<typeof mapEvent>[] = []
-  for (const result of results) {
+  for (const [i, result] of results.entries()) {
     if (result.status !== 'fulfilled') continue
     for (const e of result.value.data.items || []) {
       if (!e.id || seen.has(e.id)) continue
       seen.add(e.id)
-      allEvents.push(mapEvent(e))
+      allEvents.push(mapEvent(e, calendarIds[i]))
     }
   }
 
@@ -233,23 +246,25 @@ export async function createCalendarEvent(refreshToken: string, opts: {
   }
 }
 
-export async function deleteCalendarEvent(refreshToken: string, eventId: string) {
+export async function deleteCalendarEvent(refreshToken: string, eventId: string, calendarId = 'primary') {
   const oauth2Client = getOAuthClient()
   oauth2Client.setCredentials({ refresh_token: refreshToken })
   const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
-  await calendar.events.delete({ calendarId: 'primary', eventId })
+  await calendar.events.delete({ calendarId, eventId })
 }
 
 export async function updateCalendarEvent(refreshToken: string, eventId: string, opts: {
   title?: string
   date?: string
   time?: string
+  calendarId?: string
 }) {
+  const calendarId = opts.calendarId || 'primary'
   const oauth2Client = getOAuthClient()
   oauth2Client.setCredentials({ refresh_token: refreshToken })
   const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
 
-  const { data: existing } = await calendar.events.get({ calendarId: 'primary', eventId })
+  const { data: existing } = await calendar.events.get({ calendarId, eventId })
   const patchBody: any = {}
   if (opts.title) patchBody.summary = opts.title
   if (opts.date) {
@@ -270,7 +285,7 @@ export async function updateCalendarEvent(refreshToken: string, eventId: string,
       patchBody.end = tramo.end
     }
   }
-  const { data } = await calendar.events.patch({ calendarId: 'primary', eventId, requestBody: patchBody })
+  const { data } = await calendar.events.patch({ calendarId, eventId, requestBody: patchBody })
   return {
     id: data.id ?? eventId,
     title: data.summary ?? opts.title ?? '',

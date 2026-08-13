@@ -91,6 +91,27 @@ export const nivelTarea = (crudo?: string | null): NivelTarea => {
 export const plural = (n: number, singular: string, plural?: string): string =>
   `${n} ${n === 1 ? singular : (plural ?? singular + 's')}`
 
+// ¿Esta tarea es de esta persona? Una sola respuesta para toda la app.
+//
+// Estaba escrito solo en EquipoSection, y ReportesSection tenia el suyo propio con
+// DOS diferencias: emparejaba por `assignee.name` en vez de por id, e ignoraba por
+// completo `co_assigned_to`. Resultado: la misma persona salia con una carga de
+// trabajo en Equipo y otra distinta en Reportes — y quien solo estuviera
+// co-asignado aparecia con CERO tareas en el informe.
+//
+// Por id y no por nombre: `profiles.name` no es unique, y dos homonimos se
+// fusionaban en uno.
+export const esTareaDe = (
+  t: { assignee?: { id?: string } | null; co_assignee?: { id?: string } | null; co_assigned_to?: string | null },
+  miembro: { id?: string },
+): boolean =>
+  !!miembro?.id && (t.assignee?.id === miembro.id || t.co_assignee?.id === miembro.id || t.co_assigned_to === miembro.id)
+
+/** Tiene responsable, sea principal o co-responsable. */
+export const tieneResponsable = (
+  t: { assignee?: unknown; co_assignee?: unknown; co_assigned_to?: unknown },
+): boolean => !!t.assignee || !!t.co_assignee || !!t.co_assigned_to
+
 export const strColor = (s: string) => {
   const palette = ['#3B82F6','#8B5CF6','#EC4899','#F59E0B','#10B981','#EF4444','#06B6D4','#F97316','#6366F1','#84CC16']
   let h = 0; for (let i=0;i<s.length;i++) h = s.charCodeAt(i)+((h<<5)-h)

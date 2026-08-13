@@ -9,6 +9,7 @@ import { ProgressRing } from '@/components/shared/ui'
 import LucideIcon from '@/components/shared/LucideIcon'
 import { PlatformLogo } from '@/components/PlatformLogo'
 import type { Client, Project, Task, NexusData} from '@/types'
+import type { IrASeccion } from '@/components/shared/secciones'
 
 // El plan estrategico lo escribe Claude y /api/clients/[id]/ai-advice reenvia el
 // JSON parseado TAL CUAL, sin esquema que lo valide. Tipar aqui la forma que la
@@ -43,7 +44,7 @@ interface PropsClientes {
   onOpenModal: any
   showToast: any
   isOwner: any
-  onNavigate: any
+  onNavigate: IrASeccion
   onSelectProject: any
 }
 
