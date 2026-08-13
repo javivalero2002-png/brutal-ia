@@ -251,6 +251,7 @@ export default function PreviewClient({
     setAgenda(x=>x.map(a=>a.id===id?{...a,...u}:a))
     return []   // ninguna columna descartada: aquí no hay servidor que se queje
   }, [])
+  const aplicarAgendaLocal = useCallback((fila:ContentItem)=>{ setAgenda(x=>x.map(a=>a.id===fila.id?fila:a)) }, [])
   const deleteAgenda = useCallback(async (id:string)=>{ setAgenda(x=>x.filter(a=>a.id!==id)) }, [])
   const createMemoria = useCallback(async (e:Partial<MemoriaEntry>)=>{
     setMemoria(x=>[{ id:'mem'+Date.now(), category:'General', title:'', content:'', created_at:iso(0), ...e }, ...x])
@@ -304,7 +305,7 @@ export default function PreviewClient({
     markRead, markUnread, markManyRead,
     createClient, updateClient, deleteClient,
     createProject, updateProject, deleteProject,
-    createAgenda, updateAgenda, deleteAgenda,
+    createAgenda, updateAgenda, deleteAgenda, aplicarAgendaLocal,
     createMemoria, updateMemoria, deleteMemoria,
     sendChatMessage, clearChat, syncGmail,
     sendInternalMessage:noop, reloadInbox, reloadTeam,

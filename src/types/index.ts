@@ -191,6 +191,8 @@ export interface NexusData {
   createAgenda: (data: Partial<ContentItem>) => Promise<void>
   /** Columnas que el PATCH no pudo escribir (guardado parcial); vacio si fue completo. */
   updateAgenda: (id: string, data: Partial<ContentItem>) => Promise<string[]>
+  /** Mete en la lista una fila que el servidor YA ha escrito. No hace PATCH. */
+  aplicarAgendaLocal: (fila: ContentItem) => void
   deleteAgenda: (id: string) => Promise<void>
   createRegla: (data: Partial<Regla>) => Promise<void>
   updateRegla: (id: string, data: Partial<Regla>) => Promise<void>

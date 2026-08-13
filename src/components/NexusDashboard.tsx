@@ -248,6 +248,12 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
         setToast(gmailStatus === 'colabs_connected' ? 'Colaboraciones conectado' : 'Gmail personal conectado')
         setSection('ajustes')
       }, 400)
+    } else if (gmailStatus === 'colabs_no_autorizado') {
+      // Sin este caso, el rechazo caía en el `error` genérico y decía «Error
+      // conectando», que hace que se reintente en bucle sin entender por qué.
+      window.history.replaceState({}, '', '/dashboard')
+      setToast('El buzón de Colaboraciones es de la empresa: solo el propietario puede conectarlo')
+      setTimeout(() => setSection('ajustes'), 400)
     } else if (gmailStatus === 'denied') {
       window.history.replaceState({}, '', '/dashboard')
       setToast('Google bloqueó esta cuenta. Debe estar autorizada en la pantalla de consentimiento de Google Cloud (o usa una cuenta @brutalstudios.es).')

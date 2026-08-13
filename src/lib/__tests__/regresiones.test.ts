@@ -35,6 +35,16 @@ const RUTAS = TS.filter(f => f.endsWith('route.ts') && f.startsWith('src/app/api
 const CLIENTE = TS.filter(f => f.endsWith('.tsx'))
 const leer = (f: string) => readFileSync(f, 'utf8')
 
+// Igual que `leer`, pero sin comentarios.
+//
+// Hace falta porque este proyecto comenta MUCHO, y explicar en un comentario lo
+// que se acaba de quitar —«antes: updateAgenda(id, { cover_url: json.url })»— hace
+// que una regla que busca ese patrón lo encuentre y falle. Pasó al escribir la
+// regla de abajo. El fallo grave es el simétrico: una regla que un comentario
+// puede SATISFACER no comprueba código, comprueba prosa.
+const leerCodigo = (f: string) =>
+  leer(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
 // ── 1. Los avisos push ───────────────────────────────────────────────────────
 //
 // El bug: `sendPushToUser(...).catch(() => {})` sin await, con el `return` en la
@@ -537,5 +547,113 @@ describe('sincronizar un buzón · nunca dos a la vez', () => {
     expect(/saltado/.test(leer('src/app/api/gmail/colabs-sync/route.ts')), 'la ruta de colabs se come el saltado').toBe(true)
     expect(/saltado/.test(leer('src/hooks/useNexusData.ts')), 'el cliente no distingue saltado de vacío').toBe(true)
     expect(/saltado/.test(leer('src/app/api/cron/sync-colabs/route.ts')), 'el cron cuenta un saltado como sincronizado').toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lo que se PINTA de un campo de Storage no es lo que hay GUARDADO en él.
+//
+// La base guarda la URL pública como IDENTIFICADOR estable, y las rutas de
+// lectura la sustituyen por una firma temporal antes de mandarla (storageFirmado).
+// O sea: el formulario enseña una firma con token. Reenviarla al guardar rompe de
+// dos maneras, y la segunda destruye datos:
+//
+//  · el PATCH pisa el identificador con una firma que caduca;
+//  · si firmarUrl() falla devuelve null A PROPÓSITO —un enlace roto que parece
+//    bueno confunde más que un hueco—, el input se pinta vacío, y guardar escribe
+//    null encima. El fichero se queda en el bucket y la app olvida dónde está.
+//
+// Encontrado el 2026-08-13 en ContenidoSection, donde bastaba con escribir una
+// nota y darle a guardar.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('campos de Storage · no se reenvía lo que solo se estaba viendo', () => {
+  const CONTENIDO = leerCodigo('src/components/sections/ContenidoSection.tsx')
+
+  it('saveNotes no manda cover_url ni video_url sin que se hayan tocado', () => {
+    const i = CONTENIDO.indexOf('const saveNotes =')
+    expect(i, 'ya no existe saveNotes: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = CONTENIDO.slice(i, i + 1600)
+
+    // Si aparecen en el objeto `updates` sin pasar por la marca de "tocado",
+    // volvemos a mandar la firma —o el hueco que dejó una firma fallida—.
+    const enPayloadSuelto = /const updates[^\n]*\b(cover_url|video_url)\s*:/.test(cuerpo)
+    expect(enPayloadSuelto,
+      'cover_url/video_url vuelven al payload sin condición: guardar una nota pisa el identificador').toBe(false)
+
+    expect(/if \(coverTocada\.current\)/.test(cuerpo), 'falta la guarda de cover_url').toBe(true)
+    expect(/if \(videoTocado\.current\)/.test(cuerpo), 'falta la guarda de video_url').toBe(true)
+  })
+
+  it('las marcas se reinician al abrir otra pieza', () => {
+    const i = CONTENIDO.indexOf('const openItem =')
+    const cuerpo = CONTENIDO.slice(i, i + 700)
+    expect(/coverTocada\.current = false/.test(cuerpo) && /videoTocado\.current = false/.test(cuerpo),
+      'las marcas se quedan puestas de la pieza anterior: se reenviaría su URL a otra distinta').toBe(true)
+  })
+
+  it('subir una portada no vuelve a escribirla en la base', () => {
+    // upload-cover YA guarda el identificador en el servidor y devuelve la fila
+    // firmada. Un PATCH extra desde el cliente solo sirve para pisarlo.
+    expect(/updateAgenda\([^)]*cover_url:\s*json\.url/.test(CONTENIDO),
+      'la subida vuelve a hacer PATCH con la URL firmada: pisa el identificador que acaba de guardar el servidor').toBe(false)
+    expect(/aplicarAgendaLocal/.test(CONTENIDO),
+      'la rejilla ya no se refresca tras subir la portada').toBe(true)
+  })
+
+  it('el servidor sigue guardando la pública y devolviendo la firmada', () => {
+    const UP = leerCodigo('src/app/api/agenda/[id]/upload-cover/route.ts')
+    expect(/update\(\{ cover_url: publicUrl \}\)/.test(UP),
+      'upload-cover ya no guarda la URL pública como identificador').toBe(true)
+    expect(/firmarUrl\(admin, publicUrl\)/.test(UP),
+      'upload-cover devuelve la pública sin firmar: con el bucket cerrado no pinta nada').toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// El buzón compartido es de la EMPRESA: solo el propietario lo conecta.
+//
+// La regla no dice «/api/gmail/connect comprueba el rol», porque esa fue
+// exactamente la trampa. Se puso ahí el 2026-08-13 —simetría con disconnect, que
+// ya lo exigía— y el agujero seguía abierto una puerta más adentro: quien ESCRIBE
+// el token es /api/gmail/callback, y allí el `account` sale del `state`, que lo
+// controla el cliente.
+//
+// El nonce no cubre esto. Impide que un extraño fabrique un state; no impide que
+// el dueño legítimo de ese nonce lo edite. Un miembro pide conectar su Gmail
+// personal (permitido para cualquiera), cambia `personal` por `colabs` al volver
+// de Google, y su nonce sigue casando porque es el suyo — igual que `user.id`.
+// Resultado: el buzón de la empresa apuntando a su correo personal, y su correo
+// personal en el inbox de las siete personas.
+//
+// Por eso la regla persigue la ESCRITURA, no la ruta: cualquier puerta nueva que
+// escriba ese token queda cubierta sola.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('buzón compartido · solo el propietario puede apuntarlo a un Gmail', () => {
+  // Solo las que APUNTAN el buzón a un Gmail. Ponerlo a `null` es lo contrario:
+  // es limpiar un token que Google ya ha dado por muerto, y eso lo hace el propio
+  // sistema (gmail/status y colabsSync) sin humano delante. Exigir owner ahí
+  // dejaría el token muerto pegado hasta que pasara el propietario.
+  const APUNTAN = TS.filter(f =>
+    /gmail_colabs_refresh_token\s*:\s*(?!null)[A-Za-z_$]/.test(leerCodigo(f)))
+
+  it('hay puertas que revisar', () => {
+    expect(APUNTAN.length).toBeGreaterThan(0)
+  })
+
+  it('todas comprueban el rol antes de escribir el token', () => {
+    const sinRol = APUNTAN.filter(f => {
+      const src = leerCodigo(f)
+      const i = src.search(/gmail_colabs_refresh_token\s*:\s*(?!null)[A-Za-z_$]/)
+      // El rol tiene que resolverse ANTES de la escritura, y del servidor.
+      return !/role\s*!==\s*'owner'|role\s*===\s*'owner'/.test(src.slice(0, i))
+    })
+    expect(sinRol,
+      'Escribe el token del buzón compartido sin comprobar que quien lo pide es owner').toEqual([])
+  })
+
+  it('el rol sale del servidor, nunca del state ni del body', () => {
+    for (const f of APUNTAN) {
+      expect(/getAuthCtx\(\)/.test(leerCodigo(f)), `${f} no resuelve el rol por servidor`).toBe(true)
+    }
   })
 })
