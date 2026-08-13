@@ -1,7 +1,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { codigoDeFallo } from '@/lib/gmailAuth'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
-import { analyzeEmail, EmailAnalysis, presupuestoBucle } from '@/lib/ai'
+import { analyzeEmail, EmailAnalysis, plazoRestante, MINIMO_UTIL_MS } from '@/lib/ai'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { NextResponse } from 'next/server'
 import { sendPushToUser, sendPushToAll, canSendPush } from '@/lib/push'
@@ -52,6 +52,11 @@ export async function POST() {
 
   const { data: clientsData } = await admin.from('clients').select('name')
   const knownClients = (clientsData || []).map(c => c.name)
+
+  // T0 arranca AQUI, no junto al bucle: el fetch de Gmail y sus consultas tambien
+  // gastan del minuto de la funcion. Medirlo desde despues era contar solo una
+  // parte y creer que sobraba tiempo.
+  const T0 = Date.now()
 
   let emails: Awaited<ReturnType<typeof getEmailsWithRefreshToken>>
   let gmailAccount = ''
@@ -138,17 +143,18 @@ export async function POST() {
   // Al agotarse se sale limpiamente: lo insertado queda guardado, el push se
   // envia, y los emails que faltan los recoge la ejecucion de la hora siguiente
   // (el bucle salta los gmail_id ya conocidos, asi que no se repite trabajo).
-  const T0 = Date.now()
   // 45_000 escrito a mano no cabia: el check se hace ANTES de analyzeEmail, asi
   // que pasar en t=44,9 s y encadenar una llamada de 30,5 s termina en t=75,4 —
   // con maxDuration 60, Vercel mata la funcion y el usuario ve un error en vez de
   // un "truncado, sigo en la proxima". Ahora sale del cliente de Anthropic.
-  const PRESUPUESTO_MS = presupuestoBucle(60)
   let truncado = false
 
   for (const email of emails) {
     if (known.has(email.gmail_id)) continue
-    if (Date.now() - T0 > PRESUPUESTO_MS) { truncado = true; break }
+    // ¿Cabe la SIGUIENTE, no me he pasado ya. La diferencia importa: la guarda
+    // vieja autorizaba una llamada sin saber lo que iba a costar.
+    const plazo = plazoRestante(T0, 60)
+    if (plazo < MINIMO_UTIL_MS) { truncado = true; break }
 
     let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
     try {
@@ -156,7 +162,8 @@ export async function POST() {
         email.subject || '',
         (email.body_preview || '').slice(0, 800),
         email.from_name,
-        knownClients
+        knownClients,
+        plazo,
       )
     } catch {
       // AI analysis failed — save email with basic info anyway

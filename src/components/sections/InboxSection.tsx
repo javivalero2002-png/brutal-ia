@@ -148,7 +148,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
           const idx = sel ? msgs.findIndex((m: any)=>m.id===sel.id) : -1
           const next = e.key==='j' ? Math.min(idx+1, msgs.length-1) : Math.max(idx-1, 0)
           const m = msgs[next]
-          if (m && !m.is_read) data.markRead(m.id).catch(()=>{})
+          if (m && !m.is_read) cambiarLeido(m.id, true)
           return m || sel
         })
       }
@@ -204,7 +204,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
     setReplyOpen(false)
     setReplyDraft('')
     setReplyCopied(false)
-    if (!m.is_read) data.markRead(m.id).catch(()=>{})
+    if (!m.is_read) cambiarLeido(m.id, true)
   }
 
   // `borradorRef` numera cada peticion. Sin eso, abrir un email, cerrarlo y abrir

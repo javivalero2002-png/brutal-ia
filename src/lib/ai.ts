@@ -12,25 +12,38 @@ import { nivelTarea } from '@/components/shared/helpers'
 // sincronización moría a mitad, sin dejar rastro de por qué. Con 15s y un
 // reintento el peor caso por email queda acotado y el presupuesto del bucle
 // vuelve a ser una cota real.
-// Cuanto puede tardar UNA llamada a analyzeEmail en el peor caso.
+// El plazo de un bucle de analyzeEmail, y por que NO es un presupuesto.
 //
-// El `timeout` del SDK es POR INTENTO, no por llamada: con maxRetries: 1 son dos
-// intentos completos, mas el backoff de en medio. Se exporta porque quien hace un
-// bucle de analyzeEmail tiene que dejar sitio para que quepa la ULTIMA — comprobar
-// el presupuesto ANTES de una llamada que puede durar medio minuto no sirve de nada
-// si el presupuesto no lo contempla.
+// La primera version de esto bajaba el numero: 45 s a 25 s, para que 25 + el peor
+// caso cupieran en los 60 s de la funcion. La verificacion adversarial lo tumbo, y
+// con razon. El `timeout` del SDK es POR INTENTO, asi que con maxRetries: 1 una
+// llamada degradada vale ~30,5 s — pero ademas el SDK OBEDECE el `Retry-After` de
+// un 429 hasta 60 s, o sea que UNA sola llamada puede costar ~75 s. Ningun valor
+// de presupuesto sobrevive a eso: el numero era la palanca equivocada.
 //
-// Estaba escrito a mano y distinto en tres sitios: 45 s en /api/gmail/sync, 25 s en
-// colabsSync (colabs) y 12 s (personal). Solo el 45 no cabia — 45 + 30,5 = 75,5 s
-// contra un maxDuration de 60. Derivarlo de aqui es lo que impide que vuelvan a
-// separarse.
+// Y bajarlo se paga todos los dias en el unico camino donde hay alguien esperando:
+// a ~3 s por email, 45 s son ~15 correos por clic y 25 s son ~8.
+//
+// La palanca correcta es el PLAZO: no empezar una llamada que no quepa en lo que
+// queda. `plazoRestante()` dice cuanto hay, y `analyzeEmail` acepta ese plazo y lo
+// aplica a la peticion (con maxRetries 0, porque un reintento no cabe en un hueco
+// medido). Asi el bucle corre hasta el final del tiempo util —throughput intacto—
+// y no puede pasarse, ni siquiera con un 429 de por medio.
 const TIMEOUT_MS = 15_000
 const MAX_REINTENTOS = 1
-export const PEOR_CASO_ANALYZE_MS = TIMEOUT_MS * (MAX_REINTENTOS + 1) + 1_000
 
-/** Presupuesto de bucle que cabe en una funcion de `maxDuration` segundos. */
-export const presupuestoBucle = (maxDurationSeg: number, margenMs = 4_000): number =>
-  Math.max(5_000, maxDurationSeg * 1_000 - PEOR_CASO_ANALYZE_MS - margenMs)
+/** Lo que hay que dejar libre para responder y cerrar. */
+const MARGEN_RESPUESTA_MS = 4_000
+/** Por debajo de esto no merece la pena empezar: no daria tiempo ni al viaje. */
+export const MINIMO_UTIL_MS = 5_000
+
+/**
+ * Milisegundos que quedan para trabajar dentro de una funcion de `maxDurationSeg`.
+ * `t0` es cuando empezo la funcion — ponlo ANTES del fetch de Gmail, no despues:
+ * ese fetch y sus consultas tambien consumen el minuto.
+ */
+export const plazoRestante = (t0: number, maxDurationSeg: number): number =>
+  maxDurationSeg * 1_000 - (Date.now() - t0) - MARGEN_RESPUESTA_MS
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -62,7 +75,19 @@ export async function webSearch(query: string): Promise<SearchResult[]> {
   // como si nada, y nadie se entera de que la búsqueda web lleva días muerta.
   if (!key) { console.error('[ai] TAVILY_API_KEY ausente — búsqueda web desactivada'); return [] }
   try {
+    // `signal`, porque este fetch va pelado y sin el rigen los defaults de undici
+    // (300 s): CINCO VECES el maxDuration de 60 s de /api/chat. Un cuelgue de
+    // Tavily —no una caida, que ya cae sola en segundos— se llevaba la funcion
+    // entera, y con ella la respuesta de Harvey, que ni siquiera habia empezado.
+    //
+    // 11 s y no 10: `search_depth: 'advanced'` es el modo lento de Tavily y 10
+    // roza su latencia normal, asi que una busqueda sana pero lenta se descartaria
+    // en silencio. Por encima de ~12 s se vuelve a perder el margen. El catch de
+    // abajo devuelve [] y lo registra, y los dos system prompts contemplan el caso
+    // sin resultados — el mensaje de AbortSignal.timeout dice «operation was
+    // aborted due to timeout», que se distingue en los logs de un fallo de Tavily.
     const res = await fetch('https://api.tavily.com/search', {
+      signal: AbortSignal.timeout(11_000),
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -165,7 +190,12 @@ export async function analyzeEmail(
   subject: string,
   body: string,
   fromName: string,
-  knownClients: string[]
+  knownClients: string[],
+  /**
+   * Plazo maximo para ESTA llamada. Lo pasa quien esta en un bucle con un limite
+   * de tiempo por delante; sin el rigen los valores del cliente (15 s x 2).
+   */
+  plazoMs?: number,
 ): Promise<EmailAnalysis> {
   let msg: Awaited<ReturnType<typeof anthropic.messages.create>>
   try {
@@ -191,7 +221,12 @@ Responde SOLO con JSON válido (sin markdown):
   "suggestedTask": "texto de tarea a crear o null"
 }`
       }]
-    })
+    }, plazoMs
+      // maxRetries 0: un reintento no cabe en un hueco ya medido, y el SDK
+      // obedece el Retry-After de un 429 hasta 60 s — que es justo lo que hace
+      // que ningun presupuesto fijo funcione.
+      ? { timeout: Math.max(1_000, plazoMs), maxRetries: 0 }
+      : undefined)
   } catch (err: any) {
     // Distinguir el motivo importa: un 401 se arregla rotando la clave, un 429
     // se pasa solo. Sin este log, ambos eran silencio idéntico.

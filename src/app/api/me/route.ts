@@ -40,11 +40,21 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (existingByEmail) {
-      // Update the profile ID to match the new auth user so future lookups work
-      await admin
+      // Update the profile ID to match the new auth user so future lookups work.
+      //
+      // El error SE MIRA, y es el gemelo del callback de Gmail: si este update
+      // falla y se devuelve `{...existingByEmail, id: user.id}` igualmente, el
+      // cliente se queda con un id que NO existe en la tabla. Todo lo que haga a
+      // partir de ahi apunta a una fila fantasma —tareas creadas a nombre de nadie,
+      // permisos resueltos contra un perfil que no esta— y sin un solo error.
+      const { error: errVinculo } = await admin
         .from('profiles')
         .update({ id: user.id })
         .eq('email', user.email)
+      if (errVinculo) {
+        console.error('[me] no se pudo revincular el perfil:', errVinculo.message)
+        return NextResponse.json({ error: 'No se pudo vincular tu perfil' }, { status: 500 })
+      }
       return NextResponse.json({ ...existingByEmail, id: user.id })
     }
   }

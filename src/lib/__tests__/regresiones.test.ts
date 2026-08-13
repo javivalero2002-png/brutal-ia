@@ -701,21 +701,51 @@ describe('lo que se lee de una API se lee entero', () => {
   // llamada: pasar en t=44,9 s y encadenar 30,5 s termina en t=75,4 contra un
   // maxDuration de 60. Estaba escrito a mano y distinto en tres sitios (45/25/12) y
   // solo el 45 no cabia — el numero correcto ya estaba en los otros dos.
-  it('el presupuesto del bucle sale del cliente, no de un numero a mano', () => {
-    const CONSUMEN = TS.filter(f => /PRESUPUESTO_MS\s*=/.test(leerCodigo(f)))
-    expect(CONSUMEN.length).toBeGreaterThan(1)
-    const aMano = CONSUMEN.filter(f =>
-      leerCodigo(f).split('\n')
-        .filter(l => /PRESUPUESTO_MS\s*=/.test(l))
-        .some(l => !/presupuestoBucle\(/.test(l)))
-    expect(aMano,
-      'vuelve a escribir el presupuesto a mano: no hay nada que garantice que quepa en maxDuration').toEqual([])
+  // La primera version de esto bajaba el PRESUPUESTO de 45 s a 25 s. La
+  // verificacion adversarial lo tumbo con razon: el SDK obedece el `Retry-After`
+  // de un 429 hasta 60 s, asi que UNA llamada puede costar ~75 s y ningun valor de
+  // presupuesto sobrevive. El numero era la palanca equivocada.
+  //
+  // La regla persigue la forma correcta: preguntar si CABE la siguiente, no si ya
+  // me he pasado — y pasarle ese plazo a la llamada, para que no pueda excederlo.
+  it('los bucles de analyzeEmail preguntan si cabe la siguiente', () => {
+    const EN_BUCLE = TS.filter(f => /for \(const email of emails\)/.test(leerCodigo(f)))
+    expect(EN_BUCLE.length, 'no se encontro ningun bucle de emails').toBeGreaterThan(1)
+    for (const f of EN_BUCLE) {
+      const src = leerCodigo(f)
+      expect(/plazoRestante\(/.test(src), `${f} no mide el plazo restante`).toBe(true)
+      expect(/MINIMO_UTIL_MS/.test(src), `${f} no corta cuando ya no cabe una llamada`).toBe(true)
+      expect(/PRESUPUESTO_MS/.test(src),
+        `${f} vuelve al presupuesto fijo: un 429 con Retry-After se lo salta`).toBe(false)
+    }
   })
 
-  it('y el peor caso cuenta los reintentos, no solo el timeout', () => {
+  it('y el plazo llega hasta la llamada, que es donde se aplica', () => {
     const AI = leerCodigo('src/lib/ai.ts')
-    expect(/PEOR_CASO_ANALYZE_MS\s*=\s*TIMEOUT_MS\s*\*\s*\(\s*MAX_REINTENTOS\s*\+\s*1\s*\)/.test(AI),
-      'el peor caso ya no multiplica por los intentos: el timeout del SDK es POR INTENTO').toBe(true)
+    expect(/plazoMs\?:\s*number/.test(AI), 'analyzeEmail ya no acepta plazo').toBe(true)
+    // Acotado a la rama del plazo: `maxRetries: 0` aparece tambien en otra
+    // llamada del fichero, asi que buscarlo suelto pasaba en verde con la rama
+    // del plazo puesta en 1. Comprobado reintroduciendo ese cambio exacto.
+    const i = AI.indexOf('? { timeout:')
+    expect(i, 'ya no hay rama de plazo en la llamada').toBeGreaterThan(-1)
+    expect(/maxRetries:\s*0/.test(AI.slice(i, i + 120)),
+      'con plazo medido no puede haber reintento: no cabe en un hueco ya medido').toBe(true)
+    for (const f of TS.filter(f => /for \(const email of emails\)/.test(leerCodigo(f)))) {
+      expect(/analyzeEmail\([\s\S]{0,400}?plazo/.test(leerCodigo(f)),
+        `${f} mide el plazo y luego no se lo pasa a la llamada`).toBe(true)
+    }
+  })
+
+  // El fetch de Gmail y sus consultas tambien gastan del minuto. Medir desde
+  // despues era contar solo una parte y creer que sobraba tiempo.
+  it('el reloj arranca antes del fetch de Gmail', () => {
+    for (const f of TS.filter(f => /const T0 = Date\.now\(\)/.test(leerCodigo(f)))) {
+      const src = leerCodigo(f)
+      const t0 = src.indexOf('const T0 = Date.now()')
+      const fetchGmail = src.indexOf('await getEmailsWithRefreshToken(')
+      if (fetchGmail === -1) continue
+      expect(t0, `${f}: T0 arranca despues del fetch de Gmail`).toBeLessThan(fetchGmail)
+    }
   })
 
   // Google pagina. Con singleEvents:true cada serie se expande en instancias, asi
@@ -814,5 +844,114 @@ describe('escrituras · ningún insert descarta su error', () => {
     // El mensaje tiene que estar detras de una condicion que dependa del insert.
     expect(/creada\s*$|creada\s*\?/m.test(W.slice(Math.max(0, i - 200), i + 40)),
       'vuelve a anunciar la tarea sin comprobar que se escribio').toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ningún fetch de servidor sin plazo.
+//
+// El invariante ya estaba escrito en el repo —ai.ts dice que los timeouts se
+// eligen por debajo del maxDuration «para que el fallo lo dé la ruta, con
+// mensaje, y no la plataforma cortando la función a secas»— pero cinco fetch
+// crudos se habían quedado fuera: Tavily, Anthropic (harvey/chat usa fetch en vez
+// del SDK), Fish Audio y los dos de transcripción.
+//
+// Sin `signal` rigen los defaults de undici: 300 s, CINCO VECES el maxDuration de
+// 60 s. Y el modo de fallo no es una caída —esa cae sola en segundos— sino un
+// CUELGUE: la función se agota, Vercel la mata sin respuesta, y el camino de error
+// cuidadosamente escrito más abajo no llega a ejecutarse nunca.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('fetch de servidor · siempre con plazo', () => {
+  const SERVIDOR = TS.filter(f => !f.includes('/components/'))
+
+  const sinPlazo = SERVIDOR.flatMap(f => {
+    const src = leerCodigo(f)
+    const fuera: string[] = []
+    const re = /await fetch\('https:\/\/([^']+)'/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(src))) {
+      // El init del fetch: hasta el primer cierre de objeto.
+      const init = src.slice(m.index, m.index + 420).split('})')[0]
+      if (!/signal\s*:/.test(init)) fuera.push(`${f} → ${m[1].slice(0, 40)}`)
+    }
+    return fuera
+  })
+
+  it('hay fetch que revisar', () => {
+    const total = SERVIDOR.filter(f => /await fetch\('https:\/\//.test(leerCodigo(f)))
+    expect(total.length).toBeGreaterThan(2)
+  })
+
+  it('ninguno se queda sin signal', () => {
+    expect(sinPlazo,
+      'Un cuelgue de ese servicio agota la función entera: 300 s de undici contra 60 s de maxDuration').toEqual([])
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Seis cosas que la interfaz decía mal. Cuatro son gemelos donde la copia BUENA
+// ya estaba en el repo, así que la regla fija que sigan iguales.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('la interfaz no dice cosas que no son', () => {
+  it('el callback de Gmail no anuncia «conectado» sin haber escrito', () => {
+    const CB = leerCodigo('src/app/api/gmail/callback/route.ts')
+    // Las dos ramas (colabs y personal) tienen que mirar error Y filas: un update
+    // que no casa ninguna fila NO es error, y dejaba el mismo anuncio falso.
+    expect((CB.match(/count:\s*'exact'/g) || []).length,
+      'una de las dos ramas no cuenta las filas actualizadas').toBe(2)
+    expect((CB.match(/error:\s*err(Colabs|Personal)/g) || []).length,
+      'una de las dos ramas descarta el error del update').toBe(2)
+  })
+
+  it('/api/me no devuelve un id que quizá no se guardó', () => {
+    const ME = leerCodigo('src/app/api/me/route.ts')
+    const i = ME.indexOf("update({ id: user.id })")
+    expect(i, 'ya no revincula perfiles: revisa esta regla').toBeGreaterThan(-1)
+    expect(/const \{ error/.test(ME.slice(Math.max(0, i - 220), i)),
+      'devuelve el id nuevo sin comprobar que la fila se actualizó: el cliente se queda apuntando a un perfil fantasma').toBe(true)
+  })
+
+  it('el fallo de transcripción no se le echa al usuario', () => {
+    for (const f of ['HoySection', 'HarveySection']) {
+      const src = leerCodigo(`src/components/sections/${f}.tsx`)
+      expect(/mensajeErrorTranscripcion\(/.test(src),
+        `${f} no usa el traductor común: vuelve a decir «no se entendió el audio» ante un 503`).toBe(true)
+    }
+    // La rama del 402 era código muerto: esa ruta no devuelve 402 en ningún sitio.
+    expect(/status === 402/.test(leerCodigo('src/components/sections/HoySection.tsx')),
+      'vuelve la rama del 402, que no existe en el servidor').toBe(false)
+  })
+
+  it('Harvey no confunde «los que enseño» con «los que hay»', () => {
+    const H = leerCodigo('src/components/sections/HarveySection.tsx')
+    expect(/nSinLeer/.test(H), 'vuelve a etiquetar la lista recortada como «sin leer»').toBe(true)
+    expect(/INBOX — \$\{unreadEmails\.length\} sin leer:/.test(H),
+      'la lista lleva .slice(0,8): con más de 8 diría siempre exactamente 8').toBe(false)
+  })
+
+  // La tarjeta de confirmación es la última red antes de mandar invitaciones por
+  // correo. HoySection ya enseñaba la hora; HarveySection no.
+  it('las dos tarjetas de Harvey enseñan la hora', () => {
+    for (const f of ['HoySection', 'HarveySection']) {
+      const src = leerCodigo(`src/components/sections/${f}.tsx`)
+      const fechas = (src.match(/\{pendingAction\.date\}/g) || []).length
+      const horas = (src.match(/\{pendingAction\.date\}\{pendingAction\.time/g) || []).length
+      expect(horas, `${f}: ${fechas - horas} tarjeta(s) pintan la fecha sin la hora`).toBe(fechas)
+    }
+  })
+
+  it('abrir un correo sincroniza el que está abierto, no solo la lista', () => {
+    const I = leerCodigo('src/components/sections/InboxSection.tsx')
+    expect(/data\.markRead\(m\.id\)/.test(I),
+      'vuelve a llamar a markRead a pelo: el reducer crea un objeto nuevo y `selected` se queda con is_read:false para siempre').toBe(false)
+  })
+
+  it('guardar una tarea manda solo lo que se ha cambiado', () => {
+    const T = leerCodigo('src/components/sections/TareasSection.tsx')
+    const i = T.indexOf('const saveTask =')
+    const cuerpo = T.slice(i, i + 1400)
+    expect(/updateTask\(activeTask\.id,\s*editing\)/.test(cuerpo),
+      'vuelve a mandar `editing` entero: resucita una tarea completada desde otra pestaña y borra su completed_at').toBe(false)
+    expect(/cambios/.test(cuerpo), 'no construye el diff de campos tocados').toBe(true)
   })
 })

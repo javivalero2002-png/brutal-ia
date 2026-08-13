@@ -11,6 +11,7 @@ import { getSharedAudio, playAck, isIOSDevice, matchTeamMember, splitForTTS, sto
 import LucideIcon from '@/components/shared/LucideIcon'
 import type { Task, Project, Client, NexusData} from '@/types'
 import type { IrASeccion, Section } from '@/components/shared/secciones'
+import { mensajeErrorTranscripcion } from '@/components/shared/helpers'
 
 interface PropsHoy {
   profile: any
@@ -392,8 +393,13 @@ ${memLines||'  sin documentos'}`
         if (text?.trim()) { setHarveySpoken(text); await askHarvey(text); return }
       }
       setOrbMode('idle')
-      if (res.status === 402) showToast('Transcripción agotada este mes — activa el dictado de iOS en Ajustes → General → Teclado')
-      else showToast('No se entendió el audio — vuelve a pulsar')
+      // La rama del 402 era codigo muerto: /api/harvey/transcribe no devuelve 402
+      // en ningun sitio. Todo lo demas —401, 400, 413, 429, 503, 502— caia en «no
+      // se entendio el audio», que culpa al usuario de un fallo del servidor y le
+      // hace repetir la grabacion. A las diez repeticiones salta el 429, cuyo texto
+      // tambien se tragaba el mismo else. El gemelo de HarveySection ya estaba bien.
+      const jErr = await res.json().catch(() => null)
+      showToast(mensajeErrorTranscripcion(res.status, jErr?.error))
     } catch { setOrbMode('idle'); showToast('Error al procesar el audio') }
   }
 

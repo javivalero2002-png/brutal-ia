@@ -186,3 +186,30 @@ export function estadoDeadline(deadline?: string|null): {
     etiquetaLarga: dias === 0 ? 'HOY' : dias < 0 ? `hace ${-dias}d` : `en ${dias}d`,
   }
 }
+
+// Qué decirle al usuario cuando /api/harvey/transcribe no devuelve OK.
+//
+// Existe porque el diagnóstico estaba MAL y además escrito dos veces. HoySection
+// solo desviaba en `res.status === 402`, y esa ruta no devuelve 402 en ningún
+// sitio: era código muerto. Todo lo demás —401, 400, 413, 429, 503, 502— caía en
+// «No se entendió el audio, vuelve a pulsar», que culpa al usuario de un fallo
+// del servidor. Y se refuerza solo: a las diez repeticiones en un minuto salta el
+// 429, cuyo texto también se tragaba el mismo `else`.
+//
+// Por qué traduce en vez de usar `json.error` a secas, que era lo propuesto: tres
+// de esos estados contestan en INGLÉS («Unauthorized», «STT not configured»,
+// «Transcription failed»), así que justo en el caso que motivó el arreglo la
+// interfaz en español enseñaría «STT not configured». El texto del servidor se
+// usa solo cuando ya viene en español y dice algo accionable (429 y 413).
+export function mensajeErrorTranscripcion(status: number, delServidor?: string | null): string {
+  // El propio servidor responde en español y con algo que hacer.
+  if (status === 429 || status === 413) {
+    return delServidor || 'Audio demasiado largo o demasiadas grabaciones seguidas — espera un momento'
+  }
+  if (status === 401) return 'Tu sesión ha caducado — vuelve a entrar'
+  if (status === 503) return 'La transcripción no está configurada — avisa a quien lleva Brutal.IA'
+  if (status === 400) return 'No llegó el audio — vuelve a grabar'
+  // 502 y cualquier otro: es del servidor, y decirlo así es lo que evita que el
+  // usuario repita la grabación creyendo que habla mal.
+  return 'El servicio de transcripción falló — inténtalo en un momento'
+}

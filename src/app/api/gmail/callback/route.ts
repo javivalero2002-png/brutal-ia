@@ -106,25 +106,42 @@ export async function GET(request: NextRequest) {
       console.warn(`[gmail] ${userId} intento conectar el buzon compartido sin ser owner`)
       return done(`${base}/dashboard?gmail=colabs_no_autorizado`)
     }
-    await supabase
+    // El error se mira. supabase-js no lanza, y la ruta hermana (disconnect) SI lo
+    // comprobaba: sin esto se anunciaba «conectado», el dashboard saltaba a Ajustes
+    // y alli seguia el boton CONECTAR. El `code` de Google es de un solo uso, asi
+    // que hay que rehacer el flujo entero sin saber por que.
+    //
+    // `count` ademas de `error`: un update que no casa ninguna fila NO es error
+    // —devuelve error null— y dejaba el mismo anuncio falso por otra puerta.
+    const { error: errColabs, count: filasColabs } = await supabase
       .from('profiles')
       .update({
         gmail_colabs_refresh_token: tokens.refresh_token,
         gmail_colabs_connected: true,
         gmail_colabs_account: email,
-      })
+      }, { count: 'exact' })
       .eq('id', userId)
+    if (errColabs || !filasColabs) {
+      console.error('[gmail] no se pudo guardar el token de colabs:', errColabs?.message ?? 'ninguna fila actualizada')
+      return done(`${base}/dashboard?gmail=error`)
+    }
     return done(`${base}/dashboard?gmail=colabs_connected`)
   }
 
-  await supabase
+  // Igual que la rama de colabs de arriba: sin esto se decia «Gmail personal
+  // conectado» y en Ajustes seguia el boton CONECTAR, en la misma pantalla.
+  const { error: errPersonal, count: filasPersonal } = await supabase
     .from('profiles')
     .update({
       gmail_refresh_token: tokens.refresh_token,
       gmail_connected: true,
       gmail_account: email,
-    })
+    }, { count: 'exact' })
     .eq('id', userId)
+  if (errPersonal || !filasPersonal) {
+    console.error('[gmail] no se pudo guardar el token personal:', errPersonal?.message ?? 'ninguna fila actualizada')
+    return done(`${base}/dashboard?gmail=error`)
+  }
 
   return done(`${base}/dashboard?gmail=connected`)
 }

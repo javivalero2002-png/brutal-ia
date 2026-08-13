@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { esTokenMuerto, esConexionRota } from '@/lib/gmailAuth'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
-import { analyzeEmail, EmailAnalysis, presupuestoBucle } from '@/lib/ai'
+import { analyzeEmail, EmailAnalysis, plazoRestante, MINIMO_UTIL_MS } from '@/lib/ai'
 import { sendPushToAll, sendPushToUser, canSendPush } from '@/lib/push'
 import { localDayKey } from '@/components/shared/helpers'
 
@@ -88,6 +88,11 @@ async function syncColabsInboxSinCerrojo(
   const { data: clientsData } = await admin.from('clients').select('name')
   const knownClients = (clientsData || []).map((c: { name: string }) => c.name)
 
+  // T0 arranca AQUI, no junto al bucle: el fetch de Gmail y sus consultas tambien
+  // gastan del minuto de la funcion. Medirlo desde despues era contar solo una
+  // parte y creer que sobraba tiempo.
+  const T0 = Date.now()
+
   let emails: Awaited<ReturnType<typeof getEmailsWithRefreshToken>>
   let gmailAccount = ''
   try {
@@ -150,20 +155,21 @@ async function syncColabsInboxSinCerrojo(
   // 25s y no 45 como en /api/gmail/sync: alli la funcion solo hace eso, mientras
   // que aqui el cron tiene por delante los buzones personales de las 7 personas,
   // las automatizaciones y la purga dentro del mismo minuto.
-  const T0 = Date.now()
   // El tope de abajo es el que cabe en la funcion; el 25 s es una eleccion PROPIA
   // y mas estricta (ver comentario de arriba). Se toma el menor, para que la
   // intencion se conserve y el invariante no dependa de que alguien recuerde.
-  const PRESUPUESTO_MS = Math.min(25_000, presupuestoBucle(60))
   let truncado = false
 
   for (const email of emails) {
     if (colabsKnown.has(email.gmail_id)) continue
-    if (Date.now() - T0 > PRESUPUESTO_MS) { truncado = true; break }
+    // ¿Cabe la SIGUIENTE, no me he pasado ya. La diferencia importa: la guarda
+    // vieja autorizaba una llamada sin saber lo que iba a costar.
+    const plazo = plazoRestante(T0, 60)
+    if (plazo < MINIMO_UTIL_MS) { truncado = true; break }
 
     let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
     try {
-      analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients)
+      analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients, plazo)
     } catch { aiFailures++ }
     // analyzeEmail NO lanza: captura por dentro y devuelve el fallback básico,
     // así que el catch de arriba era código muerto y aiFailures siempre 0.
@@ -291,6 +297,11 @@ async function syncPersonalInboxSinCerrojo(
   const { data: clientsData } = await admin.from('clients').select('name')
   const knownClients = (clientsData || []).map((c: { name: string }) => c.name)
 
+  // T0 arranca AQUI, no junto al bucle: el fetch de Gmail y sus consultas tambien
+  // gastan del minuto de la funcion. Medirlo desde despues era contar solo una
+  // parte y creer que sobraba tiempo.
+  const T0 = Date.now()
+
   let emails: Awaited<ReturnType<typeof getEmailsWithRefreshToken>>
   let gmailAccount = ''
   try {
@@ -344,17 +355,18 @@ async function syncPersonalInboxSinCerrojo(
   // 12s y no 25: aqui se multiplica por el numero de personas, mientras que el
   // compartido es uno solo. Al agotarse se sale limpiamente y lo que falte lo
   // recoge la ejecucion siguiente — el bucle salta los gmail_id ya conocidos.
-  const T0 = Date.now()
-  const PRESUPUESTO_MS = Math.min(12_000, presupuestoBucle(60))
   let truncado = false
 
   for (const email of emails) {
     if (personalKnown.has(email.gmail_id)) continue
-    if (Date.now() - T0 > PRESUPUESTO_MS) { truncado = true; break }
+    // ¿Cabe la SIGUIENTE, no me he pasado ya. La diferencia importa: la guarda
+    // vieja autorizaba una llamada sin saber lo que iba a costar.
+    const plazo = plazoRestante(T0, 60)
+    if (plazo < MINIMO_UTIL_MS) { truncado = true; break }
 
     let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
     try {
-      analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients)
+      analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients, plazo)
     } catch { aiFailures++ }
     if (analysis.degraded) aiFailures++
 
