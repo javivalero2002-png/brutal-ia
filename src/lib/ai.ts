@@ -277,7 +277,7 @@ export async function chat(
 
   const urgentEmails = context.emails.filter(e => e.urgency === 'urgent')
   const emailsBlock = context.emails.length > 0
-    ? `\n\nEMAILS RECIENTES (${context.emails.length} totales, ${context.unreadInbox} sin leer):\n${
+    ? `\n\nEMAILS RECIENTES (los ${context.emails.length} mas recientes, ${context.unreadInbox} sin leer de esos):\n${
         context.emails.slice(0, 15).map(e => {
           const tag = e.shared ? '[COLABS]' : '[PERSONAL]'
           const urgTag = e.urgency === 'urgent' ? '🔴' : e.urgency === 'high' ? '🟡' : '⚪'

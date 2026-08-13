@@ -31,6 +31,42 @@ describe('contrato de datos de las secciones', () => {
     expect(culpables, `Declaran props como any: ${culpables.join(', ')}`).toEqual([])
   })
 
+  // Diez secciones declaraban `onNavigate: any`. La regla de arriba no las veía,
+  // porque solo mira el objeto de props ENTERO — un prop suelto tipado `any` se
+  // le escapa, y este era justo el que cruza la frontera hacia la navegación.
+  //
+  // Lo que costaba: `onNavigate('proyecto')` en singular compilaba sin una queja
+  // y en ejecución dejaba la app en una sección que no existe. Al ponerle el tipo
+  // aparecieron cuatro sitios que le pasaban un `string` ancho.
+  it('toda sección que recibe `onNavigate` lo tipa con IrASeccion', () => {
+    const fallan = secciones.filter(f => /^\s*onNavigate\??:\s*any\s*$/m.test(leer(f)))
+    expect(fallan, `Declaran onNavigate como any: ${fallan.join(', ')}`).toEqual([])
+  })
+
+  // Y que el tipo no se quede en la firma: las listas de `{..., nav:'tareas'}`
+  // se ensanchan a `string` si nadie las tipa, y entonces el tipo del prop no
+  // comprueba nada en el sitio donde de verdad se escribe el nombre.
+  it('las listas con `nav:` van tipadas, no ensanchadas a string', () => {
+    const HOY = readFileSync(join(DIR, 'HoySection.tsx'), 'utf8')
+    expect(/type BItem = \{[^}]*nav:\s*Section/.test(HOY), 'BItem.nav volvió a ser string').toBe(true)
+    expect(/railStats:\s*\{[^}]*nav:\s*Section\}\[\]/.test(HOY), 'railStats perdió su tipo').toBe(true)
+    const REP = readFileSync(join(DIR, 'ReportesSection.tsx'), 'utf8')
+    // `satisfies` y no `as`: con `as` el tipo se AFIRMA sin comprobarse. Se probó
+    // metiendo nav:'proyecto' y tsc pasaba igual.
+    expect(/satisfies \{[^}]*nav:\s*Section\}\[\]/.test(REP), 'los KPI de Reportes no están tipados con satisfies').toBe(true)
+  })
+
+  // Reportes NO tiene entrada en el menú: se llega solo por la pestaña de
+  // Ajustes, y ahí recibía `onNavigate={()=>{}}`. Sus seis KPI son botones, se
+  // ven como botones, y no hacían nada por la única ruta que existe para verlos.
+  it('Ajustes pasa un onNavigate de verdad a Reportes', () => {
+    const AJ = readFileSync(join(DIR, 'AjustesSection.tsx'), 'utf8')
+    const linea = AJ.split('\n').find(l => l.includes('<ReportesSection')) || ''
+    expect(linea, 'Ajustes ya no monta ReportesSection: sobra esta regla').not.toBe('')
+    expect(/onNavigate=\{\s*\(\s*\)\s*=>\s*\{\s*\}\s*\}/.test(linea),
+      'vuelve a pasar un onNavigate vacío: los KPI de Reportes no navegan').toBe(false)
+  })
+
   it('toda sección que recibe `data` lo tipa con NexusData', () => {
     const fallan = secciones.filter(f => {
       const src = leer(f)

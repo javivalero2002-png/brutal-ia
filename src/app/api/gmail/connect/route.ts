@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getAuthCtx } from '@/lib/authz'
 import { getAuthUrl, OAUTH_STATE_COOKIE } from '@/lib/gmail'
 import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
@@ -9,6 +10,23 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const account = request.nextUrl.searchParams.get('account') === 'colabs' ? 'colabs' : 'personal'
+
+  // Simetria con /api/gmail/disconnect, que ya exige owner para colabs.
+  //
+  // Faltaba aqui, y la asimetria era el bug: DESconectar el buzon compartido estaba
+  // protegido, pero CONECTARLO no. Cualquiera del equipo podia apuntar el correo de
+  // la empresa a su Gmail personal — el token de colabs se guarda en el perfil de
+  // quien conecta, asi que el buzon compartido de los siete pasaba a leer su bandeja.
+  // Y sin mala fe: basta con pulsar el boton equivocado en Sincronizacion.
+  if (account === 'colabs') {
+    const ctx = await getAuthCtx()
+    if (!ctx || ctx.role !== 'owner') {
+      return NextResponse.json(
+        { error: 'Solo el propietario puede conectar el buzón compartido' },
+        { status: 403 },
+      )
+    }
+  }
 
   // Nonce anti-CSRF: viaja en el `state` de OAuth Y en una cookie httpOnly. El
   // callback exige que coincidan, así que un tercero no puede fabricar un enlace

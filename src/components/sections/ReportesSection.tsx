@@ -1,12 +1,14 @@
 'use client'
 import { useEffect, useRef, useMemo } from 'react'
+import { esTareaDe } from '@/components/shared/helpers'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { Task, Project, Client, Profile, NexusData } from '@/types'
 import { PLATAFORMA_COLOR, useIsMobile, BLU, RED, GRN, BORDER, LucideIcon, dlDate, dlLabel, estadoDeadline, Donut, Gauge, AreaChart, localDayKey } from '@/components/shared'
+import type { IrASeccion, Section } from '@/components/shared/secciones'
 
 interface PropsReportes {
   data: NexusData
-  onNavigate: any
+  onNavigate: IrASeccion
 }
 
 function ReportesSection({data, onNavigate}: PropsReportes) {
@@ -52,8 +54,11 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
 
     const weekAgoReport = new Date(); weekAgoReport.setDate(weekAgoReport.getDate()-7); weekAgoReport.setHours(0,0,0,0)
     const tasksByMember = ((data.team || []) as Profile[]).map((m: Profile) => {
-      const memberPending = tasks.filter(t=>!t.done&&t.assignee?.name===m.name)
-      const memberDone = tasks.filter(t=>t.done&&t.assignee?.name===m.name)
+      // El MISMO predicado que Equipo (shared/helpers). Antes aqui se emparejaba
+      // por nombre y se ignoraba co_assigned_to, asi que las dos pantallas daban
+      // cargas de trabajo distintas para la misma persona.
+      const memberPending = tasks.filter(t=>!t.done&&esTareaDe(t,m))
+      const memberDone = tasks.filter(t=>t.done&&esTareaDe(t,m))
       const urgentCount = memberPending.filter(t=>t.level==='urgent').length
       const highCount = memberPending.filter(t=>t.level==='high').length
       const normalCount = memberPending.length - urgentCount - highCount
@@ -143,14 +148,16 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
 
       {/* KPIs */}
       <div className="grid gap-2 mb-4 flex-shrink-0" style={{gridTemplateColumns:isMobile?'repeat(3,minmax(0,1fr))':totalMRR>0?'repeat(6,minmax(0,1fr))':'repeat(5,minmax(0,1fr))'}}>
-        {[
+        {([
           {v:`${completionRate}%`, l:'Tareas completadas', accent:completionRate>60?'#22c55e':BLU, nav:'tareas'},
           {v:urgentTasks+'', l:'Urgentes pendientes', accent:urgentTasks>0?RED:BLU, nav:'tareas'},
           {v:overdueProjects.length+'', l:'Proy. atrasados', accent:overdueProjects.length>0?RED:null, nav:'proyectos'},
           {v:activeClients.length+'', l:'Clientes activos', accent:null, nav:'clientes'},
           {v:agendaItems.filter((a:any)=>a.status!=='publicado').length+'', l:'En pipeline', accent:agendaItems.filter((a:any)=>a.status!=='publicado').length>0?'rgba(193,53,132,0.9)':null, nav:'contenido'},
-          ...(totalMRR>0?[{v:`€${totalMRR.toLocaleString('es-ES')}`, l:'MRR activos', accent:GRN, nav:'clientes'}]:[]),
-        ].map((k,i)=>(
+          ...(totalMRR>0?[{v:`€${totalMRR.toLocaleString('es-ES')}`, l:'MRR activos', accent:GRN, nav:'clientes' as const}]:[]),
+        // `satisfies` y no `as`: con `as` el tipo se AFIRMA sin comprobarse —un
+        // nav:'proyecto' en singular pasaba tsc igual. Verificado metiendo el typo.
+        ] satisfies {v:string;l:string;accent:string|null;nav:Section}[]).map((k,i)=>(
           <button key={i} onClick={()=>onNavigate?.(k.nav)} className={isMobile ? 'rounded-xl p-2.5 text-left transition-all hover:opacity-80' : 'rounded-xl p-4 text-left transition-all hover:opacity-80'} style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)',borderTop:`2px solid ${k.accent||'rgba(255,255,255,0.1)'}`}}>
             <div className="font-syne font-black mb-1 leading-none" style={{color:k.accent||'#F0F0F8',fontSize:isMobile?'clamp(15px,5vw,22px)':totalMRR>0?'clamp(20px,2.2vw,36px)':'36px',overflowWrap:'anywhere'}}>{k.v}</div>
             <div className={isMobile ? 'text-[10px] text-white/35 leading-tight' : 'text-xs text-white/35'}>{k.l}</div>

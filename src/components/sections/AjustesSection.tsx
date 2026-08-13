@@ -10,6 +10,7 @@ import MemoriaSection from './MemoriaSection'
 import AutomatizacionesSection from './AutomatizacionesSection'
 import ReportesSection from './ReportesSection'
 import NotificacionesTab from './NotificacionesTab'
+import type { IrASeccion } from '@/components/shared/secciones'
 
 interface PropsAjustes {
   profile: any
@@ -19,9 +20,14 @@ interface PropsAjustes {
   setMemFilter: any
   onOpenModal: any
   isOwner: any
+  // Ajustes pinta ReportesSection dentro de una pestaña, y esa es la UNICA ruta
+  // que lleva a Reportes: no hay entrada en el menu. Se le pasaba `()=>{}`, asi
+  // que los seis KPI de arriba —que son botones y se ven como botones— no hacian
+  // absolutamente nada para el unico que puede verlos.
+  onNavigate: IrASeccion
 }
 
-function AjustesSection({profile,data,showToast,memFilter,setMemFilter,onOpenModal,isOwner}: PropsAjustes) {
+function AjustesSection({profile,data,showToast,memFilter,setMemFilter,onOpenModal,isOwner,onNavigate}: PropsAjustes) {
   const isMobile = useIsMobile()
   const [ajTab, setAjTab] = useState<'perfil'|'notificaciones'|'sincronizacion'|'equipo'|'memoria'|'automatizaciones'|'reportes'>('perfil')
   const [editName, setEditName] = useState(profile?.name||'')
@@ -115,7 +121,7 @@ function AjustesSection({profile,data,showToast,memFilter,setMemFilter,onOpenMod
         {ajTab === 'equipo' && <EquipoSection data={data} profile={profile} showToast={showToast} />}
         {ajTab === 'memoria' && <MemoriaSection data={data} memFilter={memFilter||'Todos'} setMemFilter={setMemFilter||(() => {})} onOpenModal={onOpenModal||(() => {})} showToast={showToast} />}
         {ajTab === 'automatizaciones' && <AutomatizacionesSection data={data} onOpenModal={onOpenModal||(() => {})} showToast={showToast} isOwner={isOwner} />}
-        {ajTab === 'reportes' && isOwner && <ReportesSection data={data} onNavigate={()=>{}} />}
+        {ajTab === 'reportes' && isOwner && <ReportesSection data={data} onNavigate={onNavigate} />}
 
         {ajTab === 'perfil' && (
         <div className={`${isMobile?'p-4':'p-8'} max-w-[680px] mx-auto`}>

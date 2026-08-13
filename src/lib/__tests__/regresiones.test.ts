@@ -386,3 +386,101 @@ describe('uniones con CHECK en la base · nadie las silencia con `as any`', () =
       'Castea a any un campo con CHECK: normalízalo (ver nivelTarea) en vez de silenciarlo').toEqual([])
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Un formulario a medio escribir no se descarta sin avisar.
+//
+// Tres sitios lo hacían, y ninguno es un fallo que el usuario atribuya a un bug:
+// escribes, desaparece, y das por hecho que no lo escribiste.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('nada de perder lo que el usuario ha escrito', () => {
+  it('el clic en el fondo del modal pasa por su propia comprobacion', () => {
+    const m = leer('src/components/CreateModal.tsx')
+    // El fondo NO puede compartir manejador con Cancelar y la X: esos dos
+    // descartan a proposito —el usuario lo ha pedido— y el fondo es el gesto que
+    // se hace sin querer. Un solo `onClose` para los tres significa que el fondo
+    // se llevaba el formulario entero en silencio.
+    const fondo = m.split('\n').find(l => /className="fixed inset-0 z-\[100\]/.test(l)) || ''
+    expect(fondo, 'no se encontró el fondo del modal').not.toBe('')
+    expect(/onClick=\{onDismiss/.test(fondo),
+      'el fondo vuelve a usar onClose: descarta el formulario sin avisar').toBe(true)
+
+    const d = leer('src/components/NexusDashboard.tsx')
+    const i = d.indexOf('onDismiss=')
+    expect(i, 'el dashboard ya no pasa onDismiss').toBeGreaterThan(-1)
+    expect(/sin guardar/.test(d.slice(i, i + 400)),
+      'el onDismiss del dashboard no comprueba si hay algo escrito').toBe(true)
+  })
+
+  it('cambiar de tarea no borra las notas a medio escribir', () => {
+    const t = leer('src/components/sections/TareasSection.tsx')
+    const i = t.indexOf('const openTask =')
+    expect(i, 'openTask ya no existe: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = t.slice(i, i + 500)
+    expect(/hayCambios\(\)/.test(cuerpo),
+      'openTask recarga el panel sin mirar si hay cambios sin guardar').toBe(true)
+    expect(/return/.test(cuerpo.slice(cuerpo.indexOf('hayCambios()'))),
+      'detecta los cambios pero sigue adelante igual').toBe(true)
+  })
+
+  // Esta regla existe porque el arreglo del modal ROMPIO Escape: la guarda de
+  // hayModalAbierto() se puso al principio del manejador global, y ese manejador
+  // es justo el que cierra el modal con Escape. Con el modal abierto, Escape ya
+  // no hacía nada — y el modal es a pantalla completa.
+  it('Escape sigue cerrando el modal: la guarda va DESPUES', () => {
+    const d = leer('src/components/NexusDashboard.tsx')
+    const esc = d.indexOf("e.key === 'Escape'")
+    const guarda = d.indexOf('hayModalAbierto()')
+    expect(esc, "no se encontró la rama de Escape").toBeGreaterThan(-1)
+    expect(guarda, 'el dashboard ya no consulta hayModalAbierto()').toBeGreaterThan(-1)
+    expect(guarda, 'la guarda está ANTES de Escape: con un modal abierto, Escape no lo cierra')
+      .toBeGreaterThan(esc)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// El calendario se LEE de todos los calendarios y se ESCRIBÍA solo en uno.
+//
+// La sincronización recorre `calendarList` entera, así que en la sección salen
+// eventos de cualquier calendario. Editar y borrar iban fijos a 'primary': todos
+// esos eventos daban 404 con los botones perfectamente visibles.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('calendario · escribir donde de verdad está el evento', () => {
+  const GMAIL = leer('src/lib/gmail.ts')
+
+  it('editar y borrar no fijan el calendario a primary', () => {
+    const malos = GMAIL.split('\n')
+      .map((l, i) => ({ i: i + 1, l }))
+      .filter(({ l }) => /events\.(delete|patch|get)\(\{\s*calendarId:\s*'primary'/.test(l))
+    expect(malos.map(u => `gmail.ts:${u.i}`),
+      "vuelve a escribir en 'primary' fijo: los eventos de otros calendarios dan 404").toEqual([])
+  })
+
+  it('cada evento sabe de qué calendario sale', () => {
+    // Mirar `calendarId: calId` en el fichero entero NO vale: `events.list` ya lo
+    // lleva, así que el test pasaba en verde con mapEvent roto. Comprobado
+    // quitándoselo a mapEvent. Se acota al cuerpo de mapEvent, que es quien
+    // construye el evento que acaba en la UI.
+    const i = GMAIL.indexOf('const mapEvent =')
+    expect(i, 'ya no existe mapEvent: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = GMAIL.slice(i, GMAIL.indexOf('})', i))
+    expect(/calendarId:\s*calId/.test(cuerpo),
+      'los eventos ya no llevan su calendarId: editar y borrar no pueden acertar').toBe(true)
+    expect(/editable:/.test(cuerpo), 'los eventos no dicen si se pueden editar').toBe(true)
+    expect(/mapEvent\(e,\s*calendarIds\[/.test(GMAIL),
+      'mapEvent recibe el calendario pero nadie se lo pasa de verdad').toBe(true)
+  })
+
+  it('la UI no ofrece editar lo que Google no deja tocar', () => {
+    const CAL = leer('src/components/sections/CalendarioSection.tsx')
+    expect(/editable === false/.test(CAL),
+      'un calendario compartido en solo lectura vuelve a enseñar EDITAR y ELIMINAR: Google contesta 403').toBe(true)
+  })
+
+  // El tipo estaba escrito dos veces, byte a byte igual. Añadir un campo a una
+  // copia y no a la otra no lo ve tsc: las dos siguen siendo válidas.
+  it('CalendarEvent está declarado una sola vez', () => {
+    const veces = TS.filter(f => /export interface CalendarEvent \{/.test(leer(f)))
+    expect(veces, `CalendarEvent declarado en: ${veces.join(', ')}`).toHaveLength(1)
+  })
+})

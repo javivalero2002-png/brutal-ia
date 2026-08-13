@@ -224,6 +224,12 @@ export interface CalendarEvent {
   colorId?: string
   htmlLink?: string
   hangoutLink?: string
+  /** De qué calendario de Google sale. Editar y borrar lo necesitan: sin él iban
+   *  siempre contra 'primary' y devolvían 404 para todo lo demás. */
+  calendarId?: string
+  /** false = calendario compartido en solo lectura. La UI esconde EDITAR y
+   *  ELIMINAR, que ahí Google contesta 403. */
+  editable?: boolean
 }
 
 // Base para tipar una seccion. Solo `data` es universal: NexusDashboard le pasa a

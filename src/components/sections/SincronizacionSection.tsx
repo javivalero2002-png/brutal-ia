@@ -562,19 +562,27 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
                     <button onClick={syncColabs} disabled={syncingColabs||syncingAll} className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all disabled:opacity-40 hover:opacity-80" style={{background:SURF2,color:syncingColabs?BLU:'rgba(255,255,255,0.4)',border:`1px solid ${BORDER}`}}>
                       <LucideIcon name="refresh-cw" size={11} color={syncingColabs?BLU:'rgba(255,255,255,0.3)'}/>{syncingColabs?'Sync…':'Sync'}
                     </button>
-                    <a href="/api/gmail/connect?account=colabs" className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all hover:opacity-80 no-underline" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>
-                      <LucideIcon name="rotate-ccw" size={10} color="rgba(255,255,255,0.2)"/>Reauth
-                    </a>
+                    {/* Conectar colabs es cosa del propietario, igual que desconectarlo: el token
+                        se guarda en el perfil de quien conecta, asi que apuntar el buzon de la
+                        empresa a un Gmail personal cambia lo que leen los siete. La ruta ya
+                        devuelve 403; ocultarlo evita que alguien lo pulse y se coma un error. */}
+                    {profile?.role === 'owner' && (
+                      <a href="/api/gmail/connect?account=colabs" className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all hover:opacity-80 no-underline" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>
+                        <LucideIcon name="rotate-ccw" size={10} color="rgba(255,255,255,0.2)"/>Reauth
+                      </a>
+                    )}
                     {/* Solo el propietario. El buzón compartido es infraestructura
                         de la empresa: desconectarlo deja a los siete sin sincronizar.
                         La ruta ya lo impide con un 403; ocultarlo aquí evita que
                         alguien lo pulse y se coma un error sin saber por qué. */}
                     {profile?.role === 'owner' && <BotonDesconectar account="colabs" aviso="¿DESCONECTAR COLABS PARA TODO EL EQUIPO?"/>}
                   </>
-                ) : (
+                ) : profile?.role === 'owner' ? (
                   <a href="/api/gmail/connect?account=colabs" className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white transition-all hover:opacity-80 no-underline" style={{background:'linear-gradient(135deg,#EA4335,#C62828)'}}>
                     <LucideIcon name="link-2" size={12} color="white"/>CONECTAR
                   </a>
+                ) : (
+                  <span className="font-syne text-[8.5px] font-black tracking-wide" style={{color:'rgba(255,255,255,0.28)'}}>SIN CONECTAR · lo conecta el propietario</span>
                 )}
               </div>
             </div>
@@ -589,12 +597,16 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
                       <p className="font-syne text-[8px] leading-relaxed mb-3" style={{color:'rgba(255,255,255,0.4)'}}>
                         El token de Gmail Colaboraciones ha caducado. Reconecta la cuenta compartida para seguir recibiendo emails del equipo.
                       </p>
-                      <a href="/api/gmail/connect?account=colabs"
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide no-underline transition-all hover:opacity-80"
-                        style={{background:`${RED}15`,color:RED,border:`1px solid ${RED}25`}}>
-                        <LucideIcon name="rotate-ccw" size={11} color={RED}/>
-                        RECONECTAR GMAIL COLABS
-                      </a>
+                      {profile?.role === 'owner' ? (
+                        <a href="/api/gmail/connect?account=colabs"
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide no-underline transition-all hover:opacity-80"
+                          style={{background:`${RED}15`,color:RED,border:`1px solid ${RED}25`}}>
+                          <LucideIcon name="rotate-ccw" size={11} color={RED}/>
+                          RECONECTAR GMAIL COLABS
+                        </a>
+                      ) : (
+                        <p className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.35)'}}>Avísale al propietario para que la reconecte.</p>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { Task, Project, NexusData} from '@/types'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, useIsMobile, dlDate, LucideIcon, todayKey } from '@/components/shared'
+import type { IrASeccion } from '@/components/shared/secciones'
 
 // ── Markdown renderer (inline) ───────────────────────────────
 function MarkdownMsg({ text }: { text: string }) {
@@ -150,7 +151,7 @@ interface PropsChat {
   chatLoading: any
   setChatLoading: any
   showToast: any
-  onNavigate: any
+  onNavigate: IrASeccion
 }
 
 function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoading,showToast,onNavigate}: PropsChat) {

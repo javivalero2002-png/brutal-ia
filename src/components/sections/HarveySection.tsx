@@ -7,12 +7,13 @@ import { nivelTarea } from '@/components/shared/helpers'
 import type { NexusData } from '@/types'
 import { BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, AMBAR} from '@/components/shared'
 import { VIO } from '@/components/shared/design-tokens'
+import type { IrASeccion } from '@/components/shared/secciones'
 
 interface PropsHarvey {
   data: NexusData
   profile: any
   showToast: any
-  onNavigate: any
+  onNavigate: IrASeccion
   preloadMessage: any
   onClearPreload: any
 }

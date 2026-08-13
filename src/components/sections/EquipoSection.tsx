@@ -4,21 +4,10 @@ import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { APP_HOST } from '@/lib/appUrl'
 import type { Profile, Task, NexusData} from '@/types'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, BORDER, LucideIcon, ProgressRing, relTime, todayKey, AMBAR } from '@/components/shared'
-import { plural } from '@/components/shared/helpers'
+import { plural, esTareaDe, tieneResponsable } from '@/components/shared/helpers'
 import { fetchWithTimeout } from '@/lib/fetch-timeout'
 
-// Una tarea es de alguien si es su responsable O su co-responsable. Equipo
-// ignoraba por completo co_assigned_to: quien solo estaba co-asignado salia con
-// CERO tareas, con el anillo de progreso a cero y sin nada en su ficha — mientras
-// el resto de la app (Tareas, Hoy) esas mismas tareas si se las contaba.
-//
-// Y se comparaba por NOMBRE, no por id. Dos perfiles con el mismo nombre —que los
-// hay— se fusionaban en uno.
-const esTareaDe = (t: Task, miembro: { id?: string }) =>
-  !!miembro?.id && (t.assignee?.id === miembro.id || t.co_assignee?.id === miembro.id || t.co_assigned_to === miembro.id)
-
-/** Tiene responsable, sea principal o co-responsable. */
-const tieneResponsable = (t: Task) => !!t.assignee || !!t.co_assignee || !!t.co_assigned_to
+// `esTareaDe` y `tieneResponsable` viven en shared/helpers: Reportes usa los mismos.
 
 
 interface PropsEquipo {

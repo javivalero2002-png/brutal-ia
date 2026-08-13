@@ -10,6 +10,7 @@ import { todayKey, localDayKey, madridHour, madridDateLabel, estadoDeadline } fr
 import { getSharedAudio, playAck, isIOSDevice, matchTeamMember, splitForTTS, stopAllVoices, isSRBroken, markSRBroken } from '@/components/shared/audio'
 import LucideIcon from '@/components/shared/LucideIcon'
 import type { Task, Project, Client, NexusData} from '@/types'
+import type { IrASeccion, Section } from '@/components/shared/secciones'
 
 interface PropsHoy {
   profile: any
@@ -19,7 +20,7 @@ interface PropsHoy {
   onOpenModal: any
   showToast: any
   isOwner: any
-  onNavigate: any
+  onNavigate: IrASeccion
 }
 
 export default function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,isOwner,onNavigate}: PropsHoy) {
@@ -635,7 +636,9 @@ ${memLines||'  sin documentos'}`
               const importante = unread.filter((m:any)=>m.ai_urgency==='urgent'||m.ai_urgency==='high').length
               const todayEvts = ((data.calendarEvents||[]) as any[]).filter((e:any)=>e.start?.slice(0,10)===todayStr)
               const focusEmail = unread.find((m:any)=>m.ai_urgency==='urgent') || unread.find((m:any)=>m.ai_urgency==='high')
-              type BItem = {icon:string;color:string;text:string;nav:string}
+              // `nav: Section` y no `string`: sin el tipo, un 'proyecto' en singular
+              // compilaba y dejaba la app en una seccion inexistente.
+              type BItem = {icon:string;color:string;text:string;nav:Section}
               const items: BItem[] = []
               if (focusEmail) {
                 // El cliente solo se añade si el nombre del remitente NO lo lleva
@@ -892,7 +895,7 @@ ${memLines||'  sin documentos'}`
 
       {/* ══ RIGHT RAIL (stats slim) ══ */}
       {(()=>{
-        const railStats = [
+        const railStats: {n:number;l:string;c:string;icon:string;nav:Section}[] = [
           {n:unreadCount, l:'sin leer', c:unreadCount>0?'rgba(255,176,32,0.95)':'rgba(255,255,255,0.5)', icon:'mail', nav:'inbox'},
           {n:pendingAll, l:pendingAll===1?'tarea':'tareas', c:urgentTasks.length>0?RED:BLU, icon:'check-square', nav:'tareas'},
           {n:pipeline, l:pipeline===1?'oportunidad':'oportunidades', c:'rgba(167,139,250,0.9)', icon:'target', nav:'contenido'},

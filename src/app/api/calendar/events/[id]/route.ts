@@ -23,8 +23,13 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: 'Gmail no conectado' }, { status: 400 })
   }
 
+  // El calendario llega del cliente, y no hace falta más: el token es el SUYO,
+  // así que solo puede alcanzar calendarios a los que su propia cuenta de Google
+  // ya tiene acceso. Google es quien decide, y devuelve 403 si no toca.
+  const calendarId = new URL(_req.url).searchParams.get('calendarId') || 'primary'
+
   try {
-    await deleteCalendarEvent(profile.gmail_refresh_token, eventId)
+    await deleteCalendarEvent(profile.gmail_refresh_token, eventId, calendarId)
     return NextResponse.json({ ok: true })
   } catch (err: any) {
     console.error('Calendar delete error:', err?.message)
@@ -43,9 +48,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ error: 'Gmail no conectado' }, { status: 400 })
   }
 
-  const { title, date, time } = await request.json()
+  const { title, date, time, calendarId } = await request.json()
   try {
-    const result = await updateCalendarEvent(profile.gmail_refresh_token, eventId, { title, date, time })
+    const result = await updateCalendarEvent(profile.gmail_refresh_token, eventId, { title, date, time, calendarId })
     return NextResponse.json(result)
   } catch (err: any) {
     console.error('Calendar update error:', err?.message)

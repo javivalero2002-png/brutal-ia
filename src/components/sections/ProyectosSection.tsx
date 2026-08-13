@@ -5,6 +5,7 @@ import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, dlLabel, todayKey, estadoDeadline, AMBAR } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
 import type { Project, Task, Profile, NexusData} from '@/types'
+import type { IrASeccion } from '@/components/shared/secciones'
 
 interface PropsProyectos {
   data: NexusData
@@ -20,7 +21,7 @@ interface PropsProyectos {
   onOpenModal: any
   showToast: any
   isOwner: any
-  onNavigate: any
+  onNavigate: IrASeccion
   onSelectClient: any
   justCreatedId: any
   onJustCreatedScrolled: any

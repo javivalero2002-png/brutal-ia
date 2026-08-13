@@ -13,12 +13,15 @@ import { join } from 'path'
 const RAIZ = join(__dirname, '../../..')
 const MANIFEST = JSON.parse(readFileSync(join(RAIZ, 'public/manifest.json'), 'utf8'))
 const DASHBOARD = readFileSync(join(RAIZ, 'src/components/NexusDashboard.tsx'), 'utf8')
+// SECCIONES vive aquí desde que las secciones necesitan el tipo `Section` para
+// declarar su prop `onNavigate` (importarlo del dashboard sería un ciclo).
+const SECCIONES_TS = readFileSync(join(RAIZ, 'src/components/shared/secciones.ts'), 'utf8')
 const PAGINA = readFileSync(join(RAIZ, 'src/app/dashboard/page.tsx'), 'utf8')
 const CLIENTE = readFileSync(join(RAIZ, 'src/components/DashboardClient.tsx'), 'utf8')
 
 function seccionesDelCodigo(): string[] {
-  const m = DASHBOARD.match(/const SECCIONES = \[([^\]]+)\] as const/)
-  if (!m) throw new Error('No se encontró SECCIONES en NexusDashboard.tsx')
+  const m = SECCIONES_TS.match(/const SECCIONES = \[([^\]]+)\] as const/)
+  if (!m) throw new Error('No se encontró SECCIONES en shared/secciones.ts')
   return m[1].split(',').map(s => s.trim().replace(/^'|'$/g, '')).filter(Boolean)
 }
 

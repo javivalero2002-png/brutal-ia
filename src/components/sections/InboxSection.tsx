@@ -9,6 +9,7 @@ import { strColor, relTime, todayKey } from '@/components/shared'
 // `plural` no se reexporta desde el índice de shared: se importa del módulo.
 import { plural } from '@/components/shared/helpers'
 import { LucideIcon } from '@/components/shared'
+import type { IrASeccion } from '@/components/shared/secciones'
 
 // Empareja el "cliente" detectado por la IA con un cliente real.
 // La primera palabra del nombre solo se usa como match parcial si es distintiva
@@ -63,7 +64,7 @@ interface PropsInbox {
   data: NexusData
   showToast: any
   profile: any
-  onNavigate: any
+  onNavigate: IrASeccion
   onSelectClient: any
   onAskHarvey: any
 }
