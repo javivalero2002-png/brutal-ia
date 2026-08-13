@@ -44,6 +44,32 @@ comprueba antes que el proyecto tiene fluid compute activo.
 Lo que **sí sigue siendo cierto** es el límite de crons diarios del punto 2:
 verificado el mismo día, con el mismo mensaje de error.
 
+**3-bis. La app vive en `brutalia.tech` desde el 2026-08-13.** `brutalstudios-ia.vercel.app`
+sigue activa y funcionando: se conservan las dos a propósito, para no dejar fuera a
+quien tenga la PWA instalada con la vieja.
+
+La URL **no se escribe a mano en ningún sitio** — sale de `NEXT_PUBLIC_APP_URL` a
+través de `src/lib/appUrl.ts` (`APP_URL` / `APP_HOST` / `rutaApp`), y hay un test
+que lo protege. Estaba cableada en cuatro sitios y tres eran texto que lee el
+usuario: las instrucciones de invitación y la URL del webhook que se pega en Meta.
+
+`GOOGLE_REDIRECT_URI` **no existe como variable**: el redirect se deriva de
+`NEXT_PUBLIC_APP_URL` en `src/lib/gmail.ts`. Estaba en el `.env.local.example`
+sin que la leyera nadie.
+
+Cambiar de dominio toca **cuatro sitios y en este orden**, o se rompe el acceso:
+Vercel (dominio) → Google Cloud (URI de redirección del cliente OAuth **existente**,
+sin crear uno nuevo: un cliente nuevo invalida los refresh tokens de todo el equipo)
+→ Supabase (Site URL + Redirect URLs) → `NEXT_PUBLIC_APP_URL` + redeploy. En Google
+y Supabase se **añade** sin quitar la anterior, para poder volver atrás.
+
+**Ojo con el Site URL de Supabase:** hasta el 2026-08-13 apuntaba a
+`nexus-web-red-three.vercel.app`, un proyecto de Vercel borrado que devolvía 404. Es
+lo que Supabase mete en los correos de «¿Olvidaste tu contraseña?», así que la
+recuperación de contraseña llevaba semanas mandando a la gente a una página muerta —
+y la sección Equipo dice justo que usen esa vía para entrar. No lo detectó nadie
+porque recuperar contraseña es raro. Si algo va por correo, comprueba a dónde apunta.
+
 **4. `deploy.sh` está retirado a propósito** y falla si lo ejecutas. Desplegaba el
 *árbol de trabajo*, no un commit, y así llegó a producción código que no existía
 en ningún commit de git.
