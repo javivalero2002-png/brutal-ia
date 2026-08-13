@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useMemo } from 'react'
+import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { Task, Project, Client, Profile, NexusData } from '@/types'
 import { PLATAFORMA_COLOR, useIsMobile, BLU, RED, GRN, BORDER, LucideIcon, dlDate, dlLabel, estadoDeadline, Donut, Gauge, AreaChart, localDayKey } from '@/components/shared'
 
@@ -14,6 +15,9 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
+      // Con un modal abierto el foco esta en BODY, asi que la guarda por tagName
+      // de mas abajo no protege: escribir en el formulario ejecutaba estos atajos.
+      if (hayModalAbierto()) return
       if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
       if (e.key === 'p') { e.preventDefault(); printBtnRef.current?.click() }
     }
@@ -350,7 +354,11 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
       {(()=>{
         const horizon = new Date(Date.now()+30*24*60*60*1000)
         const upcoming = projects
-          .filter((p:Project)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<=horizon)
+          // El filtro y el render tienen que usar la MISMA verdad. Antes filtraba con
+          // dlDate —que si resuelve 'ago 2026'— y abajo leia con estadoDeadline, que
+          // devuelve null para ese mismo valor: el proyecto entraba en la lista y
+          // reventaba al pintarlo.
+          .filter((p:Project)=>p.status!=='completado'&&(()=>{const d=estadoDeadline(p.deadline);return !!d&&d.dias<=30})())
           .sort((a:Project,b:Project)=>dlDate(a.deadline).getTime()-dlDate(b.deadline).getTime())
           .slice(0,8)
         if (!upcoming.length) return null
@@ -365,7 +373,10 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
                 // HOY; y lo vencido ayer daba Math.ceil(-0,37) = -0 -> decia HOY.
                 // Es el mismo fallo que ya se corrigio en Proyectos, con la misma
                 // funcion: un deadline es un DIA, no un instante.
-                const dl = estadoDeadline(p.deadline)!
+                const dl = estadoDeadline(p.deadline)
+                // No puede ser null: el filtro de arriba ya lo excluye. Se comprueba igual
+                // porque el `!` de antes es justo lo que dejo pasar el bug.
+                if (!dl) return null
                 const daysLeft = dl.dias
                 const isOver = dl.vencido
                 const isSoon = dl.pronto

@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { rutaApp } from '@/lib/appUrl'
 import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, todayKey, localDayKey } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
@@ -78,6 +79,9 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
+      // Con un modal abierto el foco esta en BODY, asi que la guarda por tagName
+      // de mas abajo no protege: escribir en el formulario ejecutaba estos atajos.
+      if (hayModalAbierto()) return
       if (e.key === 'Escape' && editing) { setEditing(null); return }
       if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
       if (e.key === 'n' && !editing) { e.preventDefault(); onOpenModal('memoria') }

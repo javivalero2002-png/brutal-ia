@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import dynamic from 'next/dynamic'
 import { useNexusData } from '@/hooks/useNexusData'
 import type { Profile, Task, Project, Client } from '@/types'
@@ -140,6 +141,38 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   // reflejarla. Arrancar en `false` haría que el botón mostrara "oscuro" durante
   // un instante estando en claro.
   const [lightMode, setLightMode] = useState(false)
+  // Refrescar al volver a la app, y al recuperar la conexion.
+  //
+  // Instalada como PWA en el movil, esta app NO se recarga nunca: se deja abierta y
+  // se vuelve a ella. Sin esto pasaban dos cosas a la vez, y la segunda es la mala:
+  // las listas se quedaban congeladas con lo de la ultima vez, y las URL firmadas
+  // de los ficheros (12 h) acababan caducando, asi que las portadas y los PDF
+  // empezaban a dar 400 sin que el usuario hubiera hecho nada.
+  //
+  // load() esta escrito para esto: usa allSettled y no pisa lo que hay en pantalla
+  // si una consulta falla, asi que es seguro llamarlo con datos delante. Y de paso
+  // vuelve a firmar todas las URLs.
+  //
+  // El margen de 5 minutos evita recargar por cada cambio de pestaña: alternar
+  // entre la app y el correo dispararia diez recargas seguidas.
+  const ultimoRefrescoRef = useRef(Date.now())
+  useEffect(() => {
+    const MARGEN_MS = 5 * 60 * 1000
+    const refrescar = () => {
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() - ultimoRefrescoRef.current < MARGEN_MS) return
+      ultimoRefrescoRef.current = Date.now()
+      data.reload?.()
+    }
+    document.addEventListener('visibilitychange', refrescar)
+    window.addEventListener('online', refrescar)
+    return () => {
+      document.removeEventListener('visibilitychange', refrescar)
+      window.removeEventListener('online', refrescar)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     const yaEnClaro = document.documentElement.classList.contains('theme-light')
     if (yaEnClaro) { setLightMode(true); return }
@@ -393,6 +426,9 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   useEffect(() => {
     const NAV: Record<string, Section> = { h:'hoy', t:'tareas', i:'inbox', c:'clientes', p:'proyectos', k:'contenido', a:'calendario', m:'memoria', e:'equipo', r:'reportes', s:'ajustes', v:'automatizaciones', n:'chat', y:'harvey' }
     const handler = (e: KeyboardEvent) => {
+      // Con un modal abierto el foco esta en BODY, asi que la guarda por tagName
+      // de mas abajo no protege: escribir en el formulario ejecutaba estos atajos.
+      if (hayModalAbierto()) return
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(true); setSearchQuery(''); setSearchIdx(-1); return }
       if (e.key === 'Escape') {
         if (showShortcutsRef.current) { setShowShortcuts(false); return }

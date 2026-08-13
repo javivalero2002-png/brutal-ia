@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { rutaApp } from '@/lib/appUrl'
 import type { NexusData, ContentItem } from '@/types'
 import { PLATAFORMA_COLOR, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, todayKey } from '@/components/shared'
@@ -197,6 +198,9 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
+      // Con un modal abierto el foco esta en BODY, asi que la guarda por tagName
+      // de mas abajo no protege: escribir en el formulario ejecutaba estos atajos.
+      if (hayModalAbierto()) return
       if (e.key === 'Escape' && activeItem) { setActiveItem(null); return }
       if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
       if (e.key === 'n' && !activeItem) { e.preventDefault(); onOpenModal('contenido') }

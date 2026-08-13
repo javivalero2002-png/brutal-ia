@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { APP_HOST } from '@/lib/appUrl'
 import type { Profile, Task, NexusData} from '@/types'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, BORDER, LucideIcon, ProgressRing, relTime, todayKey, AMBAR } from '@/components/shared'
@@ -71,6 +72,9 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
+      // Con un modal abierto el foco esta en BODY, asi que la guarda por tagName
+      // de mas abajo no protege: escribir en el formulario ejecutaba estos atajos.
+      if (hayModalAbierto()) return
       if (e.key === 'Escape' && selected) { setSelected(null); return }
       if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
       if (e.key === 'm' && selected) { e.preventDefault(); msgInputRef.current?.focus(); return }
