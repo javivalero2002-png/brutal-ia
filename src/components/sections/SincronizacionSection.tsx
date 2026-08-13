@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { rutaApp } from '@/lib/appUrl'
 import type { NexusData } from '@/types'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, useIsMobile, LucideIcon, AjGroup, todayKey } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
@@ -246,7 +247,9 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
   const recentColabs   = (data.inbox||[]).filter((m:any)=>m.source==='gmail'&&m.shared).slice(0,5)
   const nextEvents     = ((data.calendarEvents||[]) as any[]).filter((e:any)=>e.start>=todayKey()).slice(0,5)
   const team: any[] = data.team || []
-  const WEBHOOK_URL = 'https://brutalstudios-ia.vercel.app/api/whatsapp'
+  // Se copia y se pega en el panel de Meta: si aqui pone un dominio viejo, el
+  // webhook apunta a donde ya no esta la app y los mensajes se pierden.
+  const WEBHOOK_URL = rutaApp('/api/whatsapp')
   const personalOk = !loadingGmail && gmailStatus?.connected
   const personalExpired = !loadingGmail && gmailStatus?.personal_expired
   const colabsOk   = !loadingGmail && gmailStatus?.colabs_connected

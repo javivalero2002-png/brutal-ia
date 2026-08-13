@@ -5,8 +5,20 @@ import { madridHour } from '@/components/shared/helpers'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { NextRequest, NextResponse } from 'next/server'
 
-// Analizar varios buzones con IA puede superar los 10s por defecto
-export const maxDuration = 60
+// Este cron no lo espera nadie: lo dispara Vercel y su unico "usuario" es el
+// equipo, que ve el resultado la proxima vez que abre la app. Por eso puede
+// permitirse mucho mas margen que las rutas interactivas, que siguen en 60s
+// porque ahi hay una persona mirando una ruleta.
+//
+// Con 60s solo cabian el buzon compartido y UN buzon personal por ejecucion (ver
+// el presupuesto de abajo), asi que con 7 personas tu correo se sincronizaba una
+// vez cada ~7 horas. 300s es el defecto de la plataforma; Pro admite hasta 800.
+//
+// No encarece nada apreciable: se factura CPU activa, y esperar a Claude o a
+// Gmail es I/O, que no cuenta. Y el total de emails analizados es el mismo —
+// `gmail_id` es unique y hay deduplicacion, asi que antes no se ahorraban
+// llamadas, solo se retrasaban.
+export const maxDuration = 300
 
 // Un solo cron horario, `0 * * * *`. Hasta el 2026-08-13 aquí había 24 entradas
 // diarias (`0 0 * * *` … `0 23 * * *`) porque el plan Hobby limita cada cron job a
@@ -38,15 +50,20 @@ export async function GET(request: NextRequest) {
   //
   // El cron hace en serie: buzón compartido → los buzones personales de todo el
   // equipo → motor de automatizaciones → purga de retención. Cada email nuevo
-  // cuesta una llamada a Claude, y esta ruta se acota a 60s con su `maxDuration`.
-  // Con 7 personas con Gmail conectado, los buzones podían comerse el tiempo
-  // entero y dejar sin ejecutar el motor — que es justo lo que crea tareas y
-  // avisa al equipo. Y sin ninguna señal: la ejecución simplemente moría.
+  // cuesta una llamada a Claude, así que sin tope los buzones se comían la
+  // ejecución entera y dejaban sin correr el motor — que es justo lo que crea
+  // tareas y avisa al equipo. Y sin ninguna señal: la ejecución moría y ya.
   //
-  // Se reserva margen para la cola. Si los buzones agotan lo suyo, se paran y el
-  // motor se ejecuta igual; los buzones que falten van en la siguiente hora.
+  // El reparto, con `maxDuration = 300`: hasta 25s el buzón compartido y hasta
+  // 12s cada personal, o sea 25 + 7×12 = 109s en el peor caso real. Con 200s de
+  // presupuesto caben todos con holgura y aún sobran 100s para el motor y la
+  // purga. Antes eran 38s, en los que solo cabía el compartido y UNO personal:
+  // con 7 personas, a cada una le tocaba una vez cada ~7 horas.
+  //
+  // Sigue siendo un tope y no una promesa: si algún día el equipo crece y no
+  // caben, los que falten van a la siguiente hora, igual que antes.
   const T0 = Date.now()
-  const PARA_BUZONES_MS = 38_000
+  const PARA_BUZONES_MS = 200_000
   const quedaTiempo = () => Date.now() - T0 < PARA_BUZONES_MS
   const pendientes: string[] = []
 
@@ -93,10 +110,12 @@ export async function GET(request: NextRequest) {
     outcomes.push({ mailbox: 'profiles', ok: false, error: profilesError.message, terminal: true })
   }
 
-  // Se empieza por una posición distinta cada hora. Recorriendo siempre en el
-  // mismo orden, si el tiempo se agota son SIEMPRE los mismos últimos perfiles los
-  // que se quedan sin sincronizar — para ellos el cron no existiría. Rotando, en
-  // 24 ejecuciones le toca a todo el mundo.
+  // Se empieza por una posición distinta cada hora. Con el presupuesto actual
+  // caben los 7 buzones en una sola ejecución, así que la rotación ya no decide
+  // quién se queda fuera — pero se conserva a propósito: es la red por si el
+  // equipo crece o un buzón con mucho atraso se come el tiempo. Sin ella, los
+  // últimos de la lista serían SIEMPRE los mismos y para ellos el cron no
+  // existiría.
   const lista = profiles || []
   const inicio = lista.length ? madridHour() % lista.length : 0
   for (let i = 0; i < lista.length; i++) {

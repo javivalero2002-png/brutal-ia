@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { APP_HOST } from '@/lib/appUrl'
 import type { Profile, Task, NexusData} from '@/types'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, BORDER, LucideIcon, ProgressRing, relTime, todayKey, AMBAR } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
@@ -439,7 +440,7 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
               <div>
                 <div className="text-[13px] text-white mb-2">No se pudo generar el enlace</div>
                 <div className="text-[12px] mb-4" style={{color:'rgba(255,255,255,0.3)'}}>
-                  El miembro puede acceder en <strong>brutalstudios-ia.vercel.app</strong> con su email y usando "¿Olvidaste tu contrasena?" para recuperar el acceso.
+                  El miembro puede acceder en <strong>{APP_HOST}</strong> con su email y usando "¿Olvidaste tu contrasena?" para recuperar el acceso.
                 </div>
                 <button onClick={()=>openInvitePanel(invitePanel.email, invitePanel.name)}
                   className="px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all hover:opacity-80"
@@ -499,7 +500,7 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
                 ) : (
                   <div>
                     <div className="text-[13px] text-white mb-2">Cuenta creada correctamente</div>
-                    <div className="text-[12px]" style={{color:'rgba(255,255,255,0.35)'}}>El miembro puede iniciar sesión en brutalstudios-ia.vercel.app con el email <strong>{inviteResult.email}</strong>. Si no recuerda la contrasena, puede usar "¿Olvidaste tu contrasena?" en el login.</div>
+                    <div className="text-[12px]" style={{color:'rgba(255,255,255,0.35)'}}>El miembro puede iniciar sesión en {APP_HOST} con el email <strong>{inviteResult.email}</strong>. Si no recuerda la contrasena, puede usar "¿Olvidaste tu contrasena?" en el login.</div>
                     <button onClick={()=>{setInviteResult(null)}} className="mt-4 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all hover:opacity-80" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.4)'}}>AÑADIR OTRO</button>
                   </div>
                 )}
