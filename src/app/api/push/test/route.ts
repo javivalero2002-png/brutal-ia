@@ -2,6 +2,12 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { sendPushToUser } from '@/lib/push'
 
+// Espera al envío antes de responder (es el sentido de la ruta: decirte si ha
+// salido), así que la respuesta se lleva por delante la consulta a `reglas`, el
+// insert en notification_log y las llamadas a FCM/APNs. Igual que inbox, tasks y
+// gmail/sync, que ya lo declaran por lo mismo.
+export const maxDuration = 60
+
 // Envía una notificación de prueba a los dispositivos del usuario actual
 export async function POST() {
   const supabase = await createClient()

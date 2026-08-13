@@ -1182,8 +1182,8 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
             <div>
               <label className="block font-syne text-[9px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.25)'}}>PRIORIDAD</label>
               <div className="flex gap-2">
-                {[{v:'urgent',l:'Alta',c:RED},{v:'high',l:'Media',c:AMB},{v:'normal',l:'Baja',c:BLU}].map(p=>(
-                  <button key={p.v} onClick={()=>setEditing(x=>({...x,level:p.v as any}))}
+                {([{v:'urgent',l:'Alta',c:RED},{v:'high',l:'Media',c:AMB},{v:'normal',l:'Baja',c:BLU}] as {v:Task['level'];l:string;c:string}[]).map(p=>(
+                  <button key={p.v} onClick={()=>setEditing(x=>({...x,level:p.v}))}
                     className="flex-1 py-3 rounded-2xl font-syne text-[10px] font-black tracking-wide transition-all"
                     style={{background:editing.level===p.v?p.c+'18':SURF2,border:`1.5px solid ${editing.level===p.v?p.c+'70':BORDER}`,color:editing.level===p.v?p.c:'#FFFFFF'}}>
                     {p.l.toUpperCase()}
