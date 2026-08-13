@@ -279,3 +279,13 @@ design system (la duplicación medida es de ~127 líneas) · paginación general
 esta escala el seq scan gana) · RLS multi-tenant (el producto *es* un workspace
 único) · Server Components (PWA realtime tras auth, sin SEO) · prompt caching en
 `/api/chat` (el bloque estático son ~400 tokens, el mínimo de Sonnet son 1024).
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

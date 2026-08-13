@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { rutaApp } from '@/lib/appUrl'
 import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, todayKey, localDayKey } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
 import LucideIcon from '@/components/shared/LucideIcon'
@@ -44,10 +45,16 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
       const upRes = await fetch(urlJ.signedUrl, { method: 'PUT', body: fd })
       if (!upRes.ok) { showToast('Error subiendo el PDF'); return }
       // 3. Analizar en el servidor con la URL pública (sin base64 por la API)
+      //
+      // Ojo con lo que se GUARDA en la nota: no el fichero, sino un enlace a
+      // /api/archivo. Ese enlace no caduca —a diferencia de una URL firmada, que
+      // dura una hora y quedaría escrita y muerta dentro del texto— y exige
+      // sesión, que es lo que permite cerrar el bucket sin dejar rotos los
+      // documentos de Memoria.
       const res = await fetch('/api/documents', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ url: urlJ.publicUrl, name: file.name }) })
       const j = await res.json().catch(()=>({}))
       if (!res.ok) { showToast(j.error || 'Error al analizar'); return }
-      await data.createMemoria({ title: (j.name||file.name).replace(/\.pdf$/i,''), category: 'Documento', content: `${j.summary||''}\n\n📎 Documento: ${j.url||urlJ.publicUrl}` })
+      await data.createMemoria({ title: (j.name||file.name).replace(/\.pdf$/i,''), category: 'Documento', content: `${j.summary||''}\n\n📎 Documento: ${rutaApp('/api/archivo?u=' + encodeURIComponent(j.url||urlJ.publicUrl))}` })
       showToast('Documento guardado en la memoria')
     } catch { showToast('Error al subir el documento') }
     finally { setUploadingDoc(false) }
