@@ -349,9 +349,14 @@ html.theme-light [style*="; color: rgba(255, 255, 255, 0.5)"]:not(:has(*))  { co
    Cubre toda la carga, no solo hasta que llega el perfil, y usa la espera para
    que el usuario elija la versión del logo — que es lo que fija el tema.
 
-   Va SIN invertir aunque el modo claro esté activo (`filter: none` más abajo):
-   aquí se están comparando las dos versiones del logo, así que invertirlas seria
-   enseñar justo lo contrario de lo que se elige. */
+   La pantalla de ELECCIÓN va sin invertir aunque el modo claro esté activo:
+   ahí se comparan las dos versiones del logo, y invertirlas enseñaría justo la
+   contraria de la que se elige.
+
+   Pero eso solo aplica la PRIMERA vez. En los arranques siguientes no se elige
+   nada, y dejarla oscura daba un destello negro antes de entrar a una app clara.
+   Por eso la cancelación del filtro cuelga ahora de `.nx-boot-eligiendo`, no de
+   `.nx-boot`: el arranque normal sigue el tema como el resto de la app. */
 .nx-boot {
   position: fixed; inset: 0; z-index: 9999;
   display: flex; align-items: center; justify-content: center;
@@ -360,7 +365,17 @@ html.theme-light [style*="; color: rgba(255, 255, 255, 0.5)"]:not(:has(*))  { co
   padding: 24px;
   animation: nxBootEntra 0.45s cubic-bezier(0.22,1,0.36,1) both;
 }
-html.theme-light .nx-boot { filter: invert(1) hue-rotate(180deg); }
+/* Cancela la inversión del body (dos inversiones seguidas devuelven el original),
+   igual que hace .nx-noinvert. Solo mientras se ELIGE. */
+html.theme-light .nx-boot-eligiendo { filter: invert(1) hue-rotate(180deg); }
+
+/* Las dos insignias se pintan siempre y el tema decide cuál se ve. Con CSS y no
+   con JS a propósito: leer el tema en el cliente para elegir el `src` habría
+   dejado el logo equivocado durante el primer pintado, que es el destello que
+   este arreglo viene a quitar. */
+.nx-boot-insignia-clara { display: none; }
+html.theme-light .nx-boot-insignia-oscura { display: none; }
+html.theme-light .nx-boot-insignia-clara { display: block; }
 
 .nx-boot-glow {
   position: absolute; inset: 0; pointer-events: none;
@@ -433,6 +448,11 @@ html.theme-light .nx-boot { filter: invert(1) hue-rotate(180deg); }
   font-family: Syne, sans-serif; font-size: 8.5px; font-weight: 800;
   letter-spacing: 2.5px; color: rgba(255,255,255,0.26);
 }
+/* El 0.26 esta pensado para fondo oscuro. Al invertirse queda todavia mas flojo
+   sobre claro (~1,9:1 frente a ~2,5:1 en oscuro), y ahora que el arranque sigue el
+   tema se nota. Se compensa como ya se hace con los grises tenues mas arriba. */
+html.theme-light .nx-boot-estado { color: rgba(255,255,255,0.5); }
+html.theme-light .nx-boot-barra { background: rgba(255,255,255,0.16); }
 .nx-boot-barra {
   display: block; width: 74px; height: 2px; border-radius: 2px;
   background: rgba(255,255,255,0.07); overflow: hidden;

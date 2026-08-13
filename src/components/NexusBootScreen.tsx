@@ -51,7 +51,7 @@ export default function NexusBootScreen({ pedirEleccion = false, onElegir, estad
   }
 
   return (
-    <div className="nx-boot">
+    <div className={`nx-boot ${pedirEleccion ? 'nx-boot-eligiendo' : ''}`}>
       <div className="nx-boot-glow" aria-hidden />
 
       <div className={`nx-boot-contenido ${entrando ? 'nx-boot-saliendo' : ''}`}>
@@ -81,7 +81,11 @@ export default function NexusBootScreen({ pedirEleccion = false, onElegir, estad
           </>
         ) : (
           <div className="nx-boot-solo">
-            <img src="/logo-oscuro.svg" alt="Brutal Studios" width={104} height={104} className="nx-boot-latido" />
+            {/* Las dos, y el CSS enseña la que toca segun el tema. Antes estaba
+                fija la oscura, asi que en modo claro salia la insignia
+                equivocada sobre fondo claro. */}
+            <img src="/logo-oscuro.svg" alt="Brutal Studios" width={104} height={104} className="nx-boot-latido nx-boot-insignia-oscura" />
+            <img src="/logo-claro.svg" alt="" aria-hidden width={104} height={104} className="nx-boot-latido nx-boot-insignia-clara" />
           </div>
         )}
 
