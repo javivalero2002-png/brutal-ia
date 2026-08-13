@@ -58,9 +58,13 @@ async function logNotifications(admin: SupabaseClient, userIds: string[], payloa
   const ids = [...new Set(userIds.filter(Boolean))]
   if (ids.length === 0) return
   try {
-    await admin.from('notification_log').insert(
+    // `error` recogido: el catch de abajo solo pilla lo que LANZA, y supabase-js
+    // no lanza. Sin esto, la tabla existiendo pero rechazando la fila era silencio
+    // absoluto, indistinguible de haberla escrito.
+    const { error } = await admin.from('notification_log').insert(
       ids.map(user_id => ({ user_id, title: payload.title, body: payload.body || null, url: payload.url || null, tag: payload.tag || null }))
     )
+    if (error) console.error('[push] no se pudo registrar el aviso:', error.message)
   } catch { /* tabla ausente o error transitorio: no bloquear el envío */ }
 }
 

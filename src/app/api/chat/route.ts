@@ -90,8 +90,14 @@ export async function POST(request: NextRequest) {
   // Anthropic exige que el primer mensaje sea `user` → 502 → otra huérfana.
   // Dos inserts secuenciales (no uno con dos filas) para que created_at difiera y
   // el orden de la conversación quede determinado.
-  await admin.from('chat_messages').insert({ user_id: user.id, role: 'user', content: message })
-  await admin.from('chat_messages').insert({ user_id: user.id, role: 'ai', content: reply })
+  // El error se mira. supabase-js NO lanza: sin recogerlo, un fallo de escritura
+  // devolvia la respuesta al usuario igualmente y el historial se quedaba sin ese
+  // turno — al recargar, la conversacion aparece con un hueco y nadie sabe por que.
+  const [{ error: errUser }, { error: errIa }] = await Promise.all([
+    admin.from('chat_messages').insert({ user_id: user.id, role: 'user', content: message }),
+    admin.from('chat_messages').insert({ user_id: user.id, role: 'ai', content: reply }),
+  ])
+  if (errUser || errIa) console.error('[chat] no se pudo guardar el turno:', (errUser || errIa)?.message)
 
   return NextResponse.json({ reply, searched })
 }

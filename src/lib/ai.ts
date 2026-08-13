@@ -273,7 +273,10 @@ Responde SOLO con JSON válido:
 
   try {
     const text = textOf(msg) || '{}'
-    return parseJsonLoose(text)
+    // Misma frontera que analyzeEmail: `urgency` acaba en inbox_messages.ai_urgency
+    // y en tasks.level, que son uniones cerradas. Esta era la TERCERA copia.
+    const bruto = parseJsonLoose(text)
+    return { ...bruto, urgency: nivelTarea(bruto?.urgency, 'normal') }
   } catch {
     return {
       extractedInfo: message,

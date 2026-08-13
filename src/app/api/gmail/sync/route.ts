@@ -216,7 +216,12 @@ export async function POST() {
       // UTC. Un email recibido a las 00:30 de Madrid generaba la tarea con la
       // fecha de AYER, o sea vencida en el momento de crearse.
       const day = localDayKey(email.received_at || Date.now())
-      await admin.from('tasks').insert({
+      // El error SE MIRA, igual que en el insert hermano de veinte lineas arriba.
+      // Se registra y no se corta: convertirlo en `continue` romperia otra cosa
+      // —se saltarian newUnread.push y newCount++ para un correo que SI se
+      // guardo—. Y no se reintenta solo: el gmail_id ya esta en la base, asi que
+      // el siguiente sync hace `continue` y la tarea no vuelve a intentarse nunca.
+      const { error: reunionErr } = await admin.from('tasks').insert({
         created_by: user.id,
         assigned_to: isCompanyAccount ? null : user.id,
         text: `Reunión: ${email.subject || email.from_name || 'sin asunto'}`,
@@ -224,6 +229,7 @@ export async function POST() {
         due_date: day,
         source: 'gmail',
       })
+      if (reunionErr) console.error('[sync] no se pudo crear la tarea de reunión:', reunionErr.message)
     }
 
     if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgency: analysis.urgency })

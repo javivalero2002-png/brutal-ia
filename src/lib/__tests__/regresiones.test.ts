@@ -745,3 +745,74 @@ describe('lo que se lee de una API se lee entero', () => {
       .toBeGreaterThanOrEqual(sinced)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lo que se PINTA y lo que se MANDA AL SERVIDOR son dos cosas distintas.
+//
+// El PDF de un proyecto tiene dos consumidores con requisitos opuestos:
+//  · el visor y los <a href> necesitan algo que el navegador pueda ABRIR — con el
+//    bucket cerrado eso obliga a una firma, o a /api/archivo, que la pide fresca;
+//  · /api/projects/analyze-pdf exige que la URL pase su isOwnStorageUrl, y un
+//    enlace de brutalia.tech NO lo pasa.
+//
+// Por eso el arreglo obvio —envolver la URL y ya— arregla el visor y estropea el
+// chat sobre el PDF. La trampa es que eso COMPILA: las dos son `string`.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('PDF de proyecto · el identificador no es la URL que se pinta', () => {
+  const PROY = leerCodigo('src/components/sections/ProyectosSection.tsx')
+
+  it('lo que se manda a analyze-pdf es el identificador', () => {
+    const alServidor = PROY.split('\n').filter(l =>
+      /analyze-pdf/.test(l) || /analyzePdf\(/.test(l))
+    // La declaracion de la propia funcion no cuenta.
+    const llamadas = alServidor.filter(l => !/const analyzePdf\s*=/.test(l))
+    expect(llamadas.length, 'ya no hay llamadas a analyze-pdf: revisa esta regla').toBeGreaterThan(0)
+    const sinIdent = llamadas.filter(l => /pdfDoc[?.]*\.url/.test(l) && !/pdfDoc\.ident/.test(l))
+    expect(sinIdent.map(l => l.trim().slice(0, 90)),
+      'manda al servidor la URL de PINTAR: analyze-pdf la rechaza con 400 «URL de PDF no permitida»').toEqual([])
+  })
+
+  it('y lo que se pinta tras subir pasa por /api/archivo', () => {
+    const i = PROY.indexOf('setPdfDoc({')
+    expect(i, 'ya no se pinta el PDF recien subido: revisa esta regla').toBeGreaterThan(-1)
+    const bloque = PROY.slice(i, i + 320)
+    expect(/api\/archivo/.test(bloque),
+      'vuelve a pintar el publicUrl crudo: con el bucket cerrado da 400 y no se autocorrige').toBe(true)
+    expect(/ident:/.test(bloque), 'no guarda el identificador aparte: el chat del PDF se queda sin el').toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Un INSERT cuyo error se tira es una escritura que puede no haber ocurrido.
+//
+// supabase-js NO lanza: devuelve { data, error }. Ya hay una regla que cubre los
+// `select` que se desestructuran solo por `data`; esta cubre la escritura, que es
+// la mitad que faltaba. Se encontraron SEIS, y la peor contestaba «✅ Tarea
+// creada» por WhatsApp sin haber escrito una sola fila.
+//
+// Se persigue la forma `await X.from(...).insert(` a secas: si el error se
+// recoge, la linea empieza por `const {` y no casa.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('escrituras · ningún insert descarta su error', () => {
+  const CULPABLES = TS.flatMap(f =>
+    leerCodigo(f).split('\n')
+      .map((l, i) => ({ f, i: i + 1, l }))
+      .filter(({ l }) => /^\s*await\s+\w+\s*\.from\([^)]*\)\s*\.insert\(/.test(l)))
+
+  it('ninguno', () => {
+    expect(CULPABLES.map(u => `${u.f}:${u.i}`),
+      'Inserta sin mirar `error`: supabase-js no lanza, así que el fallo es indistinguible del éxito').toEqual([])
+  })
+
+  // Y el caso concreto que lo hacía visible: el webhook anunciaba la tarea antes
+  // de saber si se habia escrito, y ademas fuera del `if` que comprueba que haya
+  // un perfil enlazado.
+  it('WhatsApp no confirma una tarea que no ha escrito', () => {
+    const W = leerCodigo('src/app/api/whatsapp/route.ts')
+    const i = W.indexOf('Tarea creada')
+    expect(i, 'ya no existe ese mensaje: revisa esta regla').toBeGreaterThan(-1)
+    // El mensaje tiene que estar detras de una condicion que dependa del insert.
+    expect(/creada\s*$|creada\s*\?/m.test(W.slice(Math.max(0, i - 200), i + 40)),
+      'vuelve a anunciar la tarea sin comprobar que se escribio').toBe(true)
+  })
+})

@@ -122,11 +122,18 @@ export async function POST(request: NextRequest) {
   // guarda este valor dentro del texto de la nota ("📎 Documento: <url>"), asi que
   // una URL firmada quedaria escrita ahi y caducaria en una hora.
   //
-  // PENDIENTE: por eso mismo, los enlaces de documentos de Memoria son lo unico
-  // que NO sobrevive al cierre del bucket — viven dentro de un campo de texto
-  // libre, y firmarlos al leer exigiria parsear la nota. La solucion buena es una
-  // ruta /api/archivo que compruebe la sesion y redirija a una firma fresca; el
-  // enlace guardado pasaria a ser estable Y protegido. Hasta entonces, NO cerrar
-  // el bucket.
+  // RESUELTO el 2026-08-13 (commit 3496b49). Esto decia que los enlaces de
+  // documentos de Memoria eran lo unico que NO sobrevivia al cierre del bucket, y
+  // terminaba con «hasta entonces, NO cerrar el bucket». El diagnostico era
+  // correcto y la solucion que proponia es la que se hizo: `/api/archivo`
+  // comprueba la sesion y redirige a una firma fresca, y MemoriaSection guarda ya
+  // ese enlace en vez de la URL cruda.
+  //
+  // Se reescribe en vez de borrarse porque la frase de antes es la que iba a leer
+  // quien fuera a decidir si cerrar el bucket, y decia que no.
+  //
+  // Lo que SI queda: las notas creadas entre el 2026-07-30 y el 2026-08-13 llevan
+  // la URL publica cruda dentro de `memoria.content`, que es texto libre y nadie
+  // parsea. Se arreglan a mano desde la app anteponiendoles el enlace estable.
   return NextResponse.json({ url: publicUrl, name: filename, summary })
 }
