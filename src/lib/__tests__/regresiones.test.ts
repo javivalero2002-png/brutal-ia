@@ -35,6 +35,16 @@ const RUTAS = TS.filter(f => f.endsWith('route.ts') && f.startsWith('src/app/api
 const CLIENTE = TS.filter(f => f.endsWith('.tsx'))
 const leer = (f: string) => readFileSync(f, 'utf8')
 
+// Igual que `leer`, pero sin comentarios.
+//
+// Hace falta porque este proyecto comenta MUCHO, y explicar en un comentario lo
+// que se acaba de quitar —«antes: updateAgenda(id, { cover_url: json.url })»— hace
+// que una regla que busca ese patrón lo encuentre y falle. Pasó al escribir la
+// regla de abajo. El fallo grave es el simétrico: una regla que un comentario
+// puede SATISFACER no comprueba código, comprueba prosa.
+const leerCodigo = (f: string) =>
+  leer(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
 // ── 1. Los avisos push ───────────────────────────────────────────────────────
 //
 // El bug: `sendPushToUser(...).catch(() => {})` sin await, con el `return` en la
@@ -482,5 +492,573 @@ describe('calendario · escribir donde de verdad está el evento', () => {
   it('CalendarEvent está declarado una sola vez', () => {
     const veces = TS.filter(f => /export interface CalendarEvent \{/.test(leer(f)))
     expect(veces, `CalendarEvent declarado en: ${veces.join(', ')}`).toHaveLength(1)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sincronizar un buzón cuesta dinero, así que no puede correr dos veces a la vez.
+//
+// Encontrado el 2026-08-13 en los logs de producción, no leyendo código:
+// /api/gmail/colabs-sync se llamó 4 veces en 12 minutos. El freno del cliente
+// funciona —15 min— pero vive en localStorage, o sea que es POR DISPOSITIVO,
+// y el buzón de colabs es UNO para las siete personas. Más el cron de la hora en
+// punto, que tampoco pedía cerrojo: el de sync-colabs solo cubre la purga diaria.
+//
+// Al solaparse dos, el dedup no salva: lee los gmail_id guardados ANTES del bucle
+// y luego analiza e inserta uno a uno, así que entre la lectura y el insert cabe
+// otra ejecución entera. Las dos mandan el mismo correo a Claude y las dos pagan.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('sincronizar un buzón · nunca dos a la vez', () => {
+  // Vale para el codigo que se escriba manana: quien analice correo con Claude
+  // tiene que pedir cerrojo, sea una copia nueva o una que ya existe.
+  const ANALIZAN = TS.filter(f => /\banalyzeEmail\s*\(/.test(leer(f)) && !f.endsWith('src/lib/ai.ts'))
+
+  it('hay ficheros que revisar', () => {
+    expect(ANALIZAN.length).toBeGreaterThan(1)
+  })
+
+  it('todo el que analiza correo con Claude toma cerrojo', () => {
+    const sinCerrojo = ANALIZAN.filter(f => !/acquireLock\s*\(/.test(leer(f)))
+    expect(sinCerrojo,
+      'Analiza correo con Claude sin cerrojo: dos ejecuciones solapadas pagan el mismo email dos veces').toEqual([])
+  })
+
+  it('y lo suelta', () => {
+    const sinSoltar = ANALIZAN.filter(f => !/releaseLock\s*\(/.test(leer(f)))
+    expect(sinSoltar, 'Toma el cerrojo y no lo suelta: el buzón se queda bloqueado hasta que caduque').toEqual([])
+  })
+
+  // La parte que de verdad hace que funcione, y la que se rompe sola: sincronizar
+  // un buzon personal esta escrito DOS veces —la ruta que dispara el navegador y
+  // syncPersonalInbox, que dispara el cron—. Solo se excluyen si usan la MISMA
+  // clave. Dos claves distintas es tener cerrojo y seguir teniendo el problema.
+  it('las dos copias del sync personal comparten clave de cerrojo', () => {
+    const clave = /sync-personal-\$\{[a-zA-Z.]+\}/
+    const RUTA = leer('src/app/api/gmail/sync/route.ts')
+    const LIB = leer('src/lib/colabsSync.ts')
+    expect(clave.test(RUTA), 'la ruta no usa la clave sync-personal-<id>').toBe(true)
+    expect(clave.test(LIB), 'colabsSync no usa la clave sync-personal-<id>').toBe(true)
+  })
+
+  it('un sync saltado no se cuenta como sincronizado', () => {
+    // `saltado` tiene que llegar hasta arriba. Si se queda por el camino, la
+    // respuesta es `synced: 0, total: 0`, que es identica a "no habia correo".
+    expect(/saltado/.test(leer('src/lib/colabsSync.ts')), 'colabsSync no marca los saltados').toBe(true)
+    expect(/saltado/.test(leer('src/app/api/gmail/colabs-sync/route.ts')), 'la ruta de colabs se come el saltado').toBe(true)
+    expect(/saltado/.test(leer('src/hooks/useNexusData.ts')), 'el cliente no distingue saltado de vacío').toBe(true)
+    expect(/saltado/.test(leer('src/app/api/cron/sync-colabs/route.ts')), 'el cron cuenta un saltado como sincronizado').toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lo que se PINTA de un campo de Storage no es lo que hay GUARDADO en él.
+//
+// La base guarda la URL pública como IDENTIFICADOR estable, y las rutas de
+// lectura la sustituyen por una firma temporal antes de mandarla (storageFirmado).
+// O sea: el formulario enseña una firma con token. Reenviarla al guardar rompe de
+// dos maneras, y la segunda destruye datos:
+//
+//  · el PATCH pisa el identificador con una firma que caduca;
+//  · si firmarUrl() falla devuelve null A PROPÓSITO —un enlace roto que parece
+//    bueno confunde más que un hueco—, el input se pinta vacío, y guardar escribe
+//    null encima. El fichero se queda en el bucket y la app olvida dónde está.
+//
+// Encontrado el 2026-08-13 en ContenidoSection, donde bastaba con escribir una
+// nota y darle a guardar.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('campos de Storage · no se reenvía lo que solo se estaba viendo', () => {
+  const CONTENIDO = leerCodigo('src/components/sections/ContenidoSection.tsx')
+
+  it('saveNotes no manda cover_url ni video_url sin que se hayan tocado', () => {
+    const i = CONTENIDO.indexOf('const saveNotes =')
+    expect(i, 'ya no existe saveNotes: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = CONTENIDO.slice(i, i + 1600)
+
+    // Si aparecen en el objeto `updates` sin pasar por la marca de "tocado",
+    // volvemos a mandar la firma —o el hueco que dejó una firma fallida—.
+    const enPayloadSuelto = /const updates[^\n]*\b(cover_url|video_url)\s*:/.test(cuerpo)
+    expect(enPayloadSuelto,
+      'cover_url/video_url vuelven al payload sin condición: guardar una nota pisa el identificador').toBe(false)
+
+    expect(/if \(coverTocada\.current\)/.test(cuerpo), 'falta la guarda de cover_url').toBe(true)
+    expect(/if \(videoTocado\.current\)/.test(cuerpo), 'falta la guarda de video_url').toBe(true)
+  })
+
+  it('las marcas se reinician al abrir otra pieza', () => {
+    const i = CONTENIDO.indexOf('const openItem =')
+    const cuerpo = CONTENIDO.slice(i, i + 700)
+    expect(/coverTocada\.current = false/.test(cuerpo) && /videoTocado\.current = false/.test(cuerpo),
+      'las marcas se quedan puestas de la pieza anterior: se reenviaría su URL a otra distinta').toBe(true)
+  })
+
+  it('subir una portada desmarca el campo', () => {
+    // La subida deja el input con la firma que devuelve el servidor. Si el usuario
+    // habia tecleado antes en PORTADA la marca seguia puesta, y el siguiente
+    // GUARDAR mandaba esa firma pisando el identificador.
+    const i = CONTENIDO.indexOf('aplicarAgendaLocal')
+    expect(i, 'ya no se refresca la rejilla tras subir: revisa esta regla').toBeGreaterThan(-1)
+    expect(/coverTocada\.current = false/.test(CONTENIDO.slice(Math.max(0, i - 300), i + 60)),
+      'la subida no desmarca coverTocada: un teclazo previo hace que el siguiente guardado pise el identificador').toBe(true)
+  })
+
+  it('subir una portada no vuelve a escribirla en la base', () => {
+    // upload-cover YA guarda el identificador en el servidor y devuelve la fila
+    // firmada. Un PATCH extra desde el cliente solo sirve para pisarlo.
+    expect(/updateAgenda\([^)]*cover_url:\s*json\.url/.test(CONTENIDO),
+      'la subida vuelve a hacer PATCH con la URL firmada: pisa el identificador que acaba de guardar el servidor').toBe(false)
+    expect(/aplicarAgendaLocal/.test(CONTENIDO),
+      'la rejilla ya no se refresca tras subir la portada').toBe(true)
+  })
+
+  it('el servidor sigue guardando la pública y devolviendo la firmada', () => {
+    const UP = leerCodigo('src/app/api/agenda/[id]/upload-cover/route.ts')
+    expect(/update\(\{ cover_url: publicUrl \}\)/.test(UP),
+      'upload-cover ya no guarda la URL pública como identificador').toBe(true)
+    expect(/firmarUrl\(admin, publicUrl\)/.test(UP),
+      'upload-cover devuelve la pública sin firmar: con el bucket cerrado no pinta nada').toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// El buzón compartido es de la EMPRESA: solo el propietario lo conecta.
+//
+// La regla no dice «/api/gmail/connect comprueba el rol», porque esa fue
+// exactamente la trampa. Se puso ahí el 2026-08-13 —simetría con disconnect, que
+// ya lo exigía— y el agujero seguía abierto una puerta más adentro: quien ESCRIBE
+// el token es /api/gmail/callback, y allí el `account` sale del `state`, que lo
+// controla el cliente.
+//
+// El nonce no cubre esto. Impide que un extraño fabrique un state; no impide que
+// el dueño legítimo de ese nonce lo edite. Un miembro pide conectar su Gmail
+// personal (permitido para cualquiera), cambia `personal` por `colabs` al volver
+// de Google, y su nonce sigue casando porque es el suyo — igual que `user.id`.
+// Resultado: el buzón de la empresa apuntando a su correo personal, y su correo
+// personal en el inbox de las siete personas.
+//
+// Por eso la regla persigue la ESCRITURA, no la ruta: cualquier puerta nueva que
+// escriba ese token queda cubierta sola.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('buzón compartido · solo el propietario puede apuntarlo a un Gmail', () => {
+  // Solo las que APUNTAN el buzón a un Gmail. Ponerlo a `null` es lo contrario:
+  // es limpiar un token que Google ya ha dado por muerto, y eso lo hace el propio
+  // sistema (gmail/status y colabsSync) sin humano delante. Exigir owner ahí
+  // dejaría el token muerto pegado hasta que pasara el propietario.
+  const APUNTAN = TS.filter(f =>
+    /gmail_colabs_refresh_token\s*:\s*(?!null)[A-Za-z_$]/.test(leerCodigo(f)))
+
+  it('hay puertas que revisar', () => {
+    expect(APUNTAN.length).toBeGreaterThan(0)
+  })
+
+  it('todas comprueban el rol antes de escribir el token', () => {
+    const sinRol = APUNTAN.filter(f => {
+      const src = leerCodigo(f)
+      const i = src.search(/gmail_colabs_refresh_token\s*:\s*(?!null)[A-Za-z_$]/)
+      // El rol tiene que resolverse ANTES de la escritura, y del servidor.
+      return !/role\s*!==\s*'owner'|role\s*===\s*'owner'/.test(src.slice(0, i))
+    })
+    expect(sinRol,
+      'Escribe el token del buzón compartido sin comprobar que quien lo pide es owner').toEqual([])
+  })
+
+  it('el rol sale del servidor, nunca del state ni del body', () => {
+    for (const f of APUNTAN) {
+      expect(/getAuthCtx\(\)/.test(leerCodigo(f)), `${f} no resuelve el rol por servidor`).toBe(true)
+    }
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lo que escribe el modelo no entra crudo en una columna de union cerrada.
+//
+// Ya pasó con `tasks.level`: el prompt va entero en español y pide los valores en
+// inglés, el modelo contesta «urgente», el INSERT rebota y la tarea no se crea
+// después de que Harvey haya dicho en voz alta que la creaba. `nivelTarea()` lo
+// arregló ahí — y el GEMELO seguía vivo en `inbox_messages.ai_urgency`, que sale
+// igual de `parseJsonLoose` y se inserta en tres sitios.
+//
+// La regla mira la FRONTERA (donde se parsea la respuesta del modelo) y no los
+// inserts: normalizar en cada insert es exactamente como se arregla uno y
+// sobreviven los otros dos.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('salida del modelo · normalizada en la frontera', () => {
+  it('analyzeEmail normaliza la urgencia antes de devolverla', () => {
+    const AI = leerCodigo('src/lib/ai.ts')
+    const i = AI.indexOf('parseJsonLoose(text)')
+    expect(i, 'ya no se parsea así: revisa esta regla').toBeGreaterThan(-1)
+    expect(/nivelTarea\(/.test(AI.slice(i, i + 400)),
+      'la urgencia del modelo vuelve a salir cruda hacia ai_urgency, que es una unión cerrada').toBe(true)
+  })
+
+  it('y los inserts la consumen ya normalizada, sin repetir la lógica', () => {
+    // Si alguno normaliza por su cuenta es que la frontera dejó de hacerlo, y
+    // volvemos a tener el mismo arreglo escrito N veces — el patrón que este
+    // proyecto ya ha pagado más de una vez.
+    const INSERTAN = TS.filter(f => /ai_urgency\s*:/.test(leerCodigo(f)))
+    expect(INSERTAN.length).toBeGreaterThan(1)
+    const conLogicaPropia = INSERTAN.filter(f => /ai_urgency\s*:\s*nivelTarea/.test(leerCodigo(f)))
+    expect(conLogicaPropia,
+      'normaliza en el insert en vez de en la frontera: así nacen los gemelos').toEqual([])
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tres cosas que se cuentan mal y no se ven.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('lo que se lee de una API se lee entero', () => {
+  // El `timeout` del SDK de Anthropic es POR INTENTO. Con maxRetries:1 son dos
+  // intentos + backoff ≈ 31 s, y el presupuesto del bucle se comprueba ANTES de la
+  // llamada: pasar en t=44,9 s y encadenar 30,5 s termina en t=75,4 contra un
+  // maxDuration de 60. Estaba escrito a mano y distinto en tres sitios (45/25/12) y
+  // solo el 45 no cabia — el numero correcto ya estaba en los otros dos.
+  // La primera version de esto bajaba el PRESUPUESTO de 45 s a 25 s. La
+  // verificacion adversarial lo tumbo con razon: el SDK obedece el `Retry-After`
+  // de un 429 hasta 60 s, asi que UNA llamada puede costar ~75 s y ningun valor de
+  // presupuesto sobrevive. El numero era la palanca equivocada.
+  //
+  // La regla persigue la forma correcta: preguntar si CABE la siguiente, no si ya
+  // me he pasado — y pasarle ese plazo a la llamada, para que no pueda excederlo.
+  it('los bucles de analyzeEmail preguntan si cabe la siguiente', () => {
+    const EN_BUCLE = TS.filter(f => /for \(const email of emails\)/.test(leerCodigo(f)))
+    expect(EN_BUCLE.length, 'no se encontro ningun bucle de emails').toBeGreaterThan(1)
+    for (const f of EN_BUCLE) {
+      const src = leerCodigo(f)
+      expect(/plazoRestante\(/.test(src), `${f} no mide el plazo restante`).toBe(true)
+      expect(/MINIMO_UTIL_MS/.test(src), `${f} no corta cuando ya no cabe una llamada`).toBe(true)
+      expect(/PRESUPUESTO_MS/.test(src),
+        `${f} vuelve al presupuesto fijo: un 429 con Retry-After se lo salta`).toBe(false)
+    }
+  })
+
+  it('y el plazo llega hasta la llamada, que es donde se aplica', () => {
+    const AI = leerCodigo('src/lib/ai.ts')
+    expect(/plazoMs\?:\s*number/.test(AI), 'analyzeEmail ya no acepta plazo').toBe(true)
+    // El invariante, no el texto: el plazo tiene que ACOTAR el timeout normal
+    // (Math.min), no sustituirlo — con solo un `Math.max` el suelo hacia que una
+    // llamada colgada durase ~53 s en vez de ~30 y el bucle rindiera un correo en
+    // vez de cinco. Y el reintento solo se permite si CABEN dos intentos enteros.
+    const i = AI.indexOf('plazoMs\n')
+    expect(i, 'ya no hay rama de plazo en la llamada').toBeGreaterThan(-1)
+    const rama = AI.slice(i, i + 420)
+    expect(/timeout:\s*Math\.min\(\s*TIMEOUT_MS/.test(rama),
+      'el plazo sustituye al timeout en vez de acotarlo: una llamada colgada dura el plazo entero').toBe(true)
+    expect(/maxRetries:\s*plazoMs\s*>=/.test(rama),
+      'el reintento ya no depende de que quepa: o se pierde el backoff de los 5xx, o el reintento se sale del hueco').toBe(true)
+    // TODAS las llamadas, no «que exista una». colabsSync.ts tiene DOS copias del
+    // bucle y esta regla se satisfacia con cualquiera: se reintrodujo el bug exacto
+    // en la segunda y la suite seguia en verde. En un repo cuya tesis es que mas de
+    // la mitad de los fallos graves son gemelos, una regla que solo mira la primera
+    // copia no sirve para nada.
+    for (const f of TS.filter(f => /for \(const email of emails\)/.test(leerCodigo(f)))) {
+      const src = leerCodigo(f)
+      const llamadas = [...src.matchAll(/analyzeEmail\(/g)]
+      expect(llamadas.length, `${f}: no se encontro ninguna llamada`).toBeGreaterThan(0)
+      llamadas.forEach((m, i) => {
+        expect(/plazo/.test(src.slice(m.index, m.index + 400)),
+          `${f}: la llamada nº${i + 1} a analyzeEmail no recibe el plazo`).toBe(true)
+      })
+    }
+  })
+
+  // El fetch de Gmail y sus consultas tambien gastan del minuto. Medir desde
+  // despues era contar solo una parte y creer que sobraba tiempo.
+  // El reparto del cron —25 s el compartido y 12 s cada personal, 8 buzones en la
+  // misma ejecucion— depende de estos dos topes. Se borraron una vez al cambiar de
+  // palanca y CUATRO comentarios se quedaron describiendo un reparto que ya no
+  // pasaba: con ~51 s por buzon en vez de 25, en un lunes con atraso arrancan 4 de
+  // 7 y los otros 3 esperan una hora.
+  it('los topes por buzón siguen ahí, y acotan de verdad', () => {
+    const CS = leerCodigo('src/lib/colabsSync.ts')
+    expect(/TOPE_COLABS_MS\s*=\s*25_000/.test(CS), 'falta el tope del buzón compartido').toBe(true)
+    expect(/TOPE_PERSONAL_MS\s*=\s*12_000/.test(CS), 'falta el tope de los buzones personales').toBe(true)
+    // Declararlos no basta: tienen que entrar en el calculo del plazo.
+    const usos = (CS.match(/Math\.min\(plazoRestante\([^)]*\),\s*TOPE_/g) || []).length
+    expect(usos, 'los topes están declarados pero no acotan el plazo').toBe(2)
+  })
+
+  it('el reloj arranca antes del fetch de Gmail, en TODAS las copias', () => {
+    // `indexOf` comparaba solo el PRIMER T0 con el PRIMER fetch, y colabsSync.ts
+    // tiene dos parejas: el bug reintroducido en la segunda pasaba en verde.
+    // Ahora se emparejan en orden — cada fetch con el T0 que lo precede.
+    for (const f of TS.filter(f => /const T0 = Date\.now\(\)/.test(leerCodigo(f)))) {
+      const src = leerCodigo(f)
+      const t0s = [...src.matchAll(/const T0 = Date\.now\(\)/g)].map(m => m.index as number)
+      const fetches = [...src.matchAll(/await getEmailsWithRefreshToken\(/g)].map(m => m.index as number)
+      if (!fetches.length) continue
+      expect(t0s.length, `${f}: hay ${fetches.length} fetch y ${t0s.length} relojes`).toBe(fetches.length)
+      fetches.forEach((pos, i) => {
+        expect(t0s[i], `${f}: el reloj nº${i + 1} arranca DESPUÉS de su fetch de Gmail`).toBeLessThan(pos)
+      })
+    }
+  })
+
+  // Google pagina. Con singleEvents:true cada serie se expande en instancias, asi
+  // que un daily de laborables son ~65 en la ventana de 3 meses: pasar de 100 pide
+  // 1,1 eventos/dia. Se devolvia la pagina 1 con nextPageToken y nadie lo leia, sin
+  // un solo error — el mes lejano salia A MEDIAS y se leia como completo.
+  it('los eventos de calendario se paginan', () => {
+    const G = leerCodigo('src/lib/gmail.ts')
+    expect(/nextPageToken/.test(G),
+      'events.list vuelve a ignorar nextPageToken: la agenda se corta en silencio').toBe(true)
+    expect(/pageToken,?\s*$/m.test(G) || /pageToken\s*[,}]/.test(G),
+      'no se pasa pageToken en la peticion: paginar sin pedir la pagina no hace nada').toBe(true)
+    // El default de Google son 250: un maxResults escrito a mano por DEBAJO de eso
+    // es peor que no poner nada.
+    const bajos = (G.match(/maxResults:\s*(\d+)/g) || []).filter(m => Number(m.split(':')[1]) < 250)
+    expect(bajos, `maxResults por debajo del default de Google (250): ${bajos.join(', ')}`).toEqual([])
+  })
+
+  // El camino personal lo miraba y el del buzon compartido lo tiraba, cincuenta
+  // lineas mas abajo en el mismo fichero.
+  it('quien lee `synced` de un sync lee tambien `insertFailures`', () => {
+    const SINC = leerCodigo('src/components/sections/SincronizacionSection.tsx')
+    const sinced = (SINC.match(/result\??\.synced/g) || []).length
+    const fallos = (SINC.match(/result\??\.insertFailures/g) || []).length
+    expect(sinced).toBeGreaterThan(0)
+    expect(fallos, 'hay un camino que lee synced sin mirar insertFailures: 20 analizados y 0 guardados se anuncian en VERDE')
+      .toBeGreaterThanOrEqual(sinced)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lo que se PINTA y lo que se MANDA AL SERVIDOR son dos cosas distintas.
+//
+// El PDF de un proyecto tiene dos consumidores con requisitos opuestos:
+//  · el visor y los <a href> necesitan algo que el navegador pueda ABRIR — con el
+//    bucket cerrado eso obliga a una firma, o a /api/archivo, que la pide fresca;
+//  · /api/projects/analyze-pdf exige que la URL pase su isOwnStorageUrl, y un
+//    enlace de brutalia.tech NO lo pasa.
+//
+// Por eso el arreglo obvio —envolver la URL y ya— arregla el visor y estropea el
+// chat sobre el PDF. La trampa es que eso COMPILA: las dos son `string`.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('PDF de proyecto · el identificador no es la URL que se pinta', () => {
+  const PROY = leerCodigo('src/components/sections/ProyectosSection.tsx')
+
+  it('lo que se manda a analyze-pdf es el identificador', () => {
+    const alServidor = PROY.split('\n').filter(l =>
+      /analyze-pdf/.test(l) || /analyzePdf\(/.test(l))
+    // La declaracion de la propia funcion no cuenta.
+    const llamadas = alServidor.filter(l => !/const analyzePdf\s*=/.test(l))
+    expect(llamadas.length, 'ya no hay llamadas a analyze-pdf: revisa esta regla').toBeGreaterThan(0)
+    const sinIdent = llamadas.filter(l => /pdfDoc[?.]*\.url/.test(l) && !/pdfDoc\.ident/.test(l))
+    expect(sinIdent.map(l => l.trim().slice(0, 90)),
+      'manda al servidor la URL de PINTAR: analyze-pdf la rechaza con 400 «URL de PDF no permitida»').toEqual([])
+  })
+
+  it('y lo que se pinta tras subir pasa por /api/archivo', () => {
+    const i = PROY.indexOf('setPdfDoc({')
+    expect(i, 'ya no se pinta el PDF recien subido: revisa esta regla').toBeGreaterThan(-1)
+    const bloque = PROY.slice(i, i + 320)
+    expect(/api\/archivo/.test(bloque),
+      'vuelve a pintar el publicUrl crudo: con el bucket cerrado da 400 y no se autocorrige').toBe(true)
+    expect(/ident:/.test(bloque), 'no guarda el identificador aparte: el chat del PDF se queda sin el').toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Un INSERT cuyo error se tira es una escritura que puede no haber ocurrido.
+//
+// supabase-js NO lanza: devuelve { data, error }. Ya hay una regla que cubre los
+// `select` que se desestructuran solo por `data`; esta cubre la escritura, que es
+// la mitad que faltaba. Se encontraron SEIS, y la peor contestaba «✅ Tarea
+// creada» por WhatsApp sin haber escrito una sola fila.
+//
+// Se persigue la forma `await X.from(...).insert(` a secas: si el error se
+// recoge, la linea empieza por `const {` y no casa.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('escrituras · ningún insert descarta su error', () => {
+  const CULPABLES = TS.flatMap(f =>
+    leerCodigo(f).split('\n')
+      .map((l, i) => ({ f, i: i + 1, l }))
+      .filter(({ l }) => /^\s*await\s+\w+\s*\.from\([^)]*\)\s*\.insert\(/.test(l)))
+
+  it('ninguno', () => {
+    expect(CULPABLES.map(u => `${u.f}:${u.i}`),
+      'Inserta sin mirar `error`: supabase-js no lanza, así que el fallo es indistinguible del éxito').toEqual([])
+  })
+
+  // Y el caso concreto que lo hacía visible: el webhook anunciaba la tarea antes
+  // de saber si se habia escrito, y ademas fuera del `if` que comprueba que haya
+  // un perfil enlazado.
+  it('WhatsApp no confirma una tarea que no ha escrito', () => {
+    const W = leerCodigo('src/app/api/whatsapp/route.ts')
+    const i = W.indexOf('Tarea creada')
+    expect(i, 'ya no existe ese mensaje: revisa esta regla').toBeGreaterThan(-1)
+    // El mensaje tiene que estar detras de una condicion que dependa del insert.
+    expect(/creada\s*$|creada\s*\?/m.test(W.slice(Math.max(0, i - 200), i + 40)),
+      'vuelve a anunciar la tarea sin comprobar que se escribio').toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ningún fetch de servidor sin plazo.
+//
+// El invariante ya estaba escrito en el repo —ai.ts dice que los timeouts se
+// eligen por debajo del maxDuration «para que el fallo lo dé la ruta, con
+// mensaje, y no la plataforma cortando la función a secas»— pero cinco fetch
+// crudos se habían quedado fuera: Tavily, Anthropic (harvey/chat usa fetch en vez
+// del SDK), Fish Audio y los dos de transcripción.
+//
+// Sin `signal` rigen los defaults de undici: 300 s, CINCO VECES el maxDuration de
+// 60 s. Y el modo de fallo no es una caída —esa cae sola en segundos— sino un
+// CUELGUE: la función se agota, Vercel la mata sin respuesta, y el camino de error
+// cuidadosamente escrito más abajo no llega a ejecutarse nunca.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('fetch de servidor · siempre con plazo', () => {
+  // Solo codigo de SERVIDOR: src/lib y las rutas de API. Un fetch de cliente a
+  // nuestra propia API (`/api/...`) no corre bajo undici ni tiene maxDuration que
+  // agotar, asi que exigirle plazo seria ruido.
+  const SERVIDOR = TS.filter(f => f.startsWith('src/lib/') || f.startsWith('src/app/api/'))
+
+  // El patron viejo era /await fetch\('https:\/\// — comilla simple PEGADA al
+  // parentesis. No veia los cuatro fetch de whatsapp.ts: dos con la URL en la
+  // linea siguiente, uno con backtick y otro con una variable. O sea que la regla
+  // afirmaba «cero violaciones» siendo falso, y cualquier fetch futuro escrito con
+  // template literal —que es la forma natural de una URL interpolada— entraba
+  // invisible. Ahora: TODO `await fetch(` cuenta, y solo se excluye el que apunta
+  // a una ruta relativa literal, que no sale de nuestro propio origen.
+  const sinPlazo = SERVIDOR.flatMap(f => {
+    const src = leerCodigo(f)
+    const fuera: string[] = []
+    for (const m of src.matchAll(/await fetch\(/g)) {
+      const i = m.index as number
+      const tras = src.slice(i, i + 620)
+      const relativa = /await fetch\(\s*[`'"]\//.test(tras)
+      if (relativa) continue
+      const init = tras.split('})')[0]
+      if (!/signal\s*:/.test(init)) fuera.push(`${f}:${src.slice(0, i).split('\n').length}`)
+    }
+    return fuera
+  })
+
+  it('hay fetch que revisar', () => {
+    const total = SERVIDOR.filter(f => /await fetch\(/.test(leerCodigo(f)))
+    expect(total.length, 'no se encontro ningun fetch de servidor').toBeGreaterThan(3)
+  })
+
+  it('ninguno se queda sin signal', () => {
+    expect(sinPlazo,
+      'Un cuelgue de ese servicio agota la función entera: 300 s de undici contra el maxDuration de la ruta').toEqual([])
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Seis cosas que la interfaz decía mal. Cuatro son gemelos donde la copia BUENA
+// ya estaba en el repo, así que la regla fija que sigan iguales.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('la interfaz no dice cosas que no son', () => {
+  it('el callback de Gmail no anuncia «conectado» sin haber escrito', () => {
+    const CB = leerCodigo('src/app/api/gmail/callback/route.ts')
+    // Las dos ramas (colabs y personal) tienen que mirar error Y filas: un update
+    // que no casa ninguna fila NO es error, y dejaba el mismo anuncio falso.
+    expect((CB.match(/count:\s*'exact'/g) || []).length,
+      'una de las dos ramas no cuenta las filas actualizadas').toBe(2)
+    expect((CB.match(/error:\s*err(Colabs|Personal)/g) || []).length,
+      'una de las dos ramas descarta el error del update').toBe(2)
+  })
+
+  it('/api/me no devuelve un id que quizá no se guardó', () => {
+    const ME = leerCodigo('src/app/api/me/route.ts')
+    const i = ME.indexOf("update({ id: user.id })")
+    expect(i, 'ya no revincula perfiles: revisa esta regla').toBeGreaterThan(-1)
+    expect(/const \{ error/.test(ME.slice(Math.max(0, i - 220), i)),
+      'devuelve el id nuevo sin comprobar que la fila se actualizó: el cliente se queda apuntando a un perfil fantasma').toBe(true)
+  })
+
+  // Esta regla no ataba nada: exigia que la cadena apareciera, y pasaba en verde
+  // con la llamada en una rama muerta — de hecho paso en verde con el bug del
+  // cuerpo leido dos veces DENTRO, introducido por el mismo commit. Ahora fija lo
+  // que de verdad importa: el cuerpo se lee UNA vez por respuesta.
+  it('el cuerpo de la respuesta de transcripción se lee una sola vez', () => {
+    for (const f of ['HoySection', 'HarveySection']) {
+      const src = leerCodigo(`src/components/sections/${f}.tsx`)
+      const i = src.indexOf("fetch('/api/harvey/transcribe'")
+      expect(i, `${f}: ya no llama a transcribe`).toBeGreaterThan(-1)
+      const bloque = src.slice(i, i + 1600)
+      expect((bloque.match(/await res\.json\(\)/g) || []).length,
+        `${f}: lee el cuerpo dos veces — la segunda rechaza y el silencio se anuncia como caída del servicio`).toBeLessThan(2)
+    }
+  })
+
+  it('el fallo de transcripción no se le echa al usuario', () => {
+    for (const f of ['HoySection', 'HarveySection']) {
+      const src = leerCodigo(`src/components/sections/${f}.tsx`)
+      expect(/mensajeErrorTranscripcion\(/.test(src),
+        `${f} no usa el traductor común: vuelve a decir «no se entendió el audio» ante un 503`).toBe(true)
+    }
+    // La rama del 402 era código muerto: esa ruta no devuelve 402 en ningún sitio.
+    expect(/status === 402/.test(leerCodigo('src/components/sections/HoySection.tsx')),
+      'vuelve la rama del 402, que no existe en el servidor').toBe(false)
+  })
+
+  it('Harvey no confunde «los que enseño» con «los que hay»', () => {
+    const H = leerCodigo('src/components/sections/HarveySection.tsx')
+    expect(/nSinLeer/.test(H), 'vuelve a etiquetar la lista recortada como «sin leer»').toBe(true)
+    expect(/INBOX — \$\{unreadEmails\.length\} sin leer:/.test(H),
+      'la lista lleva .slice(0,8): con más de 8 diría siempre exactamente 8').toBe(false)
+  })
+
+  // La tarjeta de confirmación es la última red antes de mandar invitaciones por
+  // correo. HoySection ya enseñaba la hora; HarveySection no.
+  it('las dos tarjetas de Harvey enseñan la hora', () => {
+    for (const f of ['HoySection', 'HarveySection']) {
+      const src = leerCodigo(`src/components/sections/${f}.tsx`)
+      const fechas = (src.match(/\{pendingAction\.date\}/g) || []).length
+      const horas = (src.match(/\{pendingAction\.date\}\{pendingAction\.time/g) || []).length
+      expect(horas, `${f}: ${fechas - horas} tarjeta(s) pintan la fecha sin la hora`).toBe(fechas)
+    }
+  })
+
+  it('abrir un correo sincroniza el que está abierto, no solo la lista', () => {
+    const I = leerCodigo('src/components/sections/InboxSection.tsx')
+    expect(/data\.markRead\(m\.id\)/.test(I),
+      'vuelve a llamar a markRead a pelo: el reducer crea un objeto nuevo y `selected` se queda con is_read:false para siempre').toBe(false)
+  })
+
+  it('guardar una tarea manda solo lo que se ha cambiado', () => {
+    const T = leerCodigo('src/components/sections/TareasSection.tsx')
+    const i = T.indexOf('const saveTask =')
+    const cuerpo = T.slice(i, i + 1400)
+    expect(/updateTask\(activeTask\.id,\s*editing\)/.test(cuerpo),
+      'vuelve a mandar `editing` entero: resucita una tarea completada desde otra pestaña y borra su completed_at').toBe(false)
+    expect(/cambios/.test(cuerpo), 'no construye el diff de campos tocados').toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dos errores MIOS de la tanda del 2026-08-13, los dos de la misma familia:
+// anadir una comprobacion y cambiar de paso la semantica de al lado.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
+  // Los turnos del chat son SECUENCIALES a proposito —lo dice el comentario justo
+  // encima— para que `created_at` difiera y el orden quede determinado. Al anadir
+  // la comprobacion de error se pusieron en Promise.all, y entonces la respuesta
+  // puede leerse antes que la pregunta.
+  it('los dos turnos del chat se escriben en orden', () => {
+    const C = leerCodigo('src/app/api/chat/route.ts')
+    // Anclado a los INSERT, no al primer `chat_messages` del fichero — ese es el
+    // SELECT del historial y queda lejos, asi que la ventana no llegaba y la regla
+    // pasaba en verde con los inserts en paralelo. Comprobado por mutacion.
+    const idx: number[] = []
+    const re = /from\('chat_messages'\)\.insert\(/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(C))) idx.push(m.index)
+    expect(idx.length, 'ya no hay dos inserts de turno: revisa esta regla').toBe(2)
+    const bloque = C.slice(Math.max(0, idx[0] - 260), idx[1] + 160)
+    expect(/Promise\.all/.test(bloque),
+      'los inserts del chat vuelven a ir en paralelo: created_at puede coincidir y el orden se pierde').toBe(false)
+  })
+
+  // El `count` de un UPDATE solo se rellena si PostgREST devuelve `content-range`.
+  // Escribir `!count` en vez de `count === 0` convierte un chequeo defensivo en una
+  // rotura total: si la cabecera no llega, la conexion de Gmail falla SIEMPRE, para
+  // todo el mundo.
+  it('el count de un update solo corta cuando es 0 de verdad', () => {
+    const CB = leerCodigo('src/app/api/gmail/callback/route.ts')
+    expect(/\|\|\s*!filas/.test(CB),
+      'usa !count: si PostgREST no manda content-range, count es null y esto rompe la conexión de Gmail para todos').toBe(false)
+    expect((CB.match(/filas\w*\s*===\s*0/g) || []).length,
+      'alguna rama no comprueba el count de forma segura').toBe(2)
   })
 })

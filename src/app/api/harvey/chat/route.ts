@@ -171,7 +171,17 @@ ${context ? `CONTEXTO ACTUAL DEL SISTEMA:\n${context}` : ''}`
 
     for (const model of models) {
       try {
+        // Esta ruta usa fetch crudo en vez del SDK, asi que se quedo fuera de la
+        // decision de acotar que ya estaba tomada en ai.ts. Si Anthropic acepta la
+        // conexion y se queda parado ANTES de mandar cabeceras, la funcion agota
+        // los 60 s y Vercel la mata sin respuesta: el localFallback de mas abajo
+        // no llega a ejecutarse.
+        //
+        // Va junto con el signal del fetch de Tavily (ai.ts): ese corre ANTES,
+        // dentro de los mismos 60 s, y un cuelgue suyo da el sintoma identico.
+        // Acotar solo uno de los dos deja el agujero abierto.
         const res = await fetch('https://api.anthropic.com/v1/messages', {
+          signal: AbortSignal.timeout(45_000),
           method: 'POST',
           headers: {
             'x-api-key': apiKey,

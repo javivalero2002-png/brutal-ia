@@ -243,7 +243,33 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   const saveTask = async () => {
     if (!activeTask) return
     setSaving(true)
-    try { await data.updateTask(activeTask.id, editing); showToast('Tarea actualizada'); setActiveTask(null) }
+    try {
+      // Solo lo que el usuario ha CAMBIADO en el cajon, no `editing` entero.
+      //
+      // `editing` es una foto congelada de cuando abriste el cajon: no hay ningun
+      // useEffect que lo resincronice con data.tasks. Si mientras tanto marcas la
+      // tarea como hecha desde la lista de al lado —en escritorio conviven, y en
+      // el tablero la tarjeta se queda a la vista al moverse a HECHO—, GUARDAR
+      // mandaba el `done: false` viejo y la resucitaba. Peor: la ruta hace
+      // pick(body, [...'done'...]) y al llegar `done` como booleano ademas pone
+      // `completed_at` a null, asi que la fecha de finalizacion se pierde en
+      // silencio y Reportes cambia de semana.
+      //
+      // `hayCambios()` tampoco avisaba, porque compara contra el mismo activeTask
+      // obsoleto. Mandando solo los campos tocados, un valor que no has editado no
+      // puede pisar al de nadie.
+      const guardado = camposEditables(activeTask) as Record<string, unknown>
+      const cambios: Record<string, unknown> = {}
+      for (const k of Object.keys(guardado)) {
+        if ((editing as Record<string, unknown>)[k] !== guardado[k]) cambios[k] = (editing as Record<string, unknown>)[k]
+      }
+      if (Object.keys(cambios).length === 0) {
+        showToast('No hay cambios que guardar'); setActiveTask(null); return
+      }
+      await data.updateTask(activeTask.id, cambios)
+      showToast('Tarea actualizada')
+      setActiveTask(null)
+    }
     catch { showToast('Error al guardar') }
     finally { setSaving(false) }
   }

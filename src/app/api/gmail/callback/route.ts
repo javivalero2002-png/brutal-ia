@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getAuthCtx } from '@/lib/authz'
 import { getOAuthClient, OAUTH_STATE_COOKIE } from '@/lib/gmail'
 import { google } from 'googleapis'
 import { NextRequest, NextResponse } from 'next/server'
@@ -59,6 +60,10 @@ export async function GET(request: NextRequest) {
     return done(`${base}/dashboard?gmail=error`)
   }
 
+  // El rol, resuelto por el servidor. `profiles.role` es la unica senal de
+  // autorizacion; nada de esto sale del state, que lo escribe el cliente.
+  const ctx = await getAuthCtx()
+
   const oauth2Client = getOAuthClient()
   let tokens: { refresh_token?: string | null } = {}
   try {
@@ -84,25 +89,67 @@ export async function GET(request: NextRequest) {
   const supabase = await createAdminClient()
 
   if (account === 'colabs') {
-    await supabase
+    // El rol se comprueba AQUI, no solo en /api/gmail/connect.
+    //
+    // El nonce impide que un extrano fabrique un state; NO impide que el dueno
+    // legitimo de ese nonce lo modifique. Un miembro pide conectar su Gmail
+    // PERSONAL —permitido para cualquiera—, y al volver de Google cambia
+    // `personal` por `colabs` en el state: su nonce sigue casando, porque es el
+    // suyo, y `user.id === userId` tambien, porque es el. El buzon compartido de
+    // la empresa acaba apuntando a su correo personal, y su correo personal
+    // acaba en el inbox de las siete personas.
+    //
+    // Es la misma asimetria que ya aparecio en connect/disconnect, una puerta mas
+    // adentro: el `account` del state es entrada del cliente, y ninguna de las
+    // dos comprobaciones de arriba lo cubre.
+    if (ctx?.role !== 'owner') {
+      console.warn(`[gmail] ${userId} intento conectar el buzon compartido sin ser owner`)
+      return done(`${base}/dashboard?gmail=colabs_no_autorizado`)
+    }
+    // El error se mira. supabase-js no lanza, y la ruta hermana (disconnect) SI lo
+    // comprobaba: sin esto se anunciaba «conectado», el dashboard saltaba a Ajustes
+    // y alli seguia el boton CONECTAR. El `code` de Google es de un solo uso, asi
+    // que hay que rehacer el flujo entero sin saber por que.
+    //
+    // `count` ademas de `error`: un update que no casa ninguna fila NO es error
+    // —devuelve error null— y dejaba el mismo anuncio falso por otra puerta.
+    //
+    // `=== 0` y NO `!filas`, que es lo que puse primero y estaba mal. El `count`
+    // solo se rellena si PostgREST devuelve la cabecera `content-range`
+    // (postgrest-js: `if (countHeader && contentRange && contentRange.length > 1)`).
+    // Si algun dia no llega, `count` es null y `!count` seria true: romperia la
+    // conexion de Gmail para TODO EL MUNDO, siempre. Una comprobacion defensiva que
+    // puede tumbar el camino bueno es peor que el hueco que tapa. Asi solo corta
+    // cuando la base dice explicitamente que no toco ninguna fila.
+    const { error: errColabs, count: filasColabs } = await supabase
       .from('profiles')
       .update({
         gmail_colabs_refresh_token: tokens.refresh_token,
         gmail_colabs_connected: true,
         gmail_colabs_account: email,
-      })
+      }, { count: 'exact' })
       .eq('id', userId)
+    if (errColabs || filasColabs === 0) {
+      console.error('[gmail] no se pudo guardar el token de colabs:', errColabs?.message ?? 'ninguna fila actualizada')
+      return done(`${base}/dashboard?gmail=error`)
+    }
     return done(`${base}/dashboard?gmail=colabs_connected`)
   }
 
-  await supabase
+  // Igual que la rama de colabs de arriba: sin esto se decia «Gmail personal
+  // conectado» y en Ajustes seguia el boton CONECTAR, en la misma pantalla.
+  const { error: errPersonal, count: filasPersonal } = await supabase
     .from('profiles')
     .update({
       gmail_refresh_token: tokens.refresh_token,
       gmail_connected: true,
       gmail_account: email,
-    })
+    }, { count: 'exact' })
     .eq('id', userId)
+  if (errPersonal || filasPersonal === 0) {
+    console.error('[gmail] no se pudo guardar el token personal:', errPersonal?.message ?? 'ninguna fila actualizada')
+    return done(`${base}/dashboard?gmail=error`)
+  }
 
   return done(`${base}/dashboard?gmail=connected`)
 }

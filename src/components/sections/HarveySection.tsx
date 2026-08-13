@@ -5,7 +5,7 @@ import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
 import { parsearAccionHarvey, type AccionHarvey } from '@/lib/harveyAccion'
 import { nivelTarea } from '@/components/shared/helpers'
 import type { NexusData } from '@/types'
-import { BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, AMBAR} from '@/components/shared'
+import { BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, AMBAR, mensajeErrorTranscripcion } from '@/components/shared'
 import { VIO } from '@/components/shared/design-tokens'
 import type { IrASeccion } from '@/components/shared/secciones'
 
@@ -146,6 +146,15 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
     const todayStr = todayKey()
     // Incluye los no leídos + los urgentes/altos recibidos HOY aunque ya se hayan
     // leído: si acabas de abrir un email importante, Harvey debe seguir sabiéndolo.
+    // El recuento REAL, aparte de la lista que se le ensena a Harvey.
+    //
+    // `unreadEmails` de abajo NO es "los sin leer": lleva .slice(0,8) e incluye a
+    // proposito urgentes de hoy ya leidos. Etiquetar su .length como «sin leer»
+    // hacia que Harvey dijera SIEMPRE exactamente 8 en cuanto hubiera mas de 8 —
+    // y ese es el estado normal, porque gmail/sync copia el estado de Gmail y la
+    // retencion del cron solo borra leidos. El numero correcto esta en la MISMA
+    // pantalla, en el badge de INBOX. El gemelo de HoySection ya usaba el real.
+    const nSinLeer = inbox.filter((m:any)=>!m.is_read).length
     const unreadEmails = inbox.filter((m:any)=>
       // localDayKey, no slice(0,10): el ISO viene en UTC y todayStr es el dia de
       // Madrid. De 00:00 a 02:00 no son el mismo dia y el email de hoy no contaba.
@@ -182,7 +191,7 @@ CLIENTES ACTIVOS (${activeClients.length}): ${activeClients.map((c:any)=>c.name)
 EQUIPO: ${((data.team||[]) as any[]).map((m:any)=>m.name).filter(Boolean).join(', ')||'sin datos'}
 PIPELINE CONTENIDO: ${pipeline.length} piezas pendientes
 
-INBOX — ${unreadEmails.length} sin leer:
+INBOX — ${nSinLeer} sin leer (${unreadEmails.length} mostrados):
 ${emailLines||'  (inbox vacío)'}
 
 CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}
@@ -427,7 +436,7 @@ ${memLines2||'  sin documentos'}`
         // "No te escuche" es un diagnostico FALSO si lo que fallo fue el servicio
         // de transcripcion: el usuario repite la grabacion una y otra vez creyendo
         // que habla mal. Un fallo del servidor tiene que decirse como lo que es.
-        if (!res.ok) { setMode('idle'); showToast(json?.error || 'El servicio de transcripción falló — inténtalo en un momento'); return }
+        if (!res.ok) { setMode('idle'); showToast(mensajeErrorTranscripcion(res.status, json?.error)); return }
         text = (json.text||'').trim()
       }
 
@@ -854,7 +863,7 @@ ${memLines2||'  sin documentos'}`
               {pendingAction.contentType && <span className="font-syne text-[7px] px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.4)'}}>{pendingAction.contentType}</span>}
               {pendingAction.clientName && <span className="font-syne text-[7px] px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.4)'}}>Cliente: {pendingAction.clientName}</span>}
               {pendingAction.industry && pendingAction.type==='cliente' && <span className="font-syne text-[7px] px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.4)'}}>{pendingAction.industry}</span>}
-              {pendingAction.date && <span className="font-syne text-[7px] px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.4)'}}>{pendingAction.date}</span>}{pendingAction.assigneeName && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(34,197,94,0.12)',color:'rgba(34,197,94,0.9)'}}>→ {pendingAction.assigneeName.toUpperCase()}</span>}{pendingAction.invitees && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(167,139,250,0.12)',color:'rgba(167,139,250,0.9)'}}>INVITA: {pendingAction.invitees.toUpperCase()}</span>}
+              {pendingAction.date && <span className="font-syne text-[7px] px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.4)'}}>{pendingAction.date}{pendingAction.time?' '+pendingAction.time:''}</span>}{pendingAction.assigneeName && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(34,197,94,0.12)',color:'rgba(34,197,94,0.9)'}}>→ {pendingAction.assigneeName.toUpperCase()}</span>}{pendingAction.invitees && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(167,139,250,0.12)',color:'rgba(167,139,250,0.9)'}}>INVITA: {pendingAction.invitees.toUpperCase()}</span>}
             </div>
             <div className="flex gap-2">
               <button onClick={confirmHarveyAction} disabled={confirmingAction} className="flex-1 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest transition-all disabled:opacity-40 text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
@@ -966,7 +975,7 @@ ${memLines2||'  sin documentos'}`
                 {pendingAction.contentType && <span className="font-syne text-[7px] px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.4)'}}>{pendingAction.contentType}</span>}
                 {pendingAction.clientName && <span className="font-syne text-[7px] px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.4)'}}>Cliente: {pendingAction.clientName}</span>}
                 {pendingAction.industry && pendingAction.type==='cliente' && <span className="font-syne text-[7px] px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.4)'}}>{pendingAction.industry}</span>}
-                {pendingAction.date && <span className="font-syne text-[7px] px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.4)'}}>{pendingAction.date}</span>}{pendingAction.assigneeName && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(34,197,94,0.12)',color:'rgba(34,197,94,0.9)'}}>→ {pendingAction.assigneeName.toUpperCase()}</span>}{pendingAction.invitees && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(167,139,250,0.12)',color:'rgba(167,139,250,0.9)'}}>INVITA: {pendingAction.invitees.toUpperCase()}</span>}
+                {pendingAction.date && <span className="font-syne text-[7px] px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.4)'}}>{pendingAction.date}{pendingAction.time?' '+pendingAction.time:''}</span>}{pendingAction.assigneeName && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(34,197,94,0.12)',color:'rgba(34,197,94,0.9)'}}>→ {pendingAction.assigneeName.toUpperCase()}</span>}{pendingAction.invitees && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(167,139,250,0.12)',color:'rgba(167,139,250,0.9)'}}>INVITA: {pendingAction.invitees.toUpperCase()}</span>}
               </div>
               <div className="flex gap-2">
                 <button onClick={confirmHarveyAction} disabled={confirmingAction} className="flex-1 py-3 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all disabled:opacity-40 text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>

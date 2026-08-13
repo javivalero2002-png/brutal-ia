@@ -61,6 +61,11 @@ export async function GET(request: NextRequest) {
   // purga. Antes eran 38s, en los que solo cabía el compartido y UNO personal:
   // con 7 personas, a cada una le tocaba una vez cada ~7 horas.
   //
+  // Esos dos topes son `TOPE_COLABS_MS` y `TOPE_PERSONAL_MS` de
+  // `src/lib/colabsSync.ts`, y esta aritmética depende de que sigan ahí: se
+  // borraron una vez al cambiar la forma de medir el plazo, y este párrafo se
+  // quedó describiendo un reparto que ya no existía. Hay una regla que los fija.
+  //
   // Sigue siendo un tope y no una promesa: si algún día el equipo crece y no
   // caben, los que falten van a la siguiente hora, igual que antes.
   const T0 = Date.now()
@@ -73,10 +78,15 @@ export async function GET(request: NextRequest) {
   // conectado el buzón compartido — y un rojo permanente se ignora enseguida.
   const NOT_CONNECTED = new Set(['Colaboraciones not connected', 'not connected'])
 
-  type Outcome = { mailbox: string; ok: boolean; synced?: number; insertFailures?: number; error?: string; terminal?: boolean }
+  type Outcome = { mailbox: string; ok: boolean; synced?: number; insertFailures?: number; error?: string; terminal?: boolean; saltado?: boolean }
   const outcomes: Outcome[] = []
 
   const record = (mailbox: string, r: any) => {
+    // Saltado por el cerrojo: otra instancia lo estaba haciendo. No es un fallo,
+    // pero tampoco es "sincronizado": si el cerrojo se quedara atascado, contarlo
+    // como verde dejaria al cron diciendo que todo va bien mientras no entra ni un
+    // correo. Se anota aparte para que se vea en el resultado del cron.
+    if (r.ok && r.saltado) { outcomes.push({ mailbox, ok: true, saltado: true, synced: 0 }); return }
     if (r.ok) {
       // ok:true con inserts fallidos NO es verde. El análisis con Claude ocurre
       // ANTES del insert: si el insert falla, el gmail_id no se guarda y la

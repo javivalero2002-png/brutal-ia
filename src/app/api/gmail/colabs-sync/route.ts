@@ -32,5 +32,9 @@ export async function POST() {
     total: result.total,
     account: result.account,
     insertFailures: result.insertFailures ?? 0,
+    // `saltado`: no se hizo nada porque otra instancia lo estaba haciendo. Sin
+    // este campo la respuesta es `synced: 0, total: 0`, que desde el cliente es
+    // exactamente igual que "no habia correo nuevo" — y no es lo mismo.
+    saltado: result.saltado ?? false,
   })
 }

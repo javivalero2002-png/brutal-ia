@@ -3,6 +3,7 @@ import { analyzeWhatsAppMessage } from '@/lib/ai'
 import { sendWhatsAppMessage, parseWebhookMessage, downloadWhatsAppMedia } from '@/lib/whatsapp'
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac } from 'crypto'
+import { nivelTarea } from '@/components/shared/helpers'
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN
 const APP_SECRET = process.env.WHATSAPP_APP_SECRET
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
 
   // Add to inbox_messages for the linked user
   if (session?.user_id) {
-    await supabase.from('inbox_messages').insert({
+    const { error: inboxErr } = await supabase.from('inbox_messages').insert({
       user_id: session.user_id,
       source: 'whatsapp',
       from_name: fromName,
@@ -92,6 +93,7 @@ export async function POST(request: NextRequest) {
       is_unread: true,
       is_read: false,
     })
+    if (inboxErr) console.error('[whatsapp] no se pudo guardar el mensaje:', inboxErr.message)
   }
 
   // Check confirmation BEFORE overwriting context
@@ -103,15 +105,25 @@ export async function POST(request: NextRequest) {
 
   if (isConfirmation) {
     const prev = session.context.lastAnalysis
+    // El «✅ Tarea creada» estaba FUERA de este if, asi que un numero sin perfil
+    // enlazado —whatsapp_sessions.user_id es nullable y no lo rellena nadie hoy—
+    // recibia la confirmacion sin que se hubiera escrito una sola fila. Y el error
+    // del insert se tiraba, asi que con perfil enlazado pasaba lo mismo en cuanto
+    // Postgres dijera que no.
+    let creada = false
     if (session?.user_id) {
-      await supabase.from('tasks').insert({
+      const { error: tareaErr } = await supabase.from('tasks').insert({
         created_by: session.user_id,
         text: prev.taskText,
-        level: prev.urgency === 'urgent' ? 'urgent' : 'high',
+        level: nivelTarea(prev.urgency),
         source: 'whatsapp',
       })
+      if (tareaErr) console.error('[whatsapp] no se pudo crear la tarea:', tareaErr.message)
+      else creada = true
     }
-    reply = `✅ Tarea creada en Brutal.IA:\n\n"${prev.taskText}"\n\nPuedes verla en tu tablón.`
+    reply = creada
+      ? `✅ Tarea creada en Brutal.IA:\n\n"${prev.taskText}"\n\nPuedes verla en tu tablón.`
+      : `No he podido crear la tarea. Escribe a quien lleva Brutal.IA para que enlace este número.`
     await supabase.from('whatsapp_sessions').upsert({
       phone: from,
       last_message_at: new Date().toISOString(),

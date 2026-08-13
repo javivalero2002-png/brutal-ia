@@ -27,5 +27,12 @@ export function isOwnStorageUrl(raw: unknown): raw is string {
   try { u = new URL(raw) } catch { return false }
   // Solo https: http permitiría degradar a redes internas por nombre.
   if (u.protocol !== 'https:') return false
-  return u.host === host
+  if (u.host !== host) return false
+  // Y la RUTA, no solo el host. Esto se usa en dos sitios con consecuencias
+  // distintas: para decidir a donde hace `fetch` el servidor, y para decidir a
+  // donde redirige /api/archivo. En el segundo, aceptar cualquier ruta del host de
+  // Supabase convierte un enlace de brutalia.tech en un salto a la API de Supabase
+  // — que es justo lo que hace creible un phishing, y encima con nuestro dominio
+  // delante. A 7 personas con sesion es menor; cuesta una linea.
+  return u.pathname.startsWith('/storage/v1/object/')
 }

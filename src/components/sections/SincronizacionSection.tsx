@@ -154,18 +154,45 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
     try {
       const res = await fetch('/api/gmail/colabs-sync', { method: 'POST' })
       const result = await res.json()
+      if (res.ok && result.saltado) {
+        // El cerrojo lo tiene otra instancia: el buzon SE ESTA sincronizando. No se
+        // toca `lastColabs` —no ha pasado nada aqui— y no se dice "0 nuevos", que se
+        // leeria como que no habia correo.
+        setSyncResultMsg({ok:true, text:'Ya se estaba sincronizando', account:'colabs'})
+        showToast('Colaboraciones — ya se estaba sincronizando, los mensajes llegan solos')
+        await data.reloadInbox?.()
+        return true
+      }
       if (res.ok) {
         const now = new Date().toISOString()
         setLastColabs(now)
         try { localStorage.setItem(LS_C, now) } catch {}
         const synced = result.synced ?? 0
         const total = result.total ?? 0
-        const detail = `${synced} nuevos de ${total} revisados · equipo`
-        addLog('Gmail Colaboraciones', true, detail)
-        setSyncResultMsg({ok:true, text:`${synced} email${synced!==1?'s':''} compartido${synced!==1?'s':''}`, account:'colabs'})
+        // `insertFailures` — el camino personal lo mira cincuenta lineas mas arriba
+        // y este lo tiraba. El gemelo exacto que avisa CLAUDE.md: el mismo arreglo
+        // escrito una vez y vivo el otro lado.
+        //
+        // Sin esto, veinte correos analizados con Claude y NINGUNO guardado se
+        // anuncian como «0 nuevos de 20 revisados» en VERDE. Se lee igual que «no
+        // habia correo nuevo», que es justo lo que se mira cuando alguien dice que
+        // no le llegan los correos — y encima el registro senala en rojo el buzon
+        // personal y en verde el compartido, mandando el diagnostico al reves.
+        const fallos = result.insertFailures ?? 0
+        const detail = fallos > 0
+          ? `${total} revisados, ${fallos} sin guardar · equipo`
+          : `${synced} nuevos de ${total} revisados · equipo`
+        addLog('Gmail Colaboraciones', fallos === 0, detail)
+        setSyncResultMsg({
+          ok: fallos === 0,
+          text: fallos > 0 ? `${fallos} no se pudieron guardar` : `${synced} email${synced!==1?'s':''} compartido${synced!==1?'s':''}`,
+          account: 'colabs',
+        })
         showToast(`Colaboraciones — ${detail}`)
+        // Se refresca igual y `lastColabs` se mueve igual: el sync SI corrio y parte
+        // entro. No hacerlo seria mentir en el otro sentido.
         await data.reloadInbox?.()
-        return true
+        return fallos === 0
       } else {
         const isExpired = result.error === 'token_expired' || result.error === 'auth_rota'
         const errMsg = isExpired ? 'Conexión caducada — reconecta la cuenta' : (result.error || 'Error del servidor')

@@ -206,7 +206,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     } catch { return { ok: false, noScope: false } }
   }, [])
 
-  const syncGmail = useCallback(async (): Promise<{synced:number;total:number;insertFailures?:number}> => {
+  const syncGmail = useCallback(async (): Promise<{synced:number;total:number;insertFailures?:number;saltado?:boolean}> => {
     if (!profile?.gmail_connected) throw new Error('Gmail no conectado')
     setSyncing(true)
     setSyncResult(null)
@@ -218,6 +218,13 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
       // Claude y luego NO se pudieron guardar. Sin mirarlo, "0 emails nuevos (20
       // revisados)" se lee como "no había nada" cuando en realidad no se guardó
       // nada — y el cron los reanaliza, y se vuelve a pagar, cada hora.
+      // Otra instancia lo esta haciendo ahora mismo (el cerrojo de job_locks).
+      // Decirlo, en vez de "0 emails nuevos (0 revisados)", que se lee como que
+      // el buzon estaba vacio.
+      if (result.saltado) {
+        setSyncResult({ ok: true, message: 'Ya se estaba sincronizando — los mensajes llegan solos' })
+        return result
+      }
       const fallos = result.insertFailures ?? 0
       setSyncResult({
         ok: fallos === 0,
@@ -416,6 +423,18 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     return Array.isArray(__dropped) ? __dropped : []
   }, [])
 
+  /**
+   * Mete en la lista una fila que YA ha escrito el servidor. No hace PATCH.
+   *
+   * Existe por la subida de portada: `upload-cover` guarda el identificador y
+   * devuelve la fila entera ya firmada. Lo que se hacía antes era llamar a
+   * `updateAgenda` con la URL FIRMADA para refrescar la rejilla — y eso manda un
+   * PATCH que sustituye el identificador de la base por una firma con token.
+   */
+  const aplicarAgendaLocal = useCallback((fila: ContentItem) => {
+    setAgenda(prev => prev.map(a => a.id === fila.id ? fila : a))
+  }, [])
+
   const deleteAgenda = useCallback(async (id: string) => {
     await apiFetch(`/api/agenda/${id}`, { method: 'DELETE' })
     setAgenda(prev => prev.filter(a => a.id !== id))
@@ -455,7 +474,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     tasks, createTask, updateTask, deleteTask, deleteTasks, toggleTask,
     inbox, markRead, markManyRead, markUnread, sendInternalMessage, reloadInbox,
     memoria, createMemoria, updateMemoria, deleteMemoria,
-    agenda, createAgenda, updateAgenda, deleteAgenda,
+    agenda, createAgenda, updateAgenda, deleteAgenda, aplicarAgendaLocal,
     reglas, createRegla, updateRegla, deleteRegla, runAutomations,
     chatMessages, sendChatMessage, clearChat,
     team, reloadTeam, calendarEvents, calendarScopeError, reloadCalendar, reload: load,

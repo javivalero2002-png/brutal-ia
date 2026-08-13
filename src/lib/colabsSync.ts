@@ -1,7 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { esTokenMuerto, esConexionRota } from '@/lib/gmailAuth'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
-import { analyzeEmail, EmailAnalysis } from '@/lib/ai'
+import { analyzeEmail, EmailAnalysis, plazoRestante, MINIMO_UTIL_MS } from '@/lib/ai'
 import { sendPushToAll, sendPushToUser, canSendPush } from '@/lib/push'
 import { localDayKey } from '@/components/shared/helpers'
 
@@ -11,8 +12,44 @@ type SyncResult =
   // `insertFailures` sale al exterior a propósito: con los inserts fallando el
   // resultado es `synced: 0` sobre 20 revisados, que desde fuera es idéntico a
   // "no había nada nuevo". Es el recuento el que distingue las dos cosas.
-  | { ok: true; synced: number; total: number; account: string; aiFailures?: number; insertFailures?: number }
+  | { ok: true; synced: number; total: number; account: string; aiFailures?: number; insertFailures?: number; saltado?: boolean }
   | { ok: false; error: string; code?: number; details?: unknown }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Un cerrojo por buzón, y hace falta de verdad.
+//
+// Medido en los logs de producción del 2026-08-13: `/api/gmail/colabs-sync` se
+// llamó 4 veces en 12 minutos. No es un bug del freno —cada navegador se frena a
+// sí mismo 15 minutos con localStorage— es que el freno es POR DISPOSITIVO y el
+// buzón es UNO. Siete personas con la app abierta son siete relojes distintos
+// sincronizando el mismo correo, más el cron de la hora en punto, que tampoco
+// pedía cerrojo: el de sync-colabs solo cubre la purga diaria de retención.
+//
+// Lo que cuesta cuando dos se solapan: el dedup lee los `gmail_id` ya guardados
+// ANTES del bucle y luego analiza y escribe uno a uno. Entre esa lectura y el
+// insert de un email cabe otra ejecución entera, así que las dos mandan el MISMO
+// correo a Claude y las dos lo pagan. Y si `inbox_messages.gmail_id` no tiene
+// UNIQUE en producción —no hay DDL de esa tabla en ningún .sql del repo, es una
+// de las que CLAUDE.md avisa que están sin reconciliar— las dos lo insertan, y
+// el equipo entero ve el correo duplicado.
+//
+// El cerrojo es el mismo que ya usan el motor de automatizaciones y la purga:
+// se apoya en la PK de Postgres, así que no hay ventana entre comprobar y tomar.
+// TTL de 90 s: el presupuesto interno son 25 s y el tope de la función 60 s, de
+// modo que una instancia que Vercel corte a los 60 s libera sola 30 s después.
+// ─────────────────────────────────────────────────────────────────────────────
+const TTL_CERROJO_MS = 90_000
+
+// Topes POR BUZON, mas estrictos que lo que cabe en la funcion.
+//
+// No son redundantes con `plazoRestante`: ese protege a la funcion de morirse,
+// estos reparten el minuto entre los ocho buzones que el cron recorre seguidos
+// (el compartido + los 7 personales) para que no se lo coma el primero. Los borre
+// al cambiar de palanca y el reparto del cron se quedo describiendo algo que ya no
+// pasaba — ver el comentario de src/app/api/cron/sync-colabs/route.ts.
+const TOPE_COLABS_MS = 25_000
+const TOPE_PERSONAL_MS = 12_000
 
 /**
  * Sincroniza el buzón COMPARTIDO de colaboraciones.
@@ -21,6 +58,24 @@ type SyncResult =
  * de modo que aparecen para todo el equipo. Idempotente por `gmail_id`.
  */
 export async function syncColabsInbox(
+  admin: SupabaseClient,
+  opts: { triggeredBy?: string; max?: number } = {}
+): Promise<SyncResult> {
+  const cerrojo = await acquireLock(admin, 'sync-colabs', TTL_CERROJO_MS)
+  // `adquirido: false` es contención real: otra instancia lo está haciendo AHORA.
+  // No es un error —el trabajo se está haciendo— así que sale `ok` con `saltado`,
+  // y quien lo llamó decide qué contarle al usuario. Devolver un fallo aquí
+  // pintaría de rojo una sincronización que en realidad va bien.
+  if (!cerrojo.adquirido) return { ok: true, synced: 0, total: 0, account: '', saltado: true }
+  try {
+    return await syncColabsInboxSinCerrojo(admin, opts)
+  } finally {
+    // Solo si es NUESTRO. Con `degradado` (la tabla no existe) no se tomó nada.
+    if (!cerrojo.degradado) await releaseLock(admin, 'sync-colabs', cerrojo.holder)
+  }
+}
+
+async function syncColabsInboxSinCerrojo(
   admin: SupabaseClient,
   opts: { triggeredBy?: string; max?: number } = {}
 ): Promise<SyncResult> {
@@ -42,6 +97,11 @@ export async function syncColabsInbox(
 
   const { data: clientsData } = await admin.from('clients').select('name')
   const knownClients = (clientsData || []).map((c: { name: string }) => c.name)
+
+  // T0 arranca AQUI, no junto al bucle: el fetch de Gmail y sus consultas tambien
+  // gastan del minuto de la funcion. Medirlo desde despues era contar solo una
+  // parte y creer que sobraba tiempo.
+  const T0 = Date.now()
 
   let emails: Awaited<ReturnType<typeof getEmailsWithRefreshToken>>
   let gmailAccount = ''
@@ -105,17 +165,28 @@ export async function syncColabsInbox(
   // 25s y no 45 como en /api/gmail/sync: alli la funcion solo hace eso, mientras
   // que aqui el cron tiene por delante los buzones personales de las 7 personas,
   // las automatizaciones y la purga dentro del mismo minuto.
-  const T0 = Date.now()
-  const PRESUPUESTO_MS = 25_000
+  // El tope de abajo es el que cabe en la funcion; el 25 s es una eleccion PROPIA
+  // y mas estricta (ver comentario de arriba). Se toma el menor, para que la
+  // intencion se conserve y el invariante no dependa de que alguien recuerde.
   let truncado = false
 
   for (const email of emails) {
     if (colabsKnown.has(email.gmail_id)) continue
-    if (Date.now() - T0 > PRESUPUESTO_MS) { truncado = true; break }
+    // Dos limites, y hacen falta los dos:
+    //  · `plazoRestante` es el de la FUNCION — no empezar una llamada que no quepa;
+    //  · `TOPE_COLABS_MS` es una eleccion PROPIA y mas estricta, porque quien llama
+    //    a esto suele ser el cron y detras van los 7 buzones personales, el motor y
+    //    la purga dentro de la misma ejecucion.
+    //
+    // El Math.min existia y lo borre yo al cambiar de palanca, dejando estos
+    // comentarios describiendo un tope que ya no estaba. Sin el, el reparto del
+    // cron se queda sin base: 51 s por buzon en vez de 25 no caben siete veces.
+    const plazo = Math.min(plazoRestante(T0, 60), TOPE_COLABS_MS - (Date.now() - T0))
+    if (plazo < MINIMO_UTIL_MS) { truncado = true; break }
 
     let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
     try {
-      analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients)
+      analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients, plazo)
     } catch { aiFailures++ }
     // analyzeEmail NO lanza: captura por dentro y devuelve el fallback básico,
     // así que el catch de arriba era código muerto y aiFailures siempre 0.
@@ -158,13 +229,19 @@ export async function syncColabsInbox(
       // UTC. Un email recibido a las 00:30 de Madrid generaba la tarea con la
       // fecha de AYER, o sea vencida en el momento de crearse.
       const day = localDayKey(email.received_at || Date.now())
-        await admin.from('tasks').insert({
+        // El error SE MIRA, igual que en el insert hermano de veinte lineas arriba.
+        // Se registra y no se corta: convertirlo en `continue` romperia otra cosa
+        // —se saltarian newUnread.push y newCount++ para un correo que SI se
+        // guardo—. Y no se reintenta solo: el gmail_id ya esta en la base, asi que
+        // el siguiente sync hace `continue` y la tarea no vuelve a intentarse nunca.
+        const { error: reunionErr } = await admin.from('tasks').insert({
           created_by: ownerId,
           text: `Reunión: ${email.subject || email.from_name || 'sin asunto'}`,
           level: 'high',
           due_date: day,
           source: 'gmail',
         })
+        if (reunionErr) console.error('[colabs] no se pudo crear la tarea de reunión:', reunionErr.message)
       }
       if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgent: analysis.urgency === 'urgent' })
     }
@@ -214,11 +291,33 @@ export async function syncPersonalInbox(
   admin: SupabaseClient,
   profile: { id: string; gmail_refresh_token: string | null }
 ): Promise<SyncResult> {
+  // Por usuario y no global: son buzones distintos y no compiten entre sí. Lo que
+  // sí compite es la MISMA persona en el portátil y en el móvil —dos localStorage,
+  // dos relojes— y el cron, que recorre todos los perfiles conectados.
+  const clave = `sync-personal-${profile.id}`
+  const cerrojo = await acquireLock(admin, clave, TTL_CERROJO_MS)
+  if (!cerrojo.adquirido) return { ok: true, synced: 0, total: 0, account: '', saltado: true }
+  try {
+    return await syncPersonalInboxSinCerrojo(admin, profile)
+  } finally {
+    if (!cerrojo.degradado) await releaseLock(admin, clave, cerrojo.holder)
+  }
+}
+
+async function syncPersonalInboxSinCerrojo(
+  admin: SupabaseClient,
+  profile: { id: string; gmail_refresh_token: string | null }
+): Promise<SyncResult> {
   const token = profile.gmail_refresh_token
   if (!token) return { ok: false, error: 'not connected' }
 
   const { data: clientsData } = await admin.from('clients').select('name')
   const knownClients = (clientsData || []).map((c: { name: string }) => c.name)
+
+  // T0 arranca AQUI, no junto al bucle: el fetch de Gmail y sus consultas tambien
+  // gastan del minuto de la funcion. Medirlo desde despues era contar solo una
+  // parte y creer que sobraba tiempo.
+  const T0 = Date.now()
 
   let emails: Awaited<ReturnType<typeof getEmailsWithRefreshToken>>
   let gmailAccount = ''
@@ -273,17 +372,18 @@ export async function syncPersonalInbox(
   // 12s y no 25: aqui se multiplica por el numero de personas, mientras que el
   // compartido es uno solo. Al agotarse se sale limpiamente y lo que falte lo
   // recoge la ejecucion siguiente — el bucle salta los gmail_id ya conocidos.
-  const T0 = Date.now()
-  const PRESUPUESTO_MS = 12_000
   let truncado = false
 
   for (const email of emails) {
     if (personalKnown.has(email.gmail_id)) continue
-    if (Date.now() - T0 > PRESUPUESTO_MS) { truncado = true; break }
+    // Igual que el del buzon compartido, con el tope personal: son SIETE dentro
+    // de la misma ejecucion del cron.
+    const plazo = Math.min(plazoRestante(T0, 60), TOPE_PERSONAL_MS - (Date.now() - T0))
+    if (plazo < MINIMO_UTIL_MS) { truncado = true; break }
 
     let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
     try {
-      analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients)
+      analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients, plazo)
     } catch { aiFailures++ }
     if (analysis.degraded) aiFailures++
 

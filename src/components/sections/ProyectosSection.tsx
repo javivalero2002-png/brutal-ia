@@ -107,7 +107,20 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   }, [selectedId])
 
   // ── Documento IA (subir PDF directo a Supabase + análisis + chat) ──
-  const [pdfDoc, setPdfDoc] = useState<{name:string; url:string}|null>(null)
+  // `url` es lo que se PINTA; `ident` es lo que se manda al SERVIDOR.
+  //
+  // Son dos cosas distintas y confundirlas rompe una u otra. Lo que se pinta tiene
+  // que poder abrirse en el navegador —con el bucket cerrado eso obliga a firma, o
+  // a /api/archivo, que la pide fresca—. Lo que se manda a /api/projects/analyze-pdf
+  // tiene que pasar su `isOwnStorageUrl` (analyze-pdf/route.ts:65), y un enlace de
+  // brutalia.tech NO lo pasa: envolver la URL sin separar los papeles arregla el
+  // visor y estropea el chat sobre el PDF.
+  //
+  // Cuando el dato viene de la base (:154) ya llega firmado, asi que `ident` no
+  // hace falta: `ident || url` devuelve la firmada, y rutaDeStorage() la resuelve
+  // igual porque su patron acepta /object/sign/ ademas de /object/public/.
+  type PdfDoc = { name: string; url: string; ident?: string }
+  const [pdfDoc, setPdfDoc] = useState<PdfDoc|null>(null)
   const [pdfAnalysis, setPdfAnalysis] = useState<any>(null)
   const [pdfBusy, setPdfBusy] = useState(false)
   const [pdfUploadPct, setPdfUploadPct] = useState<number|null>(null)
@@ -131,7 +144,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   const pdfSectionRef = useRef<HTMLDivElement>(null)
 
   // Cache PDF state per project so switching projects doesn't lose the analysis
-  type PdfCache = { doc: {name:string;url:string}|null; analysis: any; chat: {role:'user'|'ai';content:string}[] }
+  type PdfCache = { doc: PdfDoc|null; analysis: any; chat: {role:'user'|'ai';content:string}[] }
   const pdfCacheRef = useRef<Map<string, PdfCache>>(new Map())
   const pdfDocRef = useRef(pdfDoc); pdfDocRef.current = pdfDoc
   const pdfAnalysisRef = useRef(pdfAnalysis); pdfAnalysisRef.current = pdfAnalysis
@@ -276,7 +289,25 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
       setPdfUploadPct(100)
       // Los setters de aqui pintan el panel que se este viendo: si ya no es el
       // proyecto de la subida, no se tocan.
-      if (selectedProjectRef.current?.id === proyectoId) setPdfDoc({ name: file.name, url: urlJ.publicUrl })
+      // `urlJ.publicUrl` es el IDENTIFICADOR que se guarda en la columna, no una
+      // direccion que se pueda abrir con el bucket cerrado. Pintarla directamente
+      // daba 400 en los tres sitios que la usan, y no se arreglaba solo: el efecto
+      // que recompone pdfDoc desde la base depende de [selectedId], que no cambia
+      // al subir, y ademas pdfCacheRef restaura la copia vieja por delante.
+      if (selectedProjectRef.current?.id === proyectoId) setPdfDoc({
+        name: file.name,
+        // RELATIVA, no rutaApp(). Esto es un enlace para la pagina que el usuario
+        // YA tiene abierta, asi que tiene que apuntar al host desde el que la abrio.
+        // `rutaApp()` cablea NEXT_PUBLIC_APP_URL en el bundle, y la app se sirve en
+        // DOS hosts a proposito (CLAUDE.md 3-bis: brutalia.tech y el .vercel.app
+        // viejo, para no dejar fuera a quien tenga la PWA instalada). Las cookies de
+        // Supabase son host-only, asi que cruzar de origen = /api/archivo no ve
+        // sesion = 401 en los tres consumidores, y el <iframe> ademas lo bloquea la
+        // CSP. El fallo es simetrico: da igual que valor tenga la variable, siempre
+        // rompe a la mitad de la plantilla.
+        url: '/api/archivo?u=' + encodeURIComponent(urlJ.publicUrl),
+        ident: urlJ.publicUrl,
+      })
       // 3. Extraer portada (cliente) + analizar en paralelo
       const [coverBlob] = await Promise.all([
         extractPdfCover(file),
@@ -313,7 +344,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
     const vigente = () => selectedProjectRef.current?.id === proyectoId
     setPdfQ(''); setPdfChat(c=>[...c,{role:'user',content:q}]); setPdfChatBusy(true)
     try {
-      const res = await fetch('/api/projects/analyze-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfUrl:pdfDoc.url,question:q}),signal:AbortSignal.timeout(60000)})
+      const res = await fetch('/api/projects/analyze-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfUrl:pdfDoc.ident||pdfDoc.url,question:q}),signal:AbortSignal.timeout(60000)})
       const j = await res.json().catch(()=>({}))
       if (!vigente()) return
       setPdfChat(c=>[...c,{role:'ai',content: res.ok ? (j.answer||'—') : (j.error||'Error al responder')}])
@@ -943,7 +974,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 )}
                 {!pdfBusy && !pdfAnalysis && pdfDoc && (
                   <div className="flex gap-2">
-                    <button onClick={()=>{ if (selectedProject) analyzePdf(pdfDoc.url, selectedProject.id) }} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all active:opacity-70" style={{background:`${BLU}12`,border:`1px solid ${BLU}30`}}>
+                    <button onClick={()=>{ if (selectedProject) analyzePdf(pdfDoc.ident||pdfDoc.url, selectedProject.id) }} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl transition-all active:opacity-70" style={{background:`${BLU}12`,border:`1px solid ${BLU}30`}}>
                       <LucideIcon name="sparkles" size={14} color={BLU}/>
                       <span className="font-syne text-[8px] font-black tracking-widest" style={{color:BLU}}>ANALIZAR DOCUMENTO</span>
                     </button>

@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { textOf } from '@/lib/aiText'
 import { sanearHistorial } from './historialIA'
 import { estadoDeadline } from '@/components/shared/helpers'
+import { nivelTarea } from '@/components/shared/helpers'
 
 // Sin topes, el SDK se queda con sus valores por defecto: 10 MINUTOS de timeout
 // y 2 reintentos con backoff. Los presupuestos de tiempo de los bucles de sync
@@ -11,10 +12,43 @@ import { estadoDeadline } from '@/components/shared/helpers'
 // sincronización moría a mitad, sin dejar rastro de por qué. Con 15s y un
 // reintento el peor caso por email queda acotado y el presupuesto del bucle
 // vuelve a ser una cota real.
+// El plazo de un bucle de analyzeEmail, y por que NO es un presupuesto.
+//
+// La primera version de esto bajaba el numero: 45 s a 25 s, para que 25 + el peor
+// caso cupieran en los 60 s de la funcion. La verificacion adversarial lo tumbo, y
+// con razon. El `timeout` del SDK es POR INTENTO, asi que con maxRetries: 1 una
+// llamada degradada vale ~30,5 s — pero ademas el SDK OBEDECE el `Retry-After` de
+// un 429 hasta 60 s, o sea que UNA sola llamada puede costar ~75 s. Ningun valor
+// de presupuesto sobrevive a eso: el numero era la palanca equivocada.
+//
+// Y bajarlo se paga todos los dias en el unico camino donde hay alguien esperando:
+// a ~3 s por email, 45 s son ~15 correos por clic y 25 s son ~8.
+//
+// La palanca correcta es el PLAZO: no empezar una llamada que no quepa en lo que
+// queda. `plazoRestante()` dice cuanto hay, y `analyzeEmail` acepta ese plazo y lo
+// aplica a la peticion (con maxRetries 0, porque un reintento no cabe en un hueco
+// medido). Asi el bucle corre hasta el final del tiempo util —throughput intacto—
+// y no puede pasarse, ni siquiera con un 429 de por medio.
+const TIMEOUT_MS = 15_000
+const MAX_REINTENTOS = 1
+
+/** Lo que hay que dejar libre para responder y cerrar. */
+const MARGEN_RESPUESTA_MS = 4_000
+/** Por debajo de esto no merece la pena empezar: no daria tiempo ni al viaje. */
+export const MINIMO_UTIL_MS = 5_000
+
+/**
+ * Milisegundos que quedan para trabajar dentro de una funcion de `maxDurationSeg`.
+ * `t0` es cuando empezo la funcion — ponlo ANTES del fetch de Gmail, no despues:
+ * ese fetch y sus consultas tambien consumen el minuto.
+ */
+export const plazoRestante = (t0: number, maxDurationSeg: number): number =>
+  maxDurationSeg * 1_000 - (Date.now() - t0) - MARGEN_RESPUESTA_MS
+
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
-  timeout: 15_000,
-  maxRetries: 1,
+  timeout: TIMEOUT_MS,
+  maxRetries: MAX_REINTENTOS,
 })
 
 // El modelo a veces envuelve el JSON en fences markdown (```json ... ```) pese a
@@ -41,7 +75,19 @@ export async function webSearch(query: string): Promise<SearchResult[]> {
   // como si nada, y nadie se entera de que la búsqueda web lleva días muerta.
   if (!key) { console.error('[ai] TAVILY_API_KEY ausente — búsqueda web desactivada'); return [] }
   try {
+    // `signal`, porque este fetch va pelado y sin el rigen los defaults de undici
+    // (300 s): CINCO VECES el maxDuration de 60 s de /api/chat. Un cuelgue de
+    // Tavily —no una caida, que ya cae sola en segundos— se llevaba la funcion
+    // entera, y con ella la respuesta de Harvey, que ni siquiera habia empezado.
+    //
+    // 11 s y no 10: `search_depth: 'advanced'` es el modo lento de Tavily y 10
+    // roza su latencia normal, asi que una busqueda sana pero lenta se descartaria
+    // en silencio. Por encima de ~12 s se vuelve a perder el margen. El catch de
+    // abajo devuelve [] y lo registra, y los dos system prompts contemplan el caso
+    // sin resultados — el mensaje de AbortSignal.timeout dice «operation was
+    // aborted due to timeout», que se distingue en los logs de un fallo de Tavily.
     const res = await fetch('https://api.tavily.com/search', {
+      signal: AbortSignal.timeout(11_000),
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -144,7 +190,12 @@ export async function analyzeEmail(
   subject: string,
   body: string,
   fromName: string,
-  knownClients: string[]
+  knownClients: string[],
+  /**
+   * Plazo maximo para ESTA llamada. Lo pasa quien esta en un bucle con un limite
+   * de tiempo por delante; sin el rigen los valores del cliente (15 s x 2).
+   */
+  plazoMs?: number,
 ): Promise<EmailAnalysis> {
   let msg: Awaited<ReturnType<typeof anthropic.messages.create>>
   try {
@@ -170,7 +221,18 @@ Responde SOLO con JSON válido (sin markdown):
   "suggestedTask": "texto de tarea a crear o null"
 }`
       }]
-    })
+    }, plazoMs
+      // El plazo ACOTA, no sustituye: `Math.min` con el timeout normal. Sin el,
+      // una llamada colgada pasaba de ~30 s a ~53 s y el bucle rendia un correo en
+      // vez de cinco. Y `maxRetries` sube a 1 SOLO si en el hueco caben dos
+      // intentos completos — asi se recupera el backoff que absorbe los 529/5xx sin
+      // Retry-After, que se habia perdido gratis, sin volver a arriesgar el corte:
+      // un 429 con Retry-After largo no cabe en el calculo y se queda en 0.
+      ? {
+          timeout: Math.min(TIMEOUT_MS, Math.max(1_000, plazoMs)),
+          maxRetries: plazoMs >= TIMEOUT_MS * 2 + 1_000 ? 1 : 0,
+        }
+      : undefined)
   } catch (err: any) {
     // Distinguir el motivo importa: un 401 se arregla rotando la clave, un 429
     // se pasa solo. Sin este log, ambos eran silencio idéntico.
@@ -180,7 +242,14 @@ Responde SOLO con JSON válido (sin markdown):
 
   try {
     const text = textOf(msg) || '{}'
-    return parseJsonLoose(text)
+    const bruto = parseJsonLoose(text)
+    // La urgencia va a `inbox_messages.ai_urgency`, que es una union cerrada, y
+    // sale LITERALMENTE de lo que haya escrito el modelo. El prompt esta entero
+    // en espanol y pide «urgent|high|normal» en ingles: es la misma trampa que ya
+    // mordio con tasks.level, y este es su gemelo exacto —lo mismo, en otro
+    // campo—. Se normaliza AQUI, en la frontera, y no en los tres inserts que
+    // consumen esto: normalizar tres veces es como se arregla uno y sobreviven dos.
+    return { ...bruto, urgency: nivelTarea(bruto?.urgency, 'normal') }
   } catch {
     return { summary: subject, action: 'Revisar email', client: 'Desconocido', urgency: 'normal', degraded: true }
   }
@@ -245,7 +314,10 @@ Responde SOLO con JSON válido:
 
   try {
     const text = textOf(msg) || '{}'
-    return parseJsonLoose(text)
+    // Misma frontera que analyzeEmail: `urgency` acaba en inbox_messages.ai_urgency
+    // y en tasks.level, que son uniones cerradas. Esta era la TERCERA copia.
+    const bruto = parseJsonLoose(text)
+    return { ...bruto, urgency: nivelTarea(bruto?.urgency, 'normal') }
   } catch {
     return {
       extractedInfo: message,

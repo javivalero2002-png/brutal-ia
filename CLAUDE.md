@@ -229,6 +229,17 @@ están verificadas así.
 Cada excepción va en una lista **con su motivo escrito**, y los tests avisan de las
 entradas que ya no existen: una excepción que sobra se nota sola.
 
+**Una regla que un comentario puede satisfacer no comprueba código, comprueba
+prosa.** Pasó de verdad: este repo comenta mucho, y explicar en un comentario lo que
+se acaba de quitar —«antes: `updateAgenda(id, { cover_url: json.url })`»— hace que la
+regla que busca ese patrón lo encuentre. El fallo simétrico es el grave. Por eso
+`regresiones.test.ts` tiene `leerCodigo()`, que quita los comentarios antes de mirar.
+
+Y **acota la regla al sitio**, no al fichero: buscar `calendarId: calId` en todo
+`gmail.ts` pasaba en verde con `mapEvent` roto, porque la LECTURA ya lo llevaba.
+Igual con `maxRetries: 0`, que aparece en dos llamadas distintas. Las dos se
+detectaron reintroduciendo el bug, que es justo para lo que sirve hacerlo.
+
 ## Lo que escribe el modelo no entra crudo en la base
 
 Harvey emite `[ACCION:tarea|texto|nivel|persona]` y ese `nivel` es literalmente lo
@@ -248,25 +259,81 @@ patrón exacto apareció en cinco sitios.
 
 ## Trabajo pendiente que NO debe hacerse a la ligera
 
-Dos bloques tocan **datos que ya existen** y sus planes fueron rechazados por
-verificación adversarial (15 y 17 roturas concretas). Requieren análisis nuevo y
-que el fundador esté delante — incluyen SQL contra la base de datos viva:
+Esto describía **dos** bloques con planes rechazados (15 y 17 roturas). Los dos se
+midieron contra la base y el código reales, y encogieron mucho: los planes estaban
+escritos sobre suposiciones.
 
-1. **Bucket a privado.** `content-videos` es público y contiene contratos,
-   presupuestos y briefs. El problema no es hacerlo privado: es que las URLs
-   públicas están **guardadas como strings** en `projects.cover_url`,
-   `projects.pdf_url`, `content_agenda.*`, `task_attachments.url`. Todas devuelven
-   404 en cuanto cambie el bucket. Además `clients/[id]/files` deriva su listado en
-   vivo de `storage.list()`, y `task_attachments.url` es `NOT NULL`.
-2. **Reconciliación de esquema.** Hay columnas que el código usa y que no tienen
-   DDL en ningún `.sql` del repo. La más crítica: `src/app/api/tasks/route.ts` hace
-   embed de `co_assignee:profiles!co_assigned_to(...)` en **toda** lectura de
-   tareas — sin esa FK, `GET /api/tasks` devuelve 500 y la app arranca sin tareas.
+**Reconciliación de esquema — CERRADA el 2026-08-13.** El embed crítico
+`co_assignee:profiles!co_assigned_to` **ya funcionaba**, así que el 500 de
+`GET /api/tasks` nunca llegó a existir. Solo faltaban dos columnas, y una de ellas
+tenía la **revisión con cliente muerta**: sin `content_agenda.feedback`, la ruta
+fallaba con 42703 y devolvía **404** — le mandabas el enlace a un cliente, escribía
+su opinión, y le salía que no existe. Están en
+`migrations/20260813_feedback_y_from_user_id.sql`.
 
-Los restos de ese plan rechazado viven en `docs/sql-rechazado/`. **No los
-ejecutes.** Estuvieron por error dentro de `migrations/`, junto a una migración
-legítima y con el mismo prefijo de fecha: se colaron en el commit `5861947` con un
-`git add -A` sin la exclusión que llevaban los demás commits de esa tanda.
+**Bucket a privado — DESBLOQUEADO, pendiente de ejecutar.** `content-videos` sigue
+público a propósito. Lo que impedía cerrarlo era que Memoria guardaba el enlace
+DENTRO del texto de la nota; `/api/archivo` lo resuelve y ya está desplegado. De
+las 13 rutas de lectura, **12 ya firman**. Lo que queda:
+
+- **Notas anteriores al commit `3496b49`** (30 jul – 13 ago) llevan la URL pública
+  cruda dentro de `memoria.content`. Nadie las parsea, así que `rutaDeStorage()` no
+  las salva. Se arreglan **a mano desde la app**, anteponiendo el enlace estable —
+  no hace falta SQL.
+- **Comprobar antes:** `select id,title from memoria where content like
+  '%.supabase.co/storage/%'` (solo lee).
+- **Cerrar es un interruptor en Supabase y se deshace con el mismo clic.** Lo
+  irreversible es *borrar* o *renombrar* el bucket: el nombre va escrito dentro de
+  cada dirección guardada.
+
+Los restos del plan rechazado viven en `docs/sql-rechazado/`. **No los ejecutes.**
+Estuvieron por error dentro de `migrations/`, junto a una migración legítima y con
+el mismo prefijo de fecha: se colaron en el commit `5861947` con un `git add -A`
+sin la exclusión que llevaban los demás commits de esa tanda.
+
+## Un timeout no acota una llamada: acota un INTENTO
+
+El `timeout` del SDK de Anthropic es **por intento**. Con `maxRetries: 1` son dos
+intentos más el backoff (~30 s), y si llega un 429 el SDK **obedece su
+`Retry-After` hasta 60 s**: una sola llamada puede costar ~75 s.
+
+Por eso un presupuesto de bucle no funciona, y bajarlo tampoco: el bucle
+comprobaba «¿me he pasado?» **entre** iteraciones, o sea que autorizaba una llamada
+sin saber lo que iba a costar. Se probó bajar 45 s → 25 s y la verificación
+adversarial lo tumbó: ningún número sobrevive a la rama del 429, y bajarlo se paga
+todos los días en throughput (a ~3 s por email, 45 s son ~15 correos y 25 s son ~8).
+
+Lo correcto es preguntar **si cabe la siguiente** y pasarle ese plazo a la llamada:
+`plazoRestante()` y el parámetro `plazoMs` de `analyzeEmail` (`src/lib/ai.ts`). Y
+el reloj arranca **antes** del fetch de Gmail — ese fetch y sus consultas también
+gastan del minuto.
+
+Lo mismo con los `fetch` crudos de servidor: sin `signal` rigen los defaults de
+undici, **300 s**, cinco veces el `maxDuration`. El modo de fallo no es una caída
+—esa cae sola en segundos— sino un **cuelgue**, y entonces Vercel mata la función
+sin respuesta y el camino de error que hay escrito debajo no se ejecuta nunca.
+Había cinco así.
+
+## Lo que se PINTA de un fichero no es lo que hay GUARDADO
+
+La base guarda la URL pública como **identificador estable** y las rutas de lectura
+la sustituyen por una firma temporal antes de responder (`src/lib/storageFirmado.ts`).
+O sea que un formulario enseña una firma con su token, y **reenviarla al guardar
+rompe dos veces**:
+
+- pisa el identificador con una firma que caduca;
+- y si `firmarUrl()` falla devuelve `null` **a propósito** (un enlace roto que
+  parece bueno confunde más que un hueco), el campo se pinta vacío y guardar
+  escribe `null` encima. El fichero se queda en el bucket y la app olvida dónde
+  está. Bastaba con escribir una nota y darle a guardar.
+
+Regla: **un campo que el usuario no ha tocado no viaja en el PATCH.** Y cuando el
+mismo valor tiene dos consumidores con requisitos opuestos —el visor necesita algo
+que el navegador pueda abrir; `analyze-pdf` exige que pase `isOwnStorageUrl`— hay
+que **separarlos en el estado** (`url` para pintar, `ident` para el servidor).
+Envolver la URL sin separarlos arregla el visor y estropea el chat del PDF, y
+**compila**, porque las dos son `string`.
+
 
 ---
 

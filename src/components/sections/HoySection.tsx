@@ -11,6 +11,7 @@ import { getSharedAudio, playAck, isIOSDevice, matchTeamMember, splitForTTS, sto
 import LucideIcon from '@/components/shared/LucideIcon'
 import type { Task, Project, Client, NexusData} from '@/types'
 import type { IrASeccion, Section } from '@/components/shared/secciones'
+import { mensajeErrorTranscripcion } from '@/components/shared/helpers'
 
 interface PropsHoy {
   profile: any
@@ -387,13 +388,25 @@ ${memLines||'  sin documentos'}`
       fd.append('audio', blob, `r.${ext}`)
       const res = await fetch('/api/harvey/transcribe', { method:'POST', body:fd, signal:AbortSignal.timeout(30000) })
       if (!aliveRef.current || run !== voiceRunRef.current) return
-      if (res.ok) {
-        const { text } = await res.json()
-        if (text?.trim()) { setHarveySpoken(text); await askHarvey(text); return }
+      // El cuerpo se lee UNA vez. Leerlo dos rechaza con «Body has already been
+      // read», el catch se lo traga y llegaba un `undefined` con status 200 al
+      // traductor, que no casa ninguna rama y acababa diciendo «el servicio de
+      // transcripcion fallo» — justo en el camino NORMAL de Whisper con silencio,
+      // que responde 200 con text vacio. O sea que callarse pasaba a anunciarse
+      // como una caida. El gemelo de HarveySection ya leia una sola vez.
+      const json = await res.json().catch(() => null)
+      if (!res.ok) {
+        setOrbMode('idle')
+        // La rama del 402 era codigo muerto: esa ruta no devuelve 402 en ningun
+        // sitio, y todo lo demas —401, 400, 413, 429, 503, 502— caia en «no se
+        // entendio el audio», culpando al usuario de un fallo del servidor.
+        showToast(mensajeErrorTranscripcion(res.status, json?.error))
+        return
       }
+      const texto = (json?.text || '').trim()
+      if (texto) { setHarveySpoken(texto); await askHarvey(texto); return }
       setOrbMode('idle')
-      if (res.status === 402) showToast('Transcripción agotada este mes — activa el dictado de iOS en Ajustes → General → Teclado')
-      else showToast('No se entendió el audio — vuelve a pulsar')
+      showToast('No se entendió el audio — vuelve a pulsar')
     } catch { setOrbMode('idle'); showToast('Error al procesar el audio') }
   }
 

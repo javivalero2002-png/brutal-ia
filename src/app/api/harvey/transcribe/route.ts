@@ -13,6 +13,9 @@ export const maxDuration = 60
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024
 
 export async function POST(request: NextRequest) {
+  // El reloj de la ruta: Groq y OpenAI son dos intentos SECUENCIALES dentro del
+  // mismo minuto, asi que el segundo solo puede usar lo que deje el primero.
+  const T0_STT = Date.now()
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -52,7 +55,12 @@ export async function POST(request: NextRequest) {
       gForm.append('language', 'es')
       gForm.append('temperature', '0')
       gForm.append('prompt', prompt)
+      // Sin `signal` rigen los defaults de undici (300 s), cinco veces el
+      // maxDuration de 60 s de esta ruta: un cuelgue —no una caida, que cae sola en
+      // segundos— agota la funcion y Vercel la mata sin respuesta, asi que el camino
+      // de error de mas abajo no llega a ejecutarse.
       const gRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        signal: AbortSignal.timeout(40_000),
         method: 'POST',
         headers: { Authorization: `Bearer ${groqKey}` },
         body: gForm,
@@ -76,7 +84,10 @@ export async function POST(request: NextRequest) {
       oForm.append('language', 'es')
       oForm.append('temperature', '0')
       oForm.append('prompt', prompt)
+      // 40 s tambien aqui, pero ojo: OpenAI es el SEGUNDO intento, asi que en el
+      // peor caso los dos suman 80 s y no caben. Se le pasa lo que quede.
       const oRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        signal: AbortSignal.timeout(Math.max(5_000, 50_000 - (Date.now() - T0_STT))),
         method: 'POST',
         headers: { Authorization: `Bearer ${openaiKey}` },
         body: oForm,

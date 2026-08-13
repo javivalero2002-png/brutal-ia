@@ -65,6 +65,26 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
   const [confirmDeleteContent, setConfirmDeleteContent] = useState(false)
   const [uploadingCover, setUploadingCover] = useState(false)
   const [editCoverUrl, setEditCoverUrl] = useState('')
+  // ¿Ha tocado el usuario estos dos campos, o solo los está VIENDO?
+  //
+  // Importa porque lo que se pinta en ellos no es lo que hay en la base. La base
+  // guarda la URL pública como IDENTIFICADOR y el GET la sustituye por una firma
+  // temporal antes de mandarla (storageFirmado.ts). Así que el input enseña una
+  // firma con su token, y `saveNotes` mandaba de vuelta lo que hubiera dentro.
+  //
+  // Eso rompe de dos maneras, y la segunda destruye datos:
+  //  · guardar cualquier nota reescribía cover_url con la firma. Se recupera al
+  //    releer —rutaDeStorage() también sabe leer /object/sign/— pero deja la base
+  //    llena de tokens caducados donde debería haber un identificador estable.
+  //  · si firmarUrl() FALLA devuelve null a propósito (un enlace roto que parece
+  //    bueno confunde más que un hueco). Entonces el input se pinta vacío, y
+  //    guardar escribía cover_url: null. El fichero se queda en el bucket y la
+  //    app olvida dónde está, sin forma de recuperarlo desde la interfaz.
+  //
+  // Con esto, un campo que no se ha tocado no viaja en el PATCH, y lo que hay
+  // guardado no se puede perder por haber escrito una nota.
+  const coverTocada = useRef(false)
+  const videoTocado = useRef(false)
   const [bocetoPlatform, setBocetoPlatform] = useState<'instagram'|'linkedin'|null>(null)
   const [bocetoCaption, setBocetoCaption] = useState<string|null>(null)
   const [editContentType, setEditContentType] = useState<'publicacion'|'reel'|'story'>('publicacion')
@@ -152,7 +172,15 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
         setEditCoverUrl(json.url)
         setActiveItem((prev: any) => prev ? ({...prev, cover_url: json.url}) : prev)
       }
-      data.updateAgenda && data.updateAgenda(idPieza, { cover_url: json.url }).catch(()=>{})
+      // Antes: updateAgenda(idPieza, { cover_url: json.url }) — un PATCH con la
+      // URL FIRMADA que pisaba en la base el identificador que upload-cover
+      // acababa de guardar bien. La respuesta ya trae la fila entera firmada, así
+      // que la rejilla se refresca sin volver a escribir nada.
+      // La subida deja el campo con la firma que devuelve el servidor, asi que
+      // desmarcarlo: si el usuario habia tecleado antes en PORTADA, la marca seguia
+      // puesta y el siguiente GUARDAR pisaba el identificador con esa firma.
+      coverTocada.current = false
+      if (json.item) data.aplicarAgendaLocal?.(json.item)
       showToast(json.warning || 'Portada subida correctamente')
     } catch (err: any) { showToast('Error: ' + err.message) }
     finally { setUploadingCover(false) }
@@ -252,6 +280,8 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
     setEditNotes(item.notes||'')
     setEditVideoUrl(item.video_url||'')
     setEditCoverUrl(item.cover_url||'')
+    coverTocada.current = false
+    videoTocado.current = false
     setEditAccountName(item.account_name||'')
     setEditPublishDate(item.publish_date||'')
     setEditPublishTime(item.publish_time||'')
@@ -308,11 +338,16 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
     const idPieza = activeItem.id
     setSavingNotes(true)
     try {
-      const updates: any = { notes: editNotes, video_url: editVideoUrl, cover_url: editCoverUrl || null, account_name: editAccountName, publish_date: editPublishDate || null, publish_time: editPublishTime || null, content_type: editContentType }
+      // La subida de portada NO marca `coverTocada`: upload-cover ya guardó el
+      // identificador en el servidor (agenda/[id]/upload-cover). Reenviarlo desde
+      // aquí solo serviría para pisarlo con la firma.
+      const updates: any = { notes: editNotes, account_name: editAccountName, publish_date: editPublishDate || null, publish_time: editPublishTime || null, content_type: editContentType }
       // El PATCH reintenta sin las columnas ausentes en la BD y responde 200 con
       // `__dropped`. Nadie lo leia: la UI decia "Guardado" y ademas dejaba fijados
       // en la pieza valores que no se habian escrito en ninguna parte, asi que la
       // perdida no se veia hasta recargar.
+      if (coverTocada.current) updates.cover_url = editCoverUrl || null
+      if (videoTocado.current) updates.video_url = editVideoUrl || null
       const descartadas: string[] = (await data.updateAgenda(idPieza, updates)) || []
       showToast(descartadas.length ? 'Guardado parcial — no se guardó ' + listaCampos(descartadas) : 'Guardado')
       if (activeItemRef.current?.id !== idPieza) return
@@ -891,7 +926,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                 <div>
                   <div className="font-syne text-[7px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>PORTADA</div>
                   <div className="flex gap-2 mb-2">
-                    <input value={editCoverUrl} onChange={e=>setEditCoverUrl(e.target.value)} placeholder="URL de portada…" className="flex-1 px-3 py-2.5 rounded-xl text-[11px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU,minWidth:0}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+                    <input value={editCoverUrl} onChange={e=>{coverTocada.current=true; setEditCoverUrl(e.target.value)}} placeholder="URL de portada…" className="flex-1 px-3 py-2.5 rounded-xl text-[11px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU,minWidth:0}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
                     <label htmlFor={`cover-mob-${activeItem.id}`} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[7.5px] font-black tracking-wide flex-shrink-0 cursor-pointer transition-all active:opacity-60${uploadingCover?' pointer-events-none opacity-50':''}`} style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.45)',border:`1px solid rgba(255,255,255,0.07)`}}>
                       {uploadingCover ? <div className="w-3 h-3 border-2 rounded-full animate-spin flex-shrink-0" style={{borderColor:'rgba(27,95,250,0.3)',borderTopColor:BLU}}/> : <LucideIcon name="image" size={11} color="rgba(255,255,255,0.4)"/>}
                       <span>{uploadingCover?'…':'SUBIR'}</span>
@@ -907,7 +942,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                 {/* Vídeo */}
                 <div>
                   <div className="font-syne text-[7px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>VÍDEO</div>
-                  <input value={editVideoUrl} onChange={e=>setEditVideoUrl(e.target.value)} placeholder="YouTube · Vimeo · Drive…" className="w-full px-3 py-2.5 rounded-xl text-[11px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+                  <input value={editVideoUrl} onChange={e=>{videoTocado.current=true; setEditVideoUrl(e.target.value)}} placeholder="YouTube · Vimeo · Drive…" className="w-full px-3 py-2.5 rounded-xl text-[11px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
                   {(editVideoUrl || activeItem.video_url) && (
                     <div className="rounded-xl overflow-hidden mt-2">
                       {videoEmbed(editVideoUrl||activeItem.video_url)
@@ -1094,7 +1129,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                     <span className="font-syne text-[7px] font-black tracking-wide px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.2)',border:'1px solid rgba(255,255,255,0.07)'}}>YouTube · Vimeo · Drive</span>
                   </div>
                   <div className="flex gap-2 mb-2.5">
-                    <input value={editVideoUrl} onChange={e=>setEditVideoUrl(e.target.value)} placeholder="Pega el enlace del vídeo…" className="flex-1 px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU,minWidth:0}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+                    <input value={editVideoUrl} onChange={e=>{videoTocado.current=true; setEditVideoUrl(e.target.value)}} placeholder="Pega el enlace del vídeo…" className="flex-1 px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU,minWidth:0}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
                   </div>
                   {videoEmbed(editVideoUrl)&&<div className="rounded-2xl overflow-hidden" style={{aspectRatio:'16/9',background:'#000'}}><iframe src={videoEmbed(editVideoUrl)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>}
                   {!videoEmbed(editVideoUrl)&&editVideoUrl&&<div className="rounded-2xl overflow-hidden" style={{background:'#000'}}><video src={editVideoUrl} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/></div>}
@@ -1110,7 +1145,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                   <input ref={coverFileInputRef} type="file" accept="image/*" className="hidden" onChange={e=>{ const f=e.target.files?.[0]; if(f) uploadCover(f); e.target.value='' }}/>
                   <div className="font-syne text-[8.5px] font-black tracking-widest mb-2.5" style={{color:'rgba(255,255,255,0.2)'}}>PORTADA</div>
                   <div className="flex gap-2 mb-2.5">
-                    <input value={editCoverUrl} onChange={e=>setEditCoverUrl(e.target.value)} placeholder="URL de portada…" className="flex-1 px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU,minWidth:0}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+                    <input value={editCoverUrl} onChange={e=>{coverTocada.current=true; setEditCoverUrl(e.target.value)}} placeholder="URL de portada…" className="flex-1 px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU,minWidth:0}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
                     <button onClick={()=>coverFileInputRef.current?.click()} disabled={uploadingCover} className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide flex-shrink-0 disabled:opacity-40 transition-all hover:opacity-80" style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.45)',border:`1px solid rgba(255,255,255,0.07)`}}>
                       {uploadingCover?<><div className="w-3 h-3 border-2 rounded-full animate-spin flex-shrink-0" style={{borderColor:'rgba(255,255,255,0.3)',borderTopColor:'white'}}/><span>SUBIENDO…</span></>:<><LucideIcon name="image" size={11} color="rgba(255,255,255,0.4)"/><span>SUBIR</span></>}
                     </button>

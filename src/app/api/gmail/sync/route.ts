@@ -1,7 +1,8 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { codigoDeFallo } from '@/lib/gmailAuth'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
-import { analyzeEmail, EmailAnalysis } from '@/lib/ai'
+import { analyzeEmail, EmailAnalysis, plazoRestante, MINIMO_UTIL_MS } from '@/lib/ai'
+import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { NextResponse } from 'next/server'
 import { sendPushToUser, sendPushToAll, canSendPush } from '@/lib/push'
 import { localDayKey } from '@/components/shared/helpers'
@@ -30,8 +31,32 @@ export async function POST() {
     return NextResponse.json({ error: 'Gmail not connected' }, { status: 400 })
   }
 
+  // MISMA clave que syncPersonalInbox de src/lib/colabsSync.ts, y a proposito.
+  //
+  // Sincronizar un buzon personal esta escrito DOS veces: aqui (lo que dispara el
+  // navegador) y alli (lo que dispara el cron). Fusionarlas es un refactor de 250
+  // lineas que no toca hacer hoy; compartir la clave del cerrojo cuesta esto y ya
+  // impide lo que importa: que las dos copias corran a la vez sobre el mismo
+  // buzon, analicen los mismos correos y los paguen dos veces.
+  //
+  // El freno de 15 min del cliente es por DISPOSITIVO (localStorage): la misma
+  // persona en el portatil y en el movil son dos relojes distintos. En los logs de
+  // produccion del 2026-08-13 esta ruta se llamo 4 veces en 12 minutos.
+  const claveCerrojo = `sync-personal-${user.id}`
+  const cerrojo = await acquireLock(admin, claveCerrojo, 90_000)
+  if (!cerrojo.adquirido) {
+    // 200 y no un error: el trabajo SE ESTA HACIENDO, solo que en otra instancia.
+    return NextResponse.json({ synced: 0, total: 0, account: '', saltado: true })
+  }
+  try {
+
   const { data: clientsData } = await admin.from('clients').select('name')
   const knownClients = (clientsData || []).map(c => c.name)
+
+  // T0 arranca AQUI, no junto al bucle: el fetch de Gmail y sus consultas tambien
+  // gastan del minuto de la funcion. Medirlo desde despues era contar solo una
+  // parte y creer que sobraba tiempo.
+  const T0 = Date.now()
 
   let emails: Awaited<ReturnType<typeof getEmailsWithRefreshToken>>
   let gmailAccount = ''
@@ -118,13 +143,18 @@ export async function POST() {
   // Al agotarse se sale limpiamente: lo insertado queda guardado, el push se
   // envia, y los emails que faltan los recoge la ejecucion de la hora siguiente
   // (el bucle salta los gmail_id ya conocidos, asi que no se repite trabajo).
-  const T0 = Date.now()
-  const PRESUPUESTO_MS = 45_000
+  // 45_000 escrito a mano no cabia: el check se hace ANTES de analyzeEmail, asi
+  // que pasar en t=44,9 s y encadenar una llamada de 30,5 s termina en t=75,4 —
+  // con maxDuration 60, Vercel mata la funcion y el usuario ve un error en vez de
+  // un "truncado, sigo en la proxima". Ahora sale del cliente de Anthropic.
   let truncado = false
 
   for (const email of emails) {
     if (known.has(email.gmail_id)) continue
-    if (Date.now() - T0 > PRESUPUESTO_MS) { truncado = true; break }
+    // ¿Cabe la SIGUIENTE, no me he pasado ya. La diferencia importa: la guarda
+    // vieja autorizaba una llamada sin saber lo que iba a costar.
+    const plazo = plazoRestante(T0, 60)
+    if (plazo < MINIMO_UTIL_MS) { truncado = true; break }
 
     let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
     try {
@@ -132,7 +162,8 @@ export async function POST() {
         email.subject || '',
         (email.body_preview || '').slice(0, 800),
         email.from_name,
-        knownClients
+        knownClients,
+        plazo,
       )
     } catch {
       // AI analysis failed — save email with basic info anyway
@@ -192,7 +223,12 @@ export async function POST() {
       // UTC. Un email recibido a las 00:30 de Madrid generaba la tarea con la
       // fecha de AYER, o sea vencida en el momento de crearse.
       const day = localDayKey(email.received_at || Date.now())
-      await admin.from('tasks').insert({
+      // El error SE MIRA, igual que en el insert hermano de veinte lineas arriba.
+      // Se registra y no se corta: convertirlo en `continue` romperia otra cosa
+      // —se saltarian newUnread.push y newCount++ para un correo que SI se
+      // guardo—. Y no se reintenta solo: el gmail_id ya esta en la base, asi que
+      // el siguiente sync hace `continue` y la tarea no vuelve a intentarse nunca.
+      const { error: reunionErr } = await admin.from('tasks').insert({
         created_by: user.id,
         assigned_to: isCompanyAccount ? null : user.id,
         text: `Reunión: ${email.subject || email.from_name || 'sin asunto'}`,
@@ -200,6 +236,7 @@ export async function POST() {
         due_date: day,
         source: 'gmail',
       })
+      if (reunionErr) console.error('[sync] no se pudo crear la tarea de reunión:', reunionErr.message)
     }
 
     if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgency: analysis.urgency })
@@ -246,4 +283,7 @@ export async function POST() {
   // verdad ("revisados 20, guardados 0") en vez de dar por bueno un synced: 0 que
   // es indistinguible de "no había emails nuevos".
   return NextResponse.json({ synced: newCount, total: emails.length, account: gmailAccount, shared: isCompanyAccount, aiFailures, insertFailures })
+  } finally {
+    if (!cerrojo.degradado) await releaseLock(admin, claveCerrojo, cerrojo.holder)
+  }
 }

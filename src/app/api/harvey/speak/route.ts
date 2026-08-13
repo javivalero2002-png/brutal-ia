@@ -29,7 +29,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // Sin `signal` rigen los defaults de undici (300 s), cinco veces el
+    // maxDuration de 60 s de esta ruta: un cuelgue —no una caida, que cae sola en
+    // segundos— agota la funcion y Vercel la mata sin respuesta, asi que el camino
+    // de error de mas abajo no llega a ejecutarse.
     const res = await fetch('https://api.fish.audio/v1/tts', {
+      signal: AbortSignal.timeout(45_000),
       method: 'POST',
       headers: {
         Authorization: `Bearer ${fishKey}`,
