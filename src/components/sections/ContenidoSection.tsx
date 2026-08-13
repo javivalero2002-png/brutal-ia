@@ -1,9 +1,22 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import type { NexusData, ContentItem } from '@/types'
 import { PLATAFORMA_COLOR, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, todayKey } from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
 import BocetoPanel from '@/components/BocetoPanel'
+
+// El PATCH de /api/agenda/[id] reintenta sin las columnas que falten en la BD y
+// devuelve `__dropped` con sus nombres. Aqui se traducen a lo que el usuario ve en
+// el panel: el aviso de guardado parcial tiene que decirle QUE se ha perdido, no
+// listarle columnas de Postgres.
+const CAMPO_VISIBLE: Record<string,string> = {
+  account_name: 'la cuenta',
+  video_url: 'el enlace del vídeo',
+  feedback: 'las opiniones',
+  cover_url: 'la portada',
+}
+const listaCampos = (campos: string[]) => campos.map(c => CAMPO_VISIBLE[c] || c).join(', ')
 
 function normContentType(raw: string|null|undefined): 'publicacion'|'reel'|'story' {
   const v = (raw||'').toLowerCase()
@@ -12,9 +25,24 @@ function normContentType(raw: string|null|undefined): 'publicacion'|'reel'|'stor
   return 'publicacion'
 }
 
-function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,profile}: any) {
+interface PropsContenido {
+  data: NexusData
+  onOpenModal: any
+  showToast: any
+  onNavigate: any
+  onSelectClient: any
+  profile: any
+}
+
+function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,profile}: PropsContenido) {
   const isMobile = useIsMobile()
   const [activeItem, setActiveItem] = useState<any>(null)
+  // Espejo de `activeItem` para poder mirar QUE PIEZA hay abierta despues de un
+  // await, en vez del valor congelado del closure. Con el panel abierto se cambia
+  // de pieza sin cerrarlo (J/K), asi que cualquier setter posterior a una espera
+  // larga tiene que comprobar antes que sigue siendo la misma.
+  const activeItemRef = useRef<any>(null)
+  activeItemRef.current = activeItem
   useBackClosable(!!activeItem, () => setActiveItem(null))
   const [editNotes, setEditNotes] = useState('')
   const [editVideoUrl, setEditVideoUrl] = useState('')
@@ -75,7 +103,16 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
   const contentSearchInputRef = useRef<HTMLInputElement>(null)
 
   const uploadCover = async (file: File) => {
-    if (!activeItem) return
+    // La pieza se fija AQUI, al empezar. Es el mismo arreglo que onPickPdf en
+    // ProyectosSection.
+    //
+    // Entre elegir la foto y tener la URL hay una compresion en canvas y una
+    // subida: segundos largos desde el movil o el iPad. El POST ya iba a la pieza
+    // correcta, pero los setters de abajo pintaban la portada en la que estuviera
+    // ABIERTA al terminar, y el siguiente "Guardar" la persistia ahi — la pieza
+    // equivocada acababa con la portada de otra.
+    const idPieza = activeItem?.id
+    if (!idPieza) return
     setUploadingCover(true)
     try {
       // Comprimir a máx 1080px JPEG 0.72 — portadas de pipeline no necesitan resolución completa
@@ -101,14 +138,18 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
       })
       const fd = new FormData()
       fd.append('file', new File([compressed], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }))
-      const res = await fetch(`/api/agenda/${activeItem.id}/upload-cover`, { method: 'POST', body: fd })
+      const res = await fetch(`/api/agenda/${idPieza}/upload-cover`, { method: 'POST', body: fd })
       const text = await res.text()
       let json: any = {}
       try { json = JSON.parse(text) } catch { throw new Error('Error del servidor al subir') }
       if (!res.ok) throw new Error(json.error || 'Error')
-      setEditCoverUrl(json.url)
-      setActiveItem((prev: any) => ({...prev, cover_url: json.url}))
-      data.updateAgenda && data.updateAgenda(activeItem.id, { cover_url: json.url }).catch(()=>{})
+      // Los dos setters pintan el panel que se este viendo: si ya no es la pieza
+      // de la subida, no se tocan (la portada ya quedo guardada en el servidor).
+      if (activeItemRef.current?.id === idPieza) {
+        setEditCoverUrl(json.url)
+        setActiveItem((prev: any) => prev ? ({...prev, cover_url: json.url}) : prev)
+      }
+      data.updateAgenda && data.updateAgenda(idPieza, { cover_url: json.url }).catch(()=>{})
       showToast(json.warning || 'Portada subida correctamente')
     } catch (err: any) { showToast('Error: ' + err.message) }
     finally { setUploadingCover(false) }
@@ -138,9 +179,18 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
       try { localStorage.setItem(`account-logo-${key}`, url) } catch {}
       setAccountLogoUrl(url)
       setAllAccountLogos(prev => ({ ...prev, [key]: url }))
-      // Persist to Supabase so it survives across devices/browser clears
-      fetch('/api/account-logos', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({account:key,logo:url}) }).catch(()=>{})
-      showToast('Logo de cuenta actualizado')
+      // Se persiste en Supabase para que sobreviva al cambio de dispositivo o al
+      // borrado del navegador. Y se ESPERA y se comprueba `ok`: un 400 ("Missing
+      // fields") o un 500 de la ruta RESUELVEN la promesa, asi que el `.catch()`
+      // que habia aqui no los veia nunca y el toast cantaba "actualizado" con el
+      // logo guardado solo en este navegador. El try/catch propio es para que un
+      // fallo de red no salte al catch de fuera: el logo SI se ha aplicado en local.
+      let enLaNube = false
+      try {
+        const rLogo = await fetch('/api/account-logos', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({account:key,logo:url}) })
+        enLaNube = rLogo.ok
+      } catch { enLaNube = false }
+      showToast(enLaNube ? 'Logo de cuenta actualizado' : 'Logo aplicado solo en este dispositivo — no se pudo guardar en la nube')
     } catch (err: any) { showToast('Error: ' + err.message) }
   }
 
@@ -152,13 +202,16 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
       if (e.key === 'f' && !activeItem) { e.preventDefault(); contentSearchInputRef.current?.focus() }
       if (e.key === 's' && activeItem) {
         e.preventDefault()
-        const statuses = ['borrador','pendiente','listo','publicado']
+        const statuses: ContentItem['status'][] = ['borrador','pendiente','listo','publicado']
         const curr = statuses.indexOf(activeItem.status)
         const next = statuses[(curr+1)%statuses.length]
         const prev = activeItem.status
+        const idPieza = activeItem.id
         setActiveItem((p: any) => ({...p, status: next}))
-        data.updateAgenda?.(activeItem.id, {status:next}).catch(() => {
-          setActiveItem((p: any) => ({...p, status: prev}))
+        data.updateAgenda?.(idPieza, {status:next}).catch(() => {
+          // Deshacer a ciegas le pegaba el estado viejo de esta pieza a la que
+          // hubieras abierto con J/K mientras el PATCH iba y venia.
+          if (activeItemRef.current?.id === idPieza) setActiveItem((p: any) => ({...p, status: prev}))
           showToast('Error actualizando estado')
         })
       }
@@ -178,7 +231,10 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
 
   const platColor = PLATAFORMA_COLOR
 
-  const cols = [
+  // `key` tipado, no string: es lo que se le pasa a changeStatus y de ahi va al
+  // PATCH. Sin el tipo, una columna nueva mal escrita ('publicada') compilaba y
+  // rebotaba contra el CHECK de la base en tiempo de ejecucion.
+  const cols: { key: ContentItem['status']; label: string; color: string }[] = [
     { key:'borrador', label:'En bruto', color:'#FFFFFF' },
     { key:'pendiente', label:'En producción', color:'#FFB020' },
     { key:'listo', label:'Listo', color:GRN },
@@ -203,6 +259,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
 
   const saveOpinion = async () => {
     if (!activeItem || (!pendingEmoji && !pendingNote.trim())) return
+    const idPieza = activeItem.id
     setSavingOpinion(true)
     try {
       // Se relee el feedback del SERVIDOR antes de mezclar, no el que hay en
@@ -218,7 +275,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
       // un fallo de red seria peor, y el caso comun es que no haya cambiado nada.
       let bruto = activeItem.feedback || '[]'
       try {
-        const fresco = await fetch(`/api/agenda/${activeItem.id}`).then(r => r.ok ? r.json() : null)
+        const fresco = await fetch(`/api/agenda/${idPieza}`).then(r => r.ok ? r.json() : null)
         if (fresco && typeof fresco.feedback === 'string') bruto = fresco.feedback
       } catch {}
       const existing = (() => { try { const p = JSON.parse(bruto||'[]'); return Array.isArray(p) ? p : [] } catch { return [] } })()
@@ -227,8 +284,14 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
       const initials = profile?.initials || name.split(' ').map((n: string) => n[0]).join('').slice(0,2).toUpperCase() || 'YO'
       filtered.push({ userId: profile?.id, name, initials, color: profile?.avatar_color || BLU, emoji: pendingEmoji, note: pendingNote.trim(), at: new Date().toISOString() })
       const feedback = JSON.stringify(filtered)
-      await data.updateAgenda(activeItem.id, { feedback })
-      setActiveItem((prev: any) => ({...prev, feedback}))
+      // La ruta responde 200 aunque haya tenido que reintentar sin las columnas que
+      // faltan en la BD, y avisa de cuales en `__dropped`. Aqui solo se manda
+      // `feedback`: si vuelve descartado, la opinion no se ha escrito en ningun
+      // sitio y decir "publicada" seria mentir — al recargar no estaria.
+      const descartadas: string[] = (await data.updateAgenda(idPieza, { feedback })) || []
+      if (descartadas.length) { showToast('No se pudo publicar: falta la columna feedback en la base de datos'); return }
+      // Y como la relectura del servidor tarda, la pieza abierta puede ser ya otra.
+      if (activeItemRef.current?.id === idPieza) setActiveItem((prev: any) => ({...prev, feedback}))
       showToast('Opinión publicada')
     } catch { showToast('Error al guardar opinión') }
     finally { setSavingOpinion(false) }
@@ -236,12 +299,20 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
 
   const saveNotes = async () => {
     if (!activeItem) return
+    const idPieza = activeItem.id
     setSavingNotes(true)
     try {
       const updates: any = { notes: editNotes, video_url: editVideoUrl, cover_url: editCoverUrl || null, account_name: editAccountName, publish_date: editPublishDate || null, publish_time: editPublishTime || null, content_type: editContentType }
-      await data.updateAgenda(activeItem.id, updates)
-      showToast('Guardado')
-      setActiveItem((prev: any) => ({...prev, ...updates}))
+      // El PATCH reintenta sin las columnas ausentes en la BD y responde 200 con
+      // `__dropped`. Nadie lo leia: la UI decia "Guardado" y ademas dejaba fijados
+      // en la pieza valores que no se habian escrito en ninguna parte, asi que la
+      // perdida no se veia hasta recargar.
+      const descartadas: string[] = (await data.updateAgenda(idPieza, updates)) || []
+      showToast(descartadas.length ? 'Guardado parcial — no se guardó ' + listaCampos(descartadas) : 'Guardado')
+      if (activeItemRef.current?.id !== idPieza) return
+      const persistido = { ...updates }
+      for (const campo of descartadas) delete persistido[campo]
+      setActiveItem((prev: any) => ({...prev, ...persistido}))
     } catch { showToast('Error guardando') }
     finally { setSavingNotes(false) }
   }
@@ -258,10 +329,12 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
   const filteredAgenda = !contentSearch.trim() ? filteredByPlatform : filteredByPlatform.filter((a: any)=>a.title?.toLowerCase().includes(contentSearch.toLowerCase()))
   filteredAgendaRef.current = filteredAgenda
 
-  const changeStatus = async (item: any, newStatus: string) => {
+  const changeStatus = async (item: any, newStatus: ContentItem['status']) => {
     try {
       await data.updateAgenda(item.id, { status: newStatus })
-      if (activeItem?.id === item.id) setActiveItem((prev: any)=>({...prev, status: newStatus}))
+      // El ref, no `activeItem`: aqui el closure lleva la pieza que hubiera abierta
+      // cuando se pinto el kanban, asi que la guarda podia dar true sobre otra.
+      if (activeItemRef.current?.id === item.id) setActiveItem((prev: any)=>({...prev, status: newStatus}))
       showToast('Estado actualizado')
     } catch { showToast('Error') }
   }
@@ -665,7 +738,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                                   <span className="font-syne text-[7px] font-black ml-auto flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.18)',border:'1px dashed rgba(255,255,255,0.1)'}}>SIN FECHA</span>
                                 )}
                                 {(()=>{
-                                  const nextMap: Record<string,string> = {borrador:'pendiente',pendiente:'listo',listo:'publicado'}
+                                  const nextMap: Record<string, ContentItem['status']> = {borrador:'pendiente',pendiente:'listo',listo:'publicado'}
                                   const nextStatus = nextMap[item.status]
                                   const nextLabel: Record<string,string> = {pendiente:'En prod.',listo:'Listo',publicado:'Publicado'}
                                   if (!nextStatus) return null
@@ -767,11 +840,17 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                 editContentType={editContentType}
                 setEditContentType={setEditContentType}
                 onSaveCopy={async (caption) => {
+                  // Misma cautela que en uploadCover: la pieza se fija al empezar.
+                  // Con el panel abierto se salta de pieza con J/K, y el copy de una
+                  // se pegaba encima del titulo de la que estuvieras viendo al volver.
+                  const idPieza = activeItem?.id
+                  if (!idPieza) return
                   try {
-                    await data.updateAgenda(activeItem.id, { title: caption.trim() })
+                    await data.updateAgenda(idPieza, { title: caption.trim() })
+                    showToast('Copy guardado')
+                    if (activeItemRef.current?.id !== idPieza) return
                     setActiveItem((a: any) => a ? { ...a, title: caption.trim() } : a)
                     setBocetoCaption(null)
-                    showToast('Copy guardado')
                   } catch { showToast('Error al guardar') }
                 }}
               />
@@ -1109,11 +1188,17 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                 editContentType={editContentType}
                 setEditContentType={setEditContentType}
                 onSaveCopy={async (caption) => {
+                  // Misma cautela que en uploadCover: la pieza se fija al empezar.
+                  // Con el panel abierto se salta de pieza con J/K, y el copy de una
+                  // se pegaba encima del titulo de la que estuvieras viendo al volver.
+                  const idPieza = activeItem?.id
+                  if (!idPieza) return
                   try {
-                    await data.updateAgenda(activeItem.id, { title: caption.trim() })
+                    await data.updateAgenda(idPieza, { title: caption.trim() })
+                    showToast('Copy guardado')
+                    if (activeItemRef.current?.id !== idPieza) return
                     setActiveItem((a: any) => a ? { ...a, title: caption.trim() } : a)
                     setBocetoCaption(null)
-                    showToast('Copy guardado')
                   } catch { showToast('Error al guardar') }
                 }}
               />

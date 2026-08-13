@@ -1,8 +1,21 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { parsearAccionHarvey, type AccionHarvey } from '@/lib/harveyAccion'
+import { nivelTarea } from '@/components/shared/helpers'
+import type { NexusData } from '@/types'
 import { BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, AMBAR} from '@/components/shared'
+import { VIO } from '@/components/shared/design-tokens'
 
-function HarveySection({data, profile, showToast, onNavigate, preloadMessage, onClearPreload}: any) {
+interface PropsHarvey {
+  data: NexusData
+  profile: any
+  showToast: any
+  onNavigate: any
+  preloadMessage: any
+  onClearPreload: any
+}
+
+function HarveySection({data, profile, showToast, onNavigate, preloadMessage, onClearPreload}: PropsHarvey) {
   const isMobile = useIsMobile()
   type HarveyMode = 'idle'|'recording'|'thinking'|'speaking'
   const [mode, setMode] = useState<HarveyMode>('idle')
@@ -11,7 +24,9 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
   const [conversation, setConversation] = useState<Array<{role:'user'|'harvey',text:string,searched?:boolean,ts?:string}>>([])
   const [textInput, setTextInput] = useState('')
   const [copiedHarveyIdx, setCopiedHarveyIdx] = useState<number|null>(null)
-  const [pendingAction, setPendingAction] = useState<{type:'tarea'|'evento'|'proyecto'|'cliente'|'pieza';text:string;level?:string;date?:string;time?:string;industry?:string;clientName?:string;platform?:string;contentType?:string;assigneeName?:string;invitees?:string}|null>(null)
+  // El tipo lo fija el modulo del parser: declararlo a mano aqui era la tercera
+  // copia de la misma forma, y la que tenia `level?: string` sin normalizar.
+  const [pendingAction, setPendingAction] = useState<AccionHarvey|null>(null)
   const [confirmingAction, setConfirmingAction] = useState(false)
   const [recSeconds, setRecSeconds] = useState(0)
   const [followUps, setFollowUps] = useState<string[]>([])
@@ -297,6 +312,12 @@ ${memLines2||'  sin documentos'}`
   const askHarvey = async (userText: string, historial?: Array<{role:'user'|'harvey',text:string,searched?:boolean,ts?:string}>) => {
     const run = ++voiceRunRef.current
     setMode('thinking')
+    // Una pregunta nueva invalida la propuesta anterior. La tarjeta se pinta con
+    // `pendingAction && mode==='idle'`, así que sin esta línea desaparecía al
+    // pasar a 'thinking' y REAPARECÍA al volver a idle, ya obsoleta: confirmabas
+    // la tarea de la pregunta de antes creyendo que era la de la respuesta que
+    // acabas de leer. Mismo invariante que HoySection.askHarvey.
+    setPendingAction(null)
     setFollowUps([])
     const searchTriggers = /busca|encuentra|consigue|influencer|instagram|tiktok|youtube|precio|tendencia|trend|noticias|actualidad|últim|listado|lista de|quién es|qué es|estadística|hashtag|seguidores|marca|agencia|competencia|referente|ejemplo de|casos de|cómo se hace|qué plataforma|cuánto cuesta|cuánto cobra/i
     if (searchTriggers.test(userText)) setIsSearching(true)
@@ -357,17 +378,11 @@ ${memLines2||'  sin documentos'}`
       }
 
       // Parse action command
-      const actionMatch = reply.match(/\[ACCION:([^\]]+)\]/)
-      if (actionMatch) {
-        reply = reply.replace(/\[ACCION:[^\]]*\]/g, '').trim()
-        const parts = actionMatch[1].split('|')
-        const type = parts[0] as 'tarea'|'evento'|'proyecto'|'cliente'|'pieza'
-        if (type==='tarea')    setPendingAction({type:'tarea',    text:parts[1]||'', level:parts[2]||'high', assigneeName:parts[3]?.trim()||''})
-        if (type==='evento')   setPendingAction({type:'evento',   text:parts[1]||'', date:parts[2]||'', time:parts[3]||'', invitees:parts[4]?.trim()||''})
-        if (type==='proyecto') setPendingAction({type:'proyecto', text:parts[1]||'', clientName:parts[2]||'', date:parts[3]||''})
-        if (type==='cliente')  setPendingAction({type:'cliente',  text:parts[1]||'', industry:parts[2]||'—'})
-        if (type==='pieza')    setPendingAction({type:'pieza',    text:parts[1]||'', platform:parts[2]||'Instagram', contentType:parts[3]||'Post'})
-      }
+      // Un solo sitio para las dos secciones: esto estaba escrito linea por linea
+      // aqui y en la otra, y cada bug de la pareja habia que arreglarlo dos veces.
+      const { texto: limpio, accion } = parsearAccionHarvey(reply)
+      reply = limpio
+      if (accion) setPendingAction(accion)
 
       setIsSearching(false)
       // Si la respuesta viene del fallback local, se dice. Callarlo era hacer pasar
@@ -549,11 +564,19 @@ ${memLines2||'  sin documentos'}`
   const confirmHarveyAction = async () => {
     if (!pendingAction) return
     setConfirmingAction(true)
+    // Solo se descarta la propuesta si de verdad se ha escrito algo. Antes el
+    // setPendingAction(null) del final se ejecutaba pasara lo que pasara, y la
+    // rama de 'evento' NO relanza: si Google Calendar contesta mal —o si Harvey
+    // no dio fecha y ni se intentó— solo sale un toast. Ese toast pide reconectar
+    // Gmail y volver a intentarlo, pero la tarjeta ya había desaparecido y había
+    // que dictarle el evento entero otra vez. Mismo tratamiento en HoySection.
+    let creado = false
     try {
       const rColor = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6'][Math.floor(Math.random()*6)]
       if (pendingAction.type==='tarea') {
         const member = pendingAction.assigneeName ? matchTeamMember((data.team||[]) as any[], pendingAction.assigneeName) : null
-        await data.createTask({text:pendingAction.text, level:pendingAction.level||'high', source:'ai', ...(member ? { assigned_to: member.id } : {})})
+        await data.createTask({text:pendingAction.text, level:nivelTarea(pendingAction.level), source:'ai', ...(member ? { assigned_to: member.id } : {})})
+        creado = true
         showToast(member ? `Tarea creada y asignada a ${member.name}`
           : pendingAction.assigneeName ? `Tarea creada (sin asignar: no encontré a "${pendingAction.assigneeName}")`
           : 'Tarea creada por Harvey')
@@ -562,15 +585,18 @@ ${memLines2||'  sin documentos'}`
           ? (data.clients as any[]).find((c:any)=>c.name.toLowerCase().includes((pendingAction.clientName||'').toLowerCase()))
           : null
         await data.createProject({name:pendingAction.text, client_id:client?.id, status:'activo', progress:0, deadline:pendingAction.date||'TBD', color:client?.color||rColor})
+        creado = true
         showToast('Proyecto creado por Harvey')
       } else if (pendingAction.type==='cliente') {
         await data.createClient({name:pendingAction.text, industry:pendingAction.industry||'—', revenue:'—', color:rColor, status:'Activo'})
+        creado = true
         showToast('Cliente creado por Harvey')
       } else if (pendingAction.type==='pieza') {
         const client = pendingAction.clientName
           ? (data.clients as any[]).find((c:any)=>c.name.toLowerCase().includes((pendingAction.clientName||'').toLowerCase()))
           : null
         await data.createAgenda({title:pendingAction.text, platform:pendingAction.platform||'Instagram', content_type:pendingAction.contentType||'Post', status:'borrador', publish_date:pendingAction.date||undefined, client_id:client?.id})
+        creado = true
         showToast('Pieza añadida al pipeline de contenido')
       } else if (pendingAction.type==='evento') {
         if (!pendingAction.date) {
@@ -588,6 +614,7 @@ ${memLines2||'  sin documentos'}`
           })
           const json = await res.json()
           if (res.ok) {
+            creado = true
             showToast(attendees.length ? `Reunión creada · invitación enviada a ${attendees.length} persona${attendees.length>1?'s':''}` : 'Evento añadido a Google Calendar')
             await data.reload?.()
           } else if (json.error === 'insufficient_scope') {
@@ -597,7 +624,7 @@ ${memLines2||'  sin documentos'}`
           }
         }
       }
-      setPendingAction(null)
+      if (creado) setPendingAction(null)
     } catch { showToast('Error al crear') }
     finally { setConfirmingAction(false) }
   }
@@ -668,7 +695,14 @@ ${memLines2||'  sin documentos'}`
     setConversation([{role:'harvey',text:g,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}])
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const MC: Record<HarveyMode,string> = { idle:BLU, recording:RED, thinking:'rgba(139,92,246,0.9)', speaking:BLU }
+  // Los cuatro colores salen de los tokens compartidos, incluido el morado (VIO).
+  // Estaba escrito a mano como rgba(139,92,246,0.9) y el boxShadow del botón de
+  // voz lo concatena (`${MC[mode]}40`): con rgba el navegador descarta la
+  // declaración ENTERA —los dos resplandores van en una sola— y el orbe se
+  // quedaba apagado justo en 'thinking', que es cuando hace falta ver que Harvey
+  // está trabajando. Este objeto es el mismo que el `orbColor` de HoySection,
+  // escrito dos veces: construido sobre los tokens no puede volver a divergir.
+  const MC: Record<HarveyMode,string> = { idle:BLU, recording:RED, thinking:VIO, speaking:BLU }
   const orbLabel: Record<HarveyMode,string> = { idle:'ESPACIO / CLIC · HABLA', recording:`GRABANDO ${recSeconds}s · SUELTA`, thinking: isSearching ? 'BUSCANDO EN INTERNET…' : 'PROCESANDO…', speaking:'REPRODUCIENDO · CLIC PARA PARAR' }
 
   const urgentTasks = (data.tasks||[]).filter((t:any)=>!t.done&&t.level==='urgent')

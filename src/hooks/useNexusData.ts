@@ -213,7 +213,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     } catch { return { ok: false, noScope: false } }
   }, [])
 
-  const syncGmail = useCallback(async (): Promise<{synced:number;total:number}> => {
+  const syncGmail = useCallback(async (): Promise<{synced:number;total:number;insertFailures?:number}> => {
     if (!profile?.gmail_connected) throw new Error('Gmail no conectado')
     setSyncing(true)
     setSyncResult(null)
@@ -221,7 +221,17 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
       const result = await apiFetch('/api/gmail/sync', { method: 'POST' })
       const newInbox = await apiFetch('/api/inbox')
       setInbox(newInbox)
-      setSyncResult({ ok: true, message: `✓ ${result.synced ?? 0} emails nuevos (${result.total ?? 0} revisados)` })
+      // `insertFailures` viene de /api/gmail/sync: emails que se analizaron con
+      // Claude y luego NO se pudieron guardar. Sin mirarlo, "0 emails nuevos (20
+      // revisados)" se lee como "no había nada" cuando en realidad no se guardó
+      // nada — y el cron los reanaliza, y se vuelve a pagar, cada hora.
+      const fallos = result.insertFailures ?? 0
+      setSyncResult({
+        ok: fallos === 0,
+        message: fallos > 0
+          ? `${result.total ?? 0} revisados, ${fallos} no se pudieron guardar`
+          : `✓ ${result.synced ?? 0} emails nuevos (${result.total ?? 0} revisados)`,
+      })
       return result
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido'
@@ -252,12 +262,27 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
   // Una sola peticion en vez de una por tarea. "LIMPIAR COMPLETADAS" hacia un
   // Promise.all de N borrados: N invocaciones de Vercel repitiendo cada una la
   // sesion, el rol y el propietario.
-  const deleteTasks = useCallback(async (ids: string[]) => {
-    if (!ids.length) return
-    await apiFetch('/api/tasks', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) })
+  //
+  // Devuelve cuantas cayeron DE VERDAD y solo quita del estado local si coinciden
+  // con las enviadas. La ruta recorta la lista a 500 ids y, si quien llama no es
+  // owner, filtra por created_by dentro del propio DELETE — por eso responde
+  // `borradas`. Se ignoraba: con 620 completadas el boton decia "¿BORRAR 620?",
+  // el servidor borraba 500, la pantalla las quitaba las 620 igual y las otras
+  // 120 reaparecian al recargar sin que nadie hubiera avisado. Cuando el recuento
+  // no cuadra se recarga —load() no pisa lo que hay si la consulta falla— y se
+  // relanza para que el llamante pueda contarlo.
+  const deleteTasks = useCallback(async (ids: string[]): Promise<number> => {
+    if (!ids.length) return 0
+    const res = await apiFetch('/api/tasks', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) })
+    const borradas: number = typeof res?.borradas === 'number' ? res.borradas : 0
+    if (borradas !== ids.length) {
+      await load()
+      throw new Error(`Se borraron ${borradas} de ${ids.length} — vuelve a intentarlo`)
+    }
     const fuera = new Set(ids)
     setTasks(prev => prev.filter(t => !fuera.has(t.id)))
-  }, [])
+    return borradas
+  }, [load])
 
   const toggleTask = useCallback(async (id: string) => {
     const task = tasks.find(t => t.id === id)
@@ -386,9 +411,16 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     setAgenda(prev => [...prev, created])
   }, [])
 
-  const updateAgenda = useCallback(async (id: string, updates: Partial<ContentItem>) => {
-    const updated = await apiFetch(`/api/agenda/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
-    setAgenda(prev => prev.map(a => a.id === id ? updated : a))
+  // Devuelve las columnas que el servidor NO ha llegado a escribir. El PATCH
+  // responde 200 aunque haya tenido que reintentar sin las que faltan en la BD
+  // (account_name, video_url, feedback, cover_url) y las lista en `__dropped`;
+  // nadie lo leia, asi que la UI cantaba "Guardado" y ademas dejaba fijados en
+  // pantalla valores que no estaban en ninguna parte. `__dropped` no es una
+  // columna de la pieza: se separa antes de meter la fila en el estado.
+  const updateAgenda = useCallback(async (id: string, updates: Partial<ContentItem>): Promise<string[]> => {
+    const { __dropped, ...fila } = await apiFetch(`/api/agenda/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) })
+    setAgenda(prev => prev.map(a => a.id === id ? (fila as ContentItem) : a))
+    return Array.isArray(__dropped) ? __dropped : []
   }, [])
 
   const deleteAgenda = useCallback(async (id: string) => {

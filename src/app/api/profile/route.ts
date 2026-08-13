@@ -32,6 +32,41 @@ export async function PATCH(request: Request) {
   if (typeof body.name === 'string') {
     const name = body.name.trim().slice(0, 80)
     if (!name) return NextResponse.json({ error: 'El nombre no puede estar vacío' }, { status: 400 })
+
+    // Dos personas no pueden llamarse igual, y esto NO es cosmético.
+    //
+    // `inbox_messages` no guarda el id de quien envía: solo `from_name`, que sale
+    // de la sesión al mandar el DM. /api/inbox/thread empareja la conversación
+    // por ese nombre, así que el nombre es, de hecho, la identidad del remitente.
+    // Poniéndome el nombre de un compañero, esa ruta me devolvía los mensajes que
+    // ÉL había mandado a un tercero — la conversación privada de otros dos, con
+    // dos líneas de curl.
+    //
+    // La ruta del hilo ya se niega a servir un emparejamiento ambiguo (409), pero
+    // eso deja la sección rota para dos personas inocentes. Aquí se corta el
+    // duplicado en el origen: es el único sitio por el que se puede crear.
+    //
+    // Sin acentos ni mayúsculas: "Pablo" y "pablo " tienen que chocar, porque como
+    // identidad son la misma persona aunque como filtro SQL no lo sean.
+    const clave = (s: string | null | undefined) =>
+      (s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+    const { data: otros, error: otrosErr } = await ctx.admin
+      .from('profiles')
+      .select('id,name')
+      .neq('id', ctx.userId)
+
+    if (otrosErr || !otros) {
+      console.error('[profile] no se pudo comprobar si el nombre está repetido —', otrosErr?.message)
+      return NextResponse.json({ error: 'No se pudo guardar el perfil' }, { status: 500 })
+    }
+    if (otros.some(p => clave(p.name) === clave(name))) {
+      return NextResponse.json(
+        { error: 'Ya hay alguien en el equipo con ese nombre — añade el apellido o una inicial' },
+        { status: 409 },
+      )
+    }
+
     updates.name = name
   }
 

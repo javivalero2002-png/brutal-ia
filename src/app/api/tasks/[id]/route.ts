@@ -1,11 +1,11 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { borrarFicherosDeAdjuntos } from '@/lib/taskAttachments'
 import { getAuthCtx, canAccessTask } from '@/lib/authz'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Solo columnas conocidas: campos desconocidos no deben tumbar la petición
 // ni permitir escribir columnas arbitrarias (p. ej. created_by).
 const pick = (obj: any, keys: string[]) => Object.fromEntries(Object.entries(obj || {}).filter(([k]) => keys.includes(k)))
-
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await getAuthCtx()
@@ -56,7 +56,23 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  // Los ficheros del Storage NO se van con la cascada de la base. `task_attachments`
+  // es ON DELETE CASCADE (migrations/20260809_task_attachments.sql:8), así que al
+  // borrar la tarea las filas desaparecen y con ellas la única referencia al objeto:
+  // se queda en `content-videos` —bucket PÚBLICO, con contratos, presupuestos y
+  // briefs— huérfano y ya imposible de encontrar desde la app. El borrado de un
+  // adjunto suelto sí lo hace, y a propósito (attachments/route.ts).
+  //
+  // Se leen ANTES del delete porque después las filas ya no existen. Todo el bloque
+  // es best-effort: si el Storage falla se registra, pero la tarea se borra igual —
+  // lo contrario dejaría una tarea imposible de borrar por culpa de un adjunto.
+  const { data: adjuntos, error: adjErr } = await admin
+    .from('task_attachments').select('url').eq('task_id', id)
+  if (adjErr) console.error('[tasks] no se pudieron leer los adjuntos antes de borrar la tarea', id, '—', adjErr.message)
+
   const { error } = await admin.from('tasks').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  await borrarFicherosDeAdjuntos(admin, (adjuntos || []).map((a: any) => a.url))
   return NextResponse.json({ ok: true })
 }

@@ -12,11 +12,28 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = await createAdminClient()
-  const { data: profile } = await admin
+  // supabase-js NO lanza: devuelve { data:null, error }. Descartando el `error`,
+  // una lectura caída del perfil dejaba `profile` en null, se cumplía el `if` de
+  // abajo y la ruta contestaba `[]` con 200. El hook trata ese array vacío como
+  // agenda vacía (useNexusData.ts:118-122) y ni siquiera enciende `loadError`:
+  // el calendario se pintaba en blanco sin un solo aviso. «No tienes Gmail
+  // conectado» y «no he podido comprobar si lo tienes» no pueden ser la misma
+  // respuesta.
+  const { data: profile, error: profileErr } = await admin
     .from('profiles')
     .select('gmail_refresh_token, gmail_connected, gmail_colabs_refresh_token, gmail_colabs_connected')
     .eq('id', user.id)
     .single()
+
+  // PGRST116 es «cero filas»: alguien sin perfil todavía no tiene Gmail
+  // conectado, y ese caso sí es el vacío legítimo de abajo.
+  if (profileErr && profileErr.code !== 'PGRST116') {
+    console.error('[calendar] no se pudo leer el perfil:', profileErr.message)
+    return NextResponse.json(
+      { __error: 'db', error: 'No se pudo comprobar tu conexión con Google Calendar' },
+      { status: 500 },
+    )
+  }
 
   if (!profile?.gmail_refresh_token || !profile?.gmail_connected) {
     return NextResponse.json([])
@@ -69,19 +86,67 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = await createAdminClient()
-  const { data: profile } = await admin
+  // Gemelo del GET: sin mirar el `error`, una lectura caída del perfil se
+  // anunciaba como «Gmail no conectado» y mandaba a reconectar una cuenta que ya
+  // estaba conectada.
+  const { data: profile, error: profileErr } = await admin
     .from('profiles')
     .select('gmail_refresh_token, gmail_connected')
     .eq('id', user.id)
     .single()
+
+  if (profileErr && profileErr.code !== 'PGRST116') {
+    console.error('[calendar] no se pudo leer el perfil (POST):', profileErr.message)
+    return NextResponse.json({ error: 'No se pudo comprobar tu conexión con Google Calendar' }, { status: 500 })
+  }
 
   if (!profile?.gmail_refresh_token || !profile?.gmail_connected) {
     return NextResponse.json({ error: 'Gmail no conectado' }, { status: 400 })
   }
 
   const { title, date, time, description, attendees } = await request.json()
-  if (!title?.trim() || !date) {
+  if (typeof title !== 'string' || !title.trim() || !date) {
     return NextResponse.json({ error: 'Faltan título o fecha' }, { status: 400 })
+  }
+
+  // La fecha y la hora no siempre vienen de un <input type="date">: cuando el
+  // evento lo propone Harvey salen de texto libre («el martes que viene») y hasta
+  // ahora llegaban sin mirar hasta google.calendar.events.insert. Dos finales
+  // distintos, los dos malos:
+  //   · fecha basura ('martes', '2026-13-40') → Google rechaza el insert, el
+  //     catch de abajo responde «Error creando evento» y el aviso culpa a Google
+  //     de un fallo que estaba en lo que le mandamos.
+  //   · hora basura ('10h', '25:00') → tramoHorario() hace split(':') + Number,
+  //     y Number(undefined) es NaN: el evento se crea con dateTime 'NaN:NaN' o a
+  //     una hora que nadie pidió, se responde 200 y nadie se entera hasta abrir
+  //     el calendario.
+  // Se valida aquí y se devuelve un error propio que dice qué no se entendió.
+  const esFechaReal = (d: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false
+    // Date.UTC, no `new Date(d)` con hora local: aquí solo se comprueba que el
+    // día exista de verdad (rechaza 2026-02-31, que JS desborda a marzo).
+    const [y, m, dia] = d.split('-').map(Number)
+    const probe = new Date(Date.UTC(y, m - 1, dia))
+    return probe.getUTCFullYear() === y && probe.getUTCMonth() === m - 1 && probe.getUTCDate() === dia
+  }
+  if (typeof date !== 'string' || !esFechaReal(date)) {
+    return NextResponse.json(
+      { error: `No se entendió la fecha «${String(date).slice(0, 30)}» — tiene que ser AAAA-MM-DD`, code: 'fecha_invalida' },
+      { status: 400 },
+    )
+  }
+  // La hora se acepta con o sin cero delante ('9:00' es lo que suele escribir
+  // Harvey y tramoHorario() ya lo rellena con pad()); lo que se rechaza es lo que
+  // no es una hora: '10h', '25:00', '9:5'.
+  const esHoraReal = (t: string) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(t)
+    return !!m && Number(m[1]) <= 23 && Number(m[2]) <= 59
+  }
+  if (time != null && time !== '' && (typeof time !== 'string' || !esHoraReal(time))) {
+    return NextResponse.json(
+      { error: `No se entendió la hora «${String(time).slice(0, 20)}» — tiene que ser HH:MM`, code: 'hora_invalida' },
+      { status: 400 },
+    )
   }
 
   try {

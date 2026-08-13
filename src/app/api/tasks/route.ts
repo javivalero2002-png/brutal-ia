@@ -1,11 +1,16 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { borrarFicherosDeAdjuntos } from '@/lib/taskAttachments'
 import { NextRequest, NextResponse } from 'next/server'
 import { sendPushToUser } from '@/lib/push'
+
+// El POST espera al push del asignado antes de responder (ver abajo), así que la
+// respuesta se lleva por delante la consulta a `reglas` y las llamadas a FCM/APNs.
+// Igual que inbox, harvey/chat y gmail/sync, que ya lo declaran por lo mismo.
+export const maxDuration = 60
 
 // Solo columnas conocidas: campos desconocidos no deben tumbar la petición
 // ni permitir escribir columnas arbitrarias (p. ej. created_by).
 const pick = (obj: any, keys: string[]) => Object.fromEntries(Object.entries(obj || {}).filter(([k, v]) => keys.includes(k) && v !== undefined))
-
 
 export async function GET() {
   const supabase = await createClient()
@@ -51,15 +56,29 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Notificación push al asignado (si no es quien la crea)
+  // Notificación push al asignado (si no es quien la crea).
+  //
+  // CON await, igual que en inbox, colabsSync y /api/gmail/sync y por lo mismo:
+  // iba suelto con `.catch(()=>{})` y el `return` en la línea siguiente, o sea
+  // cero awaits entre lanzar y responder. A sendPushToUser le quedaban por delante
+  // la consulta a `reglas`, el insert en notification_log y las llamadas HTTP a
+  // FCM/APNs, y en serverless la instancia se congela al devolver: la tarea salía
+  // asignada y el aviso se perdía sin dejar rastro.
+  //
+  // La tarea ya está insertada, así que un fallo del push se registra pero no
+  // tumba la respuesta. El fichero declara maxDuration = 60 (arriba).
   if (data?.assigned_to && data.assigned_to !== user.id) {
     const { data: creator } = await admin.from('profiles').select('name').eq('id', user.id).single()
-    sendPushToUser(admin, data.assigned_to, {
-      title: `Nueva tarea de ${creator?.name || 'el equipo'}`,
-      body: data.text?.slice(0, 120) || '',
-      url: '/dashboard',
-      tag: `task-${data.id}`,
-    }).catch(() => {})
+    try {
+      await sendPushToUser(admin, data.assigned_to, {
+        title: `Nueva tarea de ${creator?.name || 'el equipo'}`,
+        body: data.text?.slice(0, 120) || '',
+        url: '/dashboard',
+        tag: `task-${data.id}`,
+      })
+    } catch (err) {
+      console.error('[tasks] el push de tarea asignada falló:', err)
+    }
   }
   return NextResponse.json(data)
 }
@@ -88,11 +107,26 @@ export async function DELETE(request: NextRequest) {
   const admin = await createAdminClient()
   const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).single()
 
+  // Las URLs de los adjuntos se leen AHORA: la cascada de la BD se lleva las filas
+  // en el mismo DELETE y después ya no hay forma de saber qué ficheros quedaron
+  // huérfanos en el bucket. Mismo caso que el borrado de una tarea suelta.
+  const { data: adjuntos, error: adjErr } = await admin
+    .from('task_attachments').select('task_id,url').in('task_id', limpios)
+  if (adjErr) console.error('[tasks] no se pudieron leer los adjuntos del borrado en lote:', adjErr.message)
+
   let q = admin.from('tasks').delete({ count: 'exact' }).in('id', limpios)
   // Owner borra cualquiera; el resto solo las suyas.
   if (profile?.role !== 'owner') q = q.eq('created_by', user.id)
 
-  const { error, count } = await q
+  // `.select('id')` para saber cuáles cayeron DE VERDAD: la autorización va como
+  // filtro del propio DELETE, así que de `limpios` pueden sobrevivir unas cuantas
+  // y borrar sus ficheros dejaría filas de adjunto apuntando a un objeto que ya no
+  // existe — el estropicio simétrico al que arregla este bloque.
+  const { data: filasBorradas, error, count } = await q.select('id')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true, borradas: count ?? 0 })
+
+  const idsBorrados = new Set((filasBorradas || []).map((t: any) => t.id))
+  await borrarFicherosDeAdjuntos(admin, (adjuntos || []).filter((a: any) => idsBorrados.has(a.task_id)).map((a: any) => a.url))
+
+  return NextResponse.json({ ok: true, borradas: count ?? idsBorrados.size })
 }

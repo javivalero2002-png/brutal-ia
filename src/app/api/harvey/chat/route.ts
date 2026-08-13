@@ -180,7 +180,16 @@ ${context ? `CONTEXTO ACTUAL DEL SISTEMA:\n${context}` : ''}`
           },
           body: JSON.stringify({
             model,
-            max_tokens: needsSearch ? 500 : 300,
+            // El comando [ACCION:...] va en la ÚLTIMA línea de la respuesta, así
+            // que es lo primero que se pierde cuando el modelo agota los tokens.
+            // 300 daban para las 2-3 frases de siempre, pero no para lo que el
+            // propio prompt autoriza —un briefing, un listado, el repaso de los
+            // emails sin leer—: ahí la respuesta se cortaba a media frase y la
+            // tarjeta «HARVEY PROPONE» no llegaba a aparecer, aunque Harvey
+            // acabara de decir en voz alta que creaba la tarea. Este límite es
+            // una red de seguridad; de la longitud ya se encargan las reglas de
+            // comunicación del system prompt.
+            max_tokens: needsSearch ? 800 : 600,
             system: systemPrompt,
             messages,
             ...(stream ? { stream: true } : {}),
@@ -207,15 +216,35 @@ ${context ? `CONTEXTO ACTUAL DEL SISTEMA:\n${context}` : ''}`
                     if (!line.startsWith('data:')) continue
                     const payload = line.slice(5).trim()
                     if (!payload || payload === '[DONE]') continue
-                    try {
-                      const ev = JSON.parse(payload)
-                      if (ev.type === 'content_block_delta' && ev.delta?.text) {
-                        controller.enqueue(encoder.encode(ev.delta.text))
-                      }
-                    } catch {}
+                    let ev: any
+                    // Un `data:` que no sea JSON no es un fallo: se ignora.
+                    try { ev = JSON.parse(payload) } catch { continue }
+                    // Anthropic manda sus errores DENTRO del propio SSE (overloaded,
+                    // rate limit, corte del modelo). Tragárselos era lo mismo que
+                    // tragarse un corte de red: el bucle terminaba tan tranquilo y
+                    // la respuesta a medias se servía como si estuviera completa.
+                    if (ev.type === 'error') throw new Error(ev.error?.message || 'error de la API a mitad del stream')
+                    if (ev.type === 'message_delta' && ev.delta?.stop_reason === 'max_tokens') {
+                      console.warn('[harvey] respuesta truncada por max_tokens — el [ACCION:...] del final puede haberse perdido')
+                    }
+                    if (ev.type === 'content_block_delta' && ev.delta?.text) {
+                      controller.enqueue(encoder.encode(ev.delta.text))
+                    }
                   }
                 }
-              } catch {}
+              } catch (err: any) {
+                // Este catch estaba vacío y le seguía un controller.close(): un
+                // corte a mitad de la generación (reset de red, el techo de 60s de
+                // Hobby, un error de la API) cerraba el stream LIMPIAMENTE, así que
+                // el cliente daba por completas las dos primeras frases y —esto es
+                // lo grave— se las LEÍA EN VOZ ALTA como si fueran la respuesta
+                // entera. Con controller.error() el reader del cliente rechaza y cae
+                // en su catch, que ya pinta «No he podido conectar» y no manda nada
+                // al TTS. Mejor quedarse sin respuesta que con media que suena a una.
+                console.error('[harvey] el stream se cortó a mitad:', err?.message ?? err)
+                controller.error(err)
+                return
+              }
               controller.close()
             },
           })

@@ -2,17 +2,54 @@
 import { useState, useEffect, useRef } from 'react'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR} from '@/components/shared/design-tokens'
 import { useIsMobile, useBackClosable } from '@/components/shared/hooks'
-import { dlDate, dlLabel, strColor, relTime, todayKey, localDayKey, daysBetweenKeys } from '@/components/shared/helpers'
+import { dlDate, dlLabel, strColor, relTime, todayKey, localDayKey, daysBetweenKeys, plural } from '@/components/shared/helpers'
 import { fetchWithTimeout } from '@/lib/fetch-timeout'
 import { ProgressRing } from '@/components/shared/ui'
 import LucideIcon from '@/components/shared/LucideIcon'
 import { PlatformLogo } from '@/components/PlatformLogo'
-import type { Client, Project, Task } from '@/types'
+import type { Client, Project, Task, NexusData} from '@/types'
 
-export default function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner,onNavigate,onSelectProject}: any) {
+// El plan estrategico lo escribe Claude y /api/clients/[id]/ai-advice reenvia el
+// JSON parseado TAL CUAL, sin esquema que lo valide. Tipar aqui la forma que la
+// ficha necesita obliga a normalizar antes de guardarlo en el estado, que es lo
+// que impide que un campo ausente llegue al render.
+type Prioridad = 'alta'|'media'|'baja'
+type Recomendacion = { title: string; body: string; priority: Prioridad }
+
+// El prompt pide {title, body, priority:"alta|media|baja"}, pero eso es una
+// peticion, no un contrato: si el modelo omite `priority` o la manda como numero,
+// `rec.priority.toUpperCase()` lanzaba "Cannot read properties of undefined" y se
+// caia la ficha ENTERA del cliente —cabecera, proyectos, tareas y comentarios—,
+// no solo el bloque del plan. Y `recommendations` puede no ser ni un array: la
+// rama de rescate de la ruta devuelve el texto crudo cuando el JSON no parsea.
+// Se normaliza una vez, al recibir, en vez de defenderse campo a campo al pintar.
+const PRIORIDADES: Prioridad[] = ['alta','media','baja']
+const normalizarRecomendaciones = (raw: unknown): Recomendacion[] =>
+  (Array.isArray(raw) ? raw : []).map((r: any): Recomendacion => {
+    const p = typeof r?.priority === 'string' ? r.priority.trim().toLowerCase() : ''
+    return {
+      title: typeof r?.title === 'string' && r.title.trim() ? r.title.trim() : 'Recomendación',
+      body: typeof r?.body === 'string' ? r.body : '',
+      // 'media' y no 'baja': una prioridad ilegible no es una prioridad baja.
+      priority: (PRIORIDADES as string[]).includes(p) ? p as Prioridad : 'media',
+    }
+  })
+
+interface PropsClientes {
+  data: NexusData
+  selectedId: any
+  onSelect: any
+  onOpenModal: any
+  showToast: any
+  isOwner: any
+  onNavigate: any
+  onSelectProject: any
+}
+
+export default function ClientesSection({data,selectedId,onSelect,onOpenModal,showToast,isOwner,onNavigate,onSelectProject}: PropsClientes) {
   const isMobile = useIsMobile()
   useBackClosable(!!selectedId, () => onSelect(null))
-  const [aiAdvice, setAiAdvice] = useState<any[]|null>(null)
+  const [aiAdvice, setAiAdvice] = useState<Recomendacion[]|null>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [expandedProject, setExpandedProject] = useState<string|null>(null)
   const [comments, setComments] = useState<any[]|null>(null)
@@ -53,16 +90,31 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
     setAiAdvice(null)
     setExpandedProject(null)
     setNewComment('')
+    // Las cargas en vuelo del cliente anterior ya no apagan su propio spinner
+    // —sus setters van detrás de `vigente()`—, así que se apaga aquí. Si no, la
+    // ficha del siguiente cliente se quedaba en "Cargando…" para siempre.
+    setFilesLoading(false)
+    setCommentsLoading(false)
+    setAiLoading(false)
   }, [selectedId])
 
   const loadFiles = async (id: string) => {
+    // El efecto de arriba limpia el estado al cambiar de cliente, pero la
+    // peticion que ya estaba en vuelo seguia escribiendo al volver: los
+    // contratos y briefings de A se pintaban en la ficha de B. `vigente()`
+    // descarta la respuesta que ya no corresponde — tambien la de error, que
+    // dejaba a B con "Sin archivos" por un fallo que no era suyo.
+    const vigente = () => selectedIdRef.current === id
     setFilesLoading(true)
     try {
       const r = await fetchWithTimeout(`/api/clients/${id}/files`)
+      if (!vigente()) return
       if (!r.ok) { showToast('Error al cargar archivos'); setClientFiles([]); return }
-      setClientFiles(await r.json())
-    } catch { showToast('Error al cargar archivos'); setClientFiles([]) }
-    finally { setFilesLoading(false) }
+      const archivos = await r.json()
+      if (!vigente()) return
+      setClientFiles(archivos)
+    } catch { if (vigente()) { showToast('Error al cargar archivos'); setClientFiles([]) } }
+    finally { if (vigente()) setFilesLoading(false) }
   }
 
   const uploadFile = async (file: File) => {
@@ -96,12 +148,17 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
       return
     }
     setConfirmDeleteFile(null)
+    // Igual que en `uploadFile`: el borrado va contra el cliente correcto, pero
+    // la lista se toca al terminar. Sin fijar el id, cambiar de ficha durante la
+    // peticion dejaba a `clientFiles` en `[]` para el cliente siguiente — su
+    // ficha decia "Sin archivos" teniendolos.
+    const clienteId = selected.id
     try {
-      const r = await fetch(`/api/clients/${selected.id}/files`, { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path }) })
+      const r = await fetch(`/api/clients/${clienteId}/files`, { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ path }) })
       // Se quitaba la fila y se decia "Archivo eliminado" pasara lo que pasara.
       // El archivo seguia en el bucket y reaparecia al recargar la seccion.
       if (!r.ok) { const e = await r.json().catch(()=>({} as any)); showToast(e.error || 'No se pudo eliminar el archivo'); return }
-      setClientFiles(prev => (prev||[]).filter(f => f.path !== path))
+      if (selectedIdRef.current === clienteId) setClientFiles(prev => (prev||[]).filter(f => f.path !== path))
       showToast('Archivo eliminado')
     } catch { showToast('Error al eliminar') }
   }
@@ -136,13 +193,20 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
   }, [clientEditOpen, selected, isOwner])
 
   const loadComments = async (id: string) => {
+    // Mismo caso que `loadFiles`: sin esta guarda se leia el hilo de A mientras
+    // se respondia sobre B, que es justo lo que el efecto de arriba intentaba
+    // evitar limpiando el estado.
+    const vigente = () => selectedIdRef.current === id
     setCommentsLoading(true)
     try {
       const r = await fetchWithTimeout(`/api/clients/${id}/comments`)
+      if (!vigente()) return
       if (!r.ok) { showToast('Error al cargar comentarios'); setComments([]); return }
-      setComments(await r.json())
-    } catch { showToast('Error al cargar comentarios'); setComments([]) }
-    finally { setCommentsLoading(false) }
+      const hilo = await r.json()
+      if (!vigente()) return
+      setComments(hilo)
+    } catch { if (vigente()) { showToast('Error al cargar comentarios'); setComments([]) } }
+    finally { if (vigente()) setCommentsLoading(false) }
   }
 
   const postComment = async () => {
@@ -150,32 +214,46 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
     // Enter mientras tanto publicaba el mismo comentario dos veces.
     if (postingComment) return
     if (!newComment.trim() || !selected) return
+    // El cliente se fija al empezar, como en `uploadFile`: el comentario ya iba
+    // al correcto, pero al volver se anadia a la lista en pantalla, y si habias
+    // cambiado de ficha aparecia como unico comentario del cliente siguiente.
+    const clienteId = selected.id
     setPostingComment(true)
     try {
-      const r = await fetch(`/api/clients/${selected.id}/comments`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:newComment.trim()})})
+      const r = await fetch(`/api/clients/${clienteId}/comments`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:newComment.trim()})})
       const c = await r.json()
       // Sin esta comprobacion el cuerpo del error se anadia al hilo como si fuera
       // un comentario: burbuja vacia firmada por "Alguien" y el texto perdido.
       // No se vacia el input al fallar — lo escrito se conserva.
       if (!r.ok) { showToast(c?.error === 'Comment too long' ? 'El comentario es demasiado largo' : 'No se pudo publicar el comentario'); return }
-      setComments(prev => [...(prev||[]), c])
-      setNewComment('')
+      if (selectedIdRef.current === clienteId) { setComments(prev => [...(prev||[]), c]); setNewComment('') }
     } catch { showToast('Error al publicar') }
     finally { setPostingComment(false) }
   }
 
   const loadAiAdvice = async (id: string) => {
+    // El analisis tarda decenas de segundos (hasta 60s de funcion). Sin guarda,
+    // el plan estrategico de A se pintaba bajo el nombre de B, con sus cifras y
+    // sus proyectos: recomendaciones de otro cliente firmadas por este.
+    const vigente = () => selectedIdRef.current === id
     setAiLoading(true)
     try {
       const r = await fetch(`/api/clients/${id}/ai-advice`, {method:'POST'})
       const d = await r.json()
+      if (!vigente()) return
       // Con 429 ("Demasiadas solicitudes") o 502 ("AI no disponible") el boton
       // pasaba de "Analizando…" a normal y no ocurria nada: parecia roto. Con
       // varias personas usandolo a la vez, el 429 es lo mas probable.
       if (!r.ok) { showToast(d.error || 'No se pudieron generar las recomendaciones'); return }
-      setAiAdvice(d.recommendations || [])
-    } catch { showToast('Error generando recomendaciones') }
-    finally { setAiLoading(false) }
+      const recs = normalizarRecomendaciones(d.recommendations)
+      // El bloque solo se pinta si hay al menos una: sin este aviso, una respuesta
+      // vacia o con otra forma dejaba el boton volviendo de "Analizando…" a normal
+      // sin que apareciera nada, que es justo lo que arriba se describe como
+      // "parecia roto".
+      if (!recs.length) { showToast('La IA no ha devuelto recomendaciones. Vuelve a intentarlo.'); return }
+      setAiAdvice(recs)
+    } catch { if (vigente()) showToast('Error generando recomendaciones') }
+    finally { if (vigente()) setAiLoading(false) }
   }
 
   // La limpieza la hace el efecto de [selectedId], que cubre también Escape y Atrás.
@@ -236,14 +314,27 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
             {isOwner && (
               confirmDeleteClient
                 ? <div className="flex items-center gap-1">
-                    {/* La FK projects.client_id es ON DELETE CASCADE: borrar el
-                        cliente destruye TAMBIÉN sus proyectos, notas e hitos.
-                        Antes el botón solo decía "¿BORRAR?" — nadie podía saberlo. */}
+                    {/* El botón decía "¿BORRAR + N PROYECTOS?" apoyándose en que la
+                        FK projects.client_id era ON DELETE CASCADE. Ya no lo es:
+                        migrations/20260810_retencion_e_integridad.sql la cambió a
+                        ON DELETE RESTRICT justamente para que borrar un cliente no
+                        destruya su trabajo. Con proyectos, Postgres rechaza el
+                        DELETE — el botón prometía una destrucción que no ocurre y
+                        el borrado fallaba sin explicar por qué. La vía buena es
+                        archivar, que es para lo que se añadió `archived_at`. */}
                     {(() => {
                       const n = (data.projects || []).filter((p: any) => p.client_id === selected.id).length
+                      if (n > 0) return (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-xl flex-wrap max-w-full" style={{background:AMBAR+'12',border:`1px solid ${AMBAR}28`}}>
+                          <span className="font-syne text-[8px] font-black tracking-wide leading-relaxed" style={{color:AMBAR}}>TIENE {plural(n,'proyecto').toUpperCase()} · ARCHÍVALO O MUÉVELOS ANTES DE BORRAR</span>
+                          <button onClick={async()=>{try{await data.updateClient(selected.id,{status:'Archivado'});setConfirmDeleteClient(false);showToast('Cliente archivado')}catch(e:any){showToast(e?.message||'Error al archivar')}}} className="px-2.5 py-1 rounded-lg font-syne text-[8px] font-black tracking-wide transition-all flex-shrink-0" style={{background:AMBAR+'20',color:AMBAR,border:`1px solid ${AMBAR}35`}}>ARCHIVAR</button>
+                        </div>
+                      )
                       return (
-                        <button onClick={()=>data.deleteClient(selected.id).then(()=>{handleBack();showToast('Cliente eliminado')}).catch(()=>showToast('Error al eliminar'))} className="px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}} title={n ? `Se borrarán también ${n} proyecto${n>1?'s':''} con sus notas e hitos` : undefined}>
-                          {n ? `¿BORRAR + ${n} PROYECTO${n>1?'S':''}?` : '¿BORRAR?'}
+                        // El motivo del fallo se descartaba con un catch mudo: si
+                        // el DELETE lo rechaza la base de datos, hay que verlo.
+                        <button onClick={()=>data.deleteClient(selected.id).then(()=>{handleBack();showToast('Cliente eliminado')}).catch((e:any)=>showToast(e?.message||'Error al eliminar'))} className="px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:'rgba(229,29,42,0.15)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}} title="El cliente no tiene proyectos: se borra solo él">
+                          ¿BORRAR?
                         </button>
                       )
                     })()}
@@ -264,7 +355,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
               <button onClick={()=>setAiAdvice(null)} className="flex items-center justify-center w-6 h-6 rounded-lg transition-colors hover:bg-white/5" style={{color:'rgba(255,255,255,0.2)'}}><LucideIcon name="x" size={12} color="rgba(255,255,255,0.3)"/></button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {aiAdvice.map((rec: any, i: number)=>{
+              {aiAdvice.map((rec, i)=>{
                 const pc = rec.priority==='alta'?RED:rec.priority==='media'?AMBAR:BLU
                 return (
                   <div key={i} className="rounded-xl p-4" style={{background:'rgba(0,0,0,0.25)',borderLeft:`3px solid ${pc}60`}}>
@@ -305,8 +396,8 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {[
             {v:(selected.revenue||'—').split('/')[0].trim(), l:'Facturación mensual', accent:selected.color, note:(selected.revenue||'').includes('/')?'Al mes · contrato activo':'Contrato activo'},
-            {v:clientProjects.length, l:'Proyectos totales', accent:BLU, note:`${activeProjects.length} activos`},
-            {v:activeTasks.length, l:'Tareas activas', accent:urgentTasks.length>0?RED:BLU, note:urgentTasks.length>0?`${urgentTasks.length} urgentes`:`${doneTasks.length} completadas`},
+            {v:clientProjects.length, l:'Proyectos totales', accent:BLU, note:plural(activeProjects.length,'activo')},
+            {v:activeTasks.length, l:'Tareas activas', accent:urgentTasks.length>0?RED:BLU, note:urgentTasks.length>0?plural(urgentTasks.length,'urgente'):plural(doneTasks.length,'completada')},
             {v:`${avgProgress}%`, l:'Progreso medio', accent:avgProgress>70?GRN:BLU, note:'De todos los proyectos'},
           ].map((k,i)=>(
             <div key={i} className="rounded-2xl p-5 min-w-0" style={{background:SURFACE,border:`1px solid ${BORDER}`,borderTop:`2px solid ${k.accent}40`}}>
@@ -392,7 +483,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {projTasks.length > 0 && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.3)'}}>{projTasks.length} tareas</span>}
+                      {projTasks.length > 0 && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.3)'}}>{plural(projTasks.length,'tarea')}</span>}
                       <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-lg" style={{background:p.status==='urgente'?'rgba(229,29,42,0.1)':'rgba(27,95,250,0.07)',color:p.status==='urgente'?RED:BLU}}>{p.progress}%</span>
                       {onNavigate && onSelectProject && <button onClick={e=>{e.stopPropagation();onSelectProject(p.id);onNavigate('proyectos')}} className={`transition-opacity flex items-center justify-center w-7 h-7 rounded-xl ${isMobile?'opacity-40':'opacity-0 group-hover:opacity-100'}`} style={{background:'rgba(27,95,250,0.1)',color:BLU}} title="Ver en Proyectos"><LucideIcon name="arrow-right" size={11} color={BLU}/></button>}
                       <LucideIcon name={isOpen?'chevron-up':'chevron-down'} size={13} color="rgba(255,255,255,0.25)"/>
@@ -590,7 +681,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
           <div className="col-span-1 rounded-2xl p-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
             <div className="font-syne text-[8.5px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>MRR TOTAL</div>
             <div className="font-figtree text-[32px] font-black leading-none text-white" style={{letterSpacing:'-0.02em'}}>€{totalMRR.toLocaleString('es-ES')}</div>
-            <div className="text-[11px] mt-1.5" style={{color:'rgba(255,255,255,0.3)'}}>{activeClients.length} clientes activos</div>
+            <div className="text-[11px] mt-1.5" style={{color:'rgba(255,255,255,0.3)'}}>{plural(activeClients.length,'cliente activo','clientes activos')}</div>
           </div>
           <div className="col-span-1 md:col-span-2 rounded-2xl p-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
             {/* Solo caben 4 barras. Decirlo evita que se lea como el desglose

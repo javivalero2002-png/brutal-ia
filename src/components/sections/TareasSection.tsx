@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect, useRef, useMemo } from 'react'
-import type { Task, Project, Profile } from '@/types'
-import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, dlDate, todayKey } from '@/components/shared'
+import type { Task, Project, Profile, NexusData} from '@/types'
+import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, todayKey, daysBetweenKeys, estadoDeadline } from '@/components/shared'
+import { plural, nivelTarea } from '@/components/shared/helpers'
 
 const AMB = '#FFB020'
 const PRIMAP: Record<string,{label:string,color:string}> = {
@@ -21,6 +22,20 @@ function relDate(dateStr: string) {
   return {label: new Date(d+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'short'}), color: 'rgba(255,255,255,0.32)', over: false}
 }
 
+// «Esta semana» es un rango de DIAS, no de instantes.
+//
+// Antes el limite era `new Date(Date.now() + 7*24h)` —o sea la hora que fuese,
+// dentro de siete dias— y se comparaba contra las 23:59:59 del dia de
+// vencimiento. La tarea que vence dentro de 7 dias EXACTOS caia siempre fuera:
+// sus 23:59:59 son posteriores al limite durante todo el dia, y a la hora en que
+// dejarian de serlo ya faltan 6 dias. La pestaña escondia un dia entero de
+// tareas y el contador de la pestaña mentia con ella.
+//
+// Comparando day keys de Madrid la hora deja de importar. Los vencidos siguen
+// contando (dias negativos), como en la version anterior.
+const dentroDeLaSemana = (hoy: string, due?: string|null) =>
+  !!due && daysBetweenKeys(hoy, due.slice(0,10)) <= 7
+
 const HARVEY_SUGGESTIONS = [
   { text: 'Revisar y responder mensajes de clientes pendientes', level: 'urgent' },
   { text: 'Planificar contenido de redes sociales para la semana', level: 'high' },
@@ -28,7 +43,13 @@ const HARVEY_SUGGESTIONS = [
   { text: 'Revisar métricas de publicaciones recientes', level: 'normal' },
 ]
 
-function HarveyTaskSuggestions({ data, onOpenModal, onCreateTask }: any) {
+interface PropsHarveyTaskSuggestions {
+  data: NexusData
+  onOpenModal: any
+  onCreateTask: any
+}
+
+function HarveyTaskSuggestions({ data, onOpenModal, onCreateTask }: PropsHarveyTaskSuggestions) {
   const [creating, setCreating] = useState<string|null>(null)
   const [created, setCreated] = useState<Set<string>>(new Set())
 
@@ -89,7 +110,28 @@ function HarveyTaskSuggestions({ data, onOpenModal, onCreateTask }: any) {
   )
 }
 
-function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,onSelectProject,initialView,initialFocus,initialGroupBy}: any) {
+interface PropsTareas {
+  data: NexusData
+  onOpenModal: any
+  showToast: any
+  isOwner: any
+  profile: any
+  onNavigate: any
+  onSelectProject: any
+  initialView: any
+  initialFocus: any
+  initialGroupBy: any
+  /**
+   * Lo pasan NexusDashboard (`setSelectedClient`) y PreviewClient, y esta seccion
+   * NO lo usa: el componente nunca lo desestructuro, asi que hacer clic en el
+   * cliente de una tarea no navega a su ficha. Estaba oculto tras el `any` de los
+   * props. Se declara para que el tipo no mienta; o se cablea o se quita de los
+   * dos llamantes.
+   */
+  onSelectClient?: (id: string) => void
+}
+
+function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,onSelectProject,initialView,initialFocus,initialGroupBy}: PropsTareas) {
   const isMobile = useIsMobile()
   const [view,           setView]           = useState<'lista'|'kanban'|'calendario'>(initialView||'lista')
   const [tabFilter,      setTabFilter]      = useState<'todas'|'hoy'|'semana'|'sin_fecha'|'completadas'>('todas')
@@ -235,13 +277,22 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTask?.id])
 
+  // Las tres funciones de subtareas fijan la tarea AL EMPEZAR, igual que hacen
+  // uploadAttachment y los dos efectos de carga de arriba. La peticion siempre iba
+  // a la tarea correcta —la lleva el closure—, pero la lista de PANTALLA se tocaba
+  // al responder: escribes una subtarea en la tarea A, pulsas Enter y saltas a la B
+  // con j/k antes de que conteste el servidor, y la subtarea aparece listada bajo
+  // la B (creada en A, pintada en B) hasta recargar. Los avisos de error si se dan
+  // siempre: el fallo es de una accion que el usuario acaba de pedir.
   const addSubtask = async () => {
     if (!stText.trim() || !activeTask) return
+    const idTarea = activeTask.id
     setStAdding(true)
     try {
-      const res = await fetch('/api/tasks/subtasks', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({taskId:activeTask.id,text:stText.trim()}) })
+      const res = await fetch('/api/tasks/subtasks', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({taskId:idTarea,text:stText.trim()}) })
       const st = await res.json()
       if (!res.ok) throw new Error(st.error)
+      if (activeTaskRef.current?.id !== idTarea) return
       setSubtasks(s=>[...s, st])
       setStText('')
     } catch { showToast('Error al crear subtarea') }
@@ -249,6 +300,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   }
 
   const toggleSubtask = async (st: any) => {
+    const idTarea = activeTaskRef.current?.id
     try {
       const res = await fetch('/api/tasks/subtasks', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id:st.id,done:!st.done}) })
       const updated = await res.json()
@@ -256,6 +308,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
       // lista: se quedaba sin texto y sin id, o sea que desaparecia de pantalla
       // sin ningun aviso y volvia al recargar.
       if (!res.ok) { showToast(updated?.error || 'No se pudo actualizar la subtarea'); return }
+      if (activeTaskRef.current?.id !== idTarea) return
       setSubtasks(s=>s.map(x=>x.id===st.id?updated:x))
     } catch { showToast('Error al actualizar la subtarea') }
   }
@@ -264,6 +317,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   // del servidor quitaba la subtarea de la pantalla igualmente y reaparecia al
   // recargar — la app decia haber borrado algo que seguia ahi.
   const deleteSubtask = async (id: string) => {
+    const idTarea = activeTaskRef.current?.id
     try {
       const r = await fetch(`/api/tasks/subtasks?id=${id}`, { method:'DELETE' })
       if (!r.ok) {
@@ -271,6 +325,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
         showToast(e.error || 'No se pudo eliminar la subtarea')
         return
       }
+      if (activeTaskRef.current?.id !== idTarea) return
       setSubtasks(s=>s.filter(x=>x.id!==id))
     } catch { showToast('Error al eliminar') }
   }
@@ -333,7 +388,6 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   }
 
   const todayStr = todayKey()
-  const weekEnd  = new Date(Date.now() + 7*24*60*60*1000)
 
   const counts = useMemo(()=>({
     pendientes:  data.tasks.filter((t:Task)=>!t.done).length,
@@ -341,9 +395,9 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
     atrasadas:   data.tasks.filter((t:Task)=>!t.done&&!!t.due_date&&new Date(t.due_date+'T23:59:59')<new Date(todayStr+'T00:00:00')).length,
     completadas: data.tasks.filter((t:Task)=>t.done).length,
     total:       data.tasks.length,
-    semana:      data.tasks.filter((t:Task)=>!t.done&&!!t.due_date&&new Date(t.due_date+'T23:59:59')<=weekEnd).length,
+    semana:      data.tasks.filter((t:Task)=>!t.done&&dentroDeLaSemana(todayStr,t.due_date)).length,
     sinFecha:    data.tasks.filter((t:Task)=>!t.done&&!t.due_date).length,
-  }), [data.tasks, todayStr, weekEnd])
+  }), [data.tasks, todayStr])
 
   const pct = counts.total > 0 ? Math.round((counts.completadas/counts.total)*100) : 0
   const activeFilters = [assigneeFilter!=='all',projectFilter!=='all',priorityFilter!=='all'].filter(Boolean).length
@@ -367,7 +421,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
       if (focusMode) return !t.done
       return tabFilter==='todas'     ? !t.done
            : tabFilter==='hoy'       ? (!t.done&&!!t.due_date&&t.due_date.slice(0,10)===todayStr)
-           : tabFilter==='semana'    ? (!t.done&&!!t.due_date&&new Date(t.due_date+'T23:59:59')<=weekEnd)
+           : tabFilter==='semana'    ? (!t.done&&dentroDeLaSemana(todayStr,t.due_date))
            : tabFilter==='sin_fecha' ? (!t.done&&!t.due_date)
            : t.done
     }).sort((a:Task,b:Task)=>{
@@ -384,7 +438,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
       return lp(a.level)-lp(b.level)
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.tasks,searchText,assigneeFilter,projectFilter,priorityFilter,tabFilter,taskSort,todayStr,weekEnd,focusMode,profile?.id])
+  }, [data.tasks,searchText,assigneeFilter,projectFilter,priorityFilter,tabFilter,taskSort,todayStr,focusMode,profile?.id])
 
   filteredRef.current = filtered
 
@@ -989,7 +1043,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
               {renderGrupo({label:"SIN FECHA", tasks:grouped.nodate, showCols:!grouped.over.length&&!grouped.today.length&&!grouped.upcoming.length})}
               {filtered.length===0 && data.tasks.length===0 && (
                 <HarveyTaskSuggestions data={data} onOpenModal={onOpenModal} onCreateTask={async(text:string,level:string)=>{
-                  try{await data.createTask({text,level,done:false});showToast('Tarea creada')}catch(err){showToast('No se pudo crear la tarea');throw err}
+                  try{await data.createTask({text,level:nivelTarea(level),done:false});showToast('Tarea creada')}catch(err){showToast('No se pudo crear la tarea');throw err}
                 }}/>
               )}
               {filtered.length===0 && data.tasks.length>0 && (
@@ -1016,7 +1070,23 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                 <div className="mt-3 text-right">
                   {confirmLimpiar
                     ?<div className="flex items-center justify-end gap-2">
-                       <button onClick={async()=>{try{await data.deleteTasks(filtered.map((t:Task)=>t.id));showToast('Eliminadas')}catch{showToast('No se pudieron eliminar')}finally{setConfirmLimpiar(false)}}}
+                       {/* En lotes de 500 y contando lo que el servidor dice haber
+                           borrado, no lo que se mando: DELETE /api/tasks recorta la
+                           lista a 500 ids en silencio, asi que con 620 completadas
+                           el "¿BORRAR 620?" borraba 500 y las 120 restantes volvian
+                           al recargar bajo un toast que decia "Eliminadas". */}
+                       <button onClick={async()=>{
+                         const ids = filtered.map((t:Task)=>t.id)
+                         let borradas = 0
+                         try {
+                           for (let i=0; i<ids.length; i+=500) {
+                             const lote = ids.slice(i, i+500)
+                             borradas += (await data.deleteTasks(lote)) ?? lote.length
+                           }
+                           showToast(plural(borradas,'tarea eliminada','tareas eliminadas'))
+                         } catch(e:any){ showToast(e?.message || 'No se pudieron eliminar') }
+                         finally { setConfirmLimpiar(false) }
+                       }}
                          className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black" style={{background:'rgba(229,29,42,0.12)',color:RED,border:`1px solid rgba(229,29,42,0.25)`}}>¿BORRAR {filtered.length}?</button>
                        <button onClick={()=>setConfirmLimpiar(false)} className="w-7 h-7 rounded-lg flex items-center justify-center" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.3)"/></button>
                      </div>
@@ -1047,7 +1117,20 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
 
       {/* ── DETAIL DRAWER ─────────────────────────────────────────────────────── */}
       {activeTask&&(
-        <div className="flex-1 overflow-y-auto min-w-0" style={{background:'#050510'}} onKeyDown={e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'&&!saving)saveTask()}}>
+        // `key` fuerza el remonte al cambiar de tarea. Este div es el MISMO nodo para
+        // todas —el cajon no se desmonta al navegar con j/k—, asi que el navegador le
+        // conservaba el scrollTop: abrias una tarea con notas, subtareas y adjuntos,
+        // bajabas hasta el final, pulsabas `j` y la siguiente se abria ya desplazada,
+        // con su descripcion, prioridad y responsable fuera de pantalla. Mismo fallo
+        // que el panel de detalle del inbox.
+        //
+        // Y en movil el cajon NO puede ser scroller propio: ahi la seccion no acota
+        // altura, asi que su altura la marca el contenido y con `overflow-y-auto`
+        // nunca llegaba a desplazarse — desplazaba la pagina. Pero `position:sticky`
+        // se resuelve contra el scroller mas cercano, que era este, y la barra
+        // «← Tareas» se iba hacia arriba con el resto en vez de quedarse fija. Sin
+        // overflow, el scroller vuelve a ser el del dashboard y la barra se queda.
+        <div key={activeTask.id} className={isMobile ? 'flex-1 min-w-0' : 'flex-1 overflow-y-auto min-w-0'} style={{background:'#050510'}} onKeyDown={e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'&&!saving)saveTask()}}>
           <div className={`flex items-center justify-between ${isMobile?'px-4':'px-7'} py-5 sticky top-0 z-10`}
             style={{background:'rgba(5,5,16,0.95)',backdropFilter:'blur(12px)',borderBottom:`1px solid ${BORDER}`}}>
             <button onClick={()=>setActiveTask(null)} className="flex items-center gap-2 text-[13px] transition-colors hover:text-white/70" style={{color:'rgba(255,255,255,0.35)'}}>
@@ -1064,7 +1147,12 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
               )}
               <button onClick={async()=>{
                 try{const copy=await data.createTask({text:`${activeTask.text} (copia)`,level:activeTask.level,assigned_to:activeTask.assigned_to,co_assigned_to:activeTask.co_assigned_to,notes:activeTask.notes,due_date:activeTask.due_date,project_id:activeTask.project_id,client_id:activeTask.client_id,source:'manual'})
-                showToast('Duplicada');setActiveTask(copy);setEditing({text:copy.text,level:copy.level,assigned_to:copy.assigned_to,co_assigned_to:copy.co_assigned_to,notes:copy.notes,done:copy.done,due_date:copy.due_date,project_id:copy.project_id})}catch{showToast('Error al duplicar')}
+                // El borrado armado se desarma tambien aqui, como ya hacen openTask y
+                // el salto con j/k. Sin esto, si te lo pensabas y en vez de cancelar
+                // pulsabas Duplicar, el cajon pasaba a la copia recien creada con el
+                // boton todavia en «¿BORRAR?»: el siguiente clic borraba la copia
+                // creyendo que borraba el original.
+                showToast('Duplicada');setActiveTask(copy);setConfirmDelete(false);setEditing({text:copy.text,level:copy.level,assigned_to:copy.assigned_to,co_assigned_to:copy.co_assigned_to,notes:copy.notes,done:copy.done,due_date:copy.due_date,project_id:copy.project_id})}catch{showToast('Error al duplicar')}
               }} className="w-8 h-8 rounded-xl flex items-center justify-center transition-all hover:opacity-80" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`}} title="Duplicar">
                 <LucideIcon name="copy" size={13} color="rgba(255,255,255,0.35)"/>
               </button>
@@ -1094,8 +1182,8 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
             <div>
               <label className="block font-syne text-[9px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.25)'}}>PRIORIDAD</label>
               <div className="flex gap-2">
-                {[{v:'urgent',l:'Alta',c:RED},{v:'high',l:'Media',c:AMB},{v:'normal',l:'Baja',c:BLU}].map(p=>(
-                  <button key={p.v} onClick={()=>setEditing(x=>({...x,level:p.v as any}))}
+                {([{v:'urgent',l:'Alta',c:RED},{v:'high',l:'Media',c:AMB},{v:'normal',l:'Baja',c:BLU}] as {v:Task['level'];l:string;c:string}[]).map(p=>(
+                  <button key={p.v} onClick={()=>setEditing(x=>({...x,level:p.v}))}
                     className="flex-1 py-3 rounded-2xl font-syne text-[10px] font-black tracking-wide transition-all"
                     style={{background:editing.level===p.v?p.c+'18':SURF2,border:`1.5px solid ${editing.level===p.v?p.c+'70':BORDER}`,color:editing.level===p.v?p.c:'#FFFFFF'}}>
                     {p.l.toUpperCase()}
@@ -1285,15 +1373,29 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
               )}
               {activeTask.project_id&&(()=>{
                 const proj=data.projects.find((p:Project)=>p.id===activeTask.project_id); if(!proj)return null
-                const pdl=proj.deadline&&proj.deadline!=='TBD'?dlDate(proj.deadline):null
-                const pdDiff=pdl?Math.round((pdl.getTime()-Date.now())/86400000):null
-                const pdLabel=pdDiff===null?null:pdDiff<0?`−${Math.abs(pdDiff)}d`:pdDiff===0?'HOY':`${pdDiff}d`
-                const pdColor=pdDiff===null?null:pdDiff<0?RED:pdDiff<=7?AMB:'rgba(255,255,255,0.28)'
+                // Un deadline es un DIA, no un instante. Antes se restaban timestamps
+                // —y dlDate() devuelve las 23:59:59 del dia— asi que Math.round se
+                // comia el desfase: un proyecto vencido AYER daba Math.round(-0,4) = 0
+                // y se pintaba «HOY» en ambar toda la mañana, y el que vencia HOY salia
+                // como «1d». estadoDeadline() compara day keys de Madrid, que es lo que
+                // ya usan Proyectos y Reportes.
+                const pdl=estadoDeadline(proj.deadline)
+                // Los deadlines heredados en texto libre ('ago 2026') no tienen day key
+                // que valga: mejor no pintar el badge que pintar «+NaNd».
+                const pdDiff=pdl&&Number.isFinite(pdl.dias)?pdl.dias:null
+                const pdLabel=pdl&&pdDiff!==null?pdl.etiqueta:null
+                // La tercera rama era 'rgba(255,255,255,0.28)' y aqui debajo se le
+                // concatena la opacidad: 'rgba(...)18' no es un color, el navegador
+                // descarta la declaracion entera y el badge se quedaba sin fondo — justo
+                // en el caso mas comun, un proyecto que aun tiene margen. Con hex el
+                // sufijo funciona; el '47' del texto es el gris tenue de antes (0,28).
+                const pdLejos=pdDiff!==null&&pdDiff>7
+                const pdColor=pdDiff===null?null:pdDiff<0?RED:pdDiff<=7?AMB:'#FFFFFF'
                 return(
                   <div className="flex items-center justify-between">
                     <span className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>PROYECTO</span>
                     <div className="flex items-center gap-2">
-                      {pdLabel&&<span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-lg" style={{background:(pdColor||'')+'18',color:pdColor||''}}>{pdLabel}</span>}
+                      {pdLabel&&<span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-lg" style={{background:(pdColor||'')+'18',color:(pdColor||'')+(pdLejos?'47':'')}}>{pdLabel}</span>}
                       <span className="text-[12px]" style={{color:(proj.color||BLU)+'cc'}}>{proj.name}</span>
                     </div>
                   </div>

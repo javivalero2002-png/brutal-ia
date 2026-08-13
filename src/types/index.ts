@@ -145,7 +145,19 @@ export interface ChatMessage {
 
 // ── Shared section prop types ────────────────────────────────────────────────
 
+// Contrato de lo que `useNexusData()` devuelve. Estuvo desincronizado con el hook
+// —y nadie lo importaba, asi que `tsc` no veia la divergencia—: por ahi se colaron
+// ocho metodos que el stub de /preview no implementaba y que reventaban en el
+// handler de teclado, fuera del alcance de los SectionErrorBoundary. Cada firma de
+// aqui esta copiada del `return` de src/hooks/useNexusData.ts: si cambia una, esta
+// tiene que cambiar con ella.
 export interface NexusData {
+  loading: boolean
+  /** false hasta que alguna de las nueve consultas del arranque falla. */
+  loadError: boolean
+  syncing: boolean
+  syncResult: { ok: boolean; message: string } | null
+  syncGmail: () => Promise<{ synced: number; total: number; insertFailures?: number }>
   clients: Client[]
   projects: Project[]
   tasks: Task[]
@@ -156,32 +168,51 @@ export interface NexusData {
   reglas: Regla[]
   chatMessages: ChatMessage[]
   calendarEvents: CalendarEvent[]
+  calendarScopeError: boolean
   // Data mutation methods
-  createClient: (data: Partial<Client>) => Promise<Client | null>
+  createClient: (data: Partial<Client>) => Promise<Client>
   updateClient: (id: string, data: Partial<Client>) => Promise<void>
   deleteClient: (id: string) => Promise<void>
-  createProject: (data: Partial<Project>) => Promise<Project | null>
+  createProject: (data: Partial<Project>) => Promise<Project>
   updateProject: (id: string, data: Partial<Project>) => Promise<void>
   deleteProject: (id: string) => Promise<void>
-  createTask: (data: Partial<Task>) => Promise<Task | null>
+  createTask: (data: Partial<Task>) => Promise<Task>
   updateTask: (id: string, data: Partial<Task>) => Promise<void>
   deleteTask: (id: string) => Promise<void>
-  createMemoria: (data: Partial<MemoriaEntry>) => Promise<MemoriaEntry | null>
+  /** Cuantas borro el servidor de verdad. Relanza si no coinciden con las enviadas. */
+  deleteTasks: (ids: string[]) => Promise<number>
+  toggleTask: (id: string) => Promise<void>
+  markRead: (id: string) => Promise<void>
+  markManyRead: (ids: string[]) => Promise<void>
+  markUnread: (id: string) => Promise<void>
+  createMemoria: (data: Partial<MemoriaEntry>) => Promise<void>
   updateMemoria: (id: string, data: Partial<MemoriaEntry>) => Promise<void>
   deleteMemoria: (id: string) => Promise<void>
-  createAgenda: (data: Partial<ContentItem>) => Promise<ContentItem | null>
-  updateAgenda: (id: string, data: Partial<ContentItem>) => Promise<void>
+  createAgenda: (data: Partial<ContentItem>) => Promise<void>
+  /** Columnas que el PATCH no pudo escribir (guardado parcial); vacio si fue completo. */
+  updateAgenda: (id: string, data: Partial<ContentItem>) => Promise<string[]>
   deleteAgenda: (id: string) => Promise<void>
-  createRegla: (data: Partial<Regla>) => Promise<Regla | null>
+  createRegla: (data: Partial<Regla>) => Promise<void>
   updateRegla: (id: string, data: Partial<Regla>) => Promise<void>
   deleteRegla: (id: string) => Promise<void>
+  runAutomations: () => Promise<{ ran: number; results: Array<{ ruleId?: string; ruleName: string; action: string; detail: string }>; skipped?: boolean }>
   sendInternalMessage: (toId: string, subject: string, body: string, fromName: string) => Promise<void>
-  reloadCalendar?: () => Promise<void>
-  reloadInbox?: () => Promise<any>
-  calendarScopeError: boolean
+  sendChatMessage: (message: string) => Promise<string>
+  /** false si el borrado en servidor fallo, para que la UI no diga que borro. */
+  clearChat: () => Promise<boolean>
+  reload: () => Promise<void>
+  reloadInbox: () => Promise<InboxMessage[]>
+  reloadTeam: () => Promise<Profile[]>
+  // Devuelve el resultado, no solo setea estado: leer `calendarScopeError` justo
+  // despues del await da el valor del render anterior.
+  reloadCalendar: () => Promise<{ ok: boolean; noScope: boolean }>
   [key: string]: unknown
 }
 
+// Gemela de la que exporta src/hooks/useNexusData.ts (es de donde la importan los
+// componentes). Le faltaba `hangoutLink`, que lib/gmail.ts si rellena y el boton de
+// "unirse a la videollamada" de CalendarioSection si lee: con esta copia el evento
+// llegaba sin esa clave y el enlace de Meet no existia.
 export interface CalendarEvent {
   id: string
   title: string
@@ -192,12 +223,20 @@ export interface CalendarEvent {
   description?: string
   colorId?: string
   htmlLink?: string
+  hangoutLink?: string
 }
 
+// Base para tipar una seccion. Solo `data` es universal: NexusDashboard le pasa a
+// cada una lo que necesita —ReportesSection recibe `data` y `onNavigate` y nada
+// mas—, asi que declarar el resto como obligatorio convertia este tipo en algo que
+// no encajaba con ninguna seccion real. Cada seccion extiende esto con SUS props.
 export interface SectionProps {
   data: NexusData
-  profile: Profile
-  showToast: (msg: string) => void
-  onOpenModal: (type: string, prellenado?: Record<string,string>) => void
-  isOwner: boolean
+  profile?: Profile
+  showToast?: (msg: string) => void
+  onOpenModal?: (type: string | null, prellenado?: Record<string,string>) => void
+  onNavigate?: (section: string) => void
+  onSelectClient?: (id: string | null) => void
+  onSelectProject?: (id: string | null) => void
+  isOwner?: boolean
 }

@@ -58,6 +58,39 @@ export const dlLabel = (d?: string|null): string => {
   return t.toLocaleDateString('es-ES', {day:'numeric', month:'short'})
 }
 
+// Normaliza el nivel de una tarea que viene del MODELO, no de un formulario.
+//
+// Harvey emite `[ACCION:tarea|texto|nivel|persona]` y el nivel es literalmente lo
+// que haya escrito Claude. El prompt le pide «urgent, high, normal» en inglés
+// dentro de una conversación entera en español, así que un «urgente» es cuestión
+// de tiempo — y `tasks.level` tiene CHECK (level in ('urgent','high','normal')):
+// un valor de fuera hace que el INSERT rebote, la tarea no se cree y Harvey ya
+// haya dicho en voz alta que la creaba.
+//
+// Estaba sin validar en los dos sitios que confirman la acción, y en uno de ellos
+// el error de tipo estaba TAPADO con `as any` — por eso no se veía.
+export const NIVELES_TAREA = ['urgent', 'high', 'normal'] as const
+export type NivelTarea = (typeof NIVELES_TAREA)[number]
+
+export const nivelTarea = (crudo?: string | null): NivelTarea => {
+  const v = (crudo || '').trim().toLowerCase()
+  if (!v) return 'high'
+  if ((NIVELES_TAREA as readonly string[]).includes(v)) return v as NivelTarea
+  // Lo que el modelo escribe cuando contesta en español.
+  if (/^(urgente|urgentes|crítica|critica|máxima|maxima)$/.test(v)) return 'urgent'
+  if (/^(alta|alto|importante|prioritaria)$/.test(v)) return 'high'
+  if (/^(normal|media|medio|baja|bajo|low)$/.test(v)) return 'normal'
+  return 'high'
+}
+
+// Plural en los recuentos que la UI enseña. Sin esto salían "1 mensajes
+// marcados como leídos", "Propietario · 1 tareas" y "1 eventos": el patrón
+// `${n} cosas` estaba escrito a mano en una docena de sitios y ninguno miraba
+// el número. Se pasa el singular y, si el plural no es el singular + "s"
+// (mes → meses), se pasa también.
+export const plural = (n: number, singular: string, plural?: string): string =>
+  `${n} ${n === 1 ? singular : (plural ?? singular + 's')}`
+
 export const strColor = (s: string) => {
   const palette = ['#3B82F6','#8B5CF6','#EC4899','#F59E0B','#10B981','#EF4444','#06B6D4','#F97316','#6366F1','#84CC16']
   let h = 0; for (let i=0;i<s.length;i++) h = s.charCodeAt(i)+((h<<5)-h)
@@ -106,6 +139,18 @@ export function estadoDeadline(deadline?: string|null): {
 } | null {
   if (!deadline || deadline === 'TBD') return null
   const dias = daysBetweenKeys(todayKey(), deadline.slice(0, 10))
+  // Deadlines en TEXTO LIBRE ("ago 2026", "finales de mes"): quedan de cuando el
+  // campo era un input suelto, y siguen en la base. slice(0,10) no los sabe leer,
+  // Date.parse da NaN y `dias` sale NaN — que no es inofensivo, porque `NaN < 0`
+  // es false y `NaN === 0` también: el deadline no se marca ni vencido ni de hoy,
+  // y la etiqueta se pinta literalmente "+NaNd".
+  //
+  // Devolver null es lo correcto: significa "no sé cuándo vence", que es la
+  // verdad, y todos los consumidores ya tratan el null (es lo que devuelve un
+  // deadline vacío o 'TBD'). Se hace aquí y no en cada sitio porque estadoDeadline
+  // se llama ya desde ocho ficheros, y blindarlo en siete es dejarse uno.
+  // Para PINTAR el texto original está dlLabel(), que sí lo interpreta.
+  if (!Number.isFinite(dias)) return null
   return {
     dias,
     vencido: dias < 0,

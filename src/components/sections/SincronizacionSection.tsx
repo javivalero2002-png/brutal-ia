@@ -1,10 +1,18 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import type { NexusData } from '@/types'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, useIsMobile, LucideIcon, AjGroup, todayKey } from '@/components/shared'
+import { plural } from '@/components/shared/helpers'
 
 const GMAIL_STATUS_LS = 'gmail_status_cache'
-function SincronizacionSection({data, profile, showToast}: any) {
+interface PropsSincronizacion {
+  data: NexusData
+  profile: any
+  showToast: any
+}
+
+function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) {
   const isMobile = useIsMobile()
   // Arranca con el último estado conocido (cacheado) para no parpadear "sin conectar"
   const cachedStatus = (() => { try { return JSON.parse(localStorage.getItem(GMAIL_STATUS_LS) || 'null') } catch { return null } })()
@@ -19,6 +27,8 @@ function SincronizacionSection({data, profile, showToast}: any) {
   const [lastColabs, setLastColabs] = useState<string|null>(null)
   const [expandLog, setExpandLog] = useState(false)
   const [disconnecting, setDisconnecting] = useState<string|null>(null)
+  // Desconectar iba a un solo clic. Ver BotonDesconectar más abajo.
+  const [confirmDisconnect, setConfirmDisconnect] = useState<'personal'|'colabs'|null>(null)
   const [teamMembers, setTeamMembers] = useState<any[]>([])
   const [syncResultMsg, setSyncResultMsg] = useState<{ok:boolean; text:string; account:'personal'|'colabs'|'all'} | null>(null)
   // El recuadro de resultado se cierra solo a los 6 s (antes se quedaba pegado)
@@ -99,11 +109,22 @@ function SincronizacionSection({data, profile, showToast}: any) {
       try { localStorage.setItem(LS_P, now) } catch {}
       const synced = result?.synced ?? 0
       const total = result?.total ?? 0
-      const detail = `${synced} nuevos de ${total} revisados`
-      addLog('Gmail Personal', true, detail)
-      setSyncResultMsg({ok:true, text:`${synced} email${synced!==1?'s':''} nuevo${synced!==1?'s':''}`, account:'personal'})
+      // Emails analizados con Claude que luego no se pudieron guardar. Contarlos
+      // como sincronización correcta es lo que hacía que "0 nuevos de 20
+      // revisados" pareciera un buzón sin novedades en vez de una escritura rota
+      // —y el cron los vuelve a analizar, pagando otra vez, a la hora siguiente.
+      const fallos = result?.insertFailures ?? 0
+      const detail = fallos > 0
+        ? `${total} revisados, ${fallos} sin guardar`
+        : `${synced} nuevos de ${total} revisados`
+      addLog('Gmail Personal', fallos === 0, detail)
+      setSyncResultMsg({
+        ok: fallos === 0,
+        text: fallos > 0 ? `${fallos} no se pudieron guardar` : plural(synced, 'email nuevo', 'emails nuevos'),
+        account: 'personal',
+      })
       showToast(`Gmail Personal — ${detail}`)
-      return true
+      return fallos === 0
     } catch (err: any) {
       const isExpired = err?.message?.includes('token_expired') || err?.error === 'token_expired'
       const msg = isExpired ? 'Token caducado — reconecta tu cuenta'
@@ -248,6 +269,40 @@ function SincronizacionSection({data, profile, showToast}: any) {
     <div className={`w-2 h-2 rounded-full flex-shrink-0${pulse&&ok?' animate-pulse':''}`} style={{background:ok?GRN:'rgba(255,255,255,0.12)',boxShadow:ok?`0 0 6px ${GRN}99`:undefined}}/>
   )
 
+  // Desconectar era un icono `log-out` sin texto, del mismo tamaño y pegado a «Sync»
+  // y «Reauth», y ejecutaba al primer clic. El de Colaboraciones borra el refresh
+  // token de TODOS los perfiles que lo tengan (api/gmail/disconnect), o sea que un
+  // dedo torcido deja a los siete sin buzón compartido y sin saber qué han pulsado.
+  //
+  // Dos pasos, como el resto de la app: el primer clic arma el botón y lo convierte
+  // en la frase completa de lo que va a pasar, el segundo ejecuta, y hay una X para
+  // salir. Va separado del par Sync/Reauth por un divisor para que no se pulse de
+  // paso, y siempre con etiqueta de texto.
+  const BotonDesconectar = ({account, aviso}: {account:'personal'|'colabs'; aviso:string}) => (
+    <span className="flex items-center gap-2 flex-shrink-0">
+      <span className="w-px h-5 flex-shrink-0" style={{background:BORDER}}/>
+      {confirmDisconnect === account ? (
+        <>
+          <button onClick={()=>{ setConfirmDisconnect(null); disconnect(account) }} disabled={disconnecting===account}
+            className="px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all disabled:opacity-40 hover:opacity-80"
+            style={{background:`${RED}15`,color:RED,border:`1px solid ${RED}30`}}>
+            {disconnecting===account ? 'DESCONECTANDO…' : aviso}
+          </button>
+          <button onClick={()=>setConfirmDisconnect(null)} aria-label="Cancelar"
+            className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5 flex-shrink-0">
+            <LucideIcon name="x" size={11} color="rgba(255,255,255,0.3)"/>
+          </button>
+        </>
+      ) : (
+        <button onClick={()=>setConfirmDisconnect(account)} disabled={disconnecting===account}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all disabled:opacity-40 hover:opacity-80"
+          style={{background:`${RED}0A`,color:`${RED}80`,border:`1px solid ${RED}20`}}>
+          <LucideIcon name="log-out" size={10} color={`${RED}80`}/>DESCONECTAR
+        </button>
+      )}
+    </span>
+  )
+
   return (
     <div className="h-full overflow-y-auto">
       <div className={`${isMobile?'p-4':'p-8'} space-y-6`} style={{maxWidth:'760px',margin:'0 auto'}}>
@@ -274,7 +329,7 @@ function SincronizacionSection({data, profile, showToast}: any) {
                   </div>
                   <div className="font-syne text-[9px] tracking-wide" style={{color:'rgba(255,255,255,0.3)'}}>
                     {allConnected
-                      ? `${personalEmails} personales · ${colabsEmails} colabs · ${calCount} eventos`
+                      ? `${personalEmails} personales · ${colabsEmails} colabs · ${plural(calCount,'evento')}`
                       : anyConnected ? 'Conecta las cuentas restantes para activar todas las funciones'
                       : 'Cada miembro del equipo conecta su propio Gmail y Calendar'}
                   </div>
@@ -378,14 +433,16 @@ function SincronizacionSection({data, profile, showToast}: any) {
                   </div>
                   {personalOk && (
                     <div className="mt-1.5 flex items-center gap-3 flex-wrap">
-                      <span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.2)'}}>{personalEmails} emails</span>
+                      <span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.2)'}}>{plural(personalEmails,'email')}</span>
                       {unreadPersonal > 0 && <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full" style={{background:`${BLU}15`,color:BLU}}>{unreadPersonal} sin leer</span>}
-                      <span className="font-syne text-[8px]" style={{color:'rgba(167,139,250,0.4)'}}>{calCount} eventos</span>
+                      <span className="font-syne text-[8px]" style={{color:'rgba(167,139,250,0.4)'}}>{plural(calCount,'evento')}</span>
                       {lastPersonal && <span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.15)'}}>sync {timeAgo(lastPersonal)}</span>}
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0" style={isMobile?{flexBasis:'100%',justifyContent:'flex-end'}:undefined}>
+                {/* flex-wrap: al armarse, «Desconectar» pasa de icono a frase larga y
+                    en móvil ya no cabe en la misma línea que Sync y Reauth. */}
+                <div className="flex items-center justify-end gap-2 flex-wrap flex-shrink-0" style={isMobile?{flexBasis:'100%'}:undefined}>
                   {personalOk ? (
                     <>
                       <button onClick={syncPersonal} disabled={syncing||syncingAll} className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all disabled:opacity-40 hover:opacity-80" style={{background:SURF2,color:syncing?BLU:'rgba(255,255,255,0.4)',border:`1px solid ${BORDER}`}}>
@@ -394,9 +451,7 @@ function SincronizacionSection({data, profile, showToast}: any) {
                       <a href="/api/gmail/connect?account=personal" className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all hover:opacity-80 no-underline" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>
                         <LucideIcon name="rotate-ccw" size={10} color="rgba(255,255,255,0.2)"/>Reauth
                       </a>
-                      <button onClick={()=>disconnect('personal')} disabled={disconnecting==='personal'} className="flex items-center gap-1 px-2.5 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all disabled:opacity-40 hover:opacity-80" style={{background:'rgba(229,29,42,0.06)',color:'rgba(229,29,42,0.45)',border:`1px solid rgba(229,29,42,0.12)`}}>
-                        <LucideIcon name="log-out" size={10} color="rgba(229,29,42,0.45)"/>
-                      </button>
+                      <BotonDesconectar account="personal" aviso="¿DESCONECTAR MI GMAIL PERSONAL?"/>
                     </>
                   ) : (
                     <a href="/api/gmail/connect?account=personal" className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white transition-all hover:opacity-80 no-underline" style={{background:'linear-gradient(135deg,#EA4335,#C62828)'}}>
@@ -483,14 +538,16 @@ function SincronizacionSection({data, profile, showToast}: any) {
                 </div>
                 {colabsOk && (
                   <div className="mt-1.5 flex items-center gap-3 flex-wrap">
-                    <span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.2)'}}>{colabsEmails} emails compartidos</span>
+                    <span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.2)'}}>{plural(colabsEmails,'email compartido','emails compartidos')}</span>
                     {unreadColabs > 0 && <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(37,211,102,0.12)',color:GRN}}>{unreadColabs} sin leer</span>}
                     <span className="font-syne text-[8px]" style={{color:'rgba(37,211,102,0.4)'}}>Equipo completo</span>
                     {lastColabs && <span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.15)'}}>sync {timeAgo(lastColabs)}</span>}
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0" style={isMobile?{flexBasis:'100%',justifyContent:'flex-end'}:undefined}>
+              {/* flex-wrap: al armarse, «Desconectar» pasa de icono a frase larga y
+                  en móvil ya no cabe en la misma línea que Sync y Reauth. */}
+              <div className="flex items-center justify-end gap-2 flex-wrap flex-shrink-0" style={isMobile?{flexBasis:'100%'}:undefined}>
                 {colabsOk ? (
                   <>
                     <button onClick={syncColabs} disabled={syncingColabs||syncingAll} className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all disabled:opacity-40 hover:opacity-80" style={{background:SURF2,color:syncingColabs?BLU:'rgba(255,255,255,0.4)',border:`1px solid ${BORDER}`}}>
@@ -503,9 +560,7 @@ function SincronizacionSection({data, profile, showToast}: any) {
                         de la empresa: desconectarlo deja a los siete sin sincronizar.
                         La ruta ya lo impide con un 403; ocultarlo aquí evita que
                         alguien lo pulse y se coma un error sin saber por qué. */}
-                    {profile?.role === 'owner' && <button onClick={()=>disconnect('colabs')} disabled={disconnecting==='colabs'} className="flex items-center gap-1 px-2.5 py-2 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all disabled:opacity-40 hover:opacity-80" style={{background:'rgba(229,29,42,0.06)',color:'rgba(229,29,42,0.45)',border:`1px solid rgba(229,29,42,0.12)`}}>
-                      <LucideIcon name="log-out" size={10} color="rgba(229,29,42,0.45)"/>
-                    </button>}
+                    {profile?.role === 'owner' && <BotonDesconectar account="colabs" aviso="¿DESCONECTAR COLABS PARA TODO EL EQUIPO?"/>}
                   </>
                 ) : (
                   <a href="/api/gmail/connect?account=colabs" className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white transition-all hover:opacity-80 no-underline" style={{background:'linear-gradient(135deg,#EA4335,#C62828)'}}>
@@ -597,7 +652,7 @@ function SincronizacionSection({data, profile, showToast}: any) {
                 {personalOk ? (gmailStatus.gmail_account ? `Conectado a ${gmailStatus.gmail_account}` : 'Gmail conectado') : 'Se activa al conectar Gmail Personal'}
               </div>
               {personalOk && (
-                <div className="mt-1.5 font-syne text-[8px]" style={{color:'rgba(167,139,250,0.5)'}}>{calCount} eventos próximos</div>
+                <div className="mt-1.5 font-syne text-[8px]" style={{color:'rgba(167,139,250,0.5)'}}>{plural(calCount,'evento próximo','eventos próximos')}</div>
               )}
             </div>
             <div className="flex-shrink-0">
@@ -729,7 +784,7 @@ function SincronizacionSection({data, profile, showToast}: any) {
                     <span className="font-figtree text-[13.5px] font-bold text-white">{member.name||'Miembro'}</span>
                     {isMe && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:`${BLU}15`,color:BLU}}>TÚ</span>}
                   </div>
-                  <div className="font-syne text-[8px]" style={{color:isActive?'rgba(37,211,102,0.5)':'rgba(255,255,255,0.18)'}}>{isActive?`${waCount} mensajes recibidos`:'Webhook pendiente de configurar'}</div>
+                  <div className="font-syne text-[8px]" style={{color:isActive?'rgba(37,211,102,0.5)':'rgba(255,255,255,0.18)'}}>{isActive?plural(waCount,'mensaje recibido','mensajes recibidos'):'Webhook pendiente de configurar'}</div>
                 </div>
                 <span className="font-syne text-[7.5px] font-black px-2.5 py-1 rounded-full flex-shrink-0" style={{background:isActive?'rgba(37,211,102,0.1)':'rgba(255,255,255,0.04)',color:isActive?'rgba(37,211,102,0.8)':'rgba(255,255,255,0.18)',border:`1px solid ${isActive?'rgba(37,211,102,0.2)':BORDER}`}}>{isActive?'ACTIVO':'PENDIENTE'}</span>
               </div>
@@ -747,10 +802,18 @@ function SincronizacionSection({data, profile, showToast}: any) {
         return (
         <AjGroup label="ESTADO DEL EQUIPO" color="rgba(167,139,250,0.5)" defaultOpen={false} extra={<span className="font-syne text-[7.5px] font-black" style={{color:fullPct===100?GRN:fullPct>50?'rgba(255,176,32,0.7)':'rgba(255,255,255,0.25)'}}>{fullPct}% CONECTADO</span>}>
 
-          {/* Connection completeness bar */}
+          {/* Barra de completitud. Los dos tramos son mitades del MISMO total que la
+              etiqueta («{fullPct}% CONECTADO»), que se calcula sobre total*2 — una
+              conexión personal y una de colabs por persona.
+
+              Antes cada tramo se medía sobre `total` a secas, así que con el equipo
+              al completo en personal y a cero en colabs el primer tramo pedía el 100%
+              del ancho: la barra salía llena junto a un «50% CONECTADO». Y con las dos
+              cuentas conectadas pedían 200%, que el flex repartía encogiéndolos — o
+              sea, llena también. La barra decía «todo bien» en los tres casos. */}
           <div className="mb-3 rounded-xl overflow-hidden flex gap-px" style={{height:'4px',background:'rgba(255,255,255,0.05)'}}>
-            <div style={{width:`${connectedP/total*100}%`,background:'rgba(234,67,53,0.7)',transition:'width 0.6s ease'}}/>
-            <div style={{width:`${connectedC/total*100}%`,background:GRN,transition:'width 0.6s ease',opacity:0.85}}/>
+            <div style={{width:`${connectedP/(total*2)*100}%`,background:'rgba(234,67,53,0.7)',transition:'width 0.6s ease'}}/>
+            <div style={{width:`${connectedC/(total*2)*100}%`,background:GRN,transition:'width 0.6s ease',opacity:0.85}}/>
           </div>
           <div className="flex items-center gap-4 mb-3">
             <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full" style={{background:'rgba(234,67,53,0.7)'}}/><span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.28)'}}>{connectedP}/{total} Gmail Personal</span></div>
@@ -824,7 +887,7 @@ function SincronizacionSection({data, profile, showToast}: any) {
           <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
             {/* Mini stats */}
             <div className="flex items-center gap-0 px-5 py-2.5" style={{borderBottom:`1px solid ${BORDER}`,background:SURF2}}>
-              <span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.18)'}}>{syncLog.length} operaciones</span>
+              <span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.18)'}}>{plural(syncLog.length,'operación','operaciones')}</span>
               <span className="mx-2 font-syne text-[7px]" style={{color:'rgba(255,255,255,0.08)'}}>·</span>
               <span className="font-syne text-[7px]" style={{color:`${GRN}60`}}>{syncLog.filter(e=>e.ok).length} OK</span>
               <span className="mx-2 font-syne text-[7px]" style={{color:'rgba(255,255,255,0.08)'}}>·</span>

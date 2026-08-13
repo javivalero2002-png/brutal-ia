@@ -4,7 +4,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { textOf } from '@/lib/aiText'
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+// Sin topes, el SDK se queda con 10 MINUTOS de timeout y 2 reintentos: quien
+// acaba cortando es la plataforma al llegar al techo de 60s del plan Hobby, y
+// entonces no hay ni mensaje de error ni log — la petición muere a secas. El
+// timeout del SDK es POR INTENTO, así que un reintento no cabe dentro de esos
+// 60s: maxRetries 0 y un tope que deja margen para responder con un error de
+// verdad en vez de que nos maten desde fuera.
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 45_000, maxRetries: 0 })
 
 // Redaccion de borrador con Claude: el default de Vercel se queda corto.
 export const maxDuration = 60

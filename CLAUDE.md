@@ -23,8 +23,20 @@ cobertura horaria. Un solo `0 * * * *` hace que el deploy falle con
 `Hobby accounts are limited to daily cron jobs`. Ver el comentario en
 `src/app/api/cron/sync-colabs/route.ts`.
 
-**3. Hobby también implica funciones de 60s máximo.** Las rutas que llaman a
-Claude en bucle (`gmail/sync` hace hasta 20 llamadas secuenciales) rozan ese techo.
+**3. El techo de 60s ya NO es de la plataforma: es NUESTRO.** Esto decía «Hobby
+implica funciones de 60s máximo» y **es falso desde 2026**. La documentación de
+Vercel (verificada el 2026-08-13) da a Hobby **300s de máximo y de defecto** con
+fluid compute, que viene activado por defecto en los proyectos nuevos. Los 60s que
+ves son un `export const maxDuration = 60` escrito a mano en nuestras rutas.
+
+Que sea nuestro no significa que sobre: las rutas que llaman a Claude en bucle
+(`gmail/sync` hace hasta 20 llamadas secuenciales) se acotan a propósito con sus
+presupuestos internos, y un tope bajo es lo que convierte «se colgó» en un error
+con mensaje. Si algún día hace falta más margen, ahora se puede subir — pero
+comprueba antes que el proyecto tiene fluid compute activo.
+
+Lo que **sí sigue siendo cierto** es el límite de crons diarios del punto 2:
+verificado el mismo día, con el mismo mensaje de error.
 
 **4. `deploy.sh` está retirado a propósito** y falla si lo ejecutas. Desplegaba el
 *árbol de trabajo*, no un commit, y así llegó a producción código que no existía
@@ -152,6 +164,53 @@ npx tsc --noEmit && npm test && npm run build
 `npm test` corre con `TZ=UTC` a propósito: en un portátil español los bugs de zona
 horaria se esconden. `prebuild` ejecuta `scripts/check-env.mjs`, que aborta si
 falta una variable obligatoria.
+
+Desde agosto esto ya no depende de que te acuerdes: `.github/workflows/ci.yml`
+corre tsc, los tests y el checker de colores en cada PR. **No corre `npm run
+build`** a propósito — Vercel ya construye en cada push, y `prebuild` exige nueve
+variables reales: darle credenciales falsas a CI sería validar algo que no se
+parece a lo que se despliega.
+
+## Los tests fijan REGLAS, no casos
+
+Cuatro ficheros de `src/lib/__tests__/` no comprueban qué devuelve tal función:
+comprueban un invariante sobre **todo** el código, incluido el que se escriba
+mañana. Es la respuesta al hallazgo de fondo de la auditoría — más de la mitad de
+los fallos graves eran **gemelos**, el mismo error escrito dos veces, arreglado en
+una copia y vivo en la otra.
+
+- `apiRoutes.test.ts` — toda ruta con service role resuelve antes al usuario,
+  nadie se asciende a owner, ningún fallo de consulta se disfraza de lista vacía,
+  ningún `select` saca tokens al cliente.
+- `regresiones.test.ts` — ningún push sin `await` (y quien lo espera declara
+  `maxDuration`), ningún borrado de Storage sin mirar su `error`, ningún deadline
+  medido restando timestamps, ninguna respuesta de la API usada sin comprobar
+  `ok`, ni `level` ni `status` silenciados con `as any`.
+- `secciones.test.ts` — ninguna sección declara sus props como `any` ni recibe
+  `data` sin tiparlo con `NexusData`.
+- `logic.test.ts` / `automations.test.ts` — las fechas de Madrid y el motor.
+
+**Si añades una regla, reintroduce el bug y comprueba que la suite se pone roja.**
+Un test que nunca ha fallado no demuestra nada. Las cinco de `regresiones.test.ts`
+están verificadas así.
+
+Cada excepción va en una lista **con su motivo escrito**, y los tests avisan de las
+entradas que ya no existen: una excepción que sobra se nota sola.
+
+## Lo que escribe el modelo no entra crudo en la base
+
+Harvey emite `[ACCION:tarea|texto|nivel|persona]` y ese `nivel` es literalmente lo
+que haya escrito Claude. El prompt le pide «urgent, high, normal» **en inglés**
+dentro de una conversación entera en español, y `tasks.level` tiene
+`CHECK (level in (...))`: un «urgente» hace que el INSERT rebote y la tarea **no se
+cree**, después de que Harvey haya dicho en voz alta que la creaba. Vivió tanto
+porque en `HoySection` el error de tipo estaba tapado con `as any`.
+
+Pasa por `nivelTarea()` (`shared/helpers.ts`) cualquier valor que venga del modelo
+y acabe en una columna con CHECK. Y **tipa las listas de literales**
+(`const cols: ContentItem['status'][] = [...]`): sin el tipo, TypeScript las
+ensancha a `string` y un valor mal escrito compila y revienta en ejecución. Ese
+patrón exacto apareció en cinco sitios.
 
 ---
 

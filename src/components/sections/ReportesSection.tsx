@@ -1,9 +1,14 @@
 'use client'
 import { useEffect, useRef, useMemo } from 'react'
-import type { Task, Project, Client, Profile } from '@/types'
+import type { Task, Project, Client, Profile, NexusData } from '@/types'
 import { PLATAFORMA_COLOR, useIsMobile, BLU, RED, GRN, BORDER, LucideIcon, dlDate, dlLabel, estadoDeadline, Donut, Gauge, AreaChart, localDayKey } from '@/components/shared'
 
-function ReportesSection({data, onNavigate}: any) {
+interface PropsReportes {
+  data: NexusData
+  onNavigate: any
+}
+
+function ReportesSection({data, onNavigate}: PropsReportes) {
   const isMobile = useIsMobile()
   const printBtnRef = useRef<HTMLButtonElement>(null)
 

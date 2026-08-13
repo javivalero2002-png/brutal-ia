@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import type { Regla } from '@/types'
+import type { Regla, NexusData} from '@/types'
 import { BLU, RED, GRN, SURFACE, BORDER, LucideIcon, useIsMobile } from '@/components/shared'
 
 const isStructured = (r: Regla) => (r.condition_text || '').trim().startsWith('{')
@@ -16,7 +16,14 @@ function relTime(iso: string | undefined): string | null {
   return new Date(iso).toLocaleDateString('es-ES',{day:'numeric',month:'short'})
 }
 
-function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
+interface PropsAutomatizaciones {
+  data: NexusData
+  onOpenModal: any
+  showToast: any
+  isOwner: any
+}
+
+function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: PropsAutomatizaciones) {
   const isMobile = useIsMobile()
   const activeCount = data.reglas.filter((r: Regla)=>r.active).length
   const totalFired = data.reglas.reduce((s: number, r: Regla)=>s+(r.trigger_count||0),0)
@@ -49,6 +56,15 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
     notify_team:  { icon:'users',        color:'#A78BFA', label:'Equipo avisado' },
     notify_owner: { icon:'bell',         color:GRN, label:'Notificación' },
   }
+
+  // Una sola vía para pausar/activar: el atajo `e` y el botón de la tarjeta hacían
+  // la misma llamada, pero el atajo se tragaba el error con un catch vacío.
+  // updateRegla no es optimista (escribe el estado solo si el PATCH va bien), así que
+  // ahí el fallo era invisible: la regla seguía pintada igual y nadie avisaba.
+  const alternarRegla = (r: Regla) =>
+    data.updateRegla(r.id, {active:!r.active})
+      .then(()=>showToast(r.active?'Regla pausada':'Regla activada'))
+      .catch(()=>showToast('No se pudo cambiar el estado de la regla'))
 
   const startRename = (r: Regla) => {
     setRenamingId(r.id)
@@ -83,7 +99,7 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
       if (e.key === 'e' && focusedReglaId && isOwner) {
         e.preventDefault()
         const rule = visibleReglasRef.current.find((r: Regla)=>r.id===focusedReglaId)
-        if (rule) data.updateRegla(rule.id, {active:!rule.active}).then(()=>showToast(rule.active?'Regla pausada':'Regla activada')).catch(()=>{})
+        if (rule) alternarRegla(rule)
       }
       if (e.key === 'n' && isOwner) { e.preventDefault(); onOpenModal('regla') }
     }
@@ -239,7 +255,7 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: any) {
               </div>
             </div>
             {isOwner && (
-              <button onClick={()=>data.updateRegla(r.id, {active:!r.active}).then(()=>showToast(r.active?'Regla pausada':'Regla activada')).catch(()=>showToast('Error'))}
+              <button onClick={()=>alternarRegla(r)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[7.5px] font-black transition-all flex-shrink-0"
                 style={{background:r.active?'rgba(27,95,250,0.1)':'rgba(255,255,255,0.04)',color:r.active?BLU:'rgba(240,240,248,0.2)',border:`1px solid ${r.active?'rgba(27,95,250,0.2)':'transparent'}`}}>
                 <div className="w-1.5 h-1.5 rounded-full" style={{background:r.active?BLU:'rgba(255,255,255,0.2)'}}/>

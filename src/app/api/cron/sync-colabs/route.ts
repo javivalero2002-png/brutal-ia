@@ -49,11 +49,25 @@ export async function GET(request: NextRequest) {
   // conectado el buzón compartido — y un rojo permanente se ignora enseguida.
   const NOT_CONNECTED = new Set(['Colaboraciones not connected', 'not connected'])
 
-  type Outcome = { mailbox: string; ok: boolean; synced?: number; error?: string; terminal?: boolean }
+  type Outcome = { mailbox: string; ok: boolean; synced?: number; insertFailures?: number; error?: string; terminal?: boolean }
   const outcomes: Outcome[] = []
 
   const record = (mailbox: string, r: any) => {
-    if (r.ok) { outcomes.push({ mailbox, ok: true, synced: r.synced }); return }
+    if (r.ok) {
+      // ok:true con inserts fallidos NO es verde. El análisis con Claude ocurre
+      // ANTES del insert: si el insert falla, el gmail_id no se guarda y la
+      // ejecución siguiente vuelve a analizar los mismos emails y a pagarlos.
+      // Contarlo como éxito es lo que dejaba ese bucle caro corriendo en
+      // silencio cada hora, sin que nadie mirara.
+      const fallos = r.insertFailures ?? 0
+      outcomes.push({
+        mailbox,
+        ok: fallos === 0,
+        synced: r.synced,
+        ...(fallos > 0 ? { insertFailures: fallos, error: `${fallos} emails analizados no se pudieron guardar` } : {}),
+      })
+      return
+    }
     if (NOT_CONNECTED.has(r.error)) return // configuración, no fallo
     // token_expired requiere que un humano reconecte Gmail: es accionable.
     outcomes.push({ mailbox, ok: false, error: r.error, terminal: r.error === 'token_expired' })

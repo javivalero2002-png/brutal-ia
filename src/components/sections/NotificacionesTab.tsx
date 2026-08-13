@@ -1,11 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { BLU, GRN, SURFACE, BORDER, LucideIcon, useIsMobile, relTime } from '@/components/shared'
+import { BLU, GRN, RED, AMBAR, SURFACE, BORDER, LucideIcon, useIsMobile, relTime } from '@/components/shared'
 
 interface NotifItem { id: string; title: string; body?: string; url?: string; tag?: string; read: boolean; created_at: string }
 
-function NotificacionesTab({ showToast }: any) {
+interface PropsNotificaciones {
+  showToast: (mensaje: string) => void
+}
+
+function NotificacionesTab({ showToast }: PropsNotificaciones) {
   const isMobile = useIsMobile()
   const [supported, setSupported] = useState(true)
   const [needsInstall, setNeedsInstall] = useState(false)
@@ -15,20 +19,38 @@ function NotificacionesTab({ showToast }: any) {
   const [testing, setTesting] = useState(false)
   const [history, setHistory] = useState<NotifItem[]>([])
   const [histLoaded, setHistLoaded] = useState(false)
+  const [histError, setHistError] = useState(false)
+  const [confirmClear, setConfirmClear] = useState(false)
 
   const loadHistory = async () => {
     try {
       const r = await fetch('/api/notifications/history')
-      const d = await r.json()
+      const d = await r.json().catch(() => null)
+      // La ruta responde 200 con `{ items: [], unavailable: true }` cuando la
+      // consulta a notification_log falla (p.ej. la tabla aun no existe). Leyendo
+      // solo `items`, «la tabla esta caida» y «no tienes avisos» se pintaban
+      // exactamente igual: la bandeja vacia afirmaba algo que nadie habia
+      // comprobado. Un 401 con la sesion caducada hacia lo mismo.
+      if (!r.ok || !d || d.unavailable) { setHistError(true); setHistory([]); return }
+      setHistError(false)
       setHistory(Array.isArray(d.items) ? d.items : [])
-    } catch { /* silencioso */ }
+    } catch { setHistError(true); setHistory([]) }
     finally { setHistLoaded(true) }
   }
   useEffect(() => { loadHistory() }, [])
 
+  // El vaciado local iba ANTES del DELETE, dentro de un `try {} catch {}` que ni
+  // miraba r.ok. Con la sesion caducada la ruta responde 401 y con el delete roto
+  // 500: ninguno de los dos lanza, asi que el catch vacio ni se ejecutaba. El
+  // historial desaparecia de la pantalla, nadie decia nada, y volvia entero al
+  // recargar — la app afirmaba haber borrado algo que seguia ahi. Mismo orden que
+  // clearChat: primero el servidor, y solo si confirma se vacia la pantalla.
   const clearHistory = async () => {
-    setHistory([])
-    try { await fetch('/api/notifications/history', { method: 'DELETE' }) } catch {}
+    try {
+      const r = await fetch('/api/notifications/history', { method: 'DELETE' })
+      if (!r.ok) { showToast('No se pudo vaciar el historial'); return }
+      setHistory([])
+    } catch { showToast('Error al vaciar el historial') }
   }
 
   useEffect(() => {
@@ -70,7 +92,12 @@ function NotificacionesTab({ showToast }: any) {
       const reg = await navigator.serviceWorker.getRegistration('/sw.js')
       const sub = await reg?.pushManager.getSubscription()
       if (sub) {
-        await fetch('/api/push/subscribe', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) })
+        const r = await fetch('/api/push/subscribe', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) })
+        // Mismo gemelo que el de LIMPIAR: activate() ya comprueba r.ok, aqui no se
+        // miraba. Con la sesion caducada la ruta devuelve 401 (y 500 si el delete
+        // falla), ninguno lanza, asi que la suscripcion seguia viva en el servidor
+        // mientras la pantalla decia "Notificaciones desactivadas".
+        if (!r.ok) throw new Error('unsubscribe failed')
         await sub.unsubscribe()
       }
       setSubscribed(false)
@@ -165,12 +192,29 @@ function NotificacionesTab({ showToast }: any) {
             <span className="font-syne text-[10px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.55)'}}>HISTORIAL</span>
             {history.length>0 && <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(27,95,250,0.1)',color:'rgba(100,140,255,0.7)'}}>{history.length}</span>}
           </div>
+          {/* Confirmacion en dos pasos, como el LIMPIAR del chat: esto borraba el
+              historial entero de un solo clic, sin vuelta atras y sin preguntar. */}
           {history.length>0 && (
-            <button onClick={clearHistory} className="font-syne text-[8px] font-black tracking-wide px-2.5 py-1.5 rounded-lg transition-colors hover:bg-white/5" style={{color:'rgba(255,255,255,0.35)'}}>LIMPIAR</button>
+            confirmClear
+              ? <div className="flex items-center gap-1">
+                  <button onClick={()=>{ setConfirmClear(false); clearHistory() }} className="font-syne text-[8px] font-black px-3 py-1.5 rounded-xl transition-all" style={{background:'rgba(229,29,42,0.12)',color:RED,border:'1px solid rgba(229,29,42,0.25)'}}>¿BORRAR?</button>
+                  <button onClick={()=>setConfirmClear(false)} className="w-6 h-6 rounded-lg flex items-center justify-center" style={{color:'rgba(255,255,255,0.3)'}}><LucideIcon name="x" size={10} color="rgba(255,255,255,0.3)"/></button>
+                </div>
+              : <button onClick={()=>setConfirmClear(true)} className="font-syne text-[8px] font-black tracking-wide px-2.5 py-1.5 rounded-lg transition-colors hover:bg-white/5" style={{color:'rgba(255,255,255,0.35)'}}>LIMPIAR</button>
           )}
         </div>
         {!histLoaded ? (
           <div className="text-center py-8 text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Cargando…</div>
+        ) : histError ? (
+          // Nunca el vacio de «Aun no hay notificaciones»: aqui no sabemos si hay
+          // avisos o no, y decir que no hay ninguno es afirmar lo que no consta.
+          <div className="flex flex-col items-center gap-2.5 py-10">
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center" style={{background:AMBAR+'12',border:`1px solid ${AMBAR}2E`}}>
+              <LucideIcon name="alert-triangle" size={18} color={AMBAR}/>
+            </div>
+            <div className="text-[12.5px]" style={{color:AMBAR+'D9'}}>No se pudo leer el historial</div>
+            <button onClick={()=>{ setHistLoaded(false); loadHistory() }} className="font-syne text-[8px] font-black tracking-widest px-3 py-1.5 rounded-lg transition-colors hover:bg-white/5" style={{color:'rgba(255,255,255,0.35)',border:`1px solid ${BORDER}`}}>REINTENTAR</button>
+          </div>
         ) : history.length === 0 ? (
           <div className="flex flex-col items-center gap-2.5 py-10">
             <div className="w-11 h-11 rounded-2xl flex items-center justify-center" style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${BORDER}`}}>

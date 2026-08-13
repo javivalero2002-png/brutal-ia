@@ -1,8 +1,21 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { textOf } from '@/lib/aiText'
 import { sanearHistorial } from './historialIA'
+import { estadoDeadline } from '@/components/shared/helpers'
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+// Sin topes, el SDK se queda con sus valores por defecto: 10 MINUTOS de timeout
+// y 2 reintentos con backoff. Los presupuestos de tiempo de los bucles de sync
+// (src/lib/colabsSync.ts y src/app/api/gmail/sync/route.ts) se comprueban ENTRE
+// iteraciones, así que no pueden cortar una llamada ya en vuelo: una sola
+// llamada colgada se comía entera la función de 60s del plan Hobby y la
+// sincronización moría a mitad, sin dejar rastro de por qué. Con 15s y un
+// reintento el peor caso por email queda acotado y el presupuesto del bucle
+// vuelve a ser una cota real.
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  timeout: 15_000,
+  maxRetries: 1,
+})
 
 // El modelo a veces envuelve el JSON en fences markdown (```json ... ```) pese a
 // pedirle "sin markdown". Limpiamos antes de JSON.parse para no caer al fallback básico.
@@ -75,6 +88,16 @@ export function needsWebSearch(query: string): boolean {
   // 1) Datos internos o acciones → nunca buscar
   const internal = /\b(mis?|mi)\b|tarea|proyecto|cliente|inbox|correo|email|equipo|briefing|agenda|calendario|reunión|pipeline|crea|añade|apunta|recuérdame|asigna|marca|termina|completa/i
   if (internal.test(q)) return false
+
+  // 1b) Preguntas por la gente del estudio. La lista de arriba lleva «equipo»,
+  //     pero nadie pregunta así: se pregunta «¿quién lleva lo de Zara?» o
+  //     «¿quién está libre el jueves?». Eso no casa arriba, empieza por un
+  //     interrogativo y por tanto caía en el bloque 3 (conocimiento general):
+  //     la pregunta entera —con el nombre del compañero y el del cliente
+  //     dentro— se le mandaba tal cual a Tavily. Ni la responde internet ni
+  //     tiene por qué verla.
+  const equipoInterno = /compañer|\b(nuestr[oa]s?|nosotros)\b|se encarga|est[áa] (libre|liado|ocupad)|qui[ée]n (lleva|est[áa]|se ocupa|hace|va a hacer|puede hacer)/i
+  if (equipoInterno.test(q)) return false
 
   // 2) Señales explícitas de búsqueda o de dato externo
   const explicit = /busca|encuentra|consigue|invest[ií]ga|influencer|instagram|tiktok|youtube|linkedin|precio|tarifa|presupuesto de mercado|tendencia|trend|noticias|actualidad|últim|novedad|estad[ií]stica|hashtag|seguidores|competencia|referente|ejemplo de|casos de|benchmark|qué plataforma|cu[áa]nto cuesta|cu[áa]nto cobra|cu[áa]nto vale|cu[áa]nto gana/i
@@ -263,11 +286,15 @@ export async function chat(
       }`
     : `\n\n- Mensajes sin leer en inbox: ${context.unreadInbox}`
 
-  const overdueProjects = context.projects.filter(p => {
-    if (!p.deadline || p.deadline === 'TBD') return false
-    const d = new Date(p.deadline)
-    return !isNaN(d.getTime()) && d < new Date() && p.status !== 'completado'
-  })
+  // Un deadline es un DÍA, no un instante. `new Date('2026-08-12')` lo parsea el
+  // motor como medianoche UTC, o sea las 02:00 de Madrid: a partir de esa hora un
+  // proyecto que vence HOY ya entraba aquí, el bloque CONTEXTO DEL NEGOCIO decía
+  // «1 VENCIDO» y Brutal.IA se lo soltaba al fundador mientras ProyectosSection
+  // pintaba «HOY» en ámbar. estadoDeadline() compara claves de día de Madrid, que
+  // es exactamente la misma verdad que enseña la UI.
+  const overdueProjects = context.projects.filter(
+    p => p.status !== 'completado' && estadoDeadline(p.deadline)?.vencido === true
+  )
 
   const systemPrompt = `Eres Brutal.IA, la inteligencia artificial de Brutal Studios, una agencia creativa española especializada en marketing digital, contenido y estrategia de marca.
 
@@ -306,12 +333,18 @@ Responde siempre en español. Sé directo, concreto y profesional. Formato markd
     { role: 'user', content: userContent }
   ]
 
+  // El tope de 15s del cliente está calibrado para las llamadas cortas de los
+  // bucles de sync (Haiku, 512 tokens). Esta es Sonnet con 1200 tokens y sin
+  // streaming: tarda decenas de segundos, así que con ese tope el chat fallaría
+  // siempre. Se le da su propio margen, por debajo del maxDuration de 60s de
+  // /api/chat para que el fallo lo dé la ruta (502 con mensaje) y no la
+  // plataforma cortando la función a secas.
   const msg = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 1200,
     system: systemPrompt,
     messages,
-  })
+  }, { timeout: 45_000, maxRetries: 0 })
 
   const reply = textOf(msg) || 'No pude procesar tu mensaje.'
   return { reply, searched: shouldSearch && results.length > 0 }

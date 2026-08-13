@@ -1,13 +1,26 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { BLU, RED, GRN, BORDER } from '@/components/shared/design-tokens'
+import { parsearAccionHarvey, type AccionHarvey } from '@/lib/harveyAccion'
+import { nivelTarea } from '@/components/shared/helpers'
+import { BLU, RED, GRN, VIO, BORDER } from '@/components/shared/design-tokens'
 import { useIsMobile } from '@/components/shared/hooks'
-import { dlDate, todayKey, localDayKey, madridHour, madridDateLabel } from '@/components/shared/helpers'
+import { todayKey, localDayKey, madridHour, madridDateLabel, estadoDeadline } from '@/components/shared/helpers'
 import { getSharedAudio, playAck, isIOSDevice, matchTeamMember, splitForTTS, stopAllVoices, isSRBroken, markSRBroken } from '@/components/shared/audio'
 import LucideIcon from '@/components/shared/LucideIcon'
-import type { Task, Project, Client } from '@/types'
+import type { Task, Project, Client, NexusData} from '@/types'
 
-export default function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,isOwner,onNavigate}: any) {
+interface PropsHoy {
+  profile: any
+  data: NexusData
+  urgentCount: any
+  unreadCount: any
+  onOpenModal: any
+  showToast: any
+  isOwner: any
+  onNavigate: any
+}
+
+export default function HoySection({profile,data,urgentCount,unreadCount,onOpenModal,showToast,isOwner,onNavigate}: PropsHoy) {
   const isMobile = useIsMobile()
   type OrbMode = 'idle'|'recording'|'thinking'|'speaking'
   const [orbMode, setOrbMode] = useState<OrbMode>('idle')
@@ -16,7 +29,9 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
   const [replayUrl, setReplayUrl] = useState<string|null>(null)
   const replayUrlRef = useRef<string|null>(null)
   const [textQ, setTextQ] = useState('')
-  const [pendingAction, setPendingAction] = useState<{type:'tarea'|'evento'|'proyecto'|'cliente'|'pieza';text:string;level?:string;date?:string;time?:string;industry?:string;clientName?:string;platform?:string;contentType?:string;assigneeName?:string;invitees?:string}|null>(null)
+  // El tipo lo fija el modulo del parser: declararlo a mano aqui era la tercera
+  // copia de la misma forma, y la que tenia `level?: string` sin normalizar.
+  const [pendingAction, setPendingAction] = useState<AccionHarvey|null>(null)
   const [confirmingAction, setConfirmingAction] = useState(false)
   const [showTranscript, setShowTranscript] = useState(false)
   const orbModeRef = useRef<OrbMode>('idle')
@@ -93,14 +108,25 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
   const activeProjectsCount = data.projects.filter((p:Project)=>p.status!=='completado').length
   const activeClients = data.clients.filter((c:Client)=>c.status==='Activo').length
   const pipeline = (data.agenda||[]).filter((a:any)=>a.status!=='publicado').length
-  const overdueP = data.projects.filter((p:Project)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<new Date()).length
+  // Un deadline es un DIA, no un instante. `dlDate(p.deadline) < new Date()`
+  // comparaba instantes, y dlDate() devuelve las 23:59:59 en la zona de QUIEN
+  // ejecuta —UTC en el servidor—, asi que entre las 00:00 y las 02:00 de Madrid lo
+  // vencido ayer aun contaba como pendiente. estadoDeadline() resuelve el dia en
+  // Madrid, igual que Proyectos, Tareas, Reportes y el prompt de ai.ts.
+  const overdueP = data.projects.filter((p:Project)=>p.status!=='completado'&&estadoDeadline(p.deadline)?.vencido).length
   const completedToday = data.tasks.filter((t:Task)=>t.done&&localDayKey(t.completed_at||t.updated_at||t.created_at)===todayStr).length
   // Refuerzo del resumen ejecutivo: vencen hoy, deadlines de la semana, automatizaciones de hoy
-  const weekEnd = new Date(Date.now()+7*86400000)
   const dueTodayTasks = data.tasks.filter((t:Task)=>!t.done&&!!t.due_date&&t.due_date.slice(0,10)===todayStr)
+  // El umbral era `Date.now()+7*86400000` contra un deadline fijado a las
+  // 23:59:59, asi que el proyecto que vence dentro de 7 dias EXACTOS quedaba fuera
+  // durante todo el dia —a las 09:00 su 23:59:59 cae casi 15h despues del
+  // umbral— y solo asomaba pasada la medianoche. `pronto` es dias>=0 && dias<=7
+  // sobre claves de dia: el limite ya no depende de la hora a la que se mire.
+  // Los deadlines heredados en texto libre ('ago 2026') no tienen clave de dia y
+  // se quedan fuera, que es preferible a anunciar «vence en NaNd».
   const upcomingDeadlines = data.projects
-    .filter((p:Project)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)>=new Date()&&dlDate(p.deadline)<=weekEnd)
-    .sort((a:Project,b:Project)=>dlDate(a.deadline).getTime()-dlDate(b.deadline).getTime())
+    .filter((p:Project)=>p.status!=='completado'&&estadoDeadline(p.deadline)?.pronto)
+    .sort((a:Project,b:Project)=>estadoDeadline(a.deadline)!.dias-estadoDeadline(b.deadline)!.dias)
   const autosToday = ((data.reglas||[]) as any[]).filter((r:any)=>r.last_triggered_at&&(Date.now()-new Date(r.last_triggered_at).getTime())<86400000)
 
   const stopAudio = () => {
@@ -181,7 +207,10 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
   }
   const buildCtx = () => {
     const active = (data.projects as Project[]).filter(p=>p.status!=='completado')
-    const overdue = (data.projects as Project[]).filter(p=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<new Date())
+    // El mismo criterio de dia que `overdueP`: marcar [ATRASADO] en el contexto de
+    // Harvey algo que la pantalla pinta como «vence hoy» hacia que le contestara al
+    // fundador sobre un retraso que no existe.
+    const overdue = (data.projects as Project[]).filter(p=>p.status!=='completado'&&estadoDeadline(p.deadline)?.vencido)
     const clients = (data.clients as Client[]).filter(c=>c.status==='Activo')
     const highTasks = data.tasks.filter((t:Task)=>!t.done&&t.level==='high')
     const pip = (data.agenda||[]).filter((a:any)=>a.status!=='publicado')
@@ -193,7 +222,10 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
     // importante no debe borrarlo del contexto de Harvey.
     const todayForInbox = todayKey()
     const unreadEmails = inboxAll.filter((m:any)=>
-      !m.is_read || ((m.ai_urgency==='urgent'||m.ai_urgency==='high') && (m.received_at||'').slice(0,10)===todayForInbox)
+      // localDayKey, no slice(0,10): received_at se guarda con toISOString() (UTC)
+      // y todayForInbox es el dia de Madrid. De 00:00 a 02:00 no son el mismo dia,
+      // y un correo urgente de esta madrugada ya leido desaparecia del contexto.
+      !m.is_read || ((m.ai_urgency==='urgent'||m.ai_urgency==='high') && localDayKey(m.received_at)===todayForInbox)
     ).slice(0, 10)
     const emailLines = unreadEmails.map((m:any) => {
       const urg = m.ai_urgency==='urgent'?'[URGENTE]':m.ai_urgency==='high'?'[ALTA]':'[NORMAL]'
@@ -299,17 +331,11 @@ ${memLines||'  sin documentos'}`
         return
       }
 
-      const actionMatch = reply.match(/\[ACCION:([^\]]+)\]/)
-      if (actionMatch) {
-        reply = reply.replace(/\[ACCION:[^\]]*\]/g, '').trim()
-        const parts = actionMatch[1].split('|')
-        const type = parts[0] as 'tarea'|'evento'|'proyecto'|'cliente'|'pieza'
-        if (type === 'tarea')    setPendingAction({type:'tarea',    text:parts[1]||'', level:parts[2]||'high', assigneeName:parts[3]?.trim()||''})
-        if (type === 'evento')   setPendingAction({type:'evento',   text:parts[1]||'', date:parts[2]||'', time:parts[3]||'', invitees:parts[4]?.trim()||''})
-        if (type === 'proyecto') setPendingAction({type:'proyecto', text:parts[1]||'', clientName:parts[2]||'', date:parts[3]||''})
-        if (type === 'cliente')  setPendingAction({type:'cliente',  text:parts[1]||'', industry:parts[2]||'—'})
-        if (type === 'pieza')    setPendingAction({type:'pieza',    text:parts[1]||'', platform:parts[2]||'Instagram', contentType:parts[3]||'Post'})
-      }
+      // Un solo sitio para las dos secciones: esto estaba escrito linea por linea
+      // aqui y en la otra, y cada bug de la pareja habia que arreglarlo dos veces.
+      const { texto: limpio, accion } = parsearAccionHarvey(reply)
+      reply = limpio
+      if (accion) setPendingAction(accion)
 
       // Si viene del fallback local, se DICE. Callarlo era hacer pasar por Harvey
       // una frase guardada, y encima leerla en voz alta con su voz.
@@ -330,13 +356,20 @@ ${memLines||'  sin documentos'}`
   const confirmHarveyAction = async () => {
     if (!pendingAction) return
     setConfirmingAction(true)
+    // La tarjeta solo se descarta si algo se ha escrito de verdad. Antes se
+    // limpiaba al salir del try pasara lo que pasara, y la rama de 'evento' no
+    // relanza: cuando Google respondía mal solo se veía un toast, la propuesta
+    // desaparecía y había que volver a dictársela a Harvey entera — justo cuando
+    // el propio aviso te pide ir a reconectar Gmail y volver a intentarlo.
+    let creado = false
     try {
       const colors = ['#1B5FFA','#E51D2A','#22c55e','#F97316','#A78BFA','#F59E0B','#06B6D4','#EC4899']
       const rColor = colors[Math.floor(Math.random()*colors.length)]
 
       if (pendingAction.type === 'tarea') {
         const member = pendingAction.assigneeName ? matchTeamMember((data.team||[]) as any[], pendingAction.assigneeName) : null
-        await data.createTask({ text: pendingAction.text, level: pendingAction.level as any || 'high', source: 'ai', ...(member ? { assigned_to: member.id } : {}) })
+        await data.createTask({ text: pendingAction.text, level: nivelTarea(pendingAction.level), source: 'ai', ...(member ? { assigned_to: member.id } : {}) })
+        creado = true
         showToast(member ? `Tarea creada y asignada a ${member.name}`
           : pendingAction.assigneeName ? `Tarea creada (sin asignar: no encontré a "${pendingAction.assigneeName}")`
           : 'Tarea creada por Harvey')
@@ -346,10 +379,12 @@ ${memLines||'  sin documentos'}`
           ? (data.clients as any[]).find((c:any)=>c.name.toLowerCase().includes(pendingAction.clientName!.toLowerCase()))
           : null
         await data.createProject({ name: pendingAction.text, client_id: client?.id, status: 'activo', progress: 0, deadline: pendingAction.date||'TBD', color: client?.color||rColor })
+        creado = true
         showToast('Proyecto creado por Harvey')
 
       } else if (pendingAction.type === 'cliente') {
         await data.createClient({ name: pendingAction.text, industry: pendingAction.industry||'—', revenue: '—', color: rColor, status: 'Activo' })
+        creado = true
         showToast('Cliente creado por Harvey')
 
       } else if (pendingAction.type === 'pieza') {
@@ -357,6 +392,7 @@ ${memLines||'  sin documentos'}`
           ? (data.clients as any[]).find((c:any)=>c.name.toLowerCase().includes((pendingAction.clientName||'').toLowerCase()))
           : null
         await data.createAgenda({ title: pendingAction.text, platform: pendingAction.platform||'Instagram', content_type: pendingAction.contentType||'Post', status: 'borrador', publish_date: pendingAction.date||undefined, client_id: client?.id })
+        creado = true
         showToast('Pieza añadida al pipeline de contenido')
 
       } else if (pendingAction.type === 'evento') {
@@ -375,6 +411,7 @@ ${memLines||'  sin documentos'}`
           })
           const json = await res.json()
           if (res.ok) {
+            creado = true
             showToast(attendees.length ? `Reunión creada · invitación enviada a ${attendees.length} persona${attendees.length>1?'s':''}` : 'Evento añadido a Google Calendar')
             await data.reload?.()
           } else if (json.error === 'insufficient_scope') {
@@ -384,7 +421,7 @@ ${memLines||'  sin documentos'}`
           }
         }
       }
-      setPendingAction(null)
+      if (creado) setPendingAction(null)
     } catch { showToast('Error al ejecutar la acción') }
     finally { setConfirmingAction(false) }
   }
@@ -528,7 +565,12 @@ ${memLines||'  sin documentos'}`
     }
   }
 
-  const orbColor: Record<OrbMode,string> = {idle:BLU,recording:RED,thinking:'rgba(139,92,246,0.9)',speaking:BLU}
+  // Los cuatro estados TIENEN que ser hex de 6 dígitos: `rimCol` se concatena con
+  // opacidad más abajo (`${rimCol}2e`). Con el morado en rgba salía
+  // `rgba(139,92,246,0.9)2e`, el navegador descartaba la declaración entera sin
+  // avisar y el halo del orbe desaparecía justo al pasar a 'thinking' — es decir,
+  // en el único momento en el que hace falta ver que Harvey está trabajando.
+  const orbColor: Record<OrbMode,string> = {idle:BLU,recording:RED,thinking:VIO,speaking:BLU}
   const orbLabel: Record<OrbMode,string> = {idle:'PULSA',recording:'STOP',thinking:'PIENSA',speaking:'STOP'}
   const rimCol = orbColor[orbMode]
   // Orbe de cristal líquido — 100% CSS (Safari-safe). Colores por estado.
@@ -551,7 +593,11 @@ ${memLines||'  sin documentos'}`
     <div className={isMobile ? 'h-full flex flex-col overflow-y-auto overflow-x-hidden' : 'h-full flex overflow-hidden'} style={{background:'#030308'}}>
 
       {/* ══ HARVEY ══ */}
-      <div className={`flex flex-col relative ${isMobile?'':'flex-1 overflow-hidden'}`} style={isMobile?{minHeight:'78vh',flexShrink:0}:undefined}>
+      {/* dvh y no vh: en el movil este bloque va dentro de la raiz de 100dvh, y
+          con vh el navegador cuenta la altura SIN la barra de direcciones. El orbe
+          reservaba mas alto del que hay, y la fila de atajos y el campo de texto
+          quedaban por debajo del borde hasta que scrolleabas. */}
+      <div className={`flex flex-col relative ${isMobile?'':'flex-1 overflow-hidden'}`} style={isMobile?{minHeight:'78dvh',flexShrink:0}:undefined}>
         <div className="absolute inset-0 pointer-events-none" style={{
           background:`radial-gradient(ellipse 70% 80% at 50% 48%,${orbMode==='recording'?'rgba(229,29,42,0.10)':orbMode==='thinking'?'rgba(139,92,246,0.09)':'rgba(27,95,250,0.10)'} 0%,transparent 65%)`,
           transition:'background 0.8s',
@@ -657,7 +703,14 @@ ${memLines||'  sin documentos'}`
               if (importante>0 && !focusEmail) items.push({icon:'mail',color:'rgba(255,176,32,0.95)',text:`${importante} correo${importante>1?'s':''} importante${importante>1?'s':''} esperan respuesta`,nav:'inbox'})
               if (todayEvts.length>0) items.push({icon:'calendar',color:'rgba(167,139,250,0.9)',text:`${todayEvts.length} evento${todayEvts.length>1?'s':''} hoy: ${todayEvts.slice(0,2).map((e:any)=>e.title).join(', ')}`,nav:'calendario'})
               if (overdueP>0) items.push({icon:'folder',color:RED,text:`${overdueP} proyecto${overdueP>1?'s':''} atrasado${overdueP>1?'s':''} por recuperar`,nav:'proyectos'})
-              if (upcomingDeadlines.length>0) { const p0=upcomingDeadlines[0]; const dLeft=Math.max(0,Math.round((dlDate(p0.deadline).getTime()-Date.now())/86400000)); items.push({icon:'folder-open',color:'rgba(255,176,32,0.95)',text:`Deadline cercano: ${p0.name} vence ${dLeft===0?'hoy':`en ${dLeft}d`}${upcomingDeadlines.length>1?` (+${upcomingDeadlines.length-1})`:''}`,nav:'proyectos'}) }
+              // Restar timestamps cuenta bloques de 24 HORAS, no dias naturales, y
+              // dlDate() devuelve las 23:59:59: a las 09:00 del dia en que vencia la
+              // resta daba 0,62 → Math.round → 1, y lo primero que se leia cada
+              // mañana era «vence en 1d» de un proyecto que vencia HOY. El
+              // Math.max(0,..) ademas tapaba lo vencido, anunciandolo como «vence
+              // hoy». estadoDeadline().dias son dias de Madrid, y el filtro de
+              // arriba ya garantiza que aqui nunca hay nada vencido.
+              if (upcomingDeadlines.length>0) { const p0=upcomingDeadlines[0]; const d0=estadoDeadline(p0.deadline)!.dias; items.push({icon:'folder-open',color:'rgba(255,176,32,0.95)',text:`Deadline cercano: ${p0.name} vence ${d0===0?'hoy':`en ${d0}d`}${upcomingDeadlines.length>1?` (+${upcomingDeadlines.length-1})`:''}`,nav:'proyectos'}) }
               if (pipeline>0) items.push({icon:'film',color:'rgba(193,53,132,0.9)',text:`${pipeline} pieza${pipeline>1?'s':''} de contenido en el pipeline`,nav:'contenido'})
               if (autosToday.length>0) items.push({icon:'zap',color:GRN,text:`El motor ejecutó ${autosToday.length} automatización${autosToday.length>1?'es':''} hoy`,nav:'automatizaciones'})
               if (unread.length>0 && importante===0 && !focusEmail) items.push({icon:'mail',color:BLU,text:`Revisa ${unread.length} correo${unread.length>1?'s':''} sin leer`,nav:'inbox'})

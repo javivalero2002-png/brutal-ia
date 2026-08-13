@@ -52,8 +52,19 @@ export async function POST(request: NextRequest) {
   // cliente sin comprobarse contra el usuario autenticado: cualquiera podía mandar
   // un DM que apareciera como de otra persona, con su push nativo "Mensaje de
   // Pablo" incluido. Suplantación dentro del equipo con dos líneas de curl.
-  const { data: sender } = await admin.from('profiles').select('name').eq('id', user.id).single()
-  const fromName = sender?.name || 'Equipo'
+  //
+  // Y el `error` no se descarta (supabase-js no lanza): con la consulta caida
+  // `fromName` caia a 'Equipo', y `from_name` es lo UNICO que empareja el hilo en
+  // GET /api/inbox/thread —inbox_messages no guarda el id del remitente—. Un DM
+  // guardado como 'Equipo' se entrega pero no aparece en ninguna conversacion, ni
+  // para quien lo manda ni para quien lo recibe: se da por escrito algo que nadie
+  // va a volver a ver. Mejor fallar y que el remitente lo reintente.
+  const { data: sender, error: senderErr } = await admin.from('profiles').select('name').eq('id', user.id).single()
+  const fromName = (sender?.name || '').trim()
+  if (senderErr || !fromName) {
+    console.error('[inbox] no se pudo resolver el remitente:', senderErr?.message || 'perfil sin nombre')
+    return NextResponse.json({ error: 'No se pudo identificar tu perfil' }, { status: 500 })
+  }
 
   const { data, error } = await admin.from('inbox_messages').insert({
     user_id: to_user_id,
@@ -69,13 +80,25 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Notificación push al destinatario del mensaje interno
-  sendPushToUser(admin, to_user_id, {
-    title: `Mensaje de ${fromName}`,
-    body: (subject && subject !== '(sin asunto)' ? subject + ' — ' : '') + body.slice(0, 100),
-    url: '/dashboard',
-    tag: `dm-${data?.id || ''}`,
-  }).catch(() => {})
+  // Notificación push al destinatario del mensaje interno.
+  //
+  // CON await, igual que en colabsSync y /api/gmail/sync y por lo mismo: iba
+  // suelto con `.catch(()=>{})` y el `return` en la linea siguiente, o sea cero
+  // awaits entre lanzar y responder. A sendPushToUser aun le quedaban la consulta
+  // a `reglas`, el insert en `notification_log` y las llamadas HTTP a FCM/APNs, y
+  // en serverless la instancia se congela al devolver: el aviso se perdia sin
+  // dejar rastro. El DM ya esta insertado, asi que un fallo del push se registra
+  // pero no tumba la respuesta. La ruta declara maxDuration = 60 (linea 6).
+  try {
+    await sendPushToUser(admin, to_user_id, {
+      title: `Mensaje de ${fromName}`,
+      body: (subject && subject !== '(sin asunto)' ? subject + ' — ' : '') + body.slice(0, 100),
+      url: '/dashboard',
+      tag: `dm-${data?.id || ''}`,
+    })
+  } catch (err) {
+    console.error('[inbox] el push del mensaje interno fallo:', err)
+  }
   return NextResponse.json(data)
 }
 

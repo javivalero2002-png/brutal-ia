@@ -1,0 +1,59 @@
+# Puerta antes de producción.
+#
+# Por qué existe: en este repo `git push` a `main` DESPLIEGA. Los 322 tests
+# llevaban meses sin que los ejecutara nada automáticamente — el ritual de
+# CLAUDE.md ("antes de subir, corre esto") depende de que te acuerdes, y el día
+# que tengas prisa no te acuerdas. Un test roto llegaba a producción sin que
+# saltara nada.
+#
+# Qué NO hace y por qué: no ejecuta `npm run build`. Vercel ya construye en cada
+# push y `next build` valida los tipos por su cuenta, así que un error de tipo ya
+# tumba el deploy hoy. Además `prebuild` exige nueve variables de entorno reales
+# (scripts/check-env.mjs), y meterle credenciales falsas a CI para que pase sería
+# construir algo que no se parece a lo que se despliega. El hueco que tapamos
+# aquí son los TESTS, que es lo único que nadie estaba ejecutando.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Una PR con varios push seguidos cancela las ejecuciones viejas: interesa el
+# último commit, no la cola.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Tipos, tests y colores
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Tipos
+        run: npx tsc --noEmit
+
+      # TZ=UTC va dentro del script `test` a propósito: en un portátil español
+      # los bugs de zona horaria se esconden, y este proyecto ya ha tenido dos.
+      - name: Tests
+        run: npm test
+
+      # El checker de colores vive en `prebuild`, que aquí no se ejecuta porque
+      # no corremos build. Se llama suelto: detecta con el AST de TypeScript los
+      # rgba() usados como base de opacidad, un fallo que el navegador se traga
+      # en silencio y ha aparecido nueve veces.
+      - name: Colores
+        run: node scripts/check-color-opacity.mjs

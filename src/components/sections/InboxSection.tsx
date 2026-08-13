@@ -1,9 +1,12 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import type { NexusData } from '@/types'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR } from '@/components/shared'
 import { useIsMobile, useBackClosable } from '@/components/shared'
 import { strColor, relTime, todayKey } from '@/components/shared'
+// `plural` no se reexporta desde el índice de shared: se importa del módulo.
+import { plural } from '@/components/shared/helpers'
 import { LucideIcon } from '@/components/shared'
 
 // Empareja el "cliente" detectado por la IA con un cliente real.
@@ -55,7 +58,16 @@ function EmailBodyBlock({preview, gmailId}: {preview:string; gmailId?:string}) {
   )
 }
 
-function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHarvey}: any) {
+interface PropsInbox {
+  data: NexusData
+  showToast: any
+  profile: any
+  onNavigate: any
+  onSelectClient: any
+  onAskHarvey: any
+}
+
+function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHarvey}: PropsInbox) {
   const isMobile = useIsMobile()
   const [filter, setFilter] = useState('Todos')
   const [selected, setSelected] = useState<any>(null)
@@ -90,6 +102,26 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
     setSelected(null)
     showToast('Mensaje restaurado')
   }
+
+  // `markRead`/`markUnread` del hook NO son optimistas: hacen el PATCH y solo
+  // tocan la lista si sale bien. Cambiar `selected` a la vez y sin esperar dejaba
+  // el panel diciendo «no leído» mientras la fila de al lado seguía en «leído», y
+  // al recargar volvía el estado real: un email que creías haber dejado marcado
+  // para volver a él seguía leído. Ahora el panel espera la confirmación y avisa
+  // si falla. El `s.id === id` es por lo mismo que `borradorRef`: entre el PATCH y
+  // su respuesta puedes haber saltado a otro correo con J/K.
+  const cambiarLeido = (id: string, leido: boolean) => {
+    const peticion: Promise<void> = leido ? data.markRead(id) : data.markUnread(id)
+    peticion
+      .then(() => setSelected((s: any) => (s && s.id === id ? {...s, is_read: leido, is_unread: !leido} : s)))
+      .catch(() => showToast(leido ? 'No se pudo marcar como leído' : 'No se pudo marcar como no leído'))
+  }
+
+  // El participio también concuerda, así que plural() resuelve el sustantivo y
+  // aquí se cierra la frase: antes salía «1 mensajes marcados como leídos».
+  const avisoLeidos = (n: number) =>
+    `${plural(n, 'mensaje')} ${n === 1 ? 'marcado como leído' : 'marcados como leídos'}`
+
   const filteredRef = useRef<any[]>([])
   const allInboxRef = useRef<any[]>([])
 
@@ -98,8 +130,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
       if (e.key === 'Escape' && selected) { setSelected(null); return }
       if (e.key === 'e' && selected && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
         e.preventDefault()
-        if (selected.is_read) { data.markUnread(selected.id).catch(()=>{}); setSelected((s: any)=>s?{...s,is_read:false,is_unread:true}:s) }
-        else { data.markRead(selected.id).catch(()=>{}); setSelected((s: any)=>s?{...s,is_read:true,is_unread:false}:s) }
+        cambiarLeido(selected.id, !selected.is_read)
         return
       }
       if (e.key === 't' && selected && selected.ai_action && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
@@ -123,7 +154,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
           // Endpoint bulk (el mismo que usan los botones de pantalla): con 97 sin
           // leer, el Promise.all anterior disparaba 97 invocaciones de Vercel.
           data.markManyRead(unreadMsgs.map((m: any) => m.id)).catch(()=>{})
-          showToast(`${unreadMsgs.length} mensajes marcados como leídos`)
+          showToast(avisoLeidos(unreadMsgs.length))
         }
       }
     }
@@ -273,11 +304,17 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
               ...(wa?[{id:'WhatsApp', label:'WhatsApp', n:allMsgs.filter((m:any)=>m.source==='whatsapp'&&!m.is_read).length, c:'#25D366', ic:'message-circle'}]:[]),
               {id:'Calendar', label:'Calendario', n:0, c:'#A78BFA', ic:'calendar'},
             ]
+            // Todos los `c` de aquí y de `cuentas` van en hex de 6 dígitos porque
+            // el contador de abajo les concatena opacidad (`${f.c}22`). Con un
+            // rgba salía `rgba(255,176,32,0.8)22` y el navegador tiraba la
+            // declaración entera, sin decir nada: la carpeta seleccionada se
+            // quedaba con el número sin fondo. Antes se parcheaba comparando la
+            // cadena literal de «Todos», que dejaba fuera a «Clientes».
             const carpetas = [
-              {id:'Todos', label:'Bandeja unificada', n:activeMsgs.length, c:'rgba(255,255,255,0.5)', ic:'inbox'},
+              {id:'Todos', label:'Bandeja unificada', n:activeMsgs.length, c:'#FFFFFF', ic:'inbox'},
               {id:'Sin leer', label:'Sin leer', n:unread, c:BLU, ic:'mail'},
               {id:'Urgente', label:'Prioridad', n:urgent, c:AMBAR, ic:'zap'},
-              {id:'Clientes', label:'Clientes', n:fromClients, c:'rgba(255,176,32,0.8)', ic:'user'},
+              {id:'Clientes', label:'Clientes', n:fromClients, c:AMBAR, ic:'user'},
               {id:'Interno', label:'Equipo', n:internal, c:'#A78BFA', ic:'users'},
               {id:'Archivados', label:'Archivados', n:archivedCount, c:'#FFFFFF', ic:'archive'},
             ]
@@ -290,7 +327,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                   onMouseEnter={e=>{if(!act)e.currentTarget.style.background='rgba(255,255,255,0.03)'}} onMouseLeave={e=>{if(!act)e.currentTarget.style.background='transparent'}}>
                   <LucideIcon name={f.ic} size={15} color={act?f.c:'rgba(200,210,230,0.4)'}/>
                   <span className="flex-1 truncate font-figtree text-[12.5px]" style={{color:act?'#eef1fb':'rgba(230,235,247,0.5)',fontWeight:act?600:450}}>{f.label}</span>
-                  {f.n>0 && <span className="font-figtree text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{background:act?`${f.c==='rgba(255,255,255,0.5)'?BLU:f.c}22`:'rgba(214,172,102,0.16)',color:act?(f.c==='rgba(255,255,255,0.5)'?BLU:f.c):'#e2b877'}}>{f.n}</span>}
+                  {f.n>0 && <span className="font-figtree text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{background:act?`${f.c}22`:'rgba(214,172,102,0.16)',color:act?f.c:'#e2b877'}}>{f.n}</span>}
                 </button>
               )
             }
@@ -326,8 +363,8 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                       if (!confirmMarkAll) { setConfirmMarkAll(true); setTimeout(()=>setConfirmMarkAll(false), 4000); return }
                       setConfirmMarkAll(false)
                       const u=data.inbox.filter((m:any)=>!m.is_read)
-                      data.markManyRead(u.map((m:any)=>m.id)).catch(()=>showToast('No se pudieron marcar como leídos'))
-                      showToast(`${u.length} mensajes marcados como leídos`)
+                      data.markManyRead(u.map((m:any)=>m.id)).catch(()=>showToast(u.length===1?'No se pudo marcar como leído':'No se pudieron marcar como leídos'))
+                      showToast(avisoLeidos(u.length))
                     }} className="font-syne text-[8px] font-black px-2.5 py-2 rounded-xl transition-all" style={{color:confirmMarkAll?RED:'rgba(255,255,255,0.3)',border:`1px solid ${confirmMarkAll?'rgba(229,29,42,0.3)':BORDER}`}}>{confirmMarkAll ? `¿MARCAR ${unread}?` : `TODO LEÍDO · ${unread}`}</button>
                   )}
                 </div>
@@ -374,7 +411,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                 {/* Mark all read for current filter */}
                 {(filter==='Personal'||filter==='Colabs'||filter==='Sin leer') && filtered.filter((m:any)=>!m.is_read).length > 0 && (
                   <button
-                    onClick={()=>{ const u=filtered.filter((m:any)=>!m.is_read); data.markManyRead(u.map((m:any)=>m.id)).catch(()=>{}); showToast(`${u.length} marcados como leídos`) }}
+                    onClick={()=>{ const u=filtered.filter((m:any)=>!m.is_read); data.markManyRead(u.map((m:any)=>m.id)).catch(()=>{}); showToast(avisoLeidos(u.length)) }}
                     className="font-syne text-[7px] font-black px-2 py-1.5 rounded-lg flex-shrink-0 transition-all hover:opacity-80"
                     style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}
                   >TODO LEÍDO</button>
@@ -420,36 +457,39 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
             )
             const cards = [
               {
-                id:'Personal', label:'Gmail Personal', sub: personalGmailCount===0?'Conectar en Operativa':personalGmailUnread>0?`${personalGmailUnread} sin leer · ${personalGmailCount} total`:`${personalGmailCount} mensajes`,
+                id:'Personal', label:'Gmail Personal', sub: personalGmailCount===0?'Conectar en Operativa':personalGmailUnread>0?`${personalGmailUnread} sin leer · ${personalGmailCount} total`:plural(personalGmailCount,'mensaje'),
                 color:'#EA4335', active: personalGmailCount>0,
                 icon: <GmailSvg opacity={personalGmailCount>0?1:0.35}/>,
                 badge: personalGmailUnread > 0 ? personalGmailUnread : null,
                 hint: 'Tu cuenta personal',
               },
               {
-                id:'Colabs', label:'Colaboraciones', sub: colabsGmailCount===0?'Sin emails compartidos':colabsGmailUnread>0?`${colabsGmailUnread} sin leer · equipo`:`${colabsGmailCount} emails compartidos`,
+                id:'Colabs', label:'Colaboraciones', sub: colabsGmailCount===0?'Sin emails compartidos':colabsGmailUnread>0?`${colabsGmailUnread} sin leer · equipo`:plural(colabsGmailCount,'email compartido','emails compartidos'),
                 color:'#22c55e', active: colabsGmailCount>0,
                 icon: <div className="relative"><GmailSvg opacity={colabsGmailCount>0?1:0.35}/><div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center font-syne text-[6.5px] font-black" style={{background:SURFACE,border:'1px solid rgba(34,197,94,0.3)',color:'rgba(34,197,94,0.8)'}}>BS</div></div>,
                 badge: colabsGmailUnread > 0 ? colabsGmailUnread : null,
                 hint: 'Visible para todo el equipo',
               },
               {
-                id:'Calendar', label:'Calendario', sub: calEvents.length===0?'Sin eventos':todayEvents>0?`${todayEvents} eventos hoy`:`${calEvents.length} próximos`,
+                id:'Calendar', label:'Calendario', sub: calEvents.length===0?'Sin eventos':todayEvents>0?`${plural(todayEvents,'evento')} hoy`:plural(calEvents.length,'próximo'),
                 color:'#A78BFA', active: calEvents.length>0,
                 icon: <svg viewBox="0 0 24 24" width={36} height={36} fill="none" stroke="#A78BFA" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2.5" ry="2.5"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><circle cx="8" cy="15" r="1" fill="#A78BFA"/><circle cx="12" cy="15" r="1" fill="#A78BFA"/><circle cx="16" cy="15" r="1" fill="#A78BFA"/></svg>,
                 badge: todayEvents > 0 ? todayEvents : null,
                 hint: 'Tu Google Calendar',
               },
               {
-                id:'WhatsApp', label:'WhatsApp', sub: waCount===0?'Webhook pendiente':`${waCount} mensajes`,
+                id:'WhatsApp', label:'WhatsApp', sub: waCount===0?'Webhook pendiente':plural(waCount,'mensaje'),
                 color:'#25D366', active: waCount>0,
                 icon: <svg viewBox="0 0 24 24" width={36} height={36} fill="#25D366" style={{opacity:waCount>0?1:0.35}}><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>,
                 badge: null,
                 hint: 'Mensajes de clientes',
               },
               {
-                id:'Interno', label:'Equipo', sub: teamCount===0?'Sin mensajes internos':teamUnread>0?`${teamUnread} sin leer`:`${teamCount} mensajes`,
-                color:'rgba(167,139,250,0.9)', active: teamCount>0,
+                id:'Interno', label:'Equipo', sub: teamCount===0?'Sin mensajes internos':teamUnread>0?`${teamUnread} sin leer`:plural(teamCount,'mensaje'),
+                // En hex por lo mismo que las carpetas: `card.color` se concatena
+                // con opacidad en el gradiente, el borde y los hover de abajo, y
+                // con rgba la tarjeta de Equipo se pintaba plana y sin borde.
+                color:'#A78BFA', active: teamCount>0,
                 icon: <svg viewBox="0 0 24 24" width={36} height={36} fill="none" stroke="rgba(167,139,250,0.9)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{opacity:teamCount>0?1:0.35}}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
                 badge: teamUnread > 0 ? teamUnread : null,
                 hint: 'Mensajes internos',
@@ -792,7 +832,12 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
 
       {/* ── DETAIL PANEL ───────────────────────────────────────── */}
       {selected && (
-        <div className="flex-1 overflow-y-auto min-w-0" style={{background:'#050510'}}>
+        // El `key` fuerza el remonte al cambiar de correo. En escritorio la lista
+        // NO se desmonta (pasa a columna de 360px), así que este div es el mismo
+        // nodo para todos los mensajes y el navegador le conserva el `scrollTop`:
+        // leías un email largo hasta el final, pulsabas J y el siguiente se abría
+        // ya desplazado, sin asunto ni remitente a la vista.
+        <div key={selected.id} className="flex-1 overflow-y-auto min-w-0" style={{background:'#050510'}}>
 
           {/* Sticky top bar */}
           <div className={`flex items-center justify-between ${isMobile?'px-4':'px-6'} py-3.5 sticky top-0 z-10`} style={{background:'rgba(5,5,16,0.96)',backdropFilter:'blur(12px)',borderBottom:`1px solid ${BORDER}`}}>
@@ -805,7 +850,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                 <span className="font-syne text-[7.5px] font-black px-2.5 py-1 rounded-full" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.75)',border:'1px solid rgba(255,176,32,0.15)'}}>MENSAJE INTERNO</span>
               )}
               {selected.is_read && (
-                <button onClick={()=>{ data.markUnread(selected.id).catch(()=>{}); setSelected((s: any)=>({...s,is_read:false})) }} className="flex items-center gap-1.5 font-syne text-[7.5px] font-black px-2.5 py-1.5 rounded-xl transition-all hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>
+                <button onClick={()=>cambiarLeido(selected.id, false)} className="flex items-center gap-1.5 font-syne text-[7.5px] font-black px-2.5 py-1.5 rounded-xl transition-all hover:bg-white/5" style={{color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>
                   <LucideIcon name="mail" size={11} color="rgba(255,255,255,0.3)"/>
                   {!isMobile && 'NO LEÍDO'}
                 </button>

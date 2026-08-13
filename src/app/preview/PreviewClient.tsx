@@ -4,10 +4,11 @@
 // para poder revisarlas/capturarlas sin necesidad de login. NO se sirve en prod.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useCallback, useRef, useEffect } from 'react'
-import type { Task, Project, Client, Profile, Regla, InboxMessage } from '@/types'
+import type { Task, Project, Client, Profile, Regla, InboxMessage, ContentItem, MemoriaEntry, ChatMessage, CalendarEvent, NexusData } from '@/types'
 import { SectionErrorBoundary } from '@/components/shared/ErrorBoundary'
 import CreateModal from '@/components/CreateModal'
 import { BLU } from '@/components/shared/design-tokens'
+import { construirKanbanCols } from '@/components/shared/kanban'
 import { todayKey } from '@/components/shared/helpers'
 import HoySection from '@/components/sections/HoySection'
 import TareasSection from '@/components/sections/TareasSection'
@@ -105,7 +106,7 @@ const REGLAS: Regla[] = [
   { id:'r4', name:'Inbox saturado (manual)', condition_text:'15+ emails sin leer', action_text:'Avisarme', active:false, trigger_count:0 },
 ]
 
-const AGENDA = [
+const AGENDA: ContentItem[] = [
   { id:'a1', title:'Reel lanzamiento Nike', platform:'Instagram', content_type:'Reel', status:'borrador', client_id:'c1' },
   { id:'a2', title:'Carrusel Zara F/W',     platform:'Instagram', content_type:'Post',  status:'pendiente', client_id:'c3' },
   { id:'a3', title:'TikTok Adidas',         platform:'TikTok',    content_type:'Video', status:'listo', client_id:'c2' },
@@ -114,7 +115,7 @@ const AGENDA = [
 // Memoria salía vacía en el harness, así que su estado real —el que ve el equipo
 // todos los días— no se podía revisar: solo el cartel de "sin entradas". Una
 // entrada por categoría, para poder comprobar los colores de cada una.
-const MEMORIA = [
+const MEMORIA: MemoriaEntry[] = [
   { id:'m1', category:'Clientes',     title:'Nike · tono de marca',
     content:'Nada de superlativos ni signos de exclamación. Frases cortas. El logo siempre sobre fondo liso, nunca sobre foto.',
     created_at:iso(-12), client:CLIENTS[0] },
@@ -135,7 +136,7 @@ const MEMORIA = [
 // Chat tambien salia vacio en el harness. La respuesta de Harvey lleva a proposito
 // una lista numerada CON linea en blanco entre items —que es como escribe Claude—
 // para poder comprobar que la numeracion no se reinicia.
-const CHAT = [
+const CHAT: ChatMessage[] = [
   { id:'ch1', role:'user' as const, content:'¿Qué tengo pendiente con Nike?', created_at:iso(-0.02) },
   { id:'ch2', role:'ai' as const, created_at:iso(-0.019), content:`Con **Nike** tienes tres cosas abiertas:
 
@@ -151,9 +152,9 @@ const CHAT = [
 > Lo más urgente es el deck: es lo único que vence hoy.` },
 ]
 
-const CAL_EVENTS = [
-  { id:'e1', title:'Reunión equipo semanal', start:day(0)+'T10:00' },
-  { id:'e2', title:'Presentación Nike',      start:day(2)+'T16:30' },
+const CAL_EVENTS: CalendarEvent[] = [
+  { id:'e1', title:'Reunión equipo semanal', start:day(0)+'T10:00', end:day(0)+'T11:00', allDay:false },
+  { id:'e2', title:'Presentación Nike',      start:day(2)+'T16:30', end:day(2)+'T17:30', allDay:false },
 ]
 
 // Los parámetros de la URL llegan ya resueltos desde page.tsx, que es un Server
@@ -176,6 +177,14 @@ export default function PreviewClient({
   const [reglas, setReglas] = useState<Regla[]>(REGLAS)
   const [inbox, setInbox] = useState<InboxMessage[]>(INBOX)
   const [clients, setClients] = useState<Client[]>(CLIENTS)
+  // Proyectos, agenda, memoria y chat eran constantes inmutables: pasan a estado
+  // para que los stubs de abajo puedan reflejar el cambio en pantalla. Con un
+  // noop, arrastrar una tarjeta del kanban o borrar una pieza no movía nada y la
+  // revisión visual daba por bueno un flujo que en la app real sí cambia la lista.
+  const [projects, setProjects] = useState<Project[]>(PROJECTS)
+  const [agenda, setAgenda] = useState<ContentItem[]>(AGENDA)
+  const [memoria, setMemoria] = useState<MemoriaEntry[]>(MEMORIA)
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(CHAT)
   const [section, setSection] = useState(initialSection)
   // CreateModal conectado de verdad: antes onOpenModal era una función vacía y
   // este componente —por donde pasa la creación de tareas, clientes, proyectos,
@@ -205,10 +214,13 @@ export default function PreviewClient({
   const createTask = useCallback(async (p:Partial<Task>)=>{ const t=mkTask({...p, created_at:iso(0)}); setTasks(x=>[t,...x]); return t }, [])
   const updateTask = useCallback(async (id:string, u:Partial<Task>)=>{ setTasks(x=>x.map(t=>t.id===id?withPeople({...t,...u}):t)) }, [])
   const deleteTask = useCallback(async (id:string)=>{ setTasks(x=>x.filter(t=>t.id!==id)) }, [])
-  const deleteTasks = useCallback(async (ids:string[])=>{ const f=new Set(ids); setTasks(x=>x.filter(t=>!f.has(t.id))) }, [])
+  // Devuelve cuántas cayeron, como el hook: TareasSection compara ese número con
+  // los ids enviados para no dar por completo un borrado parcial.
+  const deleteTasks = useCallback(async (ids:string[])=>{ const f=new Set(ids); setTasks(x=>x.filter(t=>!f.has(t.id))); return ids.length }, [])
   const toggleTask = useCallback(async (id:string)=>{ setTasks(x=>x.map(t=>t.id===id?{...t,done:!t.done,updated_at:iso(0)}:t)) }, [])
 
-  const createRegla = useCallback(async (r:Partial<Regla>)=>{ const n={id:'r'+Date.now(),trigger_count:0,active:true,...r} as Regla; setReglas(x=>[n,...x]); return n }, [])
+  // Sin devolver la regla, igual que el hook: quien la crea no usa el valor.
+  const createRegla = useCallback(async (r:Partial<Regla>)=>{ const n={id:'r'+Date.now(),trigger_count:0,active:true,...r} as Regla; setReglas(x=>[n,...x]) }, [])
   const updateRegla = useCallback(async (id:string, u:Partial<Regla>)=>{ setReglas(x=>x.map(r=>r.id===id?{...r,...u}:r)) }, [])
   const deleteRegla = useCallback(async (id:string)=>{ setReglas(x=>x.filter(r=>r.id!==id)) }, [])
   const runAutomations = useCallback(async ()=>{
@@ -227,17 +239,76 @@ export default function PreviewClient({
   const markManyRead = useCallback(async (ids:string[])=>{ setInbox(x=>x.map(m=>ids.includes(m.id)?{...m,is_read:true}:m)) }, [])
   const noop = useCallback(async ()=>{}, [])
 
-  const data:any = {
-    loading:false, syncing:false,
-    tasks, projects:PROJECTS, clients, team:TEAM, inbox, reglas,
-    agenda:AGENDA, memoria:MEMORIA, calendarEvents:CAL_EVENTS, chatMessages:CHAT,
+  // Los OCHO que seguían faltando, por el mismo motivo que markManyRead: las
+  // secciones reales los llaman sin optional chaining, así que el fallo no era
+  // un render roto —que el SectionErrorBoundary sí pinta— sino un TypeError
+  // dentro del handler del clic, que no captura nadie: Contenido, Memoria, Chat
+  // y Sincronización se quedaban mudas en /preview y no se podían revisar.
+  // La forma de retorno imita a la del hook: ContenidoSection espera un array de
+  // columnas descartadas, ChatSection espera la respuesta y el booleano de
+  // clearChat, y SincronizacionSection lee {synced,total} de syncGmail.
+  const updateAgenda = useCallback(async (id:string, u:Partial<ContentItem>)=>{
+    setAgenda(x=>x.map(a=>a.id===id?{...a,...u}:a))
+    return []   // ninguna columna descartada: aquí no hay servidor que se queje
+  }, [])
+  const deleteAgenda = useCallback(async (id:string)=>{ setAgenda(x=>x.filter(a=>a.id!==id)) }, [])
+  const createMemoria = useCallback(async (e:Partial<MemoriaEntry>)=>{
+    setMemoria(x=>[{ id:'mem'+Date.now(), category:'General', title:'', content:'', created_at:iso(0), ...e }, ...x])
+  }, [])
+  const updateMemoria = useCallback(async (id:string, u:Partial<MemoriaEntry>)=>{ setMemoria(x=>x.map(m=>m.id===id?{...m,...u}:m)) }, [])
+  const deleteMemoria = useCallback(async (id:string)=>{ setMemoria(x=>x.filter(m=>m.id!==id)) }, [])
+  const sendChatMessage = useCallback(async (message:string)=>{
+    const reply = '(preview) Aquí respondería Harvey. El harness no llama a Claude: no hay clave ni sesión.'
+    setChatMessages(x=>[...x, { id:'u'+Date.now(), role:'user', content:message, created_at:new Date().toISOString() }])
+    await new Promise(r => setTimeout(r, 600))   // deja ver el indicador de "escribiendo"
+    setChatMessages(x=>[...x, { id:'a'+Date.now(), role:'ai', content:reply, created_at:new Date().toISOString() }])
+    return reply
+  }, [])
+  const clearChat = useCallback(async ()=>{ setChatMessages([]); return true }, [])
+  const syncGmail = useCallback(async ()=>{ await new Promise(r => setTimeout(r, 600)); return { synced:0, total:0 } }, [])
+
+  // Clientes y proyectos también dejan de ser noop: la tarjeta «HARVEY PROPONE»
+  // de Hoy y de Harvey los crea de verdad —y el kanban mueve tarjetas con
+  // updateProject—, así que con un noop la UI cantaba "creado" y no aparecía
+  // nada. Las dos creaciones DEVUELVEN la fila porque el dashboard real navega
+  // al proyecto recién creado con el id que sale de aquí.
+  const createClient = useCallback(async (c:Partial<Client>): Promise<Client> => {
+    const nuevo: Client = { id:'c'+Date.now(), industry:'—', status:'Activo', revenue:'—', color:BLU, created_at:iso(0), ...c, name:c.name||'Cliente', initials:(c.name||'??').slice(0,2).toUpperCase() }
+    setClients(x=>[nuevo,...x]); return nuevo
+  }, [])
+  const updateClient = useCallback(async (id:string, u:Partial<Client>)=>{ setClients(x=>x.map(c=>c.id===id?{...c,...u}:c)) }, [])
+  const deleteClient = useCallback(async (id:string)=>{ setClients(x=>x.filter(c=>c.id!==id)) }, [])
+  const createProject = useCallback(async (p:Partial<Project>): Promise<Project> => {
+    const nuevo: Project = { id:'p'+Date.now(), client_id:'', name:'Proyecto', status:'activo', progress:0, deadline:'TBD', color:BLU, created_at:iso(0), ...p }
+    setProjects(x=>[{ ...nuevo, client: clients.find(c=>c.id===nuevo.client_id) }, ...x]); return nuevo
+  }, [clients])
+  const updateProject = useCallback(async (id:string, u:Partial<Project>)=>{ setProjects(x=>x.map(p=>p.id===id?{...p,...u}:p)) }, [])
+  const deleteProject = useCallback(async (id:string)=>{ setProjects(x=>x.filter(p=>p.id!==id)) }, [])
+  const createAgenda = useCallback(async (i:Partial<ContentItem>)=>{
+    setAgenda(x=>[...x, { id:'ag'+Date.now(), title:'', platform:'Instagram', content_type:'Post', status:'borrador', ...i }])
+  }, [])
+  const reloadInbox = useCallback(async ()=>inbox, [inbox])
+  const reloadTeam = useCallback(async ()=>TEAM, [])
+  const reloadCalendar = useCallback(async ()=>({ ok:true, noScope:false }), [])
+
+  // Tipado con NexusData, que es el contrato que devuelve useNexusData(), y no
+  // con `any`: con `any` un método nuevo del hook que no se replicara aquí no
+  // daba error hasta que alguien abría la sección en /preview y reventaba —así
+  // se colaron los ocho de arriba. Ahora falta uno y no compila.
+  const data: NexusData = {
+    loading:false, loadError:false, syncing:false, syncResult:null,
+    tasks, projects, clients, team:TEAM, inbox, reglas,
+    agenda, memoria, calendarEvents:CAL_EVENTS, chatMessages, calendarScopeError:false,
     createTask, updateTask, deleteTask, deleteTasks, toggleTask,
     createRegla, updateRegla, deleteRegla, runAutomations,
     markRead, markUnread, markManyRead,
-    createClient:noop, updateClient:noop, deleteClient:noop,
-    createProject:noop, updateProject:noop, deleteProject:noop,
-    createAgenda:noop, sendInternalMessage:noop, reloadInbox:noop,
-    reload:noop, reloadCalendar:noop,
+    createClient, updateClient, deleteClient,
+    createProject, updateProject, deleteProject,
+    createAgenda, updateAgenda, deleteAgenda,
+    createMemoria, updateMemoria, deleteMemoria,
+    sendChatMessage, clearChat, syncGmail,
+    sendInternalMessage:noop, reloadInbox, reloadTeam,
+    reload:noop, reloadCalendar,
   }
   const profile = TEAM[0]
   const unreadCount = inbox.filter(m=>!m.is_read).length
@@ -260,14 +331,13 @@ export default function PreviewClient({
     { id:'ajustes', label:'Operativa' },
   ]
 
-  const filteredProjects = projStatusFilter === 'Todos' ? PROJECTS : PROJECTS.filter(p => p.status === projStatusFilter)
-  const kanbanCols = [
-    { title:'Plan.',       color:'rgba(240,240,248,0.25)', status:'plan.',      items:filteredProjects.filter(p=>p.status==='plan.') },
-    { title:'Progreso',    color:BLU,                      status:'activo',     items:filteredProjects.filter(p=>p.status==='activo') },
-    { title:'Urgente',     color:'#E51D2A',                status:'urgente',    items:filteredProjects.filter(p=>p.status==='urgente') },
-    { title:'Revisión',    color:'rgba(255,176,32,0.7)',   status:'revisión',   items:filteredProjects.filter(p=>p.status==='revisión') },
-    { title:'Completado',  color:'#00C48C',                status:'completado', items:filteredProjects.filter(p=>p.status==='completado') },
-  ]
+  const filteredProjects = projStatusFilter === 'Todos' ? projects : projects.filter(p => p.status === projStatusFilter)
+  // Mismas columnas que el dashboard real, del módulo compartido: esta copia
+  // llevaba «Plan.» y «Revisión» en rgba() —igual que la del dashboard— y
+  // ProyectosSection les concatena opacidad, así que el harness enseñaba el
+  // tablero roto exactamente igual que producción. Ahora, además, no puede
+  // divergir en colores.
+  const kanbanCols = construirKanbanCols(filteredProjects)
 
   return (
     <div className="h-screen flex flex-col" style={{ background:'#030308' }}>
