@@ -1,7 +1,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { codigoDeFallo } from '@/lib/gmailAuth'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
-import { analyzeEmail, EmailAnalysis } from '@/lib/ai'
+import { analyzeEmail, EmailAnalysis, presupuestoBucle } from '@/lib/ai'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { NextResponse } from 'next/server'
 import { sendPushToUser, sendPushToAll, canSendPush } from '@/lib/push'
@@ -139,7 +139,11 @@ export async function POST() {
   // envia, y los emails que faltan los recoge la ejecucion de la hora siguiente
   // (el bucle salta los gmail_id ya conocidos, asi que no se repite trabajo).
   const T0 = Date.now()
-  const PRESUPUESTO_MS = 45_000
+  // 45_000 escrito a mano no cabia: el check se hace ANTES de analyzeEmail, asi
+  // que pasar en t=44,9 s y encadenar una llamada de 30,5 s termina en t=75,4 —
+  // con maxDuration 60, Vercel mata la funcion y el usuario ve un error en vez de
+  // un "truncado, sigo en la proxima". Ahora sale del cliente de Anthropic.
+  const PRESUPUESTO_MS = presupuestoBucle(60)
   let truncado = false
 
   for (const email of emails) {

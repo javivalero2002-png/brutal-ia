@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { esTokenMuerto, esConexionRota } from '@/lib/gmailAuth'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
-import { analyzeEmail, EmailAnalysis } from '@/lib/ai'
+import { analyzeEmail, EmailAnalysis, presupuestoBucle } from '@/lib/ai'
 import { sendPushToAll, sendPushToUser, canSendPush } from '@/lib/push'
 import { localDayKey } from '@/components/shared/helpers'
 
@@ -151,7 +151,10 @@ async function syncColabsInboxSinCerrojo(
   // que aqui el cron tiene por delante los buzones personales de las 7 personas,
   // las automatizaciones y la purga dentro del mismo minuto.
   const T0 = Date.now()
-  const PRESUPUESTO_MS = 25_000
+  // El tope de abajo es el que cabe en la funcion; el 25 s es una eleccion PROPIA
+  // y mas estricta (ver comentario de arriba). Se toma el menor, para que la
+  // intencion se conserve y el invariante no dependa de que alguien recuerde.
+  const PRESUPUESTO_MS = Math.min(25_000, presupuestoBucle(60))
   let truncado = false
 
   for (const email of emails) {
@@ -336,7 +339,7 @@ async function syncPersonalInboxSinCerrojo(
   // compartido es uno solo. Al agotarse se sale limpiamente y lo que falte lo
   // recoge la ejecucion siguiente — el bucle salta los gmail_id ya conocidos.
   const T0 = Date.now()
-  const PRESUPUESTO_MS = 12_000
+  const PRESUPUESTO_MS = Math.min(12_000, presupuestoBucle(60))
   let truncado = false
 
   for (const email of emails) {

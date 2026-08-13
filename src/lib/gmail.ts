@@ -1,4 +1,5 @@
 import { google } from 'googleapis'
+import type { calendar_v3 } from 'googleapis'
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID!
 const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!
@@ -122,19 +123,52 @@ export async function getCalendarEvents(refreshToken: string, monthsAhead = 2) {
   } catch {}
   if (!calendarIds.length) calendarIds.push('primary')
 
-  // Fetch events from all calendars in parallel
-  const results = await Promise.allSettled(
-    calendarIds.map(calId =>
-      calendar.events.list({
+  // Se pagina, y no es celo: `maxResults: 100` truncaba en silencio.
+  //
+  // La ventana es de ~92 dias (el caller pide 3 meses) y con `singleEvents: true`
+  // cada serie se EXPANDE en instancias: un daily de dias laborables ya son ~65 el
+  // solo. Pasar de 100 en un calendario pide 1,1 eventos/dia, que no es un caso
+  // raro — es una agenda normal con reuniones de cliente. Google devolvia entonces
+  // la pagina 1 con `nextPageToken`, nadie lo leia (cero apariciones en todo src),
+  // y el Promise.allSettled quedaba en `fulfilled`: el resto se tiraba sin un solo
+  // error.
+  //
+  // Lo que se veia: nada. El corte es POR calendario y luego se fusiona, asi que un
+  // mes lejano podia salir a medias —los eventos de un calendario hasta el dia 20 y
+  // los de otro hasta el 30— y leerse como completo. Un mes medio poblado engana
+  // mas que uno vacio.
+  //
+  // Y el numero era peor que no escribir nada: el default de events.list son 250.
+  //
+  // Se pagina en vez de subir el tope a 2500 porque Google documenta que una pagina
+  // puede venir con MENOS elementos de los pedidos y aun asi traer nextPageToken:
+  // un tope mas alto aleja el acantilado, no lo quita. El tope de vueltas es un
+  // seguro contra un bucle infinito, no un limite esperado.
+  const MAX_PAGINAS = 10
+  const listarTodo = async (calId: string) => {
+    const items: calendar_v3.Schema$Event[] = []
+    let pageToken: string | undefined
+    for (let i = 0; i < MAX_PAGINAS; i++) {
+      const { data } = await calendar.events.list({
         calendarId: calId,
         timeMin,
         timeMax,
-        maxResults: 100,
+        maxResults: 250,
         singleEvents: true,
         orderBy: 'startTime',
+        pageToken,
       })
-    )
-  )
+      items.push(...(data.items || []))
+      pageToken = data.nextPageToken || undefined
+      if (!pageToken) return items
+    }
+    // Se avisa en vez de callarse: si esto sale, el horizonte vuelve a estar
+    // recortado y hay que subir el tope o acortar la ventana.
+    console.warn(`[calendar] ${calId} sigue teniendo paginas tras ${MAX_PAGINAS}: se corta el listado`)
+    return items
+  }
+
+  const results = await Promise.allSettled(calendarIds.map(listarTodo))
 
   // De qué calendario sale cada evento. Sin esto, editar o borrar iba SIEMPRE
   // contra 'primary': los eventos de cualquier otro calendario daban 404 al
@@ -159,7 +193,7 @@ export async function getCalendarEvents(refreshToken: string, monthsAhead = 2) {
   const allEvents: ReturnType<typeof mapEvent>[] = []
   for (const [i, result] of results.entries()) {
     if (result.status !== 'fulfilled') continue
-    for (const e of result.value.data.items || []) {
+    for (const e of result.value) {
       if (!e.id || seen.has(e.id)) continue
       seen.add(e.id)
       allEvents.push(mapEvent(e, calendarIds[i]))

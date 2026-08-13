@@ -691,3 +691,57 @@ describe('salida del modelo · normalizada en la frontera', () => {
       'normaliza en el insert en vez de en la frontera: así nacen los gemelos').toEqual([])
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tres cosas que se cuentan mal y no se ven.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('lo que se lee de una API se lee entero', () => {
+  // El `timeout` del SDK de Anthropic es POR INTENTO. Con maxRetries:1 son dos
+  // intentos + backoff ≈ 31 s, y el presupuesto del bucle se comprueba ANTES de la
+  // llamada: pasar en t=44,9 s y encadenar 30,5 s termina en t=75,4 contra un
+  // maxDuration de 60. Estaba escrito a mano y distinto en tres sitios (45/25/12) y
+  // solo el 45 no cabia — el numero correcto ya estaba en los otros dos.
+  it('el presupuesto del bucle sale del cliente, no de un numero a mano', () => {
+    const CONSUMEN = TS.filter(f => /PRESUPUESTO_MS\s*=/.test(leerCodigo(f)))
+    expect(CONSUMEN.length).toBeGreaterThan(1)
+    const aMano = CONSUMEN.filter(f =>
+      leerCodigo(f).split('\n')
+        .filter(l => /PRESUPUESTO_MS\s*=/.test(l))
+        .some(l => !/presupuestoBucle\(/.test(l)))
+    expect(aMano,
+      'vuelve a escribir el presupuesto a mano: no hay nada que garantice que quepa en maxDuration').toEqual([])
+  })
+
+  it('y el peor caso cuenta los reintentos, no solo el timeout', () => {
+    const AI = leerCodigo('src/lib/ai.ts')
+    expect(/PEOR_CASO_ANALYZE_MS\s*=\s*TIMEOUT_MS\s*\*\s*\(\s*MAX_REINTENTOS\s*\+\s*1\s*\)/.test(AI),
+      'el peor caso ya no multiplica por los intentos: el timeout del SDK es POR INTENTO').toBe(true)
+  })
+
+  // Google pagina. Con singleEvents:true cada serie se expande en instancias, asi
+  // que un daily de laborables son ~65 en la ventana de 3 meses: pasar de 100 pide
+  // 1,1 eventos/dia. Se devolvia la pagina 1 con nextPageToken y nadie lo leia, sin
+  // un solo error — el mes lejano salia A MEDIAS y se leia como completo.
+  it('los eventos de calendario se paginan', () => {
+    const G = leerCodigo('src/lib/gmail.ts')
+    expect(/nextPageToken/.test(G),
+      'events.list vuelve a ignorar nextPageToken: la agenda se corta en silencio').toBe(true)
+    expect(/pageToken,?\s*$/m.test(G) || /pageToken\s*[,}]/.test(G),
+      'no se pasa pageToken en la peticion: paginar sin pedir la pagina no hace nada').toBe(true)
+    // El default de Google son 250: un maxResults escrito a mano por DEBAJO de eso
+    // es peor que no poner nada.
+    const bajos = (G.match(/maxResults:\s*(\d+)/g) || []).filter(m => Number(m.split(':')[1]) < 250)
+    expect(bajos, `maxResults por debajo del default de Google (250): ${bajos.join(', ')}`).toEqual([])
+  })
+
+  // El camino personal lo miraba y el del buzon compartido lo tiraba, cincuenta
+  // lineas mas abajo en el mismo fichero.
+  it('quien lee `synced` de un sync lee tambien `insertFailures`', () => {
+    const SINC = leerCodigo('src/components/sections/SincronizacionSection.tsx')
+    const sinced = (SINC.match(/result\??\.synced/g) || []).length
+    const fallos = (SINC.match(/result\??\.insertFailures/g) || []).length
+    expect(sinced).toBeGreaterThan(0)
+    expect(fallos, 'hay un camino que lee synced sin mirar insertFailures: 20 analizados y 0 guardados se anuncian en VERDE')
+      .toBeGreaterThanOrEqual(sinced)
+  })
+})

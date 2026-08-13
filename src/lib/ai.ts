@@ -12,10 +12,30 @@ import { nivelTarea } from '@/components/shared/helpers'
 // sincronización moría a mitad, sin dejar rastro de por qué. Con 15s y un
 // reintento el peor caso por email queda acotado y el presupuesto del bucle
 // vuelve a ser una cota real.
+// Cuanto puede tardar UNA llamada a analyzeEmail en el peor caso.
+//
+// El `timeout` del SDK es POR INTENTO, no por llamada: con maxRetries: 1 son dos
+// intentos completos, mas el backoff de en medio. Se exporta porque quien hace un
+// bucle de analyzeEmail tiene que dejar sitio para que quepa la ULTIMA — comprobar
+// el presupuesto ANTES de una llamada que puede durar medio minuto no sirve de nada
+// si el presupuesto no lo contempla.
+//
+// Estaba escrito a mano y distinto en tres sitios: 45 s en /api/gmail/sync, 25 s en
+// colabsSync (colabs) y 12 s (personal). Solo el 45 no cabia — 45 + 30,5 = 75,5 s
+// contra un maxDuration de 60. Derivarlo de aqui es lo que impide que vuelvan a
+// separarse.
+const TIMEOUT_MS = 15_000
+const MAX_REINTENTOS = 1
+export const PEOR_CASO_ANALYZE_MS = TIMEOUT_MS * (MAX_REINTENTOS + 1) + 1_000
+
+/** Presupuesto de bucle que cabe en una funcion de `maxDuration` segundos. */
+export const presupuestoBucle = (maxDurationSeg: number, margenMs = 4_000): number =>
+  Math.max(5_000, maxDurationSeg * 1_000 - PEOR_CASO_ANALYZE_MS - margenMs)
+
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
-  timeout: 15_000,
-  maxRetries: 1,
+  timeout: TIMEOUT_MS,
+  maxRetries: MAX_REINTENTOS,
 })
 
 // El modelo a veces envuelve el JSON en fences markdown (```json ... ```) pese a
