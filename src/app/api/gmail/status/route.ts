@@ -1,21 +1,28 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { esConexionRota } from '@/lib/gmailAuth'
+import { esConexionRota, esTokenMuerto } from '@/lib/gmailAuth'
 import { getOAuthClient } from '@/lib/gmail'
 import { google } from 'googleapis'
 import { NextResponse } from 'next/server'
 
-async function validateToken(refreshToken: string): Promise<{ valid: boolean; email: string | null }> {
+/**
+ * `muerto` distingue quién puede BORRAR el token y quién solo marcarlo
+ * desconectado. Sin esa distinción, un `unauthorized_client` —que puede venir de
+ * la configuración global de Google, no de la persona— haría que cada miembro que
+ * abriera Sincronización perdiera su refresh token. Arreglar la variable ya no
+ * bastaría: habría que pedirle a los siete que volvieran a conectar a mano.
+ */
+async function validateToken(refreshToken: string): Promise<{ valid: boolean; muerto: boolean; email: string | null }> {
   try {
     const oauth2Client = getOAuthClient()
     oauth2Client.setCredentials({ refresh_token: refreshToken })
     const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client })
     const { data: info } = await oauth2.userinfo.get()
-    return { valid: true, email: info.email || null }
+    return { valid: true, muerto: false, email: info.email || null }
   } catch (err: unknown) {
     // `esConexionRota` y no solo `invalid_grant`: con `unauthorized_client` esta
     // función devolvía valid:true y la pantalla pintaba CONECTADO sobre un buzón
     // que llevaba días sin sincronizar.
-    return { valid: !esConexionRota(err), email: null }
+    return { valid: !esConexionRota(err), muerto: esTokenMuerto(err), email: null }
   }
 }
 
@@ -43,7 +50,12 @@ export async function GET() {
     if (!result.valid) {
       personalConnected = false
       personalExpired = true
-      await admin.from('profiles').update({ gmail_connected: false, gmail_refresh_token: null }).eq('id', user.id)
+      // El token solo se borra si es ESE token el que ya no vale. Si Google
+      // rechaza el cliente, se marca desconectado pero se conserva: la causa
+      // puede ser global y entonces se arregla sin que nadie reconecte.
+      await admin.from('profiles')
+        .update(result.muerto ? { gmail_connected: false, gmail_refresh_token: null } : { gmail_connected: false })
+        .eq('id', user.id)
     } else if (result.email && !gmailAccount) {
       gmailAccount = result.email
       await admin.from('profiles').update({ gmail_account: result.email }).eq('id', user.id)
@@ -67,7 +79,9 @@ export async function GET() {
     if (!result.valid) {
       colabsConnected = false
       colabsExpired = true
-      await admin.from('profiles').update({ gmail_colabs_connected: false, gmail_colabs_refresh_token: null }).eq('id', colabsOwner.id)
+      await admin.from('profiles')
+        .update(result.muerto ? { gmail_colabs_connected: false, gmail_colabs_refresh_token: null } : { gmail_colabs_connected: false })
+        .eq('id', colabsOwner.id)
     }
   }
 
