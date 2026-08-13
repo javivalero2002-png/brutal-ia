@@ -8,11 +8,17 @@ import { NextRequest, NextResponse } from 'next/server'
 // Analizar varios buzones con IA puede superar los 10s por defecto
 export const maxDuration = 60
 
-// ⚠️ NO colapsar los 24 crons de vercel.json en un solo `0 * * * *`.
-// Esta cuenta es plan Hobby, donde cada cron job debe ser como máximo DIARIO.
-// Las 24 entradas (`0 0 * * *` … `0 23 * * *`) son un apaño deliberado: cada una
-// es legalmente diaria, y juntas dan cobertura horaria. Un único `0 * * * *`
-// hace que el deploy falle con "Hobby accounts are limited to daily cron jobs".
+// Un solo cron horario, `0 * * * *`. Hasta el 2026-08-13 aquí había 24 entradas
+// diarias (`0 0 * * *` … `0 23 * * *`) porque el plan Hobby limita cada cron job a
+// UNA ejecución al día y ese era el único apaño legal para tener cobertura horaria.
+// Al pasar a Pro el límite desaparece — y con él el apaño.
+//
+// Si algún día se vuelve a Hobby, hay que deshacer esto: el deploy fallará con
+// "Hobby accounts are limited to daily cron jobs. This cron expression (0 * * * *)
+// would run more than once per day."
+//
+// Efecto secundario bueno de Pro: la precisión pasa de ±59 min a por minuto, así
+// que el sync deja de dispararse "en algún momento de esa hora" y va en punto.
 //
 // Cron de Vercel (horario, ver vercel.json): sincroniza el buzón compartido de
 // colaboraciones Y el Gmail personal de cada perfil conectado, sin sesión de
@@ -32,7 +38,7 @@ export async function GET(request: NextRequest) {
   //
   // El cron hace en serie: buzón compartido → los buzones personales de todo el
   // equipo → motor de automatizaciones → purga de retención. Cada email nuevo
-  // cuesta una llamada a Claude, y en el plan Hobby la función se MATA a los 60s.
+  // cuesta una llamada a Claude, y esta ruta se acota a 60s con su `maxDuration`.
   // Con 7 personas con Gmail conectado, los buzones podían comerse el tiempo
   // entero y dejar sin ejecutar el motor — que es justo lo que crea tareas y
   // avisa al equipo. Y sin ninguna señal: la ejecución simplemente moría.
@@ -127,7 +133,7 @@ export async function GET(request: NextRequest) {
   // Antes la condición era `getUTCHours() === 4`, y eso tiene una única
   // oportunidad al día: si esa ejecución concreta no llega hasta aquí, la purga
   // se salta el día entero y sin dejar rastro. Formas de perderla, todas reales:
-  //   · la función se mata a los 60s de Hobby antes de esta línea — el
+  //   · la función se corta en su maxDuration de 60s antes de esta línea — el
   //     presupuesto de 38s solo acota los buzones, runAutomations va sin tope;
   //   · el cron de esa hora no se dispara (despliegue en curso, fallo de plataforma);
   //   · se retrasa cruzando la hora, y entonces getUTCHours() ya no vale 4.

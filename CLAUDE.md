@@ -16,12 +16,18 @@ Supabase (Postgres + Auth + Storage + Realtime) · Anthropic SDK · Gmail OAuth2
 está conectada (proyecto `brutalstudios-ia`). No hay staging. Todo commit en main
 es una release: verifica antes de subir.
 
-**2. NO colapses los 24 crons de `vercel.json`.** La cuenta es plan **Hobby**,
-donde cada cron job debe ser como máximo *diario*. Las 24 entradas
-(`0 0 * * *` … `0 23 * * *`) son un apaño **deliberado y correcto** para tener
-cobertura horaria. Un solo `0 * * * *` hace que el deploy falle con
-`Hobby accounts are limited to daily cron jobs`. Ver el comentario en
-`src/app/api/cron/sync-colabs/route.ts`.
+**2. El cron es UNO, horario — pero solo porque la cuenta es Pro.** Hasta el
+2026-08-13 `vercel.json` llevaba **24 entradas diarias** (`0 0 * * *` … `0 23 * * *`),
+un apaño deliberado y correcto: el plan **Hobby** limita cada cron job a *una vez
+al día*, y 24 entradas individualmente diarias eran la única forma legal de tener
+cobertura horaria. Al pasar a **Pro** el límite desaparece y se colapsaron en
+`0 * * * *`.
+
+**Si algún día se vuelve a Hobby, hay que deshacerlo** o el deploy falla con
+`Hobby accounts are limited to daily cron jobs`. Y ojo al motivo real de estar en
+Pro, que no es el cron: la documentación de Vercel dice que Hobby **restringe el
+uso a no comercial y personal**, y esto es la herramienta de trabajo de una
+empresa. Ver el comentario en `src/app/api/cron/sync-colabs/route.ts`.
 
 **3. El techo de 60s ya NO es de la plataforma: es NUESTRO.** Esto decía «Hobby
 implica funciones de 60s máximo» y **es falso desde 2026**. La documentación de
