@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { NexusData } from '@/types'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR } from '@/components/shared'
 import { useIsMobile, useBackClosable } from '@/components/shared'
@@ -127,6 +128,9 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
+      // Con un modal abierto el foco esta en BODY, asi que la guarda por tagName
+      // de mas abajo no protege: escribir en el formulario ejecutaba estos atajos.
+      if (hayModalAbierto()) return
       if (e.key === 'Escape' && selected) { setSelected(null); return }
       if (e.key === 'e' && selected && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
         e.preventDefault()

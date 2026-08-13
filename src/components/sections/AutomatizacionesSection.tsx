@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { Regla, NexusData} from '@/types'
 import { BLU, RED, GRN, SURFACE, BORDER, LucideIcon, useIsMobile } from '@/components/shared'
 
@@ -88,6 +89,9 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: PropsAuto
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
+      // Con un modal abierto el foco esta en BODY, asi que la guarda por tagName
+      // de mas abajo no protege: escribir en el formulario ejecutaba estos atajos.
+      if (hayModalAbierto()) return
       if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
       if (e.key === 'j' || e.key === 'k') {
         e.preventDefault()

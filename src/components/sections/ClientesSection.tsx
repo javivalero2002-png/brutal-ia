@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR} from '@/components/shared/design-tokens'
 import { useIsMobile, useBackClosable } from '@/components/shared/hooks'
 import { dlDate, dlLabel, strColor, relTime, todayKey, localDayKey, daysBetweenKeys, plural } from '@/components/shared/helpers'
@@ -183,6 +184,9 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
+      // Con un modal abierto el foco esta en BODY, asi que la guarda por tagName
+      // de mas abajo no protege: escribir en el formulario ejecutaba estos atajos.
+      if (hayModalAbierto()) return
       if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
       if (e.key === 'Escape') { if (clientEditOpen) { setClientEditOpen(false); return } if (selected) { onSelect(null); return } }
       if (e.key === 'n' && !selected) { e.preventDefault(); onOpenModal('cliente') }

@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
 import { parsearAccionHarvey, type AccionHarvey } from '@/lib/harveyAccion'
 import { nivelTarea } from '@/components/shared/helpers'
@@ -105,6 +106,9 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
   // Spacebar shortcut: toggle recording (only when not typing)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Con un modal abierto el foco esta en BODY, asi que la guarda por tagName
+      // de mas abajo no protege: escribir en el formulario ejecutaba estos atajos.
+      if (hayModalAbierto()) return
       if ((e.target as HTMLElement).closest('input,textarea')) return
       if (e.code !== 'Space' || e.metaKey || e.ctrlKey || e.altKey) return
       e.preventDefault()

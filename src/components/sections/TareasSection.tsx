@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { Task, Project, Profile, NexusData} from '@/types'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, todayKey, daysBetweenKeys, estadoDeadline } from '@/components/shared'
 import { plural, nivelTarea } from '@/components/shared/helpers'
@@ -181,6 +182,9 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
 
   useEffect(()=>{
     const h = (e: KeyboardEvent) => {
+      // Con un modal abierto el foco esta en BODY, asi que la guarda por tagName
+      // de mas abajo no protege: escribir en el formulario ejecutaba estos atajos.
+      if (hayModalAbierto()) return
       if (e.key==='Escape'&&activeTask) { setActiveTask(null); return }
       if (e.key==='n'&&!activeTask&&!['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName)&&!(e.metaKey||e.ctrlKey||e.altKey)) {
         e.preventDefault(); onOpenModal('tarea'); return

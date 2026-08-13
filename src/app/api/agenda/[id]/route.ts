@@ -58,7 +58,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(dropped.length ? { ...data, __dropped: dropped } : data)
+  // Firmar TAMBIEN aqui, no solo en el GET. La UI pinta la fila que devuelve este
+  // PATCH, asi que sin esto tocar cualquier campo de una pieza —el estado, una
+  // nota— le devolvia la portada con la URL publica y la imagen se rompia hasta
+  // recargar. Con el bucket cerrado esa URL da 400.
+  const fila = await firmarCampos(admin, data, ['cover_url', 'video_url'])
+  return NextResponse.json(dropped.length ? { ...(fila as Record<string, unknown>), __dropped: dropped } : fila)
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

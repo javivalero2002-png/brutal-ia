@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { estadoDeadline, dlLabel } from '@/components/shared/helpers'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Las clases de bug de la auditoría, cerradas con llave.
@@ -282,6 +283,98 @@ describe('mensajes directos · el hilo se empareja por id, nunca por nombre', ()
   it('quien envia un DM guarda su id, no solo su nombre', () => {
     expect(/from_user_id:\s*user\.id/.test(leer('src/app/api/inbox/route.ts')),
       'POST /api/inbox no guarda from_user_id: los hilos nuevos saldrian vacios').toBe(true)
+  })
+})
+
+// ── 10. El `!` sobre estadoDeadline ──────────────────────────────────────────
+//
+// `estadoDeadline()` devuelve **null** con los deadlines heredados en texto libre
+// ('ago 2026', 'finales de mes'), que siguen en la base. Escribir
+// `estadoDeadline(x)!` es afirmarle a TypeScript que eso no pasa nunca — y el
+// compilador se calla justo donde hace falta que hable.
+//
+// Paso de verdad, y lo introdujo el propio arreglo del 2026-08-13 que hizo que la
+// funcion devolviera null: cuatro sitios la llamaban con `!`. En ProyectosSection
+// eso reventaba el render de la FILA, o sea que un solo proyecto con deadline en
+// texto libre tumbaba la seccion entera contra el SectionErrorBoundary, y
+// REINTENTAR volvia a fallar porque los datos eran los mismos.
+//
+// Se permite donde un filtro previo ya excluye el null (HoySection usa
+// `?.pronto` antes de ordenar), y por eso la regla mira el `!`, no la llamada.
+
+describe('fechas · nadie afirma que estadoDeadline no puede ser null', () => {
+  /** Se permite donde un filtro previo ya excluyo el null. Con su motivo. */
+  const EXCEPCIONES: Record<string, string> = {
+    'src/components/sections/HoySection.tsx':
+      'Su lista se construye filtrando con `estadoDeadline(p.deadline)?.pronto`, que ya deja fuera ' +
+      'los nulos; el `!` del sort y del briefing opera sobre esa lista ya limpia.',
+  }
+
+  it('ningun sitio la llama con `!` sin haber filtrado antes', () => {
+    const malos = TS
+      .filter(f => !(f in EXCEPCIONES))
+      .flatMap(f => leer(f).split('\n').map((l, i) => ({ f, i: i + 1, l })))
+      .filter(({ l }) => /estadoDeadline\s*\([^)]*\)\s*!/.test(l) && !/^\s*(\/\/|\*)/.test(l))
+    expect(malos.map(u => `${u.f}:${u.i}`),
+      'Afirma que estadoDeadline no es null: con un deadline en texto libre revienta el render').toEqual([])
+  })
+
+  it('las excepciones anotadas siguen existiendo', () => {
+    const fantasmas = Object.keys(EXCEPCIONES)
+      .filter(f => !TS.includes(f) || !/estadoDeadline\s*\([^)]*\)\s*!/.test(leer(f)))
+    expect(fantasmas, 'Excepcion que ya no hace falta: quitala').toEqual([])
+  })
+
+  it('un deadline en texto libre da null, y hay con que pintarlo', () => {
+    // La funcion de verdad, no una copia: si algun dia vuelve a devolver un objeto
+    // con NaN en vez de null, este test lo canta.
+    for (const libre of ['ago 2026', 'finales de mes', 'cuando cierre']) {
+      expect(estadoDeadline(libre)).toBeNull()
+      // dlLabel SI sabe con que sustituirlo: interpreta el texto y da una fecha
+      // legible ('ago 2026' -> '28 ago'), o el original si no lo entiende.
+      expect(typeof dlLabel(libre)).toBe('string')
+      expect(dlLabel(libre).length).toBeGreaterThan(0)
+    }
+  })
+})
+
+// ── 11. Atajos de seccion con un modal abierto ───────────────────────────────
+//
+// Las secciones escuchan el teclado en `window` y se protegen mirando si el foco
+// esta en un INPUT o TEXTAREA. Esa guarda deja de valer con un modal abierto: el
+// modal se pinta como HERMANO de la seccion —que sigue montada y escuchando— y si
+// no enfoca nada, el foco se queda en BODY y pasan TODAS las teclas.
+//
+// Trazado letra por letra el 2026-08-13: escribiendo «kickoff clientes semanal»
+// en el titulo de una tarea nueva, la 'k' seleccionaba una tarea de fondo, la 'c'
+// le daba la vuelta a `done` y la 's' llamaba a guardar. Un PATCH contra una tarea
+// que el usuario ni miraba.
+//
+// Se arregla por los dos lados y aqui se fijan los dos: el modal enfoca su primer
+// campo (con lo que la guarda por tagName vuelve a funcionar), y ademas las
+// secciones consultan `hayModalAbierto()` — que cubre el caso de hacer clic en una
+// zona del modal que no es un campo y devolver el foco a BODY.
+
+describe('atajos de teclado · un modal abierto los desactiva', () => {
+  const CON_LISTENER = TS.filter(f =>
+    (f.startsWith('src/components/sections/') || f === 'src/components/NexusDashboard.tsx') &&
+    /window\.addEventListener\(\s*'keydown'/.test(leer(f)))
+
+  it('hay listeners que revisar', () => {
+    expect(CON_LISTENER.length).toBeGreaterThan(10)
+  })
+
+  it('todos consultan hayModalAbierto()', () => {
+    const sinGuarda = CON_LISTENER.filter(f => !/hayModalAbierto\(\)/.test(leer(f)))
+    expect(sinGuarda, 'Escucha el teclado sin comprobar si hay un modal abierto').toEqual([])
+  })
+
+  it('el modal avisa de que esta abierto y enfoca su primer campo', () => {
+    const m = leer('src/components/CreateModal.tsx')
+    expect(/marcarModalAbierto\(\)/.test(m), 'el modal no avisa de que se abre').toBe(true)
+    expect(/marcarModalCerrado\(\)/.test(m), 'el modal no avisa de que se cierra').toBe(true)
+    expect(/\.focus\(\)/.test(m), 'el modal no enfoca nada: el foco se queda en BODY').toBe(true)
+    expect(/role="dialog"/.test(m), 'falta role="dialog"').toBe(true)
   })
 })
 

@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, todayKey, estadoDeadline, AMBAR } from '@/components/shared'
+import { hayModalAbierto } from '@/components/shared/modalAbierto'
+import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, dlLabel, todayKey, estadoDeadline, AMBAR } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
 import type { Project, Task, Profile, NexusData} from '@/types'
 
@@ -327,6 +328,9 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
+      // Con un modal abierto el foco esta en BODY, asi que la guarda por tagName
+      // de mas abajo no protege: escribir en el formulario ejecutaba estos atajos.
+      if (hayModalAbierto()) return
       if (e.key === 'Escape' && selectedId) { onSelect(null); return }
       if (['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) || e.metaKey||e.ctrlKey||e.altKey) return
       if (e.key === 'n' && !selectedId) { e.preventDefault(); onOpenModal('proyecto') }
@@ -606,7 +610,13 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                       </div>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {p.deadline && p.deadline!=='TBD' && (()=>{
-                          const dl = estadoDeadline(p.deadline)!
+                          // Sin el `!`: estadoDeadline devuelve null con los deadlines
+                          // heredados en texto libre ('ago 2026'), y la guarda de arriba
+                          // solo excluye '' y 'TBD'. El `!` se lo callaba ante tsc y aqui
+                          // reventaba el render de la FILA — o sea la seccion entera, via
+                          // SectionErrorBoundary. dlLabel si sabe enseñar el texto original.
+                          const dl = estadoDeadline(p.deadline)
+                          if (!dl) return <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.45)'}}>{dlLabel(p.deadline)}</span>
                           const dOver = dl.vencido, dSoon = dl.pronto, dLabel = dl.etiqueta
                           return <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.12)':'rgba(255,255,255,0.04)',color:dOver?RED:dSoon?AMBAR:'rgba(255,255,255,0.3)'}}>{dLabel}</span>
                         })()}
@@ -663,7 +673,8 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               {showCover && <div className="flex-1 min-w-0"/>}
               {!showCover && <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full flex-shrink-0" style={{background:statusColor(p.status)+'14',color:statusColor(p.status)}}>{statusLabel(p.status)}</span>}
               {p.deadline && p.deadline!=='TBD' && (()=>{
-                const dl = estadoDeadline(p.deadline)!
+                const dl = estadoDeadline(p.deadline)
+                if (!dl) return <span className="font-syne text-[9px] font-black flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:'transparent',color:'rgba(255,255,255,0.45)'}}>{dlLabel(p.deadline)}</span>
                 const dOver = dl.vencido, dSoon = dl.pronto, dLabel = dl.etiqueta
                 return <span className="font-syne text-[9px] font-black flex-shrink-0 px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?AMBAR:'rgba(255,255,255,0.28)'}}>{dLabel}</span>
               })()}
@@ -729,7 +740,8 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                     <span className="text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin cliente</span>
                   )}
                   {selectedProject.deadline&&selectedProject.deadline!=='TBD'&&(()=>{
-                    const dl = estadoDeadline(selectedProject.deadline)!
+                    const dl = estadoDeadline(selectedProject.deadline)
+                    if (!dl) return <span className="flex items-center gap-1.5 font-syne text-[8px] font-black px-2 py-1 rounded-full" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.45)'}}>Deadline {dlLabel(selectedProject.deadline)}</span>
                     const dOver = dl.vencido, dSoon = dl.pronto, daysLabel = dl.etiquetaLarga
                     return (
                       <span className="flex items-center gap-1.5 font-syne text-[8px] font-black px-2 py-1 rounded-full" style={{background:dOver?`${RED}18`:dSoon?'rgba(255,176,32,0.1)':'rgba(255,255,255,0.04)',color:dOver?RED:dSoon?AMBAR:'rgba(255,255,255,0.3)'}}>

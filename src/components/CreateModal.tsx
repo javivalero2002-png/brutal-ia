@@ -1,5 +1,7 @@
 'use client'
+import { useEffect, useRef } from 'react'
 import type { Profile, Client } from '@/types'
+import { marcarModalAbierto, marcarModalCerrado } from '@/components/shared/modalAbierto'
 import { PLATAFORMA_COLOR, BLU, RED, GRN, SURF2, BORDER, LucideIcon, useIsMobile, AMBAR} from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
 
@@ -99,10 +101,27 @@ export default function CreateModal({ modal, onClose, mf, setMf, saving, onSave,
   // Es la trampa que documenta CLAUDE.md; el script de prebuild no la caza aquí
   // porque prioriza precisión y se calla lo que no puede resolver.
   const catC: Record<string, string> = { Clientes:BLU, Procesos:AMBAR, Decisiones:RED, Aprendizajes:GRN, General:'#A78BFA' }
+  // Enfocar el primer campo al abrir. Sin esto el foco se queda en BODY, y las
+  // guardas por tagName de los atajos de seccion —que miran INPUT/TEXTAREA— dejan
+  // pasar TODAS las teclas: escribir el titulo ejecutaba atajos de la pantalla de
+  // detras, algunos de los cuales ESCRIBEN en la base.
+  const primerCampoRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    marcarModalAbierto()
+    const t = setTimeout(() => {
+      const campo = primerCampoRef.current?.querySelector<HTMLElement>('input:not([type="hidden"]), textarea')
+      campo?.focus()
+    }, 60)
+    return () => { clearTimeout(t); marcarModalCerrado() }
+  }, [])
+
 
   return (
     <div onClick={onClose} className="fixed inset-0 z-[100] flex items-center justify-center" style={{background:'rgba(2,2,10,0.8)',backdropFilter:'blur(8px)',touchAction:'none'}}>
       <div
+        ref={primerCampoRef}
+        role="dialog"
+        aria-modal="true"
         onClick={e => e.stopPropagation()}
         onKeyDown={e => {
           // Los BUTTON quedan fuera del atajo. Con el foco en CANCELAR, pulsar

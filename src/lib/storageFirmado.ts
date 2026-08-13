@@ -24,8 +24,17 @@ import { rutaDeStorage } from '@/lib/taskAttachments'
 // llamar aquí, sus imágenes salen rotas. Es un fallo VISIBLE, no silencioso, y por
 // eso se prefiere a la alternativa (dejar el bucket abierto).
 
-/** Una hora. Cubre de sobra una sesión de trabajo, y al recargar se renuevan. */
-const VIGENCIA_SEGUNDOS = 60 * 60
+// Una jornada, no una hora.
+//
+// La primera version puso 60 minutos «porque al recargar se renuevan», y eso es
+// falso en una PWA: instalada en el movil no se recarga NUNCA — se deja abierta y
+// se vuelve a ella. A la hora, las portadas y los PDF empezaban a dar 400 sin que
+// el usuario hubiera hecho nada raro.
+//
+// Se acompaña de un refresco al volver a la app (NexusDashboard), que vuelve a
+// firmar todo. Las dos cosas juntas: la ventana larga cubre el uso normal, y el
+// refresco cubre a quien deja la app abierta el fin de semana.
+const VIGENCIA_SEGUNDOS = 12 * 60 * 60
 
 /**
  * Firma una URL guardada. Devuelve la original si no es del Storage (vídeos de
