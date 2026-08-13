@@ -72,15 +72,21 @@ export const dlLabel = (d?: string|null): string => {
 export const NIVELES_TAREA = ['urgent', 'high', 'normal'] as const
 export type NivelTarea = (typeof NIVELES_TAREA)[number]
 
-export const nivelTarea = (crudo?: string | null): NivelTarea => {
+// `porDefecto` existe porque el mismo vocabulario sirve para dos cosas con
+// prudencias opuestas: una TAREA que Harvey crea sin decir nivel se queda en
+// 'high' (que la vea alguien), y la urgencia de un CORREO que el modelo no supo
+// clasificar se queda en 'normal' (no inflar la bandeja de todo el equipo).
+// Un segundo normalizador para eso seria justo el gemelo que este proyecto no
+// para de pagar.
+export const nivelTarea = (crudo?: string | null, porDefecto: NivelTarea = 'high'): NivelTarea => {
   const v = (crudo || '').trim().toLowerCase()
-  if (!v) return 'high'
+  if (!v) return porDefecto
   if ((NIVELES_TAREA as readonly string[]).includes(v)) return v as NivelTarea
   // Lo que el modelo escribe cuando contesta en español.
   if (/^(urgente|urgentes|crítica|critica|máxima|maxima)$/.test(v)) return 'urgent'
   if (/^(alta|alto|importante|prioritaria)$/.test(v)) return 'high'
   if (/^(normal|media|medio|baja|bajo|low)$/.test(v)) return 'normal'
-  return 'high'
+  return porDefecto
 }
 
 // Plural en los recuentos que la UI enseña. Sin esto salían "1 mensajes

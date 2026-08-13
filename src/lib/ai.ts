@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { textOf } from '@/lib/aiText'
 import { sanearHistorial } from './historialIA'
 import { estadoDeadline } from '@/components/shared/helpers'
+import { nivelTarea } from '@/components/shared/helpers'
 
 // Sin topes, el SDK se queda con sus valores por defecto: 10 MINUTOS de timeout
 // y 2 reintentos con backoff. Los presupuestos de tiempo de los bucles de sync
@@ -180,7 +181,14 @@ Responde SOLO con JSON válido (sin markdown):
 
   try {
     const text = textOf(msg) || '{}'
-    return parseJsonLoose(text)
+    const bruto = parseJsonLoose(text)
+    // La urgencia va a `inbox_messages.ai_urgency`, que es una union cerrada, y
+    // sale LITERALMENTE de lo que haya escrito el modelo. El prompt esta entero
+    // en espanol y pide «urgent|high|normal» en ingles: es la misma trampa que ya
+    // mordio con tasks.level, y este es su gemelo exacto —lo mismo, en otro
+    // campo—. Se normaliza AQUI, en la frontera, y no en los tres inserts que
+    // consumen esto: normalizar tres veces es como se arregla uno y sobreviven dos.
+    return { ...bruto, urgency: nivelTarea(bruto?.urgency, 'normal') }
   } catch {
     return { summary: subject, action: 'Revisar email', client: 'Desconocido', urgency: 'normal', degraded: true }
   }

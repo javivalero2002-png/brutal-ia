@@ -657,3 +657,37 @@ describe('buzón compartido · solo el propietario puede apuntarlo a un Gmail', 
     }
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lo que escribe el modelo no entra crudo en una columna de union cerrada.
+//
+// Ya pasó con `tasks.level`: el prompt va entero en español y pide los valores en
+// inglés, el modelo contesta «urgente», el INSERT rebota y la tarea no se crea
+// después de que Harvey haya dicho en voz alta que la creaba. `nivelTarea()` lo
+// arregló ahí — y el GEMELO seguía vivo en `inbox_messages.ai_urgency`, que sale
+// igual de `parseJsonLoose` y se inserta en tres sitios.
+//
+// La regla mira la FRONTERA (donde se parsea la respuesta del modelo) y no los
+// inserts: normalizar en cada insert es exactamente como se arregla uno y
+// sobreviven los otros dos.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('salida del modelo · normalizada en la frontera', () => {
+  it('analyzeEmail normaliza la urgencia antes de devolverla', () => {
+    const AI = leerCodigo('src/lib/ai.ts')
+    const i = AI.indexOf('parseJsonLoose(text)')
+    expect(i, 'ya no se parsea así: revisa esta regla').toBeGreaterThan(-1)
+    expect(/nivelTarea\(/.test(AI.slice(i, i + 400)),
+      'la urgencia del modelo vuelve a salir cruda hacia ai_urgency, que es una unión cerrada').toBe(true)
+  })
+
+  it('y los inserts la consumen ya normalizada, sin repetir la lógica', () => {
+    // Si alguno normaliza por su cuenta es que la frontera dejó de hacerlo, y
+    // volvemos a tener el mismo arreglo escrito N veces — el patrón que este
+    // proyecto ya ha pagado más de una vez.
+    const INSERTAN = TS.filter(f => /ai_urgency\s*:/.test(leerCodigo(f)))
+    expect(INSERTAN.length).toBeGreaterThan(1)
+    const conLogicaPropia = INSERTAN.filter(f => /ai_urgency\s*:\s*nivelTarea/.test(leerCodigo(f)))
+    expect(conLogicaPropia,
+      'normaliza en el insert en vez de en la frontera: así nacen los gemelos').toEqual([])
+  })
+})
