@@ -388,18 +388,25 @@ ${memLines||'  sin documentos'}`
       fd.append('audio', blob, `r.${ext}`)
       const res = await fetch('/api/harvey/transcribe', { method:'POST', body:fd, signal:AbortSignal.timeout(30000) })
       if (!aliveRef.current || run !== voiceRunRef.current) return
-      if (res.ok) {
-        const { text } = await res.json()
-        if (text?.trim()) { setHarveySpoken(text); await askHarvey(text); return }
+      // El cuerpo se lee UNA vez. Leerlo dos rechaza con «Body has already been
+      // read», el catch se lo traga y llegaba un `undefined` con status 200 al
+      // traductor, que no casa ninguna rama y acababa diciendo «el servicio de
+      // transcripcion fallo» — justo en el camino NORMAL de Whisper con silencio,
+      // que responde 200 con text vacio. O sea que callarse pasaba a anunciarse
+      // como una caida. El gemelo de HarveySection ya leia una sola vez.
+      const json = await res.json().catch(() => null)
+      if (!res.ok) {
+        setOrbMode('idle')
+        // La rama del 402 era codigo muerto: esa ruta no devuelve 402 en ningun
+        // sitio, y todo lo demas —401, 400, 413, 429, 503, 502— caia en «no se
+        // entendio el audio», culpando al usuario de un fallo del servidor.
+        showToast(mensajeErrorTranscripcion(res.status, json?.error))
+        return
       }
+      const texto = (json?.text || '').trim()
+      if (texto) { setHarveySpoken(texto); await askHarvey(texto); return }
       setOrbMode('idle')
-      // La rama del 402 era codigo muerto: /api/harvey/transcribe no devuelve 402
-      // en ningun sitio. Todo lo demas —401, 400, 413, 429, 503, 502— caia en «no
-      // se entendio el audio», que culpa al usuario de un fallo del servidor y le
-      // hace repetir la grabacion. A las diez repeticiones salta el 429, cuyo texto
-      // tambien se tragaba el mismo else. El gemelo de HarveySection ya estaba bien.
-      const jErr = await res.json().catch(() => null)
-      showToast(mensajeErrorTranscripcion(res.status, jErr?.error))
+      showToast('No se entendió el audio — vuelve a pulsar')
     } catch { setOrbMode('idle'); showToast('Error al procesar el audio') }
   }
 

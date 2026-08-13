@@ -41,6 +41,16 @@ type SyncResult =
 // ─────────────────────────────────────────────────────────────────────────────
 const TTL_CERROJO_MS = 90_000
 
+// Topes POR BUZON, mas estrictos que lo que cabe en la funcion.
+//
+// No son redundantes con `plazoRestante`: ese protege a la funcion de morirse,
+// estos reparten el minuto entre los ocho buzones que el cron recorre seguidos
+// (el compartido + los 7 personales) para que no se lo coma el primero. Los borre
+// al cambiar de palanca y el reparto del cron se quedo describiendo algo que ya no
+// pasaba — ver el comentario de src/app/api/cron/sync-colabs/route.ts.
+const TOPE_COLABS_MS = 25_000
+const TOPE_PERSONAL_MS = 12_000
+
 /**
  * Sincroniza el buzón COMPARTIDO de colaboraciones.
  * Es un buzón único de la empresa: usa el refresh token de quien lo tenga conectado
@@ -162,9 +172,16 @@ async function syncColabsInboxSinCerrojo(
 
   for (const email of emails) {
     if (colabsKnown.has(email.gmail_id)) continue
-    // ¿Cabe la SIGUIENTE, no me he pasado ya. La diferencia importa: la guarda
-    // vieja autorizaba una llamada sin saber lo que iba a costar.
-    const plazo = plazoRestante(T0, 60)
+    // Dos limites, y hacen falta los dos:
+    //  · `plazoRestante` es el de la FUNCION — no empezar una llamada que no quepa;
+    //  · `TOPE_COLABS_MS` es una eleccion PROPIA y mas estricta, porque quien llama
+    //    a esto suele ser el cron y detras van los 7 buzones personales, el motor y
+    //    la purga dentro de la misma ejecucion.
+    //
+    // El Math.min existia y lo borre yo al cambiar de palanca, dejando estos
+    // comentarios describiendo un tope que ya no estaba. Sin el, el reparto del
+    // cron se queda sin base: 51 s por buzon en vez de 25 no caben siete veces.
+    const plazo = Math.min(plazoRestante(T0, 60), TOPE_COLABS_MS - (Date.now() - T0))
     if (plazo < MINIMO_UTIL_MS) { truncado = true; break }
 
     let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
@@ -359,9 +376,9 @@ async function syncPersonalInboxSinCerrojo(
 
   for (const email of emails) {
     if (personalKnown.has(email.gmail_id)) continue
-    // ¿Cabe la SIGUIENTE, no me he pasado ya. La diferencia importa: la guarda
-    // vieja autorizaba una llamada sin saber lo que iba a costar.
-    const plazo = plazoRestante(T0, 60)
+    // Igual que el del buzon compartido, con el tope personal: son SIETE dentro
+    // de la misma ejecucion del cron.
+    const plazo = Math.min(plazoRestante(T0, 60), TOPE_PERSONAL_MS - (Date.now() - T0))
     if (plazo < MINIMO_UTIL_MS) { truncado = true; break }
 
     let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }

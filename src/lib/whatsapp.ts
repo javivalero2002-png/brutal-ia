@@ -7,6 +7,7 @@ export async function sendWhatsAppMessage(to: string, message: string) {
   const res = await fetch(
     `https://graph.facebook.com/v21.0/${PHONE_NUMBER_ID}/messages`,
     {
+      signal: AbortSignal.timeout(20_000),
       method: 'POST',
       headers: {
         Authorization: `Bearer ${TOKEN}`,
@@ -27,6 +28,7 @@ export async function sendWhatsAppTemplate(to: string, templateName: string, par
   const res = await fetch(
     `https://graph.facebook.com/v21.0/${PHONE_NUMBER_ID}/messages`,
     {
+      signal: AbortSignal.timeout(20_000),
       method: 'POST',
       headers: {
         Authorization: `Bearer ${TOKEN}`,
@@ -52,6 +54,7 @@ export async function sendWhatsAppTemplate(to: string, templateName: string, par
 
 export async function downloadWhatsAppMedia(mediaId: string): Promise<string> {
   const urlRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+      signal: AbortSignal.timeout(20_000),
     headers: { Authorization: `Bearer ${TOKEN}` },
   })
   if (!urlRes.ok) throw new Error(`WhatsApp media URL fetch failed: ${urlRes.status}`)
@@ -59,6 +62,7 @@ export async function downloadWhatsAppMedia(mediaId: string): Promise<string> {
   if (!url) throw new Error('WhatsApp media URL missing from response')
 
   const mediaRes = await fetch(url, {
+      signal: AbortSignal.timeout(20_000),
     headers: { Authorization: `Bearer ${TOKEN}` },
   })
   if (!mediaRes.ok) throw new Error(`WhatsApp media download failed: ${mediaRes.status}`)

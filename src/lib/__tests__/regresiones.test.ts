@@ -591,6 +591,16 @@ describe('campos de Storage · no se reenvía lo que solo se estaba viendo', () 
       'las marcas se quedan puestas de la pieza anterior: se reenviaría su URL a otra distinta').toBe(true)
   })
 
+  it('subir una portada desmarca el campo', () => {
+    // La subida deja el input con la firma que devuelve el servidor. Si el usuario
+    // habia tecleado antes en PORTADA la marca seguia puesta, y el siguiente
+    // GUARDAR mandaba esa firma pisando el identificador.
+    const i = CONTENIDO.indexOf('aplicarAgendaLocal')
+    expect(i, 'ya no se refresca la rejilla tras subir: revisa esta regla').toBeGreaterThan(-1)
+    expect(/coverTocada\.current = false/.test(CONTENIDO.slice(Math.max(0, i - 300), i + 60)),
+      'la subida no desmarca coverTocada: un teclazo previo hace que el siguiente guardado pise el identificador').toBe(true)
+  })
+
   it('subir una portada no vuelve a escribirla en la base', () => {
     // upload-cover YA guarda el identificador en el servidor y devuelve la fila
     // firmada. Un PATCH extra desde el cliente solo sirve para pisarlo.
@@ -723,28 +733,62 @@ describe('lo que se lee de una API se lee entero', () => {
   it('y el plazo llega hasta la llamada, que es donde se aplica', () => {
     const AI = leerCodigo('src/lib/ai.ts')
     expect(/plazoMs\?:\s*number/.test(AI), 'analyzeEmail ya no acepta plazo').toBe(true)
-    // Acotado a la rama del plazo: `maxRetries: 0` aparece tambien en otra
-    // llamada del fichero, asi que buscarlo suelto pasaba en verde con la rama
-    // del plazo puesta en 1. Comprobado reintroduciendo ese cambio exacto.
-    const i = AI.indexOf('? { timeout:')
+    // El invariante, no el texto: el plazo tiene que ACOTAR el timeout normal
+    // (Math.min), no sustituirlo — con solo un `Math.max` el suelo hacia que una
+    // llamada colgada durase ~53 s en vez de ~30 y el bucle rindiera un correo en
+    // vez de cinco. Y el reintento solo se permite si CABEN dos intentos enteros.
+    const i = AI.indexOf('plazoMs\n')
     expect(i, 'ya no hay rama de plazo en la llamada').toBeGreaterThan(-1)
-    expect(/maxRetries:\s*0/.test(AI.slice(i, i + 120)),
-      'con plazo medido no puede haber reintento: no cabe en un hueco ya medido').toBe(true)
+    const rama = AI.slice(i, i + 420)
+    expect(/timeout:\s*Math\.min\(\s*TIMEOUT_MS/.test(rama),
+      'el plazo sustituye al timeout en vez de acotarlo: una llamada colgada dura el plazo entero').toBe(true)
+    expect(/maxRetries:\s*plazoMs\s*>=/.test(rama),
+      'el reintento ya no depende de que quepa: o se pierde el backoff de los 5xx, o el reintento se sale del hueco').toBe(true)
+    // TODAS las llamadas, no «que exista una». colabsSync.ts tiene DOS copias del
+    // bucle y esta regla se satisfacia con cualquiera: se reintrodujo el bug exacto
+    // en la segunda y la suite seguia en verde. En un repo cuya tesis es que mas de
+    // la mitad de los fallos graves son gemelos, una regla que solo mira la primera
+    // copia no sirve para nada.
     for (const f of TS.filter(f => /for \(const email of emails\)/.test(leerCodigo(f)))) {
-      expect(/analyzeEmail\([\s\S]{0,400}?plazo/.test(leerCodigo(f)),
-        `${f} mide el plazo y luego no se lo pasa a la llamada`).toBe(true)
+      const src = leerCodigo(f)
+      const llamadas = [...src.matchAll(/analyzeEmail\(/g)]
+      expect(llamadas.length, `${f}: no se encontro ninguna llamada`).toBeGreaterThan(0)
+      llamadas.forEach((m, i) => {
+        expect(/plazo/.test(src.slice(m.index, m.index + 400)),
+          `${f}: la llamada nº${i + 1} a analyzeEmail no recibe el plazo`).toBe(true)
+      })
     }
   })
 
   // El fetch de Gmail y sus consultas tambien gastan del minuto. Medir desde
   // despues era contar solo una parte y creer que sobraba tiempo.
-  it('el reloj arranca antes del fetch de Gmail', () => {
+  // El reparto del cron —25 s el compartido y 12 s cada personal, 8 buzones en la
+  // misma ejecucion— depende de estos dos topes. Se borraron una vez al cambiar de
+  // palanca y CUATRO comentarios se quedaron describiendo un reparto que ya no
+  // pasaba: con ~51 s por buzon en vez de 25, en un lunes con atraso arrancan 4 de
+  // 7 y los otros 3 esperan una hora.
+  it('los topes por buzón siguen ahí, y acotan de verdad', () => {
+    const CS = leerCodigo('src/lib/colabsSync.ts')
+    expect(/TOPE_COLABS_MS\s*=\s*25_000/.test(CS), 'falta el tope del buzón compartido').toBe(true)
+    expect(/TOPE_PERSONAL_MS\s*=\s*12_000/.test(CS), 'falta el tope de los buzones personales').toBe(true)
+    // Declararlos no basta: tienen que entrar en el calculo del plazo.
+    const usos = (CS.match(/Math\.min\(plazoRestante\([^)]*\),\s*TOPE_/g) || []).length
+    expect(usos, 'los topes están declarados pero no acotan el plazo').toBe(2)
+  })
+
+  it('el reloj arranca antes del fetch de Gmail, en TODAS las copias', () => {
+    // `indexOf` comparaba solo el PRIMER T0 con el PRIMER fetch, y colabsSync.ts
+    // tiene dos parejas: el bug reintroducido en la segunda pasaba en verde.
+    // Ahora se emparejan en orden — cada fetch con el T0 que lo precede.
     for (const f of TS.filter(f => /const T0 = Date\.now\(\)/.test(leerCodigo(f)))) {
       const src = leerCodigo(f)
-      const t0 = src.indexOf('const T0 = Date.now()')
-      const fetchGmail = src.indexOf('await getEmailsWithRefreshToken(')
-      if (fetchGmail === -1) continue
-      expect(t0, `${f}: T0 arranca despues del fetch de Gmail`).toBeLessThan(fetchGmail)
+      const t0s = [...src.matchAll(/const T0 = Date\.now\(\)/g)].map(m => m.index as number)
+      const fetches = [...src.matchAll(/await getEmailsWithRefreshToken\(/g)].map(m => m.index as number)
+      if (!fetches.length) continue
+      expect(t0s.length, `${f}: hay ${fetches.length} fetch y ${t0s.length} relojes`).toBe(fetches.length)
+      fetches.forEach((pos, i) => {
+        expect(t0s[i], `${f}: el reloj nº${i + 1} arranca DESPUÉS de su fetch de Gmail`).toBeLessThan(pos)
+      })
     }
   })
 
@@ -862,29 +906,40 @@ describe('escrituras · ningún insert descarta su error', () => {
 // cuidadosamente escrito más abajo no llega a ejecutarse nunca.
 // ─────────────────────────────────────────────────────────────────────────────
 describe('fetch de servidor · siempre con plazo', () => {
-  const SERVIDOR = TS.filter(f => !f.includes('/components/'))
+  // Solo codigo de SERVIDOR: src/lib y las rutas de API. Un fetch de cliente a
+  // nuestra propia API (`/api/...`) no corre bajo undici ni tiene maxDuration que
+  // agotar, asi que exigirle plazo seria ruido.
+  const SERVIDOR = TS.filter(f => f.startsWith('src/lib/') || f.startsWith('src/app/api/'))
 
+  // El patron viejo era /await fetch\('https:\/\// — comilla simple PEGADA al
+  // parentesis. No veia los cuatro fetch de whatsapp.ts: dos con la URL en la
+  // linea siguiente, uno con backtick y otro con una variable. O sea que la regla
+  // afirmaba «cero violaciones» siendo falso, y cualquier fetch futuro escrito con
+  // template literal —que es la forma natural de una URL interpolada— entraba
+  // invisible. Ahora: TODO `await fetch(` cuenta, y solo se excluye el que apunta
+  // a una ruta relativa literal, que no sale de nuestro propio origen.
   const sinPlazo = SERVIDOR.flatMap(f => {
     const src = leerCodigo(f)
     const fuera: string[] = []
-    const re = /await fetch\('https:\/\/([^']+)'/g
-    let m: RegExpExecArray | null
-    while ((m = re.exec(src))) {
-      // El init del fetch: hasta el primer cierre de objeto.
-      const init = src.slice(m.index, m.index + 420).split('})')[0]
-      if (!/signal\s*:/.test(init)) fuera.push(`${f} → ${m[1].slice(0, 40)}`)
+    for (const m of src.matchAll(/await fetch\(/g)) {
+      const i = m.index as number
+      const tras = src.slice(i, i + 620)
+      const relativa = /await fetch\(\s*[`'"]\//.test(tras)
+      if (relativa) continue
+      const init = tras.split('})')[0]
+      if (!/signal\s*:/.test(init)) fuera.push(`${f}:${src.slice(0, i).split('\n').length}`)
     }
     return fuera
   })
 
   it('hay fetch que revisar', () => {
-    const total = SERVIDOR.filter(f => /await fetch\('https:\/\//.test(leerCodigo(f)))
-    expect(total.length).toBeGreaterThan(2)
+    const total = SERVIDOR.filter(f => /await fetch\(/.test(leerCodigo(f)))
+    expect(total.length, 'no se encontro ningun fetch de servidor').toBeGreaterThan(3)
   })
 
   it('ninguno se queda sin signal', () => {
     expect(sinPlazo,
-      'Un cuelgue de ese servicio agota la función entera: 300 s de undici contra 60 s de maxDuration').toEqual([])
+      'Un cuelgue de ese servicio agota la función entera: 300 s de undici contra el maxDuration de la ruta').toEqual([])
   })
 })
 
@@ -909,6 +964,21 @@ describe('la interfaz no dice cosas que no son', () => {
     expect(i, 'ya no revincula perfiles: revisa esta regla').toBeGreaterThan(-1)
     expect(/const \{ error/.test(ME.slice(Math.max(0, i - 220), i)),
       'devuelve el id nuevo sin comprobar que la fila se actualizó: el cliente se queda apuntando a un perfil fantasma').toBe(true)
+  })
+
+  // Esta regla no ataba nada: exigia que la cadena apareciera, y pasaba en verde
+  // con la llamada en una rama muerta — de hecho paso en verde con el bug del
+  // cuerpo leido dos veces DENTRO, introducido por el mismo commit. Ahora fija lo
+  // que de verdad importa: el cuerpo se lee UNA vez por respuesta.
+  it('el cuerpo de la respuesta de transcripción se lee una sola vez', () => {
+    for (const f of ['HoySection', 'HarveySection']) {
+      const src = leerCodigo(`src/components/sections/${f}.tsx`)
+      const i = src.indexOf("fetch('/api/harvey/transcribe'")
+      expect(i, `${f}: ya no llama a transcribe`).toBeGreaterThan(-1)
+      const bloque = src.slice(i, i + 1600)
+      expect((bloque.match(/await res\.json\(\)/g) || []).length,
+        `${f}: lee el cuerpo dos veces — la segunda rechaza y el silencio se anuncia como caída del servicio`).toBeLessThan(2)
+    }
   })
 
   it('el fallo de transcripción no se le echa al usuario', () => {

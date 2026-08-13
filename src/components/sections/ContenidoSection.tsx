@@ -176,6 +176,10 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
       // URL FIRMADA que pisaba en la base el identificador que upload-cover
       // acababa de guardar bien. La respuesta ya trae la fila entera firmada, así
       // que la rejilla se refresca sin volver a escribir nada.
+      // La subida deja el campo con la firma que devuelve el servidor, asi que
+      // desmarcarlo: si el usuario habia tecleado antes en PORTADA, la marca seguia
+      // puesta y el siguiente GUARDAR pisaba el identificador con esa firma.
+      coverTocada.current = false
       if (json.item) data.aplicarAgendaLocal?.(json.item)
       showToast(json.warning || 'Portada subida correctamente')
     } catch (err: any) { showToast('Error: ' + err.message) }

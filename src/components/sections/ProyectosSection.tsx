@@ -6,7 +6,6 @@ import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, Lu
 import { plural } from '@/components/shared/helpers'
 import type { Project, Task, Profile, NexusData} from '@/types'
 import type { IrASeccion } from '@/components/shared/secciones'
-import { rutaApp } from '@/lib/appUrl'
 
 interface PropsProyectos {
   data: NexusData
@@ -297,7 +296,16 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
       // al subir, y ademas pdfCacheRef restaura la copia vieja por delante.
       if (selectedProjectRef.current?.id === proyectoId) setPdfDoc({
         name: file.name,
-        url: rutaApp('/api/archivo?u=' + encodeURIComponent(urlJ.publicUrl)),
+        // RELATIVA, no rutaApp(). Esto es un enlace para la pagina que el usuario
+        // YA tiene abierta, asi que tiene que apuntar al host desde el que la abrio.
+        // `rutaApp()` cablea NEXT_PUBLIC_APP_URL en el bundle, y la app se sirve en
+        // DOS hosts a proposito (CLAUDE.md 3-bis: brutalia.tech y el .vercel.app
+        // viejo, para no dejar fuera a quien tenga la PWA instalada). Las cookies de
+        // Supabase son host-only, asi que cruzar de origen = /api/archivo no ve
+        // sesion = 401 en los tres consumidores, y el <iframe> ademas lo bloquea la
+        // CSP. El fallo es simetrico: da igual que valor tenga la variable, siempre
+        // rompe a la mitad de la plantilla.
+        url: '/api/archivo?u=' + encodeURIComponent(urlJ.publicUrl),
         ident: urlJ.publicUrl,
       })
       // 3. Extraer portada (cliente) + analizar en paralelo

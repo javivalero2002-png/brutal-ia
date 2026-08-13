@@ -222,10 +222,16 @@ Responde SOLO con JSON válido (sin markdown):
 }`
       }]
     }, plazoMs
-      // maxRetries 0: un reintento no cabe en un hueco ya medido, y el SDK
-      // obedece el Retry-After de un 429 hasta 60 s — que es justo lo que hace
-      // que ningun presupuesto fijo funcione.
-      ? { timeout: Math.max(1_000, plazoMs), maxRetries: 0 }
+      // El plazo ACOTA, no sustituye: `Math.min` con el timeout normal. Sin el,
+      // una llamada colgada pasaba de ~30 s a ~53 s y el bucle rendia un correo en
+      // vez de cinco. Y `maxRetries` sube a 1 SOLO si en el hueco caben dos
+      // intentos completos — asi se recupera el backoff que absorbe los 529/5xx sin
+      // Retry-After, que se habia perdido gratis, sin volver a arriesgar el corte:
+      // un 429 con Retry-After largo no cabe en el calculo y se queda en 0.
+      ? {
+          timeout: Math.min(TIMEOUT_MS, Math.max(1_000, plazoMs)),
+          maxRetries: plazoMs >= TIMEOUT_MS * 2 + 1_000 ? 1 : 0,
+        }
       : undefined)
   } catch (err: any) {
     // Distinguir el motivo importa: un 401 se arregla rotando la clave, un 429
