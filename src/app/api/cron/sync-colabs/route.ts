@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
+import { ERRORES_ACCIONABLES } from '@/lib/gmailAuth'
 import { syncColabsInbox, syncPersonalInbox } from '@/lib/colabsSync'
 import { runAutomations } from '@/lib/automations'
 import { madridHour } from '@/components/shared/helpers'
@@ -92,8 +93,10 @@ export async function GET(request: NextRequest) {
       return
     }
     if (NOT_CONNECTED.has(r.error)) return // configuración, no fallo
-    // token_expired requiere que un humano reconecte Gmail: es accionable.
-    outcomes.push({ mailbox, ok: false, error: r.error, terminal: r.error === 'token_expired' })
+    // Un humano tiene que reconectar Gmail: es accionable, asi que el cron se pinta
+    // en rojo aunque solo falle un buzon. Antes solo contaba 'token_expired', y un
+    // 'auth_rota' (unauthorized_client) se quedaba en un log que no lee nadie.
+    outcomes.push({ mailbox, ok: false, error: r.error, terminal: ERRORES_ACCIONABLES.has(r.error) })
   }
 
   record('colabs', await syncColabsInbox(admin))

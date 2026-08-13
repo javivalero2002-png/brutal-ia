@@ -127,9 +127,15 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
       showToast(`Gmail Personal — ${detail}`)
       return fallos === 0
     } catch (err: any) {
-      const isExpired = err?.message?.includes('token_expired') || err?.error === 'token_expired'
-      const msg = isExpired ? 'Token caducado — reconecta tu cuenta'
+      // `auth_rota` ademas de `token_expired`: Google devuelve `unauthorized_client`
+      // para una conexion muerta y eso caia como «Error de conexion» generico, que
+      // suena a fallo de red pasajero. La accion que hay que hacer es la misma —
+      // reconectar— y decirlo es la diferencia entre arreglarlo y esperar.
+      const hayQueReconectar = ['token_expired', 'auth_rota']
+        .some(c => err?.error === c || err?.message?.includes(c))
+      const msg = hayQueReconectar ? 'Conexión caducada — reconecta tu cuenta'
         : err?.message?.includes('Gmail no conectado') ? 'Cuenta no conectada' : 'Error de conexión'
+      const isExpired = hayQueReconectar
       addLog('Gmail Personal', false, msg)
       setSyncResultMsg({ok:false, text:msg, account:'personal'})
       showToast(isExpired ? 'Token de Gmail caducado — reconecta desde aquí' : 'Error al sincronizar Gmail')
@@ -161,8 +167,8 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
         await data.reloadInbox?.()
         return true
       } else {
-        const isExpired = result.error === 'token_expired'
-        const errMsg = isExpired ? 'Token caducado — reconecta la cuenta' : (result.error || 'Error del servidor')
+        const isExpired = result.error === 'token_expired' || result.error === 'auth_rota'
+        const errMsg = isExpired ? 'Conexión caducada — reconecta la cuenta' : (result.error || 'Error del servidor')
         addLog('Gmail Colaboraciones', false, errMsg)
         setSyncResultMsg({ok:false, text:errMsg, account:'colabs'})
         showToast(isExpired ? 'Token de Gmail Colabs caducado — reconecta desde aquí' : 'Error al sincronizar colaboraciones')

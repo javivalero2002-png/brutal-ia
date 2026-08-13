@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { esConexionRota } from '@/lib/gmailAuth'
 import { getOAuthClient } from '@/lib/gmail'
 import { google } from 'googleapis'
 import { NextResponse } from 'next/server'
@@ -11,11 +12,10 @@ async function validateToken(refreshToken: string): Promise<{ valid: boolean; em
     const { data: info } = await oauth2.userinfo.get()
     return { valid: true, email: info.email || null }
   } catch (err: unknown) {
-    const error = err as Error & { response?: { data?: { error?: string } } }
-    const isExpired = error.message?.includes('invalid_grant')
-      || error.response?.data?.error === 'invalid_grant'
-      || error.message?.includes('Token has been expired or revoked')
-    return { valid: !isExpired, email: null }
+    // `esConexionRota` y no solo `invalid_grant`: con `unauthorized_client` esta
+    // función devolvía valid:true y la pantalla pintaba CONECTADO sobre un buzón
+    // que llevaba días sin sincronizar.
+    return { valid: !esConexionRota(err), email: null }
   }
 }
 
