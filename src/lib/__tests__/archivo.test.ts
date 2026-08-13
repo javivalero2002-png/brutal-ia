@@ -29,7 +29,7 @@ describe('/api/archivo · no sirve nada sin sesión', () => {
   })
 
   it('corta con 401 si no hay usuario', () => {
-    expect(/if \(!user\).*401/s.test(src.slice(0, src.indexOf("searchParams.get('u')")))).toBe(true)
+    expect(/if \(!user\)[\s\S]*401/.test(src.slice(0, src.indexOf("searchParams.get('u')")))).toBe(true)
   })
 })
 
@@ -45,7 +45,7 @@ describe('/api/archivo · no puede ser un redirector abierto', () => {
   it('la guarda corta con 400, no sigue adelante', () => {
     const i = src.search(/if\s*\(\s*!\s*isOwnStorageUrl\s*\(/)
     expect(i).toBeGreaterThan(-1)
-    expect(/return .*400/s.test(src.slice(i, i + 320)), 'la guarda no devuelve 400').toBe(true)
+    expect(/return [\s\S]*400/.test(src.slice(i, i + 320)), 'la guarda no devuelve 400').toBe(true)
   })
 
   it('valida ANTES de redirigir', () => {
