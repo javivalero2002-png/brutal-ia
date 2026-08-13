@@ -1,4 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { firmarUrl } from '@/lib/storageFirmado'
+import { rutaDeStorage } from '@/lib/taskAttachments'
 import { checkAiRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
@@ -20,6 +22,28 @@ const BUCKET = 'content-videos'
 // Analiza un PDF con Claude. Dos modos:
 //  - sin `question`: análisis completo JSON + guarda el PDF en Supabase Storage
 //  - con `question`: responde una pregunta sobre el PDF (no almacena)
+/**
+ * Descarga un fichero del Storage por su identificador, con el service role.
+ *
+ * Sustituye a `fetch(urlPublica)`. Dos motivos, y el segundo es el bueno:
+ *   · con el bucket cerrado esa URL devuelve 400, asi que dejaria de funcionar;
+ *   · y sobre todo, quita del medio un `fetch()` del SERVIDOR a una URL que llega
+ *     en el body. Eso era una primitiva de lectura con canal de salida —esta ruta
+ *     devuelve el resumen que Claude hace de lo descargado— que habia que
+ *     defender con isOwnStorageUrl(). Bajando por la API de Storage no hay
+ *     peticion saliente que envenenar: se pide un objeto por su ruta, y punto.
+ */
+async function bajarDelStorage(admin: any, url: string): Promise<Buffer | null> {
+  const r = rutaDeStorage(url)
+  if (!r) return null
+  const { data, error } = await admin.storage.from(r.bucket).download(r.path)
+  if (error || !data) {
+    console.error('[storage] no se pudo descargar', r.path, '—', error?.message)
+    return null
+  }
+  return Buffer.from(await data.arrayBuffer())
+}
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -39,13 +63,11 @@ export async function POST(request: NextRequest) {
   if (body.pdfUrl) {
     // Opción A: el cliente subió el PDF directamente a Supabase; lo descargamos aquí
     if (!isOwnStorageUrl(body.pdfUrl)) return NextResponse.json({ error: 'URL de PDF no permitida' }, { status: 400 })
-    try {
-      const resp = await fetch(body.pdfUrl, { signal: AbortSignal.timeout(30_000) })
-      if (!resp.ok) return NextResponse.json({ error: 'No se pudo descargar el PDF' }, { status: 502 })
-      const buf = Buffer.from(await resp.arrayBuffer())
-      if (buf.length > 50 * 1024 * 1024) return NextResponse.json({ error: 'PDF demasiado grande (máx. 50 MB)' }, { status: 413 })
-      b64 = buf.toString('base64')
-    } catch { return NextResponse.json({ error: 'Error descargando el PDF' }, { status: 502 }) }
+    const admin0 = await createAdminClient()
+    const buf = await bajarDelStorage(admin0, body.pdfUrl)
+    if (!buf) return NextResponse.json({ error: 'No se pudo descargar el PDF' }, { status: 502 })
+    if (buf.length > 50 * 1024 * 1024) return NextResponse.json({ error: 'PDF demasiado grande (máx. 50 MB)' }, { status: 413 })
+    b64 = buf.toString('base64')
   } else {
     // Opción B (legacy): base64 en el body
     const rawPdf = body.pdf || ''
@@ -74,7 +96,9 @@ export async function POST(request: NextRequest) {
   if (!isChat && !pdfUrl) {
     try {
       const admin = await createAdminClient()
-      await admin.storage.createBucket(BUCKET, { public: true }).then(() => {}, () => {})
+      // public:false — si el bucket se borrara, recrearlo ABIERTO devolveria los
+  // contratos y presupuestos a la intemperie. Ver src/lib/storageFirmado.ts.
+  await admin.storage.createBucket(BUCKET, { public: false }).then(() => {}, () => {})
       const buffer = Buffer.from(b64, 'base64')
       const hash = createHash('sha256').update(buffer).digest('hex').slice(0, 16)
       const path = `pdfs/${hash}.pdf`
@@ -129,7 +153,9 @@ Si el documento está en otro idioma, responde en español. Si un campo no tiene
 
     const clean = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
     try {
-      return NextResponse.json({ analysis: JSON.parse(clean), pdfUrl })
+      // pdfUrl se DEVUELVE firmada (el visor la incrusta al momento); en la BD se
+      // guarda la forma publica, que es el identificador.
+      return NextResponse.json({ analysis: JSON.parse(clean), pdfUrl: await firmarUrl(await createAdminClient(), pdfUrl) })
     } catch {
       return NextResponse.json({ analysis: { summary: text.slice(0, 600), keyPoints: [], actions: [], data: {} }, pdfUrl })
     }

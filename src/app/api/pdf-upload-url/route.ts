@@ -23,7 +23,9 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = await createAdminClient()
-  await admin.storage.createBucket(BUCKET, { public: true, fileSizeLimit: MAX_MB * 1024 * 1024 }).then(() => {}, () => {})
+  // public:false — si el bucket se borrara, recrearlo ABIERTO devolveria los
+  // contratos y presupuestos a la intemperie. Ver src/lib/storageFirmado.ts.
+  await admin.storage.createBucket(BUCKET, { public: false, fileSizeLimit: MAX_MB * 1024 * 1024 }).then(() => {}, () => {})
 
   // Path deterministico por nombre+tamaño para reutilizar si ya existe
   // El nombre del objeto lleva un componente ALEATORIO, no solo el hash del
