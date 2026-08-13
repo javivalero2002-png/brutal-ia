@@ -117,7 +117,7 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
     // de lo peor que puede hacer esta seccion.
     const vigente = () => selectedRef.current?.id === member.id
     try {
-      const r = await fetchWithTimeout(`/api/inbox/thread?withUserId=${member.id}&withName=${encodeURIComponent(member.name)}`)
+      const r = await fetchWithTimeout(`/api/inbox/thread?withUserId=${member.id}`)
       // Un fallo de carga se pintaba igual que un hilo vacío: "Sin mensajes aún".
       // Decir que no hay conversación cuando en realidad no se ha podido leer es
       // peor que no decir nada — se escribe otra vez algo ya enviado.
