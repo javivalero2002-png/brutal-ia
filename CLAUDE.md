@@ -23,8 +23,20 @@ cobertura horaria. Un solo `0 * * * *` hace que el deploy falle con
 `Hobby accounts are limited to daily cron jobs`. Ver el comentario en
 `src/app/api/cron/sync-colabs/route.ts`.
 
-**3. Hobby también implica funciones de 60s máximo.** Las rutas que llaman a
-Claude en bucle (`gmail/sync` hace hasta 20 llamadas secuenciales) rozan ese techo.
+**3. El techo de 60s ya NO es de la plataforma: es NUESTRO.** Esto decía «Hobby
+implica funciones de 60s máximo» y **es falso desde 2026**. La documentación de
+Vercel (verificada el 2026-08-13) da a Hobby **300s de máximo y de defecto** con
+fluid compute, que viene activado por defecto en los proyectos nuevos. Los 60s que
+ves son un `export const maxDuration = 60` escrito a mano en nuestras rutas.
+
+Que sea nuestro no significa que sobre: las rutas que llaman a Claude en bucle
+(`gmail/sync` hace hasta 20 llamadas secuenciales) se acotan a propósito con sus
+presupuestos internos, y un tope bajo es lo que convierte «se colgó» en un error
+con mensaje. Si algún día hace falta más margen, ahora se puede subir — pero
+comprueba antes que el proyecto tiene fluid compute activo.
+
+Lo que **sí sigue siendo cierto** es el límite de crons diarios del punto 2:
+verificado el mismo día, con el mismo mensaje de error.
 
 **4. `deploy.sh` está retirado a propósito** y falla si lo ejecutas. Desplegaba el
 *árbol de trabajo*, no un commit, y así llegó a producción código que no existía

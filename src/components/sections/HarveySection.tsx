@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { parsearAccionHarvey, type AccionHarvey } from '@/lib/harveyAccion'
 import { nivelTarea } from '@/components/shared/helpers'
 import type { NexusData } from '@/types'
 import { BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, AMBAR} from '@/components/shared'
@@ -23,7 +24,9 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
   const [conversation, setConversation] = useState<Array<{role:'user'|'harvey',text:string,searched?:boolean,ts?:string}>>([])
   const [textInput, setTextInput] = useState('')
   const [copiedHarveyIdx, setCopiedHarveyIdx] = useState<number|null>(null)
-  const [pendingAction, setPendingAction] = useState<{type:'tarea'|'evento'|'proyecto'|'cliente'|'pieza';text:string;level?:string;date?:string;time?:string;industry?:string;clientName?:string;platform?:string;contentType?:string;assigneeName?:string;invitees?:string}|null>(null)
+  // El tipo lo fija el modulo del parser: declararlo a mano aqui era la tercera
+  // copia de la misma forma, y la que tenia `level?: string` sin normalizar.
+  const [pendingAction, setPendingAction] = useState<AccionHarvey|null>(null)
   const [confirmingAction, setConfirmingAction] = useState(false)
   const [recSeconds, setRecSeconds] = useState(0)
   const [followUps, setFollowUps] = useState<string[]>([])
@@ -375,17 +378,11 @@ ${memLines2||'  sin documentos'}`
       }
 
       // Parse action command
-      const actionMatch = reply.match(/\[ACCION:([^\]]+)\]/)
-      if (actionMatch) {
-        reply = reply.replace(/\[ACCION:[^\]]*\]/g, '').trim()
-        const parts = actionMatch[1].split('|')
-        const type = parts[0] as 'tarea'|'evento'|'proyecto'|'cliente'|'pieza'
-        if (type==='tarea')    setPendingAction({type:'tarea',    text:parts[1]||'', level:parts[2]||'high', assigneeName:parts[3]?.trim()||''})
-        if (type==='evento')   setPendingAction({type:'evento',   text:parts[1]||'', date:parts[2]||'', time:parts[3]||'', invitees:parts[4]?.trim()||''})
-        if (type==='proyecto') setPendingAction({type:'proyecto', text:parts[1]||'', clientName:parts[2]||'', date:parts[3]||''})
-        if (type==='cliente')  setPendingAction({type:'cliente',  text:parts[1]||'', industry:parts[2]||'—'})
-        if (type==='pieza')    setPendingAction({type:'pieza',    text:parts[1]||'', platform:parts[2]||'Instagram', contentType:parts[3]||'Post'})
-      }
+      // Un solo sitio para las dos secciones: esto estaba escrito linea por linea
+      // aqui y en la otra, y cada bug de la pareja habia que arreglarlo dos veces.
+      const { texto: limpio, accion } = parsearAccionHarvey(reply)
+      reply = limpio
+      if (accion) setPendingAction(accion)
 
       setIsSearching(false)
       // Si la respuesta viene del fallback local, se dice. Callarlo era hacer pasar
