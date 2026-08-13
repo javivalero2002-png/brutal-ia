@@ -183,6 +183,38 @@ describe('la URL de la app vive en un solo sitio', () => {
   })
 })
 
+// ── 7. Cuándo Gmail está desconectado ────────────────────────────────────────
+//
+// La detección estaba escrita CUATRO veces y las cuatro miraban solo
+// `invalid_grant`. Los logs de producción del 2026-08-13 enseñaron a Google
+// devolviendo `unauthorized_client`: no casaba en ninguna, caía como error
+// genérico, y `gmail_connected` seguía en true — la pantalla decía «CONECTADO»
+// sobre un buzón que llevaba días sin sincronizar.
+
+describe('Gmail · la detección de conexión rota vive en un solo sitio', () => {
+  /** Cada excepción, con su motivo. Si sobra, el test de abajo lo canta. */
+  const EXCEPCIONES: Record<string, string> = {
+    'src/app/api/calendar/events/route.ts':
+      'Su `isNoScope` no detecta una conexión muerta sino la FALTA DE PERMISO de calendario ' +
+      '(403 / insufficientPermissions), y mira invalid_grant como una señal más entre varias. ' +
+      'Es otra pregunta, no una copia. Candidato a unificar el día que se toque el calendario.',
+  }
+
+  it('nadie vuelve a comparar contra invalid_grant a mano', () => {
+    const malos = TS
+      .filter(f => f !== 'src/lib/gmailAuth.ts' && !(f in EXCEPCIONES))
+      .flatMap(f => leer(f).split('\n').map((l, i) => ({ f, i: i + 1, l })))
+      .filter(({ l }) => /invalid_grant/.test(l) && !/^\s*(\/\/|\*)/.test(l))
+    expect(malos.map(u => `${u.f}:${u.i}`),
+      'Detecta el token caducado a mano: usa esTokenMuerto/esConexionRota de @/lib/gmailAuth').toEqual([])
+  })
+
+  it('las excepciones anotadas siguen existiendo', () => {
+    const fantasmas = Object.keys(EXCEPCIONES).filter(f => !TS.includes(f) || !/invalid_grant/.test(leer(f)))
+    expect(fantasmas, 'Excepción que ya no hace falta: quítala de la lista').toEqual([])
+  })
+})
+
 describe('uniones con CHECK en la base · nadie las silencia con `as any`', () => {
   it('ni el nivel de una tarea ni el estado de un proyecto se castean', () => {
     const malos = TS.flatMap(f => leer(f).split('\n').map((l, i) => ({ f, i: i + 1, l })))

@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
+import { ERRORES_ACCIONABLES } from '@/lib/gmailAuth'
 import { syncColabsInbox, syncPersonalInbox } from '@/lib/colabsSync'
 import { runAutomations } from '@/lib/automations'
 import { madridHour } from '@/components/shared/helpers'
@@ -92,8 +93,10 @@ export async function GET(request: NextRequest) {
       return
     }
     if (NOT_CONNECTED.has(r.error)) return // configuración, no fallo
-    // token_expired requiere que un humano reconecte Gmail: es accionable.
-    outcomes.push({ mailbox, ok: false, error: r.error, terminal: r.error === 'token_expired' })
+    // Un humano tiene que reconectar Gmail: es accionable, asi que el cron se pinta
+    // en rojo aunque solo falle un buzon. Antes solo contaba 'token_expired', y un
+    // 'auth_rota' (unauthorized_client) se quedaba en un log que no lee nadie.
+    outcomes.push({ mailbox, ok: false, error: r.error, terminal: ERRORES_ACCIONABLES.has(r.error) })
   }
 
   record('colabs', await syncColabsInbox(admin))
@@ -221,24 +224,42 @@ export async function GET(request: NextRequest) {
 
   const failures = outcomes.filter(o => !o.ok)
   const attempted = outcomes.length
+
   // Devolver 500 hace que Vercel marque la ejecución como fallida en el panel.
   // Antes esto siempre era 200 {ok:true} con los errores enterrados en el cuerpo:
   // el dashboard salía verde mientras no se sincronizaba nada.
-  // Se falla solo cuando hay algo que hacer — un token caducado (hay que
-  // reconectar Gmail) o que TODOS los buzones intentados fallen. Un fallo suelto
-  // y transitorio (429/5xx de Gmail en 1 de 7) no debe pintar el cron de rojo:
-  // 24 rojos al día enseñan al equipo a ignorar el rojo, y volvemos al punto de partida.
-  const terminal = failures.filter(o => o.terminal)
-  // `attempted >= 2` y no `> 0`: con un solo buzón conectado (lo normal aquí),
-  // "todos fallaron" es lo mismo que "falló uno", así que un 429 puntual de Gmail
-  // pintaría de rojo las 24 ejecuciones del día — justo la fatiga de alarma que
-  // este código quería evitar. Un fallo transitorio queda en el console.error.
+  //
+  // Pero un buzón que necesita reconexión NO cuenta como ejecución fallida, y esta
+  // distinción es la que hace que el panel siga sirviendo para algo. Es un estado
+  // CONOCIDO y PERSISTENTE: seguirá ahí cada hora hasta que esa persona entre en
+  // la app y vuelva a conectar. Repetir el 500 cada hora no añade información —
+  // la destruye, porque un rojo permanente se aprende a ignorar en dos días, y
+  // entonces el rojo del día que falle algo de verdad tampoco se ve.
+  //
+  // Quien tiene que enterarse es la persona afectada, y ya se entera donde mira:
+  // `gmail_connected` pasa a false, así que su cuenta sale como desconectada en
+  // Operativa → Sincronización, y baja el «% CONECTADO» del estado del equipo.
+  // Aquí queda el console.error, que es rastreable en los logs cuando alguien
+  // investigue.
+  const reconexion = failures.filter(o => ERRORES_ACCIONABLES.has(o.error || ''))
+  // `attempted >= 2` y no `> 0`: con un solo buzón conectado, "todos fallaron" es
+  // lo mismo que "falló uno", así que un 429 puntual de Gmail pintaría de rojo las
+  // 24 ejecuciones del día — la misma fatiga de alarma.
   const allFailed = attempted >= 2 && failures.length === attempted
-  const failed = terminal.length > 0 || allFailed
+  // Lo que sí es un fallo de EJECUCIÓN: que reventara todo, o que fallara algo que
+  // no sea una reconexión pendiente (la base, la red, un bug).
+  const rotoDeVerdad = failures.some(o => !ERRORES_ACCIONABLES.has(o.error || ''))
+  const failed = allFailed || (rotoDeVerdad && failures.length > 0 && attempted >= 2)
 
-  if (failures.length) {
-    console.error(`[cron] ${failures.length}/${attempted} buzones fallaron:`,
-      failures.map(f => `${f.mailbox}=${f.error}`).join(' | '))
+  if (reconexion.length) {
+    console.error(`[cron] ${reconexion.length} buzón(es) necesitan reconectar Gmail:`,
+      reconexion.map(f => `${f.mailbox}=${f.error}`).join(' | '),
+      '— no cuenta como fallo de la ejecución, se arregla desde Operativa → Sincronización')
+  }
+  const otros = failures.filter(o => !ERRORES_ACCIONABLES.has(o.error || ''))
+  if (otros.length) {
+    console.error(`[cron] ${otros.length}/${attempted} buzones fallaron:`,
+      otros.map(f => `${f.mailbox}=${f.error}`).join(' | '))
   }
 
   return NextResponse.json({
@@ -248,6 +269,9 @@ export async function GET(request: NextRequest) {
     // Visible desde fuera: si esto es > 0 de forma sostenida, el presupuesto se
     // queda corto y hay que repartir los buzones en mas ejecuciones.
     ...(pendientes.length ? { aplazados: pendientes.length } : {}),
+    // Visible sin bucear en los logs: quién tiene que reconectar Gmail. No pone
+    // la ejecución en rojo a propósito (ver arriba), pero queda dicho.
+    ...(reconexion.length ? { requierenReconexion: reconexion.map(o => o.mailbox) } : {}),
     automations,
     ...(retention ? { retention } : {}),
   }, { status: failed ? 500 : 200 })

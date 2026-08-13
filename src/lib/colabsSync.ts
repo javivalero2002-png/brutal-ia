@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { esTokenMuerto, esConexionRota } from '@/lib/gmailAuth'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
 import { analyzeEmail, EmailAnalysis } from '@/lib/ai'
 import { sendPushToAll, sendPushToUser, canSendPush } from '@/lib/push'
@@ -49,10 +50,13 @@ export async function syncColabsInbox(
     gmailAccount = await getGmailAccountEmail(token)
   } catch (err: unknown) {
     const error = err as Error & { code?: number; response?: { data?: { error?: string } } }
-    const isTokenExpired = error.message?.includes('invalid_grant')
-      || error.response?.data?.error === 'invalid_grant'
-      || error.message?.includes('Token has been expired or revoked')
-
+    const isTokenExpired = esTokenMuerto(error)
+    if (!isTokenExpired && esConexionRota(error)) {
+      // Google rechaza la conexión pero puede ser configuración global: se avisa
+      // como accionable SIN borrar el token. Ver src/lib/gmailAuth.ts.
+      console.error('[sync] Google rechazó la conexión:', error.response?.data?.error)
+      return { ok: false, error: 'auth_rota' }
+    }
     if (isTokenExpired) {
       await admin.from('profiles').update({ gmail_colabs_connected: false, gmail_colabs_refresh_token: null }).eq('id', owner!.id)
       return { ok: false, error: 'token_expired' }
@@ -223,10 +227,13 @@ export async function syncPersonalInbox(
     gmailAccount = await getGmailAccountEmail(token)
   } catch (err: unknown) {
     const error = err as Error & { code?: number; response?: { data?: { error?: string } } }
-    const isTokenExpired = error.message?.includes('invalid_grant')
-      || error.response?.data?.error === 'invalid_grant'
-      || error.message?.includes('Token has been expired or revoked')
-
+    const isTokenExpired = esTokenMuerto(error)
+    if (!isTokenExpired && esConexionRota(error)) {
+      // Google rechaza la conexión pero puede ser configuración global: se avisa
+      // como accionable SIN borrar el token. Ver src/lib/gmailAuth.ts.
+      console.error('[sync] Google rechazó la conexión:', error.response?.data?.error)
+      return { ok: false, error: 'auth_rota' }
+    }
     if (isTokenExpired) {
       await admin.from('profiles').update({ gmail_connected: false, gmail_refresh_token: null }).eq('id', profile.id)
       return { ok: false, error: 'token_expired' }

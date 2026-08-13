@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { codigoDeFallo } from '@/lib/gmailAuth'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
 import { analyzeEmail, EmailAnalysis } from '@/lib/ai'
 import { NextResponse } from 'next/server'
@@ -39,14 +40,25 @@ export async function POST() {
     gmailAccount = await getGmailAccountEmail(profile.gmail_refresh_token)
   } catch (err: unknown) {
     const error = err as Error & { code?: number; response?: { data?: { error?: string } } }
-    const isTokenExpired = error.message?.includes('invalid_grant')
-      || error.response?.data?.error === 'invalid_grant'
-      || error.message?.includes('Token has been expired or revoked')
-
-    if (isTokenExpired) {
+    const fallo = codigoDeFallo(error)
+    if (fallo === 'token_expired') {
+      // Solo aquí se borra el token: `invalid_grant` significa que ESE token ya no
+      // vale y no hay nada que recuperar.
       await admin.from('profiles').update({ gmail_connected: false, gmail_refresh_token: null }).eq('id', user.id)
       return NextResponse.json(
         { error: 'token_expired', message: 'El token de Gmail ha caducado. Reconecta tu cuenta desde Operativa → Sincronización.' },
+        { status: 401 }
+      )
+    }
+    if (fallo === 'auth_rota') {
+      // NO se borra el token: `unauthorized_client` puede venir de la configuración
+      // global de Google, y borrarlo dejaría a todo el equipo sin poder recuperarse
+      // arreglando la variable. Se marca desconectado para que la UI lo diga, y el
+      // token se conserva por si la causa era global.
+      console.error('[gmail] conexión rechazada por Google:', error.response?.data?.error, '— perfil', user.id)
+      await admin.from('profiles').update({ gmail_connected: false }).eq('id', user.id)
+      return NextResponse.json(
+        { error: 'auth_rota', message: 'Google ha rechazado la conexión. Vuelve a conectar Gmail desde Operativa → Sincronización.' },
         { status: 401 }
       )
     }
