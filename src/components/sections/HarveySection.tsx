@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
 import { parsearAccionHarvey, type AccionHarvey } from '@/lib/harveyAccion'
 import { nivelTarea } from '@/components/shared/helpers'
 import type { NexusData } from '@/types'
@@ -570,63 +571,14 @@ ${memLines2||'  sin documentos'}`
     // no dio fecha y ni se intentó— solo sale un toast. Ese toast pide reconectar
     // Gmail y volver a intentarlo, pero la tarjeta ya había desaparecido y había
     // que dictarle el evento entero otra vez. Mismo tratamiento en HoySection.
-    let creado = false
+    // La ejecución vive en src/lib/harveyEjecutar.ts: estaba escrita byte por byte
+    // aquí y en la otra sección, y los dos bugs que encontró la auditoría hubo que
+    // arreglarlos por duplicado. Devuelve si se escribió algo de verdad — y solo
+    // entonces se descarta la propuesta, que era justo el fallo.
     try {
-      const rColor = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6'][Math.floor(Math.random()*6)]
-      if (pendingAction.type==='tarea') {
-        const member = pendingAction.assigneeName ? matchTeamMember((data.team||[]) as any[], pendingAction.assigneeName) : null
-        await data.createTask({text:pendingAction.text, level:nivelTarea(pendingAction.level), source:'ai', ...(member ? { assigned_to: member.id } : {})})
-        creado = true
-        showToast(member ? `Tarea creada y asignada a ${member.name}`
-          : pendingAction.assigneeName ? `Tarea creada (sin asignar: no encontré a "${pendingAction.assigneeName}")`
-          : 'Tarea creada por Harvey')
-      } else if (pendingAction.type==='proyecto') {
-        const client = pendingAction.clientName
-          ? (data.clients as any[]).find((c:any)=>c.name.toLowerCase().includes((pendingAction.clientName||'').toLowerCase()))
-          : null
-        await data.createProject({name:pendingAction.text, client_id:client?.id, status:'activo', progress:0, deadline:pendingAction.date||'TBD', color:client?.color||rColor})
-        creado = true
-        showToast('Proyecto creado por Harvey')
-      } else if (pendingAction.type==='cliente') {
-        await data.createClient({name:pendingAction.text, industry:pendingAction.industry||'—', revenue:'—', color:rColor, status:'Activo'})
-        creado = true
-        showToast('Cliente creado por Harvey')
-      } else if (pendingAction.type==='pieza') {
-        const client = pendingAction.clientName
-          ? (data.clients as any[]).find((c:any)=>c.name.toLowerCase().includes((pendingAction.clientName||'').toLowerCase()))
-          : null
-        await data.createAgenda({title:pendingAction.text, platform:pendingAction.platform||'Instagram', content_type:pendingAction.contentType||'Post', status:'borrador', publish_date:pendingAction.date||undefined, client_id:client?.id})
-        creado = true
-        showToast('Pieza añadida al pipeline de contenido')
-      } else if (pendingAction.type==='evento') {
-        if (!pendingAction.date) {
-          showToast('Harvey no especificó fecha — dile "para el [fecha]" y vuelve a intentarlo')
-        } else {
-          const team = (data.team||[]) as any[]
-          const inv = (pendingAction.invitees||'').trim()
-          const attendees = !inv ? [] : /^todos?$/i.test(inv)
-            ? team.map((m:any)=>m.email).filter((e:string)=>e && e!==profile?.email)
-            : inv.split(',').map(s=>matchTeamMember(team, s)).filter(Boolean).map((m:any)=>m.email).filter((e:string)=>e && e!==profile?.email)
-          const res = await fetch('/api/calendar/events', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: pendingAction.text, date: pendingAction.date, time: pendingAction.time, attendees }),
-          })
-          const json = await res.json()
-          if (res.ok) {
-            creado = true
-            showToast(attendees.length ? `Reunión creada · invitación enviada a ${attendees.length} persona${attendees.length>1?'s':''}` : 'Evento añadido a Google Calendar')
-            await data.reload?.()
-          } else if (json.error === 'insufficient_scope') {
-            showToast('Re-conecta Gmail en Operativa → Sincronización → Reauth para activar la escritura')
-          } else {
-            showToast('Error al crear el evento en Google Calendar')
-          }
-        }
-      }
+      const creado = await ejecutarAccionHarvey(pendingAction, { data, perfil: profile, showToast })
       if (creado) setPendingAction(null)
-    } catch { showToast('Error al crear') }
-    finally { setConfirmingAction(false) }
+    } finally { setConfirmingAction(false) }
   }
 
   // React ejecuta los efectos en orden de declaración, así que este corría ANTES
