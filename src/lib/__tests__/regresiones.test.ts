@@ -1125,4 +1125,30 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
     expect(/lte\('dia'/.test(consulta),
       'la consulta del diario no tiene tope por arriba: Harvey contaria como hecho lo que solo esta planificado').toBe(true)
   })
+
+  // `diario_dia` lo escribe el CLIENTE (lo manda el Diario al crear la tarea) y
+  // luego el propio Diario filtra por esa columna. Un valor con otra forma se
+  // quedaria ahi para siempre sin emparejar nada, y sin error visible. Es la
+  // misma razon por la que existe `pick()`: lo que llega del cliente y acaba en
+  // una columna se valida, no se confia.
+  it('el dia de diario que manda el cliente se valida antes de guardarse', () => {
+    const T = leerCodigo('src/app/api/tasks/route.ts')
+    expect(/diario_dia/.test(T), 'la ruta ya no acepta diario_dia: revisa esta regla').toBe(true)
+    expect(/\\d\{4\}-\\d\{2\}-\\d\{2\}/.test(T),
+      'diario_dia entra sin comprobar la forma: una clave mal formada se guarda y no empareja con nada').toBe(true)
+    // Y las dos columnas van juntas: un vinculo a medias no empareja y encima
+    // parece que si, porque la columna existe.
+    const i = T.indexOf('diario_dia !== undefined')
+    expect(i, 'ya no se valida diario_dia: revisa esta regla').toBeGreaterThan(-1)
+    expect(/delete fields\.diario_objetivo/.test(T.slice(i, i + 320)),
+      'descarta el dia pero deja el objetivo: queda un vinculo a medias').toBe(true)
+  })
+
+  // El PATCH no debe dejar reescribir el vinculo: cambiarlo a mano moveria una
+  // tarea al dia de otro y descuadraria los dos comprobadores.
+  it('el vinculo con el diario no se puede reescribir desde el cliente', () => {
+    const P = leerCodigo('src/app/api/tasks/[id]/route.ts')
+    expect(/pick\(body, \[[^\]]*diario_/.test(P),
+      'el PATCH deja cambiar diario_dia: se podria mover una tarea al dia de otra persona').toBe(false)
+  })
 })

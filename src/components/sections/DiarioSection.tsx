@@ -149,8 +149,16 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
    * El día se decide por `created_at`, no por `completed_at`: la tarea nace el
    * día en que la fichaste, y ahí sigue perteneciendo aunque la cierres mañana.
    */
-  const misTareasDelDia = (data.tasks || []).filter((t: { assigned_to?: string | null; created_at?: string }) =>
-    t.assigned_to === profile?.id && !!t.created_at && localDayKey(t.created_at) === dia)
+  const misTareasDelDia = (data.tasks || []).filter((t: { assigned_to?: string | null; created_at?: string; diario_dia?: string | null }) => {
+    if (t.assigned_to !== profile?.id) return false
+    // Si la tarea sabe de qué día de diario nació, manda ella: planificar el
+    // jueves crea hoy una tarea que pertenece al JUEVES, y por `created_at`
+    // habría caído en hoy.
+    if (t.diario_dia) return t.diario_dia === dia
+    // Las anteriores a la migración no lo saben: se caen al día de creación,
+    // que es lo que había antes y sigue siendo razonable para ellas.
+    return !!t.created_at && localDayKey(t.created_at) === dia
+  })
   // Los objetivos se ENSEÑAN como lista y se EDITAN en un textarea. Ver una lista
   // con viñetas y editar texto plano son dos cosas distintas, y mezclarlas en un
   // textarea siempre visible es lo que hacía que la sección pareciera un borrador.
@@ -363,7 +371,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
         let creadas = 0
         for (const o of nuevas) {
           try {
-            await data.createTask({ text: o, level: 'high', done: false, assigned_to: profile?.id, source: 'ai' })
+            await data.createTask({ text: o, level: 'high', done: false, assigned_to: profile?.id, source: 'ai', diario_dia: dia, diario_objetivo: o })
             creadas++
           } catch { /* se cuenta abajo */ }
         }
@@ -415,7 +423,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
     let ok = 0
     for (const p of propuestas) {
       try {
-        await data.createTask({ text: p.text, level: p.level, done: p.hecha, assigned_to: profile?.id, source: 'ai' })
+        await data.createTask({ text: p.text, level: p.level, done: p.hecha, assigned_to: profile?.id, source: 'ai', diario_dia: dia, diario_objetivo: p.text })
         ok++
       } catch { /* se cuenta abajo */ }
     }
@@ -437,9 +445,30 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   // La tarea es la verdad y aquí solo se lee. Así el tachado, el porcentaje, la
   // lista de Tareas y lo que ve tu compañero no pueden discrepar: son el mismo
   // dato. Emparejadas por texto normalizado, que es como nacieron.
-  const tareaDe = (o: string) =>
-    misTareasDelDia.find((t: { text?: string }) => normalizar(t.text || '') === normalizar(o)) as
-      { id: string; text?: string; done?: boolean } | undefined
+  /**
+   * La tarea de un objetivo. Por el VÍNCULO primero, por el texto solo si no lo
+   * hay.
+   *
+   * Emparejar por texto tenía un caso que ningún filtro arregla: en cuanto
+   * alguien retoca el texto de la tarea desde la sección Tareas —donde `text` es
+   * editable— el objetivo dejaba de encontrarla. La burbuja salía sin tachar
+   * aunque la tarea estuviera hecha, y al tocarla se creaba una SEGUNDA tarea con
+   * el texto viejo, ya marcada como completada: dos tareas para un trabajo y dos
+   * completadas en Reportes.
+   *
+   * Con `diario_objetivo` el vínculo sobrevive a que cambien los dos textos. El
+   * respaldo por texto se queda para las tareas anteriores a la migración, que
+   * tienen las columnas vacías.
+   */
+  const tareaDe = (o: string) => {
+    const clave = normalizar(o)
+    return (
+      misTareasDelDia.find((t: { diario_objetivo?: string | null }) =>
+        !!t.diario_objetivo && normalizar(t.diario_objetivo) === clave) ||
+      misTareasDelDia.find((t: { text?: string; diario_objetivo?: string | null }) =>
+        !t.diario_objetivo && normalizar(t.text || '') === clave)
+    ) as { id: string; text?: string; done?: boolean } | undefined
+  }
   const estaHecho = (o: string) => !!tareaDe(o)?.done
 
   /** Los objetivos que todavía no son tarea mía de este día. */
@@ -452,7 +481,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
       if (t) await data.updateTask(t.id, { done: !t.done })
       // Sin tarea todavía —marcaste antes de fichar— se crea ya completada, que es
       // lo que acabas de decir que pasó.
-      else await data.createTask({ text: o, level: 'high', done: true, assigned_to: profile?.id, source: 'ai' })
+      else await data.createTask({ text: o, level: 'high', done: true, assigned_to: profile?.id, source: 'ai', diario_dia: dia, diario_objetivo: o })
       // Y se recarga: el bloque «HOY EN EL EQUIPO» sale de `cargar()`, que solo
       // corría al montar, al cambiar de día y al fichar. Tachabas tres burbujas y
       // tu propia fila, dos dedos más abajo, seguía diciendo «0 HECHAS». La misma
