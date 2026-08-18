@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { rutaApp } from '@/lib/appUrl'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { mensajeDeContrasena } from '@/lib/mensajesAuth'
@@ -31,11 +32,51 @@ export default function ResetPasswordPage() {
   const [sesion, setSesion] = useState<'comprobando' | 'si' | 'no'>('comprobando')
 
   useEffect(() => {
-    // El enlace trae los tokens en el hash y supabase-js los canjea al cargar,
-    // así que hay que preguntar DESPUÉS de montar, no durante el render.
+    // El enlace trae los tokens en el hash y supabase-js los canjea AL CARGAR,
+    // pero ese canje es asíncrono. Preguntar una sola vez nada más montar llegaba
+    // antes de tiempo y la página declaraba el enlace caducado con el enlace
+    // perfectamente vivo — y encima mandaba a pedirle otro a Javi.
+    //
+    // Se hacen las tres cosas: preguntar, ESCUCHAR el cambio de estado (que es lo
+    // que dispara el canje cuando termina), y solo declarar que no hay sesión tras
+    // un plazo de gracia. Quien tenga un enlace bueno entra; quien lo tenga
+    // gastado espera dos segundos y ve el aviso, que es el orden correcto de los
+    // dos errores posibles.
     const supabase = createClient()
-    supabase.auth.getSession().then(({ data }) => setSesion(data.session ? 'si' : 'no'))
+    let vivo = true
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (vivo && session) setSesion('si')
+    })
+    supabase.auth.getSession().then(({ data }) => { if (vivo && data.session) setSesion('si') })
+    const plazo = setTimeout(() => { if (vivo) setSesion(a => (a === 'si' ? 'si' : 'no')) }, 2500)
+    return () => { vivo = false; clearTimeout(plazo); sub.subscription.unsubscribe() }
   }, [])
+
+  /**
+   * Pedirse un enlace nuevo uno mismo.
+   *
+   * El aviso mandaba a «pedírselo a Javi», que es una dependencia absurda para
+   * algo que la propia app sabe hacer: el enlace es de un SOLO USO y se gasta con
+   * facilidad —basta con que quien lo reenvía por WhatsApp o Slack genere una
+   * vista previa, porque el robot que la genera lo abre—. Con esto la persona se
+   * desatasca sola.
+   */
+  const [emailNuevo, setEmailNuevo] = useState('')
+  const [pidiendo, setPidiendo] = useState<'no' | 'si' | 'hecho'>('no')
+  async function pedirOtro(e: React.FormEvent) {
+    e.preventDefault()
+    if (!emailNuevo.trim()) return
+    setPidiendo('si')
+    const supabase = createClient()
+    await supabase.auth.resetPasswordForEmail(emailNuevo.trim(), {
+      // El dominio canónico, no el del navegador: esto viaja por CORREO y la app
+      // sirve en dos hosts. Es lo que fija la regla de `enlaces compartibles`.
+      redirectTo: rutaApp('/reset-password'),
+    })
+    // Se dice lo mismo exista o no la cuenta: responder distinto convierte esta
+    // pantalla en un comprobador de qué correos están dados de alta.
+    setPidiendo('hecho')
+  }
 
   async function guardar(e: React.FormEvent) {
     e.preventDefault()
@@ -81,10 +122,32 @@ export default function ResetPasswordPage() {
             Es la que usarás para entrar desde ahora, también en el móvil.
           </div>
 
+          {sesion === 'comprobando' && (
+            <div style={{ ...s.aviso, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.45)' }}>
+              Comprobando el enlace…
+            </div>
+          )}
           {sesion === 'no' && (
             <div style={{ ...s.aviso, background: 'rgba(255,176,32,0.1)', border: '1px solid rgba(255,176,32,0.25)', color: '#FFB020' }}>
-              Este enlace ha caducado o ya se usó. Pídele a Javi que te genere uno nuevo desde Operativa → Equipo.
+              {pidiendo === 'hecho'
+                ? 'Hecho. Si ese correo está dado de alta, te llega un enlace nuevo en un minuto. Míralo también en spam.'
+                : 'Este enlace ya se ha usado o ha caducado. Son de un solo uso — pide otro aquí:'}
             </div>
+          )}
+          {sesion === 'no' && pidiendo !== 'hecho' && (
+            <form onSubmit={pedirOtro} style={{ marginBottom: '20px' }}>
+              <input
+                style={{ ...s.input, marginBottom: '10px' }}
+                type="email" value={emailNuevo} onChange={e => setEmailNuevo(e.target.value)}
+                placeholder="tu@brutalstudios.es" autoComplete="email"
+                onFocus={e => { e.currentTarget.style.borderColor = 'rgba(27,95,250,0.55)' }}
+                onBlur={e => { e.currentTarget.style.borderColor = 'rgba(27,95,250,0.2)' }}
+              />
+              <button type="submit" disabled={pidiendo === 'si' || !emailNuevo.trim()}
+                style={{ ...s.btn, background: 'rgba(255,255,255,0.06)', opacity: pidiendo === 'si' || !emailNuevo.trim() ? 0.4 : 1 }}>
+                {pidiendo === 'si' ? 'ENVIANDO…' : 'MÁNDAME UN ENLACE NUEVO'}
+              </button>
+            </form>
           )}
           {error && (
             <div style={{ ...s.aviso, background: 'rgba(229,29,42,0.1)', border: '1px solid rgba(229,29,42,0.25)', color: '#ff7070' }}>{error}</div>

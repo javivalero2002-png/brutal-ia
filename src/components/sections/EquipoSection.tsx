@@ -187,11 +187,20 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
           role: newMemberRole,
           cambiarRol: !yaExiste,
         }),
-        timeoutMs: 15_000,
+        // 45 s, no 15. La ruta hace TRES viajes a Supabase seguidos —crear la
+        // cuenta, insertar el perfil, generar el enlace— y en frío se pasaba de
+        // los 15: el cliente se rendía con «Error de red» mientras el servidor
+        // terminaba bien. Por eso había que darle dos veces, y a la segunda ya
+        // existía la cuenta. El plazo del servidor se declara en la ruta.
+        timeoutMs: 45_000,
       })
       const json = await res.json()
       if (!res.ok) { showToast(json.error || 'Error al crear cuenta'); return }
       setInviteResult({ email: newMemberEmail.trim().toLowerCase(), inviteLink: json.inviteLink || null })
+      // Si el enlace no salió, se dice POR QUÉ. Antes se tragaba el fallo y
+      // quedaba una cuenta creada sin nada que mandarle: parecía que no había
+      // funcionado.
+      if (!json.inviteLink) showToast(json.avisoEnlace ? `Cuenta creada, pero el enlace falló: ${json.avisoEnlace}` : 'Cuenta creada, pero no se pudo generar el enlace')
       setNewMemberName(''); setNewMemberEmail(''); setNewMemberRole('member')
       // La lista se refresca. Sin esto, la persona recien dada de alta no aparecia
       // hasta recargar la pagina: parecia que el alta no habia funcionado, y lo

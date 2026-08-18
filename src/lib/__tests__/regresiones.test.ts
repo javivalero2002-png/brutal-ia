@@ -1151,4 +1151,57 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
     expect(/pick\(body, \[[^\]]*diario_/.test(P),
       'el PATCH deja cambiar diario_dia: se podria mover una tarea al dia de otra persona').toBe(false)
   })
+
+  // El alta de un miembro hace TRES viajes a Supabase seguidos. Con el plazo del
+  // cliente en 15 s, en frio se rendia con «Error de red» mientras el servidor
+  // terminaba bien: habia que darle dos veces, y a la segunda ya existia la
+  // cuenta. Un plazo de cliente MENOR que lo que tarda la ruta convierte un exito
+  // en un error a la cara del usuario.
+  it('el alta de miembro da plazo suficiente y lo declara en la ruta', () => {
+    const E = leerCodigo('src/components/sections/EquipoSection.tsx')
+    const i = E.indexOf("fetchWithTimeout('/api/admin/team'")
+    expect(i, 'ya no se llama asi al alta: revisa esta regla').toBeGreaterThan(-1)
+    const m = /timeoutMs: (\d+)_?(\d*)/.exec(E.slice(i, i + 900))
+    expect(m, 'el alta no declara plazo').not.toBeNull()
+    expect(Number(m![1] + (m![2] || '')),
+      'el plazo del cliente es corto para tres viajes a Supabase en frio: se rendira con la cuenta ya creada')
+      .toBeGreaterThanOrEqual(30_000)
+    const R = leerCodigo('src/app/api/admin/team/route.ts')
+    expect(/export const maxDuration/.test(R),
+      'la ruta del equipo no declara maxDuration: un cuelgue no se distingue de un fallo').toBe(true)
+  })
+
+  // El enlace es lo UNICO que se le puede mandar a la persona nueva. Si su
+  // generacion falla en silencio queda una cuenta creada sin nada que enviar, y
+  // desde fuera eso es identico a «el alta no ha funcionado».
+  it('un fallo al generar el enlace de invitacion no se traga', () => {
+    const R = leerCodigo('src/app/api/admin/team/route.ts')
+    const i = R.indexOf('async function generarEnlace')
+    expect(i, 'ya no existe generarEnlace: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = R.slice(i, R.indexOf('\n}', i))
+    // supabase-js no lanza: el error viaja en la respuesta y hay que mirarlo.
+    expect(/if \(error\)/.test(cuerpo),
+      'no mira el error de generateLink: un fallo saldria como enlace nulo sin motivo').toBe(true)
+    expect(/motivo/.test(cuerpo), 'no devuelve el motivo del fallo').toBe(true)
+  })
+
+  // Dar de baja a un propietario esta permitido, pero hay dos bajas que no tienen
+  // vuelta atras: la del ULTIMO propietario deja el workspace sin nadie que pueda
+  // nombrar a otro (esta misma ruta exige ser owner), y la de UNO MISMO te deja
+  // fuera de tu propia app a mitad de clic.
+  it('no se puede borrar al ultimo propietario ni a uno mismo', () => {
+    const R = leerCodigo('src/app/api/admin/team/route.ts')
+    const i = R.indexOf('export async function DELETE')
+    expect(i, 'ya no hay DELETE: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = R.slice(i)
+    expect(/profile\.id === ctx\.user\.id/.test(cuerpo),
+      'deja darse de baja a uno mismo: te quedas fuera sin otra puerta').toBe(true)
+    expect(/count/.test(cuerpo),
+      'no cuenta cuantos propietarios quedan: se podria borrar al ultimo').toBe(true)
+    // Y un fallo al contar NO puede leerse como «hay de sobra».
+    const iC = cuerpo.indexOf('errCuenta')
+    expect(iC, 'no captura el error de la cuenta de propietarios').toBeGreaterThan(-1)
+    expect(/status: 500/.test(cuerpo.slice(iC, iC + 400)),
+      'un fallo al contar propietarios se trata como si hubiera de sobra: autorizaria borrar al ultimo').toBe(true)
+  })
 })
