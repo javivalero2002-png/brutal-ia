@@ -507,3 +507,57 @@ describe('diario · el campo de objetivos no se desmonta al escribir', () => {
       .toBe(true)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Harvey tiene que acordarse de lo que se acaba de decir.
+//
+// El caso real: le pides una tarea, él pregunta de qué va, respondes «urgente,
+// editar vídeos» — y le llega esa frase suelta, sin la pregunta que la provocó.
+// Vuelve a preguntar lo mismo y la tarea no se crea nunca.
+//
+// La causa NO era el prompt ni el servidor, que ya recibía y saneaba el
+// historial: era que dos de los cinco llamantes del cliente —el de VOZ y el
+// precargado— no pasaban historial y caían al `conversation` de la clausura,
+// que va un turno por detrás. Medido contra el modelo real: sin historial la
+// tarea se crea 1 de cada 3 veces; con historial, 3 de 3.
+//
+// La regla no comprueba que la voz lo haga bien: comprueba que NADIE pueda
+// volver a saltárselo, que es lo que hace que no vuelva a pasar.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('harvey · no pierde el hilo de la conversación', () => {
+  // Sin comentarios: este fichero explica sus decisiones, y un comentario que
+  // mencione `askHarvey(` haría que la regla lo contara como un llamante.
+  const H = readFileSync('src/components/sections/HarveySection.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  it('solo `preguntar` habla con Harvey', () => {
+    // Se cuentan las LLAMADAS, no la declaración (que es `const askHarvey =`).
+    // Tiene que haber exactamente una, y dentro de `preguntar`: cualquier otra es
+    // un llamante saltándose el único sitio que compone el historial.
+    const llamadas = [...H.matchAll(/askHarvey\(/g)].map(m => m.index!)
+    expect(llamadas.length,
+      'alguien llama a askHarvey() por su cuenta: ese camino manda el historial atrasado y Harvey pierde el hilo')
+      .toBe(1)
+
+    const ini = H.indexOf('const preguntar')
+    const fin = H.indexOf('\n  }', ini)
+    expect(ini, 'ya no existe `preguntar`: revisa esta regla').toBeGreaterThan(-1)
+    expect(llamadas[0] > ini && llamadas[0] < fin,
+      'la llamada a askHarvey() está fuera de `preguntar`').toBe(true)
+  })
+
+  it('el historial sale del espejo, no del estado', () => {
+    expect(/historial \?\? conversationRef\.current/.test(H),
+      'el respaldo vuelve a leer `conversation`, que va un turno por detrás cuando lo lee el mismo manejador que acaba de cambiarlo').toBe(true)
+    expect(/conversationRef\.current = nuevo/.test(H),
+      '`preguntar` no actualiza el espejo a mano: el turno recién añadido no llegaría a la misma llamada').toBe(true)
+  })
+
+  it('el mensaje actual no viaja también en el historial', () => {
+    const i = H.indexOf('const preguntar')
+    expect(i, 'ya no existe `preguntar`: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = H.slice(i, H.indexOf('\n  }', i))
+    expect(/askHarvey\(texto, previos\)/.test(cuerpo),
+      'manda `nuevo` en vez de `previos`: el servidor ya añade el mensaje actual, así que iría duplicado').toBe(true)
+  })
+})
