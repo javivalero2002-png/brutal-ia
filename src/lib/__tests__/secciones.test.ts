@@ -153,13 +153,23 @@ describe('Diario · cableado completo', () => {
     }
   })
 
-  it('el día y el autor los pone el servidor, no el cuerpo de la petición', () => {
+  // El DÍA sí puede venir del cuerpo —se rellena el lunes el martes, que es lo
+  // normal cuando se te pasa—. Lo que no puede venir nunca es el AUTOR: eso es lo
+  // que impide escribir en el día de otro. Y no se puede escribir en el futuro,
+  // que ni es un diario ni debe permitir inventarse un histórico.
+  it('el autor sale de la sesión, nunca del cuerpo', () => {
     const R = leerCod('src/app/api/diario/route.ts')
-    // Si `dia` o `user_id` salieran del body, cualquiera podría escribir en el día
-    // de otro o retocar un día ya cerrado.
     expect(/pick\(body, \['entrada', 'cierre'\]\)/.test(R),
-      'la allowlist deja pasar más que los dos textos: el día o el autor podrían venir del cliente').toBe(true)
-    expect(/const dia = todayKey\(\)/.test(R), 'el día no se calcula en el servidor con todayKey()').toBe(true)
+      'la allowlist deja pasar más que los dos textos: el autor podría venir del cliente').toBe(true)
+    expect(/user_id: user\.id/.test(R), 'el autor no sale de la sesión').toBe(true)
+  })
+
+  it('y no se puede escribir en el futuro', () => {
+    const R = leerCod('src/app/api/diario/route.ts')
+    expect(/pedido > hoy \? hoy : pedido/.test(R),
+      'un día futuro se escribiría tal cual: se puede fabricar un histórico por delante').toBe(true)
+    // Y la forma se valida antes: entra en un filtro de la consulta.
+    expect(/\\d\{4\}-\\d\{2\}-\\d\{2\}/.test(R), 'el día del cuerpo no se valida').toBe(true)
   })
 
   it('la extracción propone, no crea', () => {

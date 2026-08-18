@@ -182,6 +182,28 @@ const DIARIO_DEMO = [
   },
 ]
 
+// Días de muestra para el calendario del diario. Fechas relativas a hoy para que
+// el demo siga teniendo sentido dentro de seis meses.
+const DIAS_DEMO = (() => {
+  const jv = { id: 'u1', name: 'Javier Valero', initials: 'JV', avatar_color: '#1B5FFA' }
+  const pb = { id: 'u2', name: 'Paula Bravo', initials: 'PB', avatar_color: '#22c55e' }
+  const mr = { id: 'u3', name: 'Marco Ruiz', initials: 'MR', avatar_color: '#A78BFA' }
+  const clave = (atras: number) => {
+    const d = new Date()
+    d.setDate(d.getDate() - atras)
+    return d.toLocaleDateString('en-CA', { timeZone: 'Europe/Madrid' })
+  }
+  return {
+    [clave(0)]: { personas: [jv, pb], objetivos: 4, cerrados: 1 },
+    [clave(1)]: { personas: [jv, pb, mr], objetivos: 7, cerrados: 3 },
+    [clave(2)]: { personas: [jv, mr], objetivos: 5, cerrados: 2 },
+    [clave(3)]: { personas: [pb], objetivos: 2, cerrados: 1 },
+    [clave(4)]: { personas: [jv, pb, mr], objetivos: 8, cerrados: 3 },
+    [clave(7)]: { personas: [jv, mr], objetivos: 3, cerrados: 0 },
+    [clave(8)]: { personas: [jv, pb, mr], objetivos: 6, cerrados: 3 },
+  }
+})()
+
 export default function PreviewClient({
   initialSection,
   initialView,
@@ -380,7 +402,7 @@ export default function PreviewClient({
         {section==='tareas' && <SectionErrorBoundary section="tareas"><TareasSection data={data} onOpenModal={abrirModal} showToast={showToast} isOwner profile={profile} onNavigate={setSection} onSelectProject={()=>{}} onSelectClient={()=>{}} initialView={initialView} initialFocus={initialFocus} initialGroupBy={initialGroupBy}/></SectionErrorBoundary>}
         {section==='automatizaciones' && <SectionErrorBoundary section="automatizaciones"><AutomatizacionesSection data={data} onOpenModal={abrirModal} showToast={showToast} isOwner/></SectionErrorBoundary>}
         {section==='inbox' && <SectionErrorBoundary section="inbox"><InboxSection data={data} showToast={showToast} profile={profile} onNavigate={setSection} onSelectClient={()=>{}} onAskHarvey={()=>{}}/></SectionErrorBoundary>}
-        {section==='diario' && <SectionErrorBoundary section="diario"><DiarioSection data={data} profile={profile} showToast={showToast} onNavigate={setSection} demo={DIARIO_DEMO}/></SectionErrorBoundary>}
+        {section==='diario' && <SectionErrorBoundary section="diario"><DiarioSection data={data} profile={profile} showToast={showToast} onNavigate={setSection} demo={DIARIO_DEMO} diasDemo={DIAS_DEMO}/></SectionErrorBoundary>}
         {section==='reportes' && <SectionErrorBoundary section="reportes"><ReportesSection data={data} onNavigate={setSection}/></SectionErrorBoundary>}
         {section==='clientes' && <SectionErrorBoundary section="clientes"><ClientesSection data={data} selectedId={null} onSelect={()=>{}} onOpenModal={abrirModal} showToast={showToast} isOwner onNavigate={setSection} onSelectProject={()=>{}}/></SectionErrorBoundary>}
         {section==='proyectos' && <SectionErrorBoundary section="proyectos"><ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={abrirModal} showToast={showToast} isOwner onNavigate={setSection} onSelectClient={()=>{}} justCreatedId={null} onJustCreatedScrolled={()=>{}}/></SectionErrorBoundary>}

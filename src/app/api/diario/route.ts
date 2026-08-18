@@ -51,7 +51,16 @@ export async function POST(request: NextRequest) {
   // empezaste, no cuándo tocaste el teclado por última vez.
   const esBorrador = body?.borrador === true
 
-  const dia = todayKey()
+  // El día puede venir del cuerpo: se rellena el lunes el martes, que es lo normal
+  // cuando se te pasa. Pero con dos límites, y los dos importan:
+  //
+  //  · el USUARIO nunca viene del cuerpo, sale de la sesión. Eso es lo que impide
+  //    escribir en el día de otro, que era el motivo original de fijarlo aquí;
+  //  · y no se puede escribir en el FUTURO. Un diario de mañana no es un diario,
+  //    y abre la puerta a inventarse un histórico.
+  const hoy = todayKey()
+  const pedido = typeof body?.dia === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.dia) ? body.dia : hoy
+  const dia = pedido > hoy ? hoy : pedido
   const ahora = new Date().toISOString()
 
   const admin = await createAdminClient()
