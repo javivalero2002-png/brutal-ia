@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { rutaApp } from '@/lib/appUrl'
-import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, todayKey, localDayKey, AMBAR } from '@/components/shared'
+import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, todayKey, localDayKey, AMBAR, buscaEnTexto } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
 import LucideIcon from '@/components/shared/LucideIcon'
 import type { Client, NexusData} from '@/types'
@@ -149,7 +149,7 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
   // silencio cuales son las 12 que Harvey mete en su contexto (buildContext hace
   // slice(0,12)) y las que ve Hoy.
   const filtered = [...(memSearch.trim()
-    ? byClientFilter.filter((m: any)=>(m.title+' '+m.content).toLowerCase().includes(memSearch.toLowerCase()))
+    ? byClientFilter.filter((m: any)=>buscaEnTexto(`${m.title} ${m.content} ${m.category||''} ${m.client?.name||''}`, memSearch))
     : byClientFilter)].sort((a: any, b: any) => {
       const pinDiff = (pinnedIds.has(b.id)?1:0) - (pinnedIds.has(a.id)?1:0)
       if (pinDiff !== 0) return pinDiff

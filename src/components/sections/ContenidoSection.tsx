@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { rutaApp } from '@/lib/appUrl'
 import type { NexusData, ContentItem } from '@/types'
-import { PLATAFORMA_COLOR, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, todayKey } from '@/components/shared'
+import { PLATAFORMA_COLOR, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, todayKey, buscaEnTexto } from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
 import BocetoPanel from '@/components/BocetoPanel'
 import type { IrASeccion } from '@/components/shared/secciones'
@@ -398,7 +398,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
   const activePlatforms = [...new Set(filteredByAccount.filter((a: any)=>a.platform).map((a: any)=>String(a.platform).trim()))].filter(Boolean).sort() as string[]
   const allPlatforms: string[] = ['Todas', ...activePlatforms]
   const filteredByPlatform = platformFilter === 'Todas' ? filteredByAccount : filteredByAccount.filter((a: any)=>String(a.platform||'').trim()===platformFilter)
-  const filteredAgenda = !contentSearch.trim() ? filteredByPlatform : filteredByPlatform.filter((a: any)=>a.title?.toLowerCase().includes(contentSearch.toLowerCase()))
+  const filteredAgenda = !contentSearch.trim() ? filteredByPlatform : filteredByPlatform.filter((a: any)=>buscaEnTexto(`${a.title||''} ${a.account_name||''} ${a.platform||''}`, contentSearch))
   filteredAgendaRef.current = filteredAgenda
 
   const changeStatus = async (item: any, newStatus: ContentItem['status']) => {

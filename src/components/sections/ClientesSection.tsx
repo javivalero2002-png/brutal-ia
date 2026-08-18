@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { parseImporte } from '@/components/shared'
+import { parseImporte, buscaEnTexto } from '@/components/shared'
 import { rutaApp } from '@/lib/appUrl'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR} from '@/components/shared/design-tokens'
@@ -741,7 +741,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
   const maxRevenue = Math.max(...revenueClients.map((c: Client)=>parseRevenue(c.revenue||'')), 1)
   const visibleClients = data.clients.filter((c: Client) => {
     const matchStatus = clientStatusFilter === 'Todos' || c.status === clientStatusFilter
-    const matchSearch = !clientSearch.trim() || c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.industry?.toLowerCase().includes(clientSearch.toLowerCase())
+    const matchSearch = buscaEnTexto(`${c.name} ${c.industry||''}`, clientSearch)
     return matchStatus && matchSearch
   })
   const sortedClients: Client[] = clientSort === 'revenue'

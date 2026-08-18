@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { rutaApp } from '@/lib/appUrl'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
-import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, dlLabel, todayKey, estadoDeadline, AMBAR } from '@/components/shared'
+import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, dlLabel, todayKey, estadoDeadline, AMBAR, buscaEnTexto } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
 import type { Project, Task, Profile, NexusData} from '@/types'
 import type { IrASeccion } from '@/components/shared/secciones'
@@ -122,6 +122,15 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   // igual porque su patron acepta /object/sign/ ademas de /object/public/.
   type PdfDoc = { name: string; url: string; ident?: string }
   const [pdfDoc, setPdfDoc] = useState<PdfDoc|null>(null)
+  /**
+   * El ÚNICO filtro de búsqueda de esta sección.
+   *
+   * Estaba escrito tres veces —la lista, el recuento de la columna y el pintado—
+   * y las tres tenían que decir lo mismo. Arreglando dos, el número de la columna
+   * decía 3 y debajo se veían 5, sin un error por ningún sitio.
+   */
+  const casaBusqueda = (p: Project) => buscaEnTexto(`${p.name} ${(p.client as { name?: string } | undefined)?.name || ''}`, projSearch)
+
   const [pdfAnalysis, setPdfAnalysis] = useState<any>(null)
   const [pdfBusy, setPdfBusy] = useState(false)
   const [pdfUploadPct, setPdfUploadPct] = useState<number|null>(null)
@@ -595,7 +604,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   }
   const statusColor = (s: string) => s==='urgente'?RED:s==='activo'?GRN:s==='revisión'?'#A78BFA':s==='completado'?'#22C55E':BLU
   const listProjectsSorted: Project[] = (()=>{
-    const baseL = filteredProjects.filter((p: Project)=>!projSearch.trim()||p.name.toLowerCase().includes(projSearch.toLowerCase())||(p.client as any)?.name?.toLowerCase().includes(projSearch.toLowerCase()))
+    const baseL = filteredProjects.filter(casaBusqueda)
     if (projListSort==='progress') return [...baseL].sort((a:Project,b:Project)=>b.progress-a.progress)
     if (projListSort==='deadline') return [...baseL].sort((a:Project,b:Project)=>{const da=a.deadline&&a.deadline!=='TBD'?dlDate(a.deadline).getTime():Infinity;const db=b.deadline&&b.deadline!=='TBD'?dlDate(b.deadline).getTime():Infinity;return da-db})
     if (projListSort==='status') return [...baseL].sort((a:Project,b:Project)=>{const o:Record<string,number>={urgente:0,activo:1,'revisión':2,'plan.':3,completado:4};return (o[a.status]??3)-(o[b.status]??3)})
@@ -697,10 +706,10 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               <div className="flex items-center gap-2.5 px-5 py-3.5" style={{borderBottom:`1px solid ${BORDER}`}}>
                 <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:col.color,boxShadow:`0 0 6px ${col.color}80`}}/>
                 <span className="font-syne text-[8.5px] font-black tracking-widest uppercase flex-1" style={{color:'rgba(255,255,255,0.38)'}}>{col.title}</span>
-                <span className="font-syne text-[11px] font-black px-2 py-0.5 rounded-full" style={{background:col.color+'15',color:col.color+'99'}}>{projSearch.trim()?col.items.filter((p: Project)=>p.name.toLowerCase().includes(projSearch.toLowerCase())||(p.client as any)?.name?.toLowerCase().includes(projSearch.toLowerCase())).length:col.items.length}</span>
+                <span className="font-syne text-[11px] font-black px-2 py-0.5 rounded-full" style={{background:col.color+'15',color:col.color+'99'}}>{projSearch.trim()?col.items.filter(casaBusqueda).length:col.items.length}</span>
               </div>
               <div className="p-3 space-y-2">
-                {col.items.filter((p: Project)=>!projSearch.trim()||p.name.toLowerCase().includes(projSearch.toLowerCase())||(p.client as any)?.name?.toLowerCase().includes(projSearch.toLowerCase())).map((p: Project)=>(
+                {col.items.filter(casaBusqueda).map((p: Project)=>(
                   <div key={p.id} draggable onDragStart={()=>dragRef.current=p.id} onClick={()=>onSelect(selectedId===p.id?null:p.id)} className="rounded-xl cursor-pointer transition-all overflow-hidden" style={{background:selectedId===p.id?`rgba(27,95,250,0.06)`:SURF2,border:`1px solid ${selectedId===p.id?'rgba(27,95,250,0.35)':BORDER}`,boxShadow:selectedId===p.id?`0 0 16px ${p.color||BLU}1A`:'none'}}>
                     {p.cover_url && !brokenCovers.has(p.cover_url) ? (
                       <div className="relative w-full overflow-hidden" style={{height:'88px'}}>

@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { Regla, NexusData} from '@/types'
-import { BLU, RED, GRN, SURFACE, BORDER, LucideIcon, useIsMobile } from '@/components/shared'
+import { BLU, RED, GRN, SURFACE, BORDER, LucideIcon, useIsMobile, buscaEnTexto } from '@/components/shared'
 
 const isStructured = (r: Regla) => (r.condition_text || '').trim().startsWith('{')
 
@@ -84,7 +84,7 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: PropsAuto
     setRenamingId(null)
   }
   const visibleReglasRef = useRef<Regla[]>([])
-  const visibleReglas = data.reglas.filter((r: Regla)=>!reglaSearch.trim()||r.name.toLowerCase().includes(reglaSearch.toLowerCase())||(r.condition_text||'').toLowerCase().includes(reglaSearch.toLowerCase())||(r.action_text||'').toLowerCase().includes(reglaSearch.toLowerCase()))
+  const visibleReglas = data.reglas.filter((r: Regla)=>buscaEnTexto(`${r.name} ${r.condition_text||''} ${r.action_text||''}`, reglaSearch))
   visibleReglasRef.current = visibleReglas
 
   useEffect(()=>{
