@@ -20,7 +20,7 @@ function fields(type: string, team: Profile[]) {
     cliente: [
       f('Nombre del cliente', 'name', 'Ej: Nike España'),
       f('Industria', 'industria', 'Ej: Fashion · Lifestyle'),
-      f('Facturación mensual', 'facturacion', 'Ej: €12.000/mes'),
+      f('Facturación', 'facturacion', 'Ej: 12k/mes · 120k/año · €1.500'),
     ],
     proyecto: [
       f('Nombre del proyecto', 'nombre', 'Ej: Campaign Summer 2026'),

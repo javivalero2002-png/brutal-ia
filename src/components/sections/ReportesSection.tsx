@@ -3,7 +3,7 @@ import { useEffect, useRef, useMemo } from 'react'
 import { esTareaDe } from '@/components/shared/helpers'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { Task, Project, Client, Profile, NexusData } from '@/types'
-import { PLATAFORMA_COLOR, useIsMobile, BLU, RED, GRN, BORDER, SURF2, LucideIcon, dlDate, dlLabel, estadoDeadline, Donut, Gauge, AreaChart, localDayKey } from '@/components/shared'
+import { PLATAFORMA_COLOR, useIsMobile, BLU, RED, GRN, BORDER, SURF2, LucideIcon, dlDate, dlLabel, estadoDeadline, Donut, Gauge, AreaChart, localDayKey, parseImporte } from '@/components/shared'
 import type { IrASeccion, Section } from '@/components/shared/secciones'
 
 interface PropsReportes {
@@ -41,8 +41,11 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
     const completionRate = totalTasks > 0 ? Math.round((doneTasks/totalTasks)*100) : 0
 
     const activeClients = clients.filter(c=>c.status==='Activo')
-    const parseMRR = (s: string) => { if(!s||s==='—')return 0; return parseFloat(s.replace(/[€$£\s]/g,'').replace(/\./g,'').replace(',','.').replace(/\/.*$/,''))||0 }
-    const totalMRR = activeClients.reduce((sum: number,c: Client)=>sum+parseMRR(c.revenue||''),0)
+    // `parseImporte` y no un parseFloat a pelo: «12k» salía como 12 y «1.2M» como
+    // 12, o sea importes mil veces menores sin un solo aviso. Y devuelve siempre
+    // el equivalente MENSUAL, que es lo que significa MRR — antes un contrato
+    // anual se sumaba entero, doce veces más de lo que es.
+    const totalMRR = activeClients.reduce((sum: number,c: Client)=>sum+parseImporte(c.revenue||'').mensual,0)
     const overdueProjects = projects.filter(p=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<new Date())
     const projectsByStatus = [
       {label:'En progreso', count:projects.filter(p=>p.status==='activo').length, color:BLU},

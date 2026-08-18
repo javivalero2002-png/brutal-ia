@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { parseImporte } from '@/components/shared'
 import { rutaApp } from '@/lib/appUrl'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR} from '@/components/shared/design-tokens'
@@ -418,7 +419,44 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
               </div>
               {isOwner && <div>
                 <label className="block font-syne text-[8px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.25)'}}>FACTURACIÓN MENSUAL</label>
-                <input value={editRevenue} onChange={e=>setEditRevenue(e.target.value)} placeholder="Ej: €12.000/mes" className="w-full px-4 py-3 rounded-xl text-[13px] text-white placeholder-white/20 outline-none transition-all" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')} onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+                <div className="flex gap-2 items-stretch">
+                  <input value={editRevenue.replace(/\s*\/\s*(mes|año|ano)\s*$/i,'')}
+                    onChange={e=>{
+                      // El periodo se conserva al reescribir el importe: si no, cambiar
+                      // «12k/año» por «14k» lo convertía en mensual sin avisar y el MRR
+                      // se multiplicaba por doce.
+                      const anual = parseImporte(editRevenue).anual
+                      setEditRevenue(e.target.value.trim() ? `${e.target.value.trim()}${anual?'/año':'/mes'}` : '')
+                    }}
+                    placeholder="Ej: €12.000 · 12k · 1,5M"
+                    className="flex-1 min-w-0 px-4 py-3 rounded-xl text-[13px] text-white placeholder-white/20 outline-none transition-all"
+                    style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}}
+                    onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.4)')}
+                    onBlur={e=>(e.target.style.borderColor=BORDER)}/>
+                  {/* MES o AÑO. No existía: todo se interpretaba como mensual, así
+                      que un contrato anual inflaba el MRR doce veces. */}
+                  <div className="flex rounded-xl overflow-hidden flex-shrink-0" style={{border:`1.5px solid ${BORDER}`}}>
+                    {([['mes','MES'],['año','AÑO']] as const).map(([p,l])=>{
+                      const on = (p==='año') === parseImporte(editRevenue).anual
+                      return (
+                        <button key={p} type="button"
+                          onClick={()=>{
+                            const importe = editRevenue.replace(/\s*\/\s*(mes|año|ano)\s*$/i,'').trim()
+                            setEditRevenue(importe ? `${importe}/${p}` : '')
+                          }}
+                          className="px-3 font-syne text-[8.5px] font-black tracking-widest transition-all"
+                          style={{background:on?'rgba(27,95,250,0.15)':'transparent',color:on?BLU:'rgba(255,255,255,0.3)'}}>
+                          {l}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                {editRevenue && parseImporte(editRevenue).anual && (
+                  <div className="font-figtree text-[11px] mt-1.5" style={{color:'rgba(255,255,255,0.35)'}}>
+                    Son {Math.round(parseImporte(editRevenue).mensual).toLocaleString('es-ES')} € al mes — es lo que suma en Reportes.
+                  </div>
+                )}
               </div>}
             </div>
             <div className="mb-4">
@@ -434,7 +472,15 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {[
-            {v:(selected.revenue||'—').split('/')[0].trim(), l:'Facturación mensual', accent:selected.color, note:(selected.revenue||'').includes('/')?'Al mes · contrato activo':'Contrato activo'},
+            {v:(selected.revenue||'—').split('/')[0].trim(),
+             // Decía «Facturación mensual» pasara lo que pasara, incluso con un
+             // contrato anual escrito al lado. Ahora lo lee y lo dice, y enseña
+             // el equivalente mensual, que es lo que suma en Reportes.
+             l:parseImporte(selected.revenue).anual?'Facturación anual':'Facturación mensual',
+             accent:selected.color,
+             note:parseImporte(selected.revenue).anual
+               ? `Al año · ${Math.round(parseImporte(selected.revenue).mensual).toLocaleString('es-ES')} €/mes`
+               : (selected.revenue||'').includes('/')?'Al mes · contrato activo':'Contrato activo'},
             {v:clientProjects.length, l:'Proyectos totales', accent:BLU, note:plural(activeProjects.length,'activo')},
             {v:activeTasks.length, l:'Tareas activas', accent:urgentTasks.length>0?RED:BLU, note:urgentTasks.length>0?plural(urgentTasks.length,'urgente'):plural(doneTasks.length,'completada')},
             {v:`${avgProgress}%`, l:'Progreso medio', accent:avgProgress>70?GRN:BLU, note:'De todos los proyectos'},
