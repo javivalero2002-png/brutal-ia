@@ -74,9 +74,12 @@ const CAMINOS: Record<Camino, { donde: string; pasos: { texto: string; icono?: s
   'safari-mac': {
     donde: 'EN SAFARI, EN EL MAC',
     pasos: [
-      { texto: 'Abre el menú Archivo, arriba del todo' },
+      // Está en DOS sitios y conviene decir los dos: el menú Archivo se pasa por
+      // alto (no hay nada en la página que lo sugiera) y el botón de Compartir se
+      // ve. Javi buscó esto y no encontró nada con una sola pista.
+      { texto: 'Pulsa Compartir', icono: 'share', cola: 'en la barra de Safari — o abre el menú Archivo' },
       { texto: 'Elige «Añadir al Dock»' },
-      { texto: 'Confirma con «Añadir»' },
+      { texto: 'Ponle el nombre que quieras y confirma con «Añadir»' },
     ],
   },
   otro: {
