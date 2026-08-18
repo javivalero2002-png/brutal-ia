@@ -187,8 +187,11 @@ describe('la demo no queda abierta en producción', () => {
       expect(/NODE_ENV === 'production'/.test(src), 'ya no distingue producción').toBe(true)
       // El rol, del servidor. Nunca de la URL ni de una cabecera.
       expect(/getAuthCtx\(\)/.test(src), 'no resuelve el rol en el servidor').toBe(true)
-      expect(/role !== 'owner'[\s\S]{0,40}notFound\(\)/.test(src),
-        'la demo queda accesible en producción a quien no es propietario').toBe(true)
+      // Sesión, no rol: dentro no hay datos reales, así que exigir owner dejaba
+      // fuera a medio equipo de una pantalla hecha para enseñarles la app. Lo que
+      // no puede caer es la parte de «nunca sin auth».
+      expect(/if \(!ctx\) notFound\(\)/.test(src),
+        'la demo queda accesible en producción sin haber iniciado sesión').toBe(true)
     })
   }
 
@@ -227,5 +230,25 @@ describe('Diario · no se pierde lo escrito', () => {
     const i = D.indexOf('diario/extraer')
     expect(/useEffect/.test(D.slice(Math.max(0, i - 1200), i)),
       'la extracción vuelve a depender de que el usuario pulse un botón').toBe(true)
+  })
+})
+
+// Al escribir el balance para cerrar el día, el extractor releía los objetivos de
+// la mañana y volvía a ofrecer las tareas que acababas de aceptar.
+describe('Diario · no repite tareas ya creadas', () => {
+  const D = readFileSync('src/components/sections/DiarioSection.tsx', 'utf8')
+
+  it('filtra contra las tareas que ya existen', () => {
+    expect(/yaSon\.has\(/.test(D),
+      'vuelve a proponer lo que ya es una tarea: al cerrar el día se duplica todo').toBe(true)
+    // Contra data.tasks y no contra una lista en memoria: así sigue funcionando
+    // tras recargar la página.
+    expect(/data\.tasks[\s\S]{0,120}normalizar/.test(D),
+      'compara contra una lista en memoria, que se pierde al recargar').toBe(true)
+  })
+
+  it('y lo que quitas a mano no vuelve', () => {
+    expect(/rechazadas\.current\.add/.test(D),
+      'quitar una propuesta no la recuerda: la siguiente relectura la resucita').toBe(true)
   })
 })

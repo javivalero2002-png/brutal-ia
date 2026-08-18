@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   const admin = await createAdminClient()
   const { data, error } = await admin
     .from('diario')
-    .select('*, autor:profiles!user_id(id,name,initials,color)')
+    .select('*, autor:profiles!user_id(id,name,initials,avatar_color)')
     .eq('dia', dia)
     .order('entrada_at', { ascending: true, nullsFirst: false })
 
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
   const { data, error } = await admin
     .from('diario')
     .upsert(fila, { onConflict: 'user_id,dia' })
-    .select('*, autor:profiles!user_id(id,name,initials,color)')
+    .select('*, autor:profiles!user_id(id,name,initials,avatar_color)')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
