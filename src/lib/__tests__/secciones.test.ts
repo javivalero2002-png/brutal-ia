@@ -164,10 +164,17 @@ describe('Diario · cableado completo', () => {
     expect(/user_id: user\.id/.test(R), 'el autor no sale de la sesión').toBe(true)
   })
 
-  it('y no se puede escribir en el futuro', () => {
+  // Un día futuro se PLANIFICA, no se ficha. Se guardan los objetivos —planificar
+  // la semana es la mitad de para qué sirve esto— pero NO la hora de entrada:
+  // fichar es haber estado, y el jueves todavía no has estado. Poner la hora ahí
+  // convertiría un plan en un registro de trabajo falso.
+  it('un día futuro se planifica, pero no ficha la hora', () => {
     const R = leerCod('src/app/api/diario/route.ts')
-    expect(/pedido > hoy \? hoy : pedido/.test(R),
-      'un día futuro se escribiría tal cual: se puede fabricar un histórico por delante').toBe(true)
+    expect(/const esFuturo = dia > hoy/.test(R), 'ya no se distingue un día futuro').toBe(true)
+    expect(/!esFuturo && campos\.entrada[\s\S]{0,60}entrada_at = ahora/.test(R),
+      'un día futuro fichará hora de entrada: un plan quedaría como trabajo hecho').toBe(true)
+    expect(/!esFuturo && campos\.cierre[\s\S]{0,60}cierre_at = ahora/.test(R),
+      'un día futuro fichará hora de cierre').toBe(true)
     // Y la forma se valida antes: entra en un filtro de la consulta.
     expect(/\\d\{4\}-\\d\{2\}-\\d\{2\}/.test(R), 'el día del cuerpo no se valida').toBe(true)
   })
