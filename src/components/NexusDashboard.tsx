@@ -22,6 +22,7 @@ import NexusBootScreen from '@/components/NexusBootScreen'
 // "Hoy" es la vista inicial: se carga con el bundle principal.
 import HoySection from '@/components/sections/HoySection'
 import DiarioSection from '@/components/sections/DiarioSection'
+import PuestaEnMarcha from '@/components/PuestaEnMarcha'
 
 // El resto se carga bajo demanda (code splitting). Antes las 14 secciones
 // viajaban en el bundle inicial, así que entrar a "Hoy" descargaba también
@@ -335,6 +336,11 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
     return () => { alive = false; clearInterval(iv); document.removeEventListener('visibilitychange', onVis) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  // La puesta en marcha se enseña una vez por PERSONA, no por aparato: la marca
+  // vive en `profiles.onboarding_at`. Se guarda en estado local para que al
+  // terminarla desaparezca sin esperar a que el perfil se recargue.
+  const [puestaHecha, setPuestaHecha] = useState(!!profile?.onboarding_at)
+
   const [selectedClient, setSelectedClient] = useState<string|null>(null)
   const [selectedProject, setSelectedProject] = useState<string|null>(null)
   const [justCreatedProjId, setJustCreatedProjId] = useState<string|null>(null)
@@ -1122,6 +1128,15 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
         />
       )}
 
+
+      {!puestaHecha && (
+        <PuestaEnMarcha
+          profile={profile}
+          showToast={showToast}
+          onTema={claro => { guardarTema(claro); document.documentElement.classList.toggle('theme-light', claro) }}
+          onTerminar={() => setPuestaHecha(true)}
+        />
+      )}
 
       {/* TOAST */}
       {toast && (() => {

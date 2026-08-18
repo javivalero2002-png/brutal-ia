@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   // el fichero como texto y no distingue codigo de prosa.)
   const { data: profile } = await admin
     .from('profiles')
-    .select('id, email, name, role, avatar_color, initials, gmail_connected, gmail_account, gmail_colabs_connected, gmail_colabs_account')
+    .select('id, email, name, role, avatar_color, initials, gmail_connected, gmail_account, gmail_colabs_connected, gmail_colabs_account, onboarding_at')
     .eq('id', user.id)
     .single()
 
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
   if (user.email) {
     const { data: existingByEmail } = await admin
       .from('profiles')
-      .select('id, email, name, role, avatar_color, initials, gmail_connected, gmail_account, gmail_colabs_connected, gmail_colabs_account')
+      .select('id, email, name, role, avatar_color, initials, gmail_connected, gmail_account, gmail_colabs_connected, gmail_colabs_account, onboarding_at')
       .eq('email', user.email)
       .single()
 

@@ -341,3 +341,50 @@ describe('briefing del equipo · solo el propietario', () => {
       '«nadie hizo nada» y «no se pudo leer» se verían igual').toBe(true)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// La puesta en marcha: lo primero que ve cada persona del equipo.
+//
+// Es la pantalla con más riesgo de toda la app, porque es la única que se
+// interpone entre alguien y su herramienta de trabajo. Si falla, no falla una
+// sección: falla el acceso.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('puesta en marcha · no puede dejar a nadie fuera', () => {
+  const P = readFileSync('src/components/PuestaEnMarcha.tsx', 'utf8')
+
+  it('todos los pasos se pueden saltar', () => {
+    expect(/SALTAR/.test(P),
+      'no hay forma de saltar: quien no pueda conectar Gmail se queda fuera de la app el primer día').toBe(true)
+  })
+
+  it('un fallo al guardar no bloquea la entrada', () => {
+    const i = P.indexOf('const terminar')
+    expect(i, 'ya no existe terminar: revisa esta regla').toBeGreaterThan(-1)
+    // Hasta el cierre de la función, no una ventana a ojo.
+    const cuerpo = P.slice(i, P.indexOf('}, [onTerminar, showToast])', i))
+    // El catch de la PETICIÓN, y hace falta puntería: el `try {…} catch {}` VACÍO
+    // de localStorage va justo antes, y como cadena `'} catch {'` casa también con
+    // él. Anclando ahí la ventana empezaba en el catch vacío y seguía viendo el
+    // `onTerminar()` de la línea siguiente, así que la regla pasaba con el bug
+    // puesto. Se exige un salto de línea detrás, que es lo que solo tiene el real.
+    const m = /\}\s*catch\s*\{\s*\n/.exec(cuerpo)
+    expect(m, 'no se encontró el catch de la petición').not.toBeNull()
+    const enCatch = cuerpo.slice(m!.index)
+    expect(/onTerminar\(\)/.test(enCatch),
+      'si falla el guardado no se entra: la bienvenida se convierte en un muro').toBe(true)
+  })
+
+  it('el paso se recuerda para volver de Google', () => {
+    // Conectar Gmail sale de la app (OAuth). Sin guardar el paso, al volver se
+    // empieza de cero y hay que repetirlo todo.
+    expect(/localStorage\.setItem\(CLAVE_PASO/.test(P), 'no se recuerda el paso al ir a Google').toBe(true)
+  })
+
+  it('la marca es de la persona, no del aparato', () => {
+    const M = readFileSync('src/app/api/me/route.ts', 'utf8')
+    expect(/onboarding_at/.test(M),
+      '/api/me no devuelve onboarding_at: la bienvenida se enseñaría siempre o nunca').toBe(true)
+    const R = readFileSync('src/app/api/onboarding/route.ts', 'utf8')
+    expect(/eq\('id', user\.id\)/.test(R), 'se marca una fila que no sale de la sesión').toBe(true)
+  })
+})
