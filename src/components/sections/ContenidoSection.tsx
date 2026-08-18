@@ -654,6 +654,18 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                               borderBottom:`1px solid ${ipc}16`,
                             }}>
                               <PlatformLogo platform={item.platform} size={14} />
+                              {/* El avatar de la cuenta, AQUÍ. Estaba solo en el hueco
+                                  de la portada, así que en cuanto una pieza tenía
+                                  imagen —o sea casi siempre— el logo no se veía nunca
+                                  desde el tablero. La cabecera está siempre. */}
+                              {(() => {
+                                const cta = (item.account_name || '').trim()
+                                if (!cta) return null
+                                const url = allAccountLogos[cta] || (() => { try { return localStorage.getItem(`account-logo-${cta}`) || '' } catch { return '' } })() || logoPorDefecto(cta)
+                                return url
+                                  ? <img src={url} alt="" className="w-4 h-4 rounded-full object-cover flex-shrink-0" style={{border:`1px solid ${ipc}40`}}/>
+                                  : null
+                              })()}
                               <div className="flex-1 min-w-0 flex items-baseline gap-1.5">
                                 <span className="font-syne text-[8px] font-black tracking-widest flex-shrink-0" style={{color:ipc}}>{item.platform.toUpperCase()}</span>
                                 {item.account_name && <span className="font-syne text-[7.5px] truncate" style={{color:`${ipc}65`}}>@{item.account_name}</span>}

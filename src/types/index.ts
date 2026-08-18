@@ -115,6 +115,8 @@ export interface MemoriaEntry {
   content: string
   source?: string
   created_at: string
+  /** El cliente al que pertenece. La ruta ya lo aceptaba; faltaba declararlo. */
+  client_id?: string | null
   client?: Client
 }
 

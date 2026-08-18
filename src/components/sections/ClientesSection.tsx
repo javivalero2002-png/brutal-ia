@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { rutaApp } from '@/lib/appUrl'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR} from '@/components/shared/design-tokens'
 import { useIsMobile, useBackClosable } from '@/components/shared/hooks'
@@ -133,6 +134,39 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
       const result = await r.json()
       if (!r.ok) { showToast(result.error || 'Error al subir'); return }
       if (selectedIdRef.current === clienteId) setClientFiles(prev => [result, ...(prev||[])])
+
+      // Y a MEMORIA. Un contrato subido a la ficha de un cliente se quedaba solo
+      // ahí: había que saber que existía y entrar a buscarlo, no salía al buscar
+      // en Memoria y Harvey no lo veía. Memoria es lo que el estudio sabe, y un
+      // documento que no llega no lo sabe nadie.
+      //
+      // Solo los PDF se analizan —es lo que la IA sabe leer—; el resto entra igual
+      // como registro, que ya es más que nada. Va sin `await`: la subida ya ha
+      // terminado y esto no debe hacer esperar.
+      const nombre = (result?.name || file.name || 'Documento').replace(/\.[^.]+$/, '')
+      const enlace = result?.url ? rutaApp('/api/archivo?u=' + encodeURIComponent(result.url)) : ''
+      const esPdf = /\.pdf$/i.test(file.name)
+      ;(async () => {
+        let resumen = ''
+        if (esPdf && result?.url) {
+          try {
+            const ra = await fetch('/api/documents', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url: result.url, name: file.name }),
+            })
+            if (ra.ok) { const ja = await ra.json(); resumen = ja?.summary || '' }
+          } catch { /* sin resumen, la nota se crea igual */ }
+        }
+        try {
+          await data.createMemoria?.({
+            title: `${nombre} — ${selected?.name || 'cliente'}`,
+            category: 'Documento',
+            client_id: clienteId,
+            content: [resumen, enlace ? `📎 Documento: ${enlace}` : ''].filter(Boolean).join('\n\n'),
+          })
+        } catch { /* la nota es un extra: el archivo ya está subido */ }
+      })()
+
       showToast('Archivo subido')
     } catch { showToast('Error al subir el archivo') }
     finally { setUploadingFile(false) }

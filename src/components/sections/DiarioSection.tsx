@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { BLU, GRN, AMBAR, RED, VIO, SURFACE, SURF2, BORDER } from '@/components/shared/design-tokens'
 import { LucideIcon, useIsMobile, plural, ProgressRing, todayKey, localDayKey } from '@/components/shared'
 import type { NexusData, Profile } from '@/types'
@@ -569,7 +569,46 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
     setFocoPendiente(null)
   }, [focoPendiente, filas.length])
 
-    /** Los objetivos que todavía no son tarea mía de este día. */
+    /**
+   * Lo que me propuse en días ANTERIORES y sigue sin hacer.
+   *
+   * El Diario empezaba cada día en blanco: si dejabas un objetivo sin marcar,
+   * al día siguiente había desaparecido de la vista. La tarea seguía viva en
+   * Tareas, pero el sitio donde te organizas el día no lo sabía — así que lo que
+   * no cerrabas se caía del radar justo cuando más falta hacía verlo.
+   *
+   * Solo se enseña en HOY: en un día pasado sería ruido, y en uno futuro no tiene
+   * sentido arrastrar nada todavía.
+   */
+  const vienenDeAntes = useMemo(() => {
+    if (!esHoy) return []
+    return (data.tasks || []).filter((t: { assigned_to?: string | null; done?: boolean; diario_dia?: string | null }) =>
+      t.assigned_to === profile?.id && !t.done && !!t.diario_dia && t.diario_dia < dia,
+    ) as { id: string; text?: string; diario_dia?: string | null }[]
+  }, [data.tasks, profile?.id, dia, esHoy])
+
+  const [arrastrando, setArrastrando] = useState(false)
+  const traerAHoy = async (ids: string[]) => {
+    if (!ids.length) return
+    setArrastrando(true)
+    try {
+      const res = await fetch('/api/diario/arrastrar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) { showToast(j.error || 'No se pudo traer'); return }
+      // Los objetivos se añaden al texto del día, que es lo que los convierte en
+      // parte de la lista de hoy; la tarea ya se ha movido en el servidor.
+      const textos = ids.map(id => vienenDeAntes.find((t: { id: string }) => t.id === id)?.text || '').filter(Boolean)
+      const nuevas = [...filas.map(x => x.trim()).filter(Boolean), ...textos]
+      cambiarFilas(nuevas.length ? nuevas : [''])
+      await data.reload?.()
+      showToast(`${plural(j.movidas ?? ids.length, 'objetivo traído', 'objetivos traídos')} a hoy`)
+    } catch { showToast('No se pudo traer') }
+    finally { setArrastrando(false) }
+  }
+
+  /** Los objetivos que todavía no son tarea mía de este día. */
   const porCrear = objetivosDeHoy.filter(o => !tareaDe(o))
 
   /** Marca o desmarca. Escribe en la tarea, que es donde vive el estado. */
@@ -713,6 +752,44 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
           </div>
         </div>
       </div>
+
+      {/* Lo que quedó sin cumplir. Se enseña ANTES de los objetivos de hoy porque
+          es lo primero que hay que decidir: ¿lo retomo o lo dejo ir? Sin esto se
+          caía del radar en silencio justo cuando más falta hacía verlo. */}
+      {vienenDeAntes.length > 0 && (
+        <div className="rounded-2xl px-4 py-3.5 mb-4" style={{ background: `${AMBAR}0D`, border: `1px solid ${AMBAR}2E` }}>
+          <div className="flex items-center gap-2 mb-2.5 flex-wrap">
+            <LucideIcon name="history" size={14} color={AMBAR} />
+            <div className="font-syne text-[8.5px] font-black tracking-widest flex-1" style={{ color: AMBAR }}>
+              VIENEN DE ANTES · {vienenDeAntes.length}
+            </div>
+            <button onClick={() => traerAHoy(vienenDeAntes.map(t => t.id))} disabled={arrastrando}
+              className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-widest transition-all active:scale-95 disabled:opacity-40"
+              style={{ background: `${AMBAR}1E`, border: `1px solid ${AMBAR}45`, color: AMBAR }}>
+              {arrastrando ? 'TRAYENDO…' : 'TRAER TODO A HOY'}
+            </button>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {vienenDeAntes.slice(0, 5).map(t => (
+              <div key={t.id} className="flex items-center gap-2.5">
+                <span className="font-figtree text-[10.5px] flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  {etiquetaDia(t.diario_dia || '')}
+                </span>
+                <span className="font-figtree text-[12.5px] flex-1 min-w-0 truncate" style={{ color: 'rgba(255,255,255,0.8)' }}>{t.text}</span>
+                <button onClick={() => traerAHoy([t.id])} disabled={arrastrando}
+                  aria-label={`Traer «${t.text}» a hoy`}
+                  className="font-syne text-[7.5px] font-black tracking-widest flex-shrink-0 transition-opacity hover:opacity-70 disabled:opacity-40"
+                  style={{ color: AMBAR }}>TRAER</button>
+              </div>
+            ))}
+            {vienenDeAntes.length > 5 && (
+              <div className="font-figtree text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                y {vienenDeAntes.length - 5} más
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* La semana entera, delante y siempre. Estaba dentro de un modal, así que
           para ver cómo venía había que abrirlo, mirar y cerrarlo — lo contrario de
