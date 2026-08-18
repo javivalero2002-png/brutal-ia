@@ -1061,4 +1061,25 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
     expect((CB.match(/filas\w*\s*===\s*0/g) || []).length,
       'alguna rama no comprueba el count de forma segura').toBe(2)
   })
+
+  // Conceder el permiso del navegador NO activa los avisos: es la mitad. Falta
+  // crear la PushSubscription y mandarla al servidor, que es lo unico que le dice
+  // a que aparato empujar. La puesta en marcha tenia escrita solo la primera
+  // mitad y decia «Avisos activados» en verde sin que llegara nada — y dejaba el
+  // permiso concedido, que es el estado en el que el navegador ya no vuelve a
+  // preguntar, asi que nadie se enteraba nunca.
+  //
+  // Gemelo de manual: la misma operacion escrita dos veces, correcta en una copia
+  // (Operativa) y a medias en la otra. La regla no comprueba que la puesta en
+  // marcha lo haga bien — comprueba que NADIE pueda escribir la segunda copia.
+  it('nadie pide el permiso de avisos por su cuenta', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (ruta === 'src/lib/activarPush.ts') continue   // la única copia legítima
+      if (/Notification\.requestPermission\(/.test(leerCodigo(ruta))) infractores.push(ruta)
+    }
+    expect(infractores,
+      'piden el permiso a mano en vez de usar activarPush(): un permiso concedido sin suscripcion es una pantalla que promete avisos que no llegan')
+      .toEqual([])
+  })
 })

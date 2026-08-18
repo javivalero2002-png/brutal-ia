@@ -384,18 +384,42 @@ describe('puesta en marcha · no puede dejar a nadie fuera', () => {
     // con la propia flecha del oyente y pasaba en verde con el fallo puesto.
   })
 
-  it('el paso de instalar cubre a Safari, que no da instalador', () => {
-    // Chrome ofrece `beforeinstallprompt` y ahí basta un botón. Safari no lo
-    // implementa NI en iPhone NI en Mac: si solo hubiera botón, media plantilla
-    // se queda sin instalar la app y sin saber por qué.
-    const i = P.indexOf('ACCESO DIRECTO')
-    expect(i, 'ya no existe el paso de instalar: revisa esta regla').toBeGreaterThan(-1)
-    const paso = P.slice(i, P.indexOf('{paso === 4', i))
-    for (const [caso, pista] of [['ios', 'pantalla de inicio'], ['safari-mac', 'Dock']] as const) {
-      expect(paso.includes(caso), `el paso de instalar no contempla «${caso}»`).toBe(true)
-      expect(paso.includes(pista),
-        `«${caso}» no tiene instrucciones propias: sin instalador y sin pasos, no hay salida`).toBe(true)
+  it('cada navegador tiene su propio camino para instalar', () => {
+    // Chrome ofrece `beforeinstallprompt` y ahí basta un botón. Safari NO lo
+    // implementa y no lo va a implementar (WebKit lo cerró como WONTFIX), así que
+    // ahí las instrucciones son lo único que hay.
+    //
+    // Y no basta con "tener instrucciones": el fallo real fue meter TODO iOS en
+    // una rama con los pasos de Safari. En iPhone el botón está en sitios
+    // distintos —Safari en la barra, Chrome en su menú de tres puntos— así que
+    // media plantilla habría estado buscando un botón que no está donde se le
+    // dice. Por eso se exige que los dos caminos de iOS sean DISTINTOS entre sí.
+    const m = /const CAMINOS[^=]*=\s*\{([\s\S]*?)\n\}/.exec(P)
+    expect(m, 'ya no existe CAMINOS: revisa esta regla').not.toBeNull()
+
+    const trozo = (clave: string) => {
+      const a = m![1].indexOf(`'${clave}':`) >= 0 ? m![1].indexOf(`'${clave}':`) : m![1].indexOf(`${clave}: {`)
+      expect(a, `no hay camino para «${clave}»`).toBeGreaterThan(-1)
+      const resto = m![1].slice(a)
+      const fin = resto.indexOf('],')
+      return resto.slice(0, fin > -1 ? fin : resto.length)
     }
+
+    const iosSafari = trozo('ios-safari')
+    const iosOtro = trozo('ios-otro')
+    const mac = trozo('safari-mac')
+
+    expect(mac.includes('Dock'),
+      'Safari del Mac no instala desde el menú del navegador: es Archivo → Añadir al Dock').toBe(true)
+    expect(iosSafari.includes('share'),
+      'el camino de Safari en iPhone no dibuja el icono de Compartir, que es el que hay que reconocer').toBe(true)
+
+    // Los pasos, sin lo que los rodea. Si los dos caminos de iOS dicen lo mismo,
+    // es que se ha vuelto a lumpar todo iPhone en uno.
+    const pasos = (t: string) => t.replace(/\s+/g, ' ').replace(/'ios-[a-z]+':|donde:[^,]*,/g, '').trim()
+    expect(pasos(iosSafari),
+      'Safari y Chrome en iPhone tienen las MISMAS instrucciones: el botón no está en el mismo sitio en los dos')
+      .not.toBe(pasos(iosOtro))
   })
 
   it('un fallo al guardar no bloquea la entrada', () => {
@@ -427,5 +451,38 @@ describe('puesta en marcha · no puede dejar a nadie fuera', () => {
       '/api/me no devuelve onboarding_at: la bienvenida se enseñaría siempre o nunca').toBe(true)
     const R = readFileSync('src/app/api/onboarding/route.ts', 'utf8')
     expect(/eq\('id', user\.id\)/.test(R), 'se marca una fila que no sale de la sesión').toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// El campo de objetivos del Diario: que no se desmonte solo.
+//
+// La condición que decide si se pinta el <textarea> o la lista de solo lectura
+// mira `objetivosDeHoy`, que se DERIVA del propio texto. Con el día en blanco la
+// condición se cumple y sale el campo; al teclear la primera letra ya hay una
+// línea, deja de cumplirse, y React sustituye el campo por la lista. Se pierde
+// el foco y lo que sigas escribiendo no llega a ninguna parte.
+//
+// Solo le pasaba a quien NO había escrito nada ese día — o sea, a todo el que
+// estrena la sección, y a nadie más. Por eso no lo vio nadie: quien ya tiene
+// entrada del día entra al campo por el botón, que sí marca `editando`.
+//
+// Lo que lo arregla es que enfocar marque `editando`: entonces el campo deja de
+// depender de su propio contenido para seguir existiendo.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('diario · el campo de objetivos no se desmonta al escribir', () => {
+  const D = readFileSync('src/components/sections/DiarioSection.tsx', 'utf8')
+
+  it('enfocar el campo lo mantiene montado', () => {
+    // Anclado al textarea de OBJETIVOS por su `value`, no al primero del fichero:
+    // hay otro más abajo (el cierre del día) que no lleva condición ninguna, y una
+    // ventana a ojo lo habría cogido a él.
+    const i = D.indexOf('value={objetivos}')
+    expect(i, 'ya no existe el campo de objetivos: revisa esta regla').toBeGreaterThan(-1)
+    const campo = D.slice(i, D.indexOf('/>', i))
+
+    expect(/onFocus=\{\(\) => setEditando\(true\)\}/.test(campo),
+      'el campo no marca `editando` al enfocarlo: se desmonta al teclear la primera letra y solo le pasa a quien estrena la sección')
+      .toBe(true)
   })
 })
