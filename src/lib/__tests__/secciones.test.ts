@@ -445,6 +445,27 @@ describe('puesta en marcha · no puede dejar a nadie fuera', () => {
     expect(/localStorage\.setItem\(CLAVE_PASO/.test(P), 'no se recuerda el paso al ir a Google').toBe(true)
   })
 
+  it('se puede volver a ver, o nadie podría comprobar qué ve el equipo', () => {
+    // `onboarding_at` es de una sola vez: en cuanto se marca, la pantalla no
+    // vuelve. Sin una puerta para reabrirla, quien se saltó un paso no puede
+    // rehacerlo, y el dueño no puede ver qué se va a encontrar su equipo antes de
+    // darles acceso — que es justo lo que hacía falta el día del despliegue.
+    const A = readFileSync('src/components/sections/AjustesSection.tsx', 'utf8')
+    expect(/onClick=\{onVerPuestaEnMarcha\}/.test(A),
+      'Operativa ya no tiene el botón para volver a ver la puesta en marcha').toBe(true)
+
+    const N = readFileSync('src/components/NexusDashboard.tsx', 'utf8')
+    const m = /onVerPuestaEnMarcha=\{([^}]*\}[^}]*)\}/.exec(N)
+    expect(m, 'el dashboard no cablea onVerPuestaEnMarcha').not.toBeNull()
+    // Las DOS cosas, y por separado: reabrirla sin olvidar el paso guardado te
+    // deja donde lo dejaste la última vez en vez de al principio, que para
+    // «ver qué verá el equipo» no sirve de nada.
+    expect(/setPuestaHecha\(false\)/.test(m![1]),
+      'el botón no reabre el recorrido').toBe(true)
+    expect(/olvidarPasoGuardado\(\)/.test(m![1]),
+      'reabre sin olvidar el paso guardado: aparecería a mitad del recorrido').toBe(true)
+  })
+
   it('la marca es de la persona, no del aparato', () => {
     const M = readFileSync('src/app/api/me/route.ts', 'utf8')
     expect(/onboarding_at/.test(M),
