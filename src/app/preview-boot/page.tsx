@@ -17,8 +17,15 @@ import Cliente from './Cliente'
 // mirarla mientras se diseña.
 export default async function PreviewBoot() {
   if (process.env.NODE_ENV === 'production') {
+    // Basta con tener SESION. No hace falta ser propietario: aqui dentro no hay ni
+    // un dato real —PreviewClient trae su propio juego de muestra— asi que exigir
+    // owner anadia friccion sin anadir proteccion, y dejaba fuera a la mitad del
+    // equipo de una pantalla que existe justo para ensenarles la app.
+    //
+    // Lo que si se mantiene es el motivo original: nunca sin auth. Un anonimo
+    // sigue viendo un 404, no una pantalla en blanco ni la interfaz del estudio.
     const ctx = await getAuthCtx()
-    if (ctx?.role !== 'owner') notFound()
+    if (!ctx) notFound()
   }
   return <Cliente />
 }

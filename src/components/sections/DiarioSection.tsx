@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { BLU, GRN, AMBAR, RED, SURFACE, SURF2, BORDER } from '@/components/shared/design-tokens'
-import { LucideIcon, useIsMobile, plural } from '@/components/shared'
+import { LucideIcon, useIsMobile, plural, ProgressRing } from '@/components/shared'
 import type { NexusData, Profile } from '@/types'
 import type { IrASeccion } from '@/components/shared/secciones'
 
@@ -35,7 +35,7 @@ interface Entrada {
   cierre: string | null
   entrada_at: string | null
   cierre_at: string | null
-  autor?: { id: string; name: string; initials?: string; color?: string } | null
+  autor?: { id: string; name: string; initials?: string; avatar_color?: string } | null
 }
 
 interface TareaPropuesta { text: string; level: 'urgent' | 'high' | 'normal'; hecha: boolean }
@@ -49,6 +49,13 @@ interface Props {
 
 const horaCorta = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' }) : ''
+
+/**
+ * Para comparar textos de tarea sin que una tilde o una mayúscula los haga
+ * distintos. Se usa para no volver a proponer lo que ya es una tarea.
+ */
+const normalizar = (t: string) =>
+  (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
 
 /** Los objetivos, uno por línea. Es el formato que permite tacharlos luego. */
 const lineas = (t?: string | null) =>
@@ -73,6 +80,9 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
   const guardadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const extraerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const ultimoExtraido = useRef('')
+  // Lo que has quitado a mano no vuelve. Sin esto, cada relectura del texto lo
+  // resucitaba y había que quitarlo otra vez.
+  const rechazadas = useRef<Set<string>>(new Set())
 
   const cargar = useCallback(async () => {
     try {
@@ -157,7 +167,18 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
         })
         if (!res.ok) return
         const j = await res.json()
-        setPropuestas(Array.isArray(j.tareas) ? j.tareas : [])
+        const brutas: TareaPropuesta[] = Array.isArray(j.tareas) ? j.tareas : []
+        // No volver a proponer lo que YA es una tarea, ni lo que ya has quitado.
+        //
+        // Sin esto, al escribir el balance para cerrar el día el extractor releía
+        // los objetivos de la mañana y te ofrecía otra vez las tareas que acabas de
+        // aceptar. Comparar contra `data.tasks` en vez de contra una lista en
+        // memoria hace que siga funcionando tras recargar.
+        const yaSon = new Set((data.tasks || []).map((t: { text?: string }) => normalizar(t.text || '')))
+        setPropuestas(brutas.filter(p => {
+          const k = normalizar(p.text)
+          return k && !yaSon.has(k) && !rechazadas.current.has(k)
+        }))
       } catch { /* silencioso: no se ha pedido, no se avisa de que falló */ }
       finally { setLeyendo(false) }
     }, 2500)
@@ -199,111 +220,147 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
   }
 
   const objetivosDeHoy = lineas(miEntrada?.entrada || objetivos)
+  // Los objetivos ya no existen se descuentan solos: si borras una línea, su
+  // marca de cumplido deja de contar en vez de inflar el porcentaje.
+  const cumplidosVivos = objetivosDeHoy.filter(o => cumplidos.has(o)).length
+  const pctObjetivos = objetivosDeHoy.length ? Math.round((cumplidosVivos / objetivosDeHoy.length) * 100) : 0
   const colorNivel = (l: string) => l === 'urgent' ? RED : l === 'high' ? AMBAR : BLU
   const yaCerrado = !!miEntrada?.cierre_at
 
   return (
     <div className="h-full overflow-y-auto" style={{ padding: isMobile ? '1rem' : '1.75rem' }}>
 
-      {/* ── ENTRADA: OBJETIVOS ─────────────────────────────────────────── */}
-      <div className="rounded-2xl mb-4" style={{ background: SURFACE, border: `1px solid ${miEntrada?.entrada_at ? BLU + '30' : BORDER}` }}>
-        <div className="flex items-center gap-3 px-4 pt-4 pb-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${BLU}16` }}>
-            <LucideIcon name="target" size={16} color={BLU} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="font-syne text-[9px] font-black tracking-widest" style={{ color: BLU }}>QUÉ ME PROPONGO HOY</div>
-            <div className="font-figtree text-[11px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
-              {miEntrada?.entrada_at ? `Fichaste a las ${horaCorta(miEntrada.entrada_at)}` : 'Un objetivo por línea'}
+      {/* ── ESTADO DEL DÍA ─────────────────────────────────────────────
+          Una franja que informa en vez de titular: a qué hora entraste, cuántos
+          objetivos llevas y si el día sigue abierto. Antes eran dos cabeceras
+          gemelas ocupando el doble y sin decir nada que no estuviera debajo. */}
+      <div className="relative rounded-3xl mb-4 overflow-hidden" style={{ background: SURF2, border: `1px solid ${BORDER}` }}>
+        {/* Halo del color del estado. Es el mismo recurso que usa el orbe de
+            Harvey, y ata la sección al resto de la app en vez de inventar otro. */}
+        <div className="absolute pointer-events-none" aria-hidden
+          style={{ width: '60%', height: '160%', top: '-40%', right: '-10%', borderRadius: '9999px',
+                   background: `radial-gradient(closest-side, ${yaCerrado ? GRN : BLU}1A, transparent)`, filter: 'blur(28px)' }} />
+        <div className="relative flex items-center gap-4 px-5 py-4">
+          <div className="flex-shrink-0" style={{ position: 'relative' }}>
+            <ProgressRing pct={pctObjetivos} size={54} stroke={3} color={yaCerrado ? GRN : BLU} />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="font-syne text-[13px] font-black" style={{ color: yaCerrado ? GRN : BLU }}>
+                {objetivosDeHoy.length ? cumplidosVivos : '·'}
+              </span>
             </div>
           </div>
-          {/* El estado del guardado, en pequeño. Sin esto, "se guarda solo" es una
-              promesa que el usuario no puede comprobar. */}
-          <div className="font-syne text-[7.5px] font-black tracking-widest flex-shrink-0" style={{ color: estadoGuardado === 'guardado' ? GRN : 'rgba(255,255,255,0.2)' }}>
-            {estadoGuardado === 'guardando' ? 'GUARDANDO…' : estadoGuardado === 'guardado' ? 'GUARDADO' : ''}
+          <div className="flex-1 min-w-0">
+            <div className="font-syne text-[8px] font-black tracking-widest mb-0.5" style={{ color: 'rgba(255,255,255,0.28)' }}>
+              MI DÍA · {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Madrid' }).toUpperCase()}
+            </div>
+            <div className="font-figtree text-[14px] font-bold text-white leading-tight">
+              {objetivosDeHoy.length
+                ? `${cumplidosVivos} de ${plural(objetivosDeHoy.length, 'objetivo', 'objetivos')}`
+                : 'Sin objetivos todavía'}
+            </div>
+            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+              <span className="font-syne text-[7px] font-black tracking-widest px-2 py-0.5 rounded-full"
+                style={{ background: yaCerrado ? `${GRN}18` : `${AMBAR}18`, color: yaCerrado ? GRN : AMBAR }}>
+                {yaCerrado ? 'CERRADO' : miEntrada?.entrada_at ? 'EN MARCHA' : 'SIN FICHAR'}
+              </span>
+              {miEntrada?.entrada_at && (
+                <span className="font-figtree text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  entrada {horaCorta(miEntrada.entrada_at)}{miEntrada.cierre_at ? ` · cierre ${horaCorta(miEntrada.cierre_at)}` : ''}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="px-4 pb-4">
-          <textarea
-            value={objetivos}
-            onChange={e => alEscribir('entrada', e.target.value)}
-            placeholder={'Cerrar el presupuesto de Nike\nMontar el reel de Mango\nLlamar al proveedor'}
-            rows={4}
-            className="w-full px-3 py-2.5 rounded-xl text-[12.5px] text-white placeholder-white/20 outline-none resize-y leading-relaxed"
-            style={{ background: 'rgba(255,255,255,0.04)', border: `1.5px solid ${BORDER}`, caretColor: BLU, minHeight: '5.5rem' }}
-          />
-          {!miEntrada?.entrada_at && (
-            <button onClick={() => fichar('entrada')} disabled={fichando}
-              className="mt-2 px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-widest disabled:opacity-40"
-              style={{ background: `${BLU}18`, border: `1px solid ${BLU}35`, color: BLU }}>
-              FICHAR ENTRADA
-            </button>
-          )}
+          {/* El guardado, discreto pero visible: "se guarda solo" tiene que poder
+              comprobarse o no es una promesa, es fe. */}
+          <div className="font-syne text-[7px] font-black tracking-widest flex-shrink-0 transition-opacity"
+            style={{ color: estadoGuardado === 'guardado' ? GRN : 'rgba(255,255,255,0.25)', opacity: estadoGuardado === 'limpio' ? 0 : 1 }}>
+            {estadoGuardado === 'guardando' ? 'GUARDANDO' : 'GUARDADO'}
+          </div>
         </div>
       </div>
 
-      {/* ── SALIDA: ¿LOS CUMPLISTE? ────────────────────────────────────── */}
-      <div className="rounded-2xl mb-5" style={{ background: SURFACE, border: `1px solid ${yaCerrado ? GRN + '30' : BORDER}` }}>
-        <div className="flex items-center gap-3 px-4 pt-4 pb-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `${GRN}16` }}>
-            <LucideIcon name="check-circle" size={16} color={GRN} />
+      {/* ── LOS DOS PANELES ────────────────────────────────────────────────
+          Lado a lado en escritorio: proponerse y cumplir son las dos mitades de
+          lo mismo, y verlas juntas es la mitad del valor. Apilados en móvil. */}
+      <div className={isMobile ? 'flex flex-col gap-3 mb-5' : 'grid gap-3 mb-5'} style={isMobile ? undefined : { gridTemplateColumns: '1fr 1fr' }}>
+
+        {/* OBJETIVOS */}
+        <div className="rounded-3xl flex flex-col" style={{ background: SURFACE, border: `1px solid ${miEntrada?.entrada_at ? BLU + '28' : BORDER}` }}>
+          <div className="flex items-center gap-2 px-4 pt-3.5 pb-2">
+            <LucideIcon name="target" size={13} color={BLU} />
+            <div className="font-syne text-[8.5px] font-black tracking-widest" style={{ color: BLU }}>QUÉ ME PROPONGO</div>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="font-syne text-[9px] font-black tracking-widest" style={{ color: GRN }}>¿LO COMPLETASTE TODO?</div>
-            <div className="font-figtree text-[11px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
-              {yaCerrado ? `Cerraste a las ${horaCorta(miEntrada?.cierre_at)}` : 'Marca lo que sí, y cuenta el resto'}
-            </div>
+          <div className="px-4 pb-4 flex-1 flex flex-col">
+            <textarea
+              value={objetivos}
+              onChange={e => alEscribir('entrada', e.target.value)}
+              placeholder={'Cerrar el presupuesto de Nike\nMontar el reel de Mango\nLlamar al proveedor'}
+              rows={4}
+              className="w-full px-3 py-2.5 rounded-2xl text-[12.5px] text-white placeholder-white/20 outline-none resize-none leading-relaxed flex-1"
+              style={{ background: 'rgba(255,255,255,0.035)', border: `1px solid ${BORDER}`, caretColor: BLU, minHeight: '6rem' }}
+            />
+            {!miEntrada?.entrada_at && (
+              <button onClick={() => fichar('entrada')} disabled={fichando}
+                className="mt-2.5 w-full py-2.5 rounded-2xl font-syne text-[9px] font-black tracking-widest disabled:opacity-40 transition-all active:scale-[0.99]"
+                style={{ background: `${BLU}16`, border: `1px solid ${BLU}32`, color: BLU }}>
+                FICHAR ENTRADA
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Los objetivos de la mañana, para tacharlos. Esto es lo que hace que la
-            salida no sea otra caja de texto igual que la entrada. */}
-        {objetivosDeHoy.length > 0 ? (
-          <div className="px-4 pb-1 flex flex-col gap-1">
-            {objetivosDeHoy.map((o, i) => {
-              const hecho = cumplidos.has(o)
-              return (
-                <button key={i}
-                  onClick={() => setCumplidos(s => { const n = new Set(s); n.has(o) ? n.delete(o) : n.add(o); return n })}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-all active:scale-[0.99]"
-                  style={{ background: hecho ? `${GRN}0E` : 'rgba(255,255,255,0.03)', border: `1px solid ${hecho ? GRN + '30' : BORDER}` }}>
-                  <span className="w-4 h-4 rounded-md flex items-center justify-center flex-shrink-0"
-                    style={{ background: hecho ? GRN : 'transparent', border: `1.5px solid ${hecho ? GRN : 'rgba(255,255,255,0.18)'}` }}>
-                    {hecho && <LucideIcon name="check" size={10} color="#06110A" />}
-                  </span>
-                  <span className="font-figtree text-[12px] flex-1 min-w-0"
-                    style={{ color: hecho ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.8)', textDecoration: hecho ? 'line-through' : 'none' }}>
-                    {o}
-                  </span>
-                </button>
-              )
-            })}
-            <div className="font-figtree text-[10px] px-1 pt-1" style={{ color: 'rgba(255,255,255,0.25)' }}>
-              {cumplidos.size} de {plural(objetivosDeHoy.length, 'objetivo', 'objetivos')}
-            </div>
+        {/* BALANCE — los objetivos como burbujas tachables. Esto es lo que hace
+            que la salida no sea otra caja de texto igual que la entrada. */}
+        <div className="rounded-3xl flex flex-col" style={{ background: SURFACE, border: `1px solid ${yaCerrado ? GRN + '28' : BORDER}` }}>
+          <div className="flex items-center gap-2 px-4 pt-3.5 pb-2">
+            <LucideIcon name="check-circle" size={13} color={GRN} />
+            <div className="font-syne text-[8.5px] font-black tracking-widest" style={{ color: GRN }}>¿LO COMPLETÉ?</div>
           </div>
-        ) : (
-          <div className="px-4 pb-2 font-figtree text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
-            Escribe arriba tus objetivos y aquí podrás ir tachándolos.
-          </div>
-        )}
 
-        <div className="px-4 pt-3 pb-4">
-          <textarea
-            value={balance}
-            onChange={e => alEscribir('cierre', e.target.value)}
-            placeholder="Qué salió, qué se quedó a medias y por qué…"
-            rows={3}
-            className="w-full px-3 py-2.5 rounded-xl text-[12.5px] text-white placeholder-white/20 outline-none resize-y leading-relaxed"
-            style={{ background: 'rgba(255,255,255,0.04)', border: `1.5px solid ${BORDER}`, caretColor: GRN, minHeight: '4.5rem' }}
-          />
-          {!yaCerrado && (
-            <button onClick={() => fichar('cierre')} disabled={fichando}
-              className="mt-2 px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-widest disabled:opacity-40"
-              style={{ background: `${GRN}18`, border: `1px solid ${GRN}35`, color: GRN }}>
-              CERRAR EL DÍA
-            </button>
+          {objetivosDeHoy.length > 0 ? (
+            <div className="px-4 pb-2 flex flex-wrap gap-1.5">
+              {objetivosDeHoy.map((o, i) => {
+                const hecho = cumplidos.has(o)
+                return (
+                  <button key={i}
+                    onClick={() => setCumplidos(s => { const n = new Set(s); n.has(o) ? n.delete(o) : n.add(o); return n })}
+                    className="flex items-center gap-1.5 pl-1.5 pr-3 py-1.5 rounded-full text-left transition-all active:scale-95"
+                    style={{ background: hecho ? `${GRN}16` : 'rgba(255,255,255,0.04)', border: `1px solid ${hecho ? GRN + '3A' : BORDER}`, maxWidth: '100%' }}>
+                    <span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+                      style={{ background: hecho ? GRN : 'transparent', border: `1.5px solid ${hecho ? GRN : 'rgba(255,255,255,0.2)'}` }}>
+                      {hecho && <LucideIcon name="check" size={9} color="#06110A" />}
+                    </span>
+                    <span className="font-figtree text-[11.5px] truncate"
+                      style={{ color: hecho ? 'rgba(255,255,255,0.42)' : 'rgba(255,255,255,0.82)', textDecoration: hecho ? 'line-through' : 'none' }}>
+                      {o}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="px-4 pb-2 font-figtree text-[11px]" style={{ color: 'rgba(255,255,255,0.22)' }}>
+              Escribe objetivos y aquí los vas tachando.
+            </div>
           )}
+
+          <div className="px-4 pt-1.5 pb-4 flex-1 flex flex-col">
+            <textarea
+              value={balance}
+              onChange={e => alEscribir('cierre', e.target.value)}
+              placeholder="Qué se quedó a medias y por qué…"
+              rows={3}
+              className="w-full px-3 py-2.5 rounded-2xl text-[12.5px] text-white placeholder-white/20 outline-none resize-none leading-relaxed flex-1"
+              style={{ background: 'rgba(255,255,255,0.035)', border: `1px solid ${BORDER}`, caretColor: GRN, minHeight: '4.5rem' }}
+            />
+            {!yaCerrado && (
+              <button onClick={() => fichar('cierre')} disabled={fichando}
+                className="mt-2.5 w-full py-2.5 rounded-2xl font-syne text-[9px] font-black tracking-widest disabled:opacity-40 transition-all active:scale-[0.99]"
+                style={{ background: `${GRN}16`, border: `1px solid ${GRN}32`, color: GRN }}>
+                CERRAR EL DÍA
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -333,7 +390,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
                         </div>
                       )}
                     </div>
-                    <button onClick={() => setPropuestas(ps => ps.filter((_, k) => k !== i))} aria-label={`Quitar «${p.text}»`}
+                    <button onClick={() => { rechazadas.current.add(normalizar(p.text)); setPropuestas(ps => ps.filter((_, k) => k !== i)) }} aria-label={`Quitar «${p.text}»`}
                       className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,0.04)' }}>
                       <LucideIcon name="x" size={12} color="rgba(255,255,255,0.35)" />
                     </button>
@@ -346,7 +403,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
                   style={{ background: `${BLU}20`, border: `1px solid ${BLU}45`, color: BLU }}>
                   {creando ? 'CREANDO…' : `ACEPTAR ${propuestas.length}`}
                 </button>
-                <button onClick={() => setPropuestas([])}
+                <button onClick={() => { propuestas.forEach(p => rechazadas.current.add(normalizar(p.text))); setPropuestas([]) }}
                   className="px-4 py-2 rounded-xl font-syne text-[9px] font-black tracking-widest"
                   style={{ color: 'rgba(255,255,255,0.35)', border: `1px solid ${BORDER}` }}>
                   DESCARTAR
@@ -384,7 +441,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
               <div key={e.id} className="rounded-2xl px-4 py-3.5" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
                 <div className="flex items-center gap-2.5 mb-2 flex-wrap">
                   <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 font-syne text-[9px] font-black"
-                    style={{ background: `${e.autor?.color || BLU}22`, color: e.autor?.color || BLU }}>
+                    style={{ background: `${e.autor?.avatar_color || BLU}22`, color: e.autor?.avatar_color || BLU }}>
                     {e.autor?.initials || (e.autor?.name || '?').slice(0, 2).toUpperCase()}
                   </div>
                   <div className="font-figtree text-[12px] font-bold text-white">{e.autor?.name || 'Alguien'}</div>
