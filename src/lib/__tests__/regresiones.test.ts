@@ -1262,4 +1262,28 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
     expect(/body\?\.dia|body\.dia/.test(A),
       'acepta el dia por el body: eso permite colocar trabajo en el dia que se quiera').toBe(false)
   })
+
+  // La facturacion es TEXTO LIBRE y nadie la escribe igual. Un `parseFloat` sobre
+  // la cadena limpia devuelve numeros mil veces menores sin avisar («12k» -> 12,
+  // «1.2M» -> 12) y tira el periodo, asi que un contrato anual se suma al MRR
+  // entero, doce veces mas de lo que es. Los importes que se leen mal no fallan:
+  // simplemente enseñan otra cosa.
+  it('los importes se leen con parseImporte, no con parseFloat a pelo', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (ruta === 'src/components/shared/helpers.ts') continue   // el intérprete
+      const C = leerCodigo(ruta)
+      // Un parseFloat cerca de `revenue` es el patron exacto que habia.
+      if (/revenue[\s\S]{0,200}parseFloat|parseFloat[\s\S]{0,200}revenue/.test(C)) infractores.push(ruta)
+    }
+    expect(infractores,
+      'lee la facturacion con parseFloat: «12k» saldria como 12 y lo anual se sumaria como mensual')
+      .toEqual([])
+  })
+
+  it('el MRR suma el equivalente mensual, no el importe crudo', () => {
+    const R = leerCodigo('src/components/sections/ReportesSection.tsx')
+    expect(/parseImporte\([^)]*\)\.mensual/.test(R),
+      'el MRR suma el importe tal cual: un contrato anual contaria doce veces lo que vale').toBe(true)
+  })
 })

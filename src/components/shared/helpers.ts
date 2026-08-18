@@ -136,6 +136,51 @@ export const ventanaDelDia = (dia: string, diasAntes = 0) => {
 // Diario, el briefing y Harvey usaban `assigned_to === id` a secas. Una tarea
 // con dos responsables sumaba en un sitio y no en el otro, así que los dos
 // comprobadores daban números distintos del mismo trabajo.
+/**
+ * Lee la facturación de un cliente, que es TEXTO LIBRE.
+ *
+ * Lo que había hacía `parseFloat` sobre la cadena limpia, y eso convertía en
+ * silencio importes en números mil veces más pequeños:
+ *
+ *   «12k»    → 12          (debería ser 12.000)
+ *   «1,5k»   → 1,5         (1.500)
+ *   «1.2M»   → 12          (1.200.000 — el punto se quitaba como separador de
+ *                           miles y quedaba «12M», que parseFloat corta en 12)
+ *
+ * Y el periodo se TIRABA: `.replace(/\/.*$/, '')` borraba «/año» junto con todo
+ * lo demás, así que un contrato anual se sumaba al MRR como si fuera mensual —
+ * doce veces más de lo que es.
+ *
+ * Devuelve siempre el equivalente MENSUAL, que es lo que significa MRR, más el
+ * periodo leído para poder decirlo en pantalla.
+ */
+export function parseImporte(bruto?: string | null): { mensual: number; anual: boolean } {
+  const t = (bruto || '').trim()
+  if (!t || t === '—') return { mensual: 0, anual: false }
+
+  const sinTildes = t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const anual = /\b(anual|ano|year|yr)\b|\/\s*(ano|year)/.test(sinTildes)
+
+  // El número, con su sufijo. Se busca el PRIMERO: «12k/mes» y «€12k» dan igual.
+  const m = /(\d[\d.,\s]*)\s*([km])?/i.exec(t.replace(/[€$£]/g, ''))
+  if (!m) return { mensual: 0, anual }
+
+  let cuerpo = m[1].replace(/\s/g, '')
+  // Español: el punto separa miles y la coma decimales. Pero «1.2M» usa el punto
+  // como decimal, así que un punto seguido de MENOS de tres cifras y con sufijo
+  // se trata como decimal — que es como lo escribe la gente.
+  const sufijo = (m[2] || '').toLowerCase()
+  if (sufijo && /^\d+\.\d{1,2}$/.test(cuerpo)) cuerpo = cuerpo.replace('.', ',')
+  cuerpo = cuerpo.replace(/\./g, '').replace(',', '.')
+
+  const n = parseFloat(cuerpo)
+  if (!Number.isFinite(n)) return { mensual: 0, anual }
+
+  const factor = sufijo === 'k' ? 1_000 : sufijo === 'm' ? 1_000_000 : 1
+  const total = n * factor
+  return { mensual: anual ? total / 12 : total, anual }
+}
+
 export const esTareaDe = (
   t: {
     assignee?: { id?: string } | null; co_assignee?: { id?: string } | null
