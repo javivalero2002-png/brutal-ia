@@ -4,6 +4,7 @@ import { BLU, GRN, AMBAR, RED, VIO, SURFACE, SURF2, BORDER } from '@/components/
 import { LucideIcon, useIsMobile, plural, ProgressRing, todayKey, localDayKey } from '@/components/shared'
 import type { NexusData, Profile } from '@/types'
 import type { IrASeccion } from '@/components/shared/secciones'
+import CalendarioDiario from '@/components/shared/CalendarioDiario'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DIARIO — objetivos al entrar, balance al salir, y las tareas salen solas.
@@ -53,6 +54,8 @@ interface Props {
    * enseña una sección rota es peor que no enseñarla.
    */
   demo?: Entrada[]
+  /** Días de muestra para el calendario del demo. */
+  diasDemo?: Record<string, { personas: { id: string; name?: string; initials?: string; avatar_color?: string }[]; objetivos: number; cerrados: number }>
 }
 
 const horaCorta = (iso?: string | null) =>
@@ -96,7 +99,7 @@ const etiquetaDia = (clave: string): string => {
 const lineas = (t?: string | null) =>
   (t || '').split('\n').map(l => l.replace(/^[-•*\s]+/, '').trim()).filter(Boolean)
 
-export default function DiarioSection({ data, profile, showToast, onNavigate, demo }: Props) {
+export default function DiarioSection({ data, profile, showToast, onNavigate, demo, diasDemo }: Props) {
   const isMobile = useIsMobile()
   const [entradas, setEntradas] = useState<Entrada[]>([])
   const [cargando, setCargando] = useState(true)
@@ -123,6 +126,9 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   // con viñetas y editar texto plano son dos cosas distintas, y mezclarlas en un
   // textarea siempre visible es lo que hacía que la sección pareciera un borrador.
   const [editando, setEditando] = useState(false)
+  // El calendario se abre a demanda: la mayoria de las visitas son «abro, escribo
+  // lo de hoy y me voy», y un mes entero de rejilla ahi arriba estorbaria a eso.
+  const [verCalendario, setVerCalendario] = useState(false)
 
   const miEntrada = entradas.find(e => e.user_id === profile?.id) || null
   const sembrado = useRef(false)
@@ -177,7 +183,8 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
       const res = await fetch('/api/diario', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...campos, borrador: true }),
+        // El DIA viaja: si no, rellenar el lunes el martes escribiria en el martes.
+        body: JSON.stringify({ ...campos, dia, borrador: true }),
       })
       setEstadoGuardado(res.ok ? 'guardado' : 'limpio')
       if (res.status === 401) {
@@ -187,7 +194,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
       }
       if (!res.ok) showToast('No se pudo guardar el diario')
     } catch { setEstadoGuardado('limpio'); showToast('No se pudo guardar el diario') }
-  }, [showToast])
+  }, [dia, demo, showToast])
 
   const alEscribir = (campo: 'entrada' | 'cierre', valor: string) => {
     if (campo === 'entrada') setObjetivos(valor); else setBalance(valor)
@@ -208,7 +215,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
       fetch('/api/diario', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...pendiente.current, borrador: true }),
+        body: JSON.stringify({ ...pendiente.current, dia, borrador: true }),
         keepalive: true,
       }).catch(() => {})
     }
@@ -273,7 +280,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
       const res = await fetch('/api/diario', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [campo]: valor.trim() }),
+        body: JSON.stringify({ [campo]: valor.trim(), dia }),
       })
       if (!res.ok) { showToast('No se pudo fichar'); return }
 
@@ -409,9 +416,10 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
               className="w-8 h-8 flex items-center justify-center transition-opacity hover:opacity-70">
               <LucideIcon name="chevron-left" size={14} color="rgba(255,255,255,0.45)" />
             </button>
-            <button onClick={() => setDia(todayKey())} disabled={esHoy}
-              className="px-3 h-8 font-figtree text-[11px] whitespace-nowrap disabled:opacity-100"
+            <button onClick={() => setVerCalendario(v => !v)}
+              className="px-3 h-8 font-figtree text-[11px] whitespace-nowrap flex items-center gap-1.5"
               style={{ color: esHoy ? 'rgba(255,255,255,0.6)' : VIO }}>
+              <LucideIcon name="calendar" size={11} color={esHoy ? 'rgba(255,255,255,0.4)' : VIO} />
               {etiquetaDia(dia)}
             </button>
             <button onClick={() => setDia(sumarDias(dia, 1))} disabled={esHoy} aria-label="Día siguiente"
@@ -421,7 +429,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
           </div>
 
           {/* Solo en hoy: no se ficha en un dia que ya paso. */}
-          {esHoy && (
+          {(
             <button onClick={anadirObjetivo}
               className="flex items-center gap-1.5 pl-3 pr-4 h-9 rounded-full font-syne text-[9px] font-black tracking-widest transition-all active:scale-95"
               style={{ background: `linear-gradient(140deg, ${VIO}30, ${BLU}22)`, border: `1px solid ${VIO}48`, color: '#DCD3FF' }}>
@@ -431,6 +439,16 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
           )}
         </div>
       </div>
+
+      {verCalendario && (
+        <div className="mb-4">
+          <CalendarioDiario
+            diaSeleccionado={dia}
+            demo={diasDemo}
+            onElegirDia={d => { setDia(d); setVerCalendario(false) }}
+          />
+        </div>
+      )}
 
       {/* ── HÉROE: EL ESTADO DEL DÍA ───────────────────────────────────── */}
       <div className="relative rounded-3xl mb-4 overflow-hidden"
@@ -492,7 +510,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
           <div className="flex items-center gap-2 px-4 pt-3.5 pb-2.5">
             <LucideIcon name="target" size={14} color={BLU} />
             <div className="font-syne text-[9px] font-black tracking-widest flex-1" style={{ color: BLU }}>¿QUÉ ME PROPONGO?</div>
-            {esHoy && (
+            {(
               <button onClick={() => setEditando(e => !e)} aria-label={editando ? 'Ver la lista' : 'Editar objetivos'}
                 className="w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90"
                 style={{ background: editando ? `${BLU}20` : 'rgba(255,255,255,0.04)' }}>
@@ -530,7 +548,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
                 )}
               </div>
             )}
-            {esHoy && !miEntrada?.entrada_at && objetivosDeHoy.length > 0 && (
+            {!miEntrada?.entrada_at && objetivosDeHoy.length > 0 && (
               <button onClick={() => fichar('entrada')} disabled={fichando}
                 className="mt-2.5 w-full py-2.5 rounded-2xl font-syne text-[9px] font-black tracking-widest disabled:opacity-40 transition-all active:scale-[0.99]"
                 style={{ background: `${BLU}18`, border: `1px solid ${BLU}38`, color: BLU }}>
@@ -552,7 +570,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
               {objetivosDeHoy.map((o, i) => {
                 const hecho = estaHecho(o)
                 return (
-                  <button key={i} disabled={!esHoy}
+                  <button key={i}
                     onClick={() => alternarObjetivo(o)}
                     className="flex items-center gap-2 pl-2 pr-3.5 py-2 rounded-full text-left transition-all active:scale-95 disabled:active:scale-100"
                     style={{ background: hecho ? `${GRN}16` : 'rgba(255,255,255,0.045)', border: `1px solid ${hecho ? GRN + '42' : BORDER}`, maxWidth: '100%' }}>
@@ -579,15 +597,14 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
               <textarea
                 value={balance}
                 onChange={e => alEscribir('cierre', e.target.value)}
-                disabled={!esHoy}
-                placeholder="Qué se quedó a medias y por qué…"
+                  placeholder="Qué se quedó a medias y por qué…"
                 rows={3}
                 className="w-full px-3.5 py-3 pr-12 rounded-2xl text-[12.5px] text-white placeholder-white/20 outline-none resize-none leading-relaxed flex-1"
                 style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, caretColor: GRN, minHeight: '5.5rem' }}
               />
               {/* Cerrar el día, dentro del propio campo: es la acción que sigue a
                   escribirlo, y así no hace falta bajar la vista a otro botón. */}
-              {esHoy && !yaCerrado && (
+              {!yaCerrado && (
                 <button onClick={() => fichar('cierre')} disabled={fichando} aria-label="Cerrar el día"
                   className="absolute bottom-3 right-3 w-8 h-8 rounded-xl flex items-center justify-center transition-all active:scale-90 disabled:opacity-40"
                   style={{ background: `${GRN}1E`, border: `1px solid ${GRN}45` }}>
