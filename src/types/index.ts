@@ -65,6 +65,16 @@ export interface Task {
   updated_at?: string
   /** Momento real de completado. Lo sella la API al marcar done. */
   completed_at?: string | null
+  /**
+   * De qué línea de diario nació esta tarea. Las dos van juntas o ninguna.
+   *
+   * Antes el Diario emparejaba sus objetivos con las tareas por el TEXTO, así que
+   * en cuanto alguien retocaba el texto de la tarea desde Tareas el vínculo se
+   * rompía: la burbuja salía sin tachar aunque estuviera hecha, y al tocarla se
+   * creaba una SEGUNDA tarea con el texto viejo. Dos tareas para un trabajo.
+   */
+  diario_dia?: string | null
+  diario_objetivo?: string | null
   assignee?: Profile
   co_assignee?: Profile
   client?: Client

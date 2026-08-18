@@ -276,12 +276,36 @@ describe('Diario · no repite tareas ya creadas', () => {
     // texto no se creaba tu tarea y tu casilla marcaba la suya; un objetivo
     // recurrente salía tachado antes de empezar; y destacharlo borraba el
     // completado del día en que se hizo de verdad. La regla protegía el bug.
-    expect(/const misTareasDelDia[\s\S]{0,400}assigned_to === profile\?\.id/.test(D),
-      'el conjunto contra el que se empareja no se acota a mis tareas').toBe(true)
-    expect(/const misTareasDelDia[\s\S]{0,400}localDayKey\([\s\S]{0,40}=== dia/.test(D),
+    // Sobre el CUERPO de `misTareasDelDia`, no sobre una ventana de caracteres:
+    // la forma de la comprobación cambió (de `=== profile?.id` a una guarda con
+    // `!==`) y una regla atada a la forma se rompe sin que el invariante falle.
+    const iM = D.indexOf('const misTareasDelDia')
+    expect(iM, 'ya no existe misTareasDelDia: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpoM = D.slice(iM, D.indexOf('\n  })', iM))
+    expect(/profile\?\.id/.test(cuerpoM),
+      'el conjunto contra el que se empareja no se acota a mis tareas: el objetivo de uno se tacharía con el trabajo de otro').toBe(true)
+    expect(/=== dia/.test(cuerpoM),
       'el conjunto no se acota al día: un objetivo recurrente casaría con la tarea de otro día').toBe(true)
     expect(/data\.tasks[\s\S]{0,120}normalizar\(t\.text/.test(D),
       'vuelve a emparejar contra las tareas de todo el equipo desde siempre').toBe(false)
+  })
+
+  it('el vínculo con la tarea sobrevive a que cambie el texto', () => {
+    // Emparejar por texto tiene un caso que ningún filtro arregla: `text` es
+    // editable desde la sección Tareas. En cuanto alguien lo retoca, el objetivo
+    // deja de encontrar su tarea, la burbuja sale sin tachar aunque esté hecha, y
+    // al tocarla se crea una SEGUNDA tarea con el texto viejo. Dos tareas para un
+    // trabajo, dos completadas en Reportes.
+    expect(/diario_objetivo/.test(D),
+      'el Diario vuelve a emparejar solo por texto: retocar el texto de la tarea duplicaría el trabajo').toBe(true)
+
+    // Y se ESCRIBE al crear, no solo se lee: sin esto el vínculo nace vacío y
+    // todo sigue cayendo al respaldo por texto sin que nada falle.
+    const creaciones = [...D.matchAll(/createTask\(\{[^}]*\}/g)].map(m => m[0])
+    expect(creaciones.length, 'ya no se crean tareas desde el Diario: revisa esta regla').toBeGreaterThan(0)
+    const sinVinculo = creaciones.filter(c => !/diario_dia:/.test(c) || !/diario_objetivo:/.test(c))
+    expect(sinVinculo,
+      'alguna creación no guarda de qué línea de diario nació: esa tarea solo podrá emparejarse por texto').toEqual([])
   })
 
   it('y lo que quitas a mano no vuelve', () => {

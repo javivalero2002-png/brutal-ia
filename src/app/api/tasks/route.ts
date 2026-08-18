@@ -39,7 +39,15 @@ export async function POST(request: NextRequest) {
   const admin = await createAdminClient()
   const body = await request.json()
 
-  const fields: any = { ...pick(body, ['text','level','done','due_date','project_id','client_id','assigned_to','co_assigned_to','source','notes']), created_by: user.id }
+  const fields: any = { ...pick(body, ['text','level','done','due_date','project_id','client_id','assigned_to','co_assigned_to','source','notes','diario_dia','diario_objetivo']), created_by: user.id }
+  // `diario_dia` lo escribe el CLIENTE, así que se valida la forma antes de que
+  // llegue a una columna por la que luego se filtra. Cualquier cosa que no sea
+  // una clave de día se descarta entera, con su objetivo: las dos van juntas o
+  // ninguna, o quedaría un vínculo a medias que no empareja nada.
+  if (fields.diario_dia !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(fields.diario_dia))) {
+    delete fields.diario_dia
+    delete fields.diario_objetivo
+  }
   // Crear una tarea ya marcada como hecha debe sellar completed_at igual que lo
   // hace el PATCH; si no, la tarea nunca aparece en los reportes de tendencia.
   if (fields.done === true) fields.completed_at = new Date().toISOString()
