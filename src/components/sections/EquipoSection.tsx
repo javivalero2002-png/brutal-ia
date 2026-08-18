@@ -238,12 +238,26 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
 
   const isMe = (m: Profile) => m.id === profile?.id
 
+  // ¿Hay algo que ensenar a la derecha? Si no, la lista se queda con todo.
+  const hayPanelDerecho = !!(invitePanel || addingMember || selected)
+
   return (
     <div className="flex h-full overflow-hidden">
       {/* Left: team list */}
       <div className="flex flex-col overflow-hidden" style={isMobile
         ? {width:'100%',flexShrink:0,display:(invitePanel||addingMember||selected)?'none':'flex'}
-        : {width:'360px',flexShrink:0,borderRight:`1px solid ${BORDER}`}}>
+        // Sin nadie seleccionado, la lista ocupa el ancho completo.
+        //
+        // Antes eran 360px fijos con la mitad derecha diciendo «Selecciona un
+        // companero» — o sea, la pantalla que mas se ve de esta seccion tenia el
+        // 70% del espacio vacio, y las fichas salian con el texto cortado
+        // («2 atras…», «Gm…») teniendo sitio de sobra al lado.
+        //
+        // Al elegir a alguien vuelve a 360 y aparece el panel de la derecha, que es
+        // cuando ese reparto si tiene sentido.
+        : hayPanelDerecho
+          ? {width:'360px',flexShrink:0,borderRight:`1px solid ${BORDER}`}
+          : {width:'100%',flexShrink:1}}>
         <div className={`${isMobile?'px-4':'px-6'} pt-6 pb-4 flex-shrink-0`} style={{borderBottom:`1px solid ${BORDER}`}}>
           <div className="flex items-center justify-between mb-1">
             <div className="font-syne text-[9px] font-black tracking-[0.25em]" style={{color:'rgba(255,255,255,0.18)'}}>BRUTAL STUDIOS</div>
@@ -300,7 +314,10 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
             )
           })()}
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+        <div className={hayPanelDerecho || isMobile
+          ? 'flex-1 overflow-y-auto p-4 space-y-2'
+          : 'flex-1 overflow-y-auto p-5 grid gap-3 content-start'}
+          style={hayPanelDerecho || isMobile ? undefined : {gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))'}}>
           {allActive.map((member: Profile) => {
             const memberTasks = data.tasks.filter((t: Task) => esTareaDe(t, member))
             const pending = memberTasks.filter((t: Task) => !t.done)
@@ -332,7 +349,11 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
                         {isMe(member) && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>TU</span>}
                         {urgent.length > 0 && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(229,29,42,0.1)',color:RED}}>{urgent.length} URG</span>}
                       </div>
-                      <div className="text-[11px] mt-0.5 truncate" style={{color:'rgba(255,255,255,0.3)'}}>
+                      {/* En rejilla la ficha tiene ancho de sobra y alto libre, asi
+                          que el resumen se lee entero: cortarlo dejaba «2 atras…» y
+                          «Gm…», que no dicen nada. En la columna de 360px se sigue
+                          truncando, que ahi si hace falta. */}
+                      <div className={`text-[11px] mt-0.5 ${hayPanelDerecho || isMobile ? 'truncate' : ''}`} style={{color:'rgba(255,255,255,0.3)'}}>
                         {member.role==='owner'?'Propietario':'Equipo'} · {plural(pending.length,'tarea')}
                         {mOverdue.length>0?<span style={{color:RED+'aa'}}> · {mOverdue.length} atrasada{mOverdue.length>1?'s':''}</span>:null}
                         {mDueToday.length>0&&mOverdue.length===0?<span style={{color:'rgba(255,176,32,0.75)'}}> · {mDueToday.length} hoy</span>:null}
@@ -387,7 +408,9 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
         </div>
       </div>
 
-      {/* Right: Invite panel / Add member / DM panel / empty */}
+      {/* Right: Invite panel / Add member / DM panel.
+          El estado vacio de antes («Selecciona un companero») ya no existe: sin
+          seleccion no hay panel derecho, porque la lista ocupa la pantalla. */}
       {invitePanel ? (
         <div className="flex-1 flex flex-col overflow-hidden" style={{background:'#050510'}}>
           <div className={`flex items-center gap-4 ${isMobile?'px-4':'px-6'} py-5 flex-shrink-0`} style={{borderBottom:`1px solid ${BORDER}`,background:`linear-gradient(135deg,rgba(27,95,250,0.06),transparent)`}}>
@@ -648,33 +671,7 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
             <div className="text-center text-[9px] mt-2" style={{color:'rgba(255,255,255,0.15)'}}>⌘↵ para enviar</div>
           </div>
         </div>
-      ) : (
-        // En móvil la lista ocupa el 100% del ancho; este panel se colocaba AL
-        // LADO dentro del mismo flex y empujaba 103px fuera de pantalla. Sobra
-        // en móvil: la lista ya ES la pantalla.
-        //
-        // Se oculta con `hidden md:flex` y no con isMobile a propósito. El ancho
-        // de la ventana es CSS, y resolverlo con estado de React lo hace depender
-        // de que un efecto se ejecute y de que el elemento se vuelva a pintar
-        // después — con `isMobile` el atributo style se quedaba con el valor del
-        // servidor y el panel seguía desbordando. La media query se aplica en el
-        // primer píxel pintado, sin hidratación de por medio.
-        <div className="flex-1 hidden md:flex items-center justify-center" style={{background:'#050510'}}>
-          <div className="text-center">
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${BORDER}`}}><LucideIcon name="message-square" size={22} color="rgba(255,255,255,0.15)"/></div>
-            <div className="font-figtree text-[16px] font-semibold text-white mb-1">Selecciona un compañero</div>
-            <div className="text-[12px] mb-5" style={{color:'rgba(255,255,255,0.3)'}}>Haz clic en su nombre para ver la conversación</div>
-            {isOwner && (
-              <button onClick={()=>setAddingMember(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest mx-auto transition-all hover:opacity-80"
-                style={{background:'rgba(27,95,250,0.08)',border:`1px solid rgba(27,95,250,0.2)`,color:BLU}}>
-                <LucideIcon name="user-plus" size={11} color={BLU}/>
-                AÑADIR MIEMBRO
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      ) : null}
     </div>
   )
 }
