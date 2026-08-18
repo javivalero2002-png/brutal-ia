@@ -32,7 +32,14 @@ export default function TableroLunes({ isMobile }: { isMobile: boolean }) {
       style={{
         // `env(safe-area-inset-bottom)` para que no se meta bajo la barra de gestos
         // del iPhone, y algo más de aire en móvil, donde hay barra de navegación.
-        left: '1rem',
+        // En MÓVIL a la izquierda, que es lo contrario de donde cae el pulgar y de
+        // donde vive el botón de crear: un enlace que se pulsa una vez por semana
+        // no comparte zona con la acción que más se repite.
+        //
+        // En ESCRITORIO a la derecha, y no por gusto: a la izquierda está la barra
+        // lateral, así que el botón caía justo encima del bloque de tu perfil. En
+        // la demo no se nota porque no tiene barra; en la app sí.
+        ...(isMobile ? { left: '1rem' } : { right: '1.5rem' }),
         bottom: `calc(${isMobile ? '5.25rem' : '1.5rem'} + env(safe-area-inset-bottom))`,
         height: '2.75rem',
         width: abierto && !isMobile ? '13.5rem' : '2.75rem',

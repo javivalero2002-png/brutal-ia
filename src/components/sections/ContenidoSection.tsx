@@ -1003,8 +1003,15 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                       <div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center" style={{background:'#111'}}>
                         {accountLogoUrl ? <img src={accountLogoUrl} alt="" className="w-full h-full object-cover rounded-full"/> : <span className="font-figtree font-black text-white text-[13px]">{(editAccountName.trim().charAt(0)||'B').toUpperCase()}</span>}
                       </div>
-                      <div className="absolute inset-0 rounded-full flex items-center justify-center" style={{background:'rgba(0,0,0,0.45)'}}>
-                        <LucideIcon name="camera" size={12} color="white"/>
+                      {/* Una CHAPITA en la esquina, no una capa encima.
+                          La versión de móvil tenía la cámara cubriendo el avatar
+                          entero con un velo negro al 45 %, y siempre —no en hover,
+                          que en táctil no existe—: el logo de la cuenta no se veía
+                          NUNCA desde aquí. Con la chapita se sigue entendiendo que
+                          se puede tocar para cambiarlo, y además se ve cuál es. */}
+                      <div className="absolute rounded-full flex items-center justify-center"
+                        style={{ right:'-1px', bottom:'-1px', width:'16px', height:'16px', background:'#111', border:'1px solid rgba(255,255,255,0.25)' }}>
+                        <LucideIcon name="camera" size={9} color="rgba(255,255,255,0.75)"/>
                       </div>
                     </label>
                     <select value={editAccountName} onChange={e=>setEditAccountName(e.target.value)} className="flex-1 px-3 py-2.5 rounded-xl text-[11px] text-white outline-none appearance-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,colorScheme:'dark'}}>
