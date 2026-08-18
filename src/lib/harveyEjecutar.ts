@@ -22,7 +22,8 @@ import { plural } from '@/components/shared/helpers'
 
 export interface DepsAccionHarvey {
   data: NexusData
-  perfil: { email?: string | null } | null | undefined
+  /** Quien habla. `id` y `name` hacen falta para «créame una tarea a mí». */
+  perfil: { id?: string | null; name?: string | null; email?: string | null } | null | undefined
   showToast: (mensaje: string) => void
 }
 
@@ -45,7 +46,22 @@ export async function ejecutarAccionHarvey(
   try {
     switch (accion.type) {
       case 'tarea': {
-        const miembro = accion.assigneeName ? matchTeamMember(equipo, accion.assigneeName) : null
+        // Sin persona = PARA QUIEN HABLA, no «sin asignar».
+        //
+        // Es lo que el prompt lleva prometiendo desde siempre —«persona = …, o
+        // vacío si es para quien habla» (api/harvey/chat/route.ts)— y lo que el
+        // código no cumplía: dejaba `null` y la tarea nacía huérfana. Le pedías a
+        // Harvey «créame una tarea», él la creaba, decía que la creaba, y no
+        // aparecía en las de nadie. El contrato entre el prompt y el código estaba
+        // roto por el lado del código.
+        //
+        // Y hay un caso peor que este arregla de paso: si Harvey se INVENTA un
+        // nombre que no existe en el equipo, antes también caía en «sin asignar».
+        // Ahora solo cae ahí si dijo un nombre Y no era nadie — que es cuando de
+        // verdad hay que avisar, porque es lo único que el usuario puede corregir.
+        const miembro = accion.assigneeName
+          ? matchTeamMember(equipo, accion.assigneeName)
+          : (matchTeamMember(equipo, perfil?.name || '') || (perfil?.id ? { id: perfil.id, name: perfil.name } : null))
         await data.createTask({
           text: accion.text,
           level: accion.level,          // ya normalizado en el parser

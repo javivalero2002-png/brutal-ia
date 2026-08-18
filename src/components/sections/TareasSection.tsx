@@ -5,6 +5,7 @@ import type { Task, Project, Profile, NexusData} from '@/types'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, todayKey, daysBetweenKeys, estadoDeadline } from '@/components/shared'
 import { plural, nivelTarea } from '@/components/shared/helpers'
 import type { IrASeccion } from '@/components/shared/secciones'
+import TableroLunes from '@/components/shared/TableroLunes'
 
 const AMB = '#FFB020'
 const PRIMAP: Record<string,{label:string,color:string}> = {
@@ -845,22 +846,15 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
             </div>
           )}
 
-          {/* ── REUNIÓN DEL LUNES ──────────────────────────────────────────── */}
-          {!activeTask && (
-            <a href="https://docs.google.com/spreadsheets/d/12LAHQfIUy8BrYx_ekRWZgoqtwlUOUIn0/edit?usp=sharing&ouid=109708069863804140195&rtpof=true&sd=true"
-              target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-3 px-4 py-3 rounded-2xl mb-5 group transition-all hover:opacity-90 active:scale-[0.99]"
-              style={{background:'rgba(27,95,250,0.06)',border:'1px solid rgba(27,95,250,0.14)'}}>
-              <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:'rgba(27,95,250,0.14)'}}>
-                <LucideIcon name="coffee" size={15} color={BLU}/>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-syne text-[9px] font-black tracking-widest" style={{color:BLU}}>REUNIÓN DEL LUNES</div>
-                <div className="font-figtree text-[11px] truncate" style={{color:'rgba(255,255,255,0.35)'}}>Tablero semanal del equipo · Google Sheets</div>
-              </div>
-              <LucideIcon name="external-link" size={12} color="rgba(27,95,250,0.4)"/>
-            </a>
-          )}
+          {/* Mismo criterio que tenía el banner: con el cajón de una tarea abierto
+              desaparece, para no flotar encima de lo que estás editando. */}
+          {!activeTask && <TableroLunes isMobile={isMobile} />}
+
+          {/* El tablero del lunes ya no ocupa una franja horizontal aquí arriba.
+              Era un enlace que se lee una vez por semana comiéndose el ancho entero
+              y empujando hacia abajo lo que sí se mira a diario. Ahora es un botón
+              flotante, abajo — está a mano cuando hace falta y no estorba el resto
+              del tiempo. Ver TableroLunes, al final del componente. */}
 
           {/* ── STATS CARDS ────────────────────────────────────────────────── */}
           {data.tasks.length>0 && !activeTask && (
