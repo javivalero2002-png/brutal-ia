@@ -5,6 +5,7 @@ import { LucideIcon, useIsMobile, plural, ProgressRing, todayKey, localDayKey } 
 import type { NexusData, Profile } from '@/types'
 import type { IrASeccion } from '@/components/shared/secciones'
 import CalendarioDiario from '@/components/shared/CalendarioDiario'
+import SemanaDiario from '@/components/shared/SemanaDiario'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DIARIO — objetivos al entrar, balance al salir, y las tareas salen solas.
@@ -129,6 +130,16 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   // histórico que se va llenando, no solo la pantalla de hoy.
   const [dia, setDia] = useState<string>(() => todayKey())
   const esHoy = dia === todayKey()
+  // Tres tiempos, y no se comportan igual:
+  //  · PASADO: solo lectura. Escribir ahí sella la hora de AHORA, así que
+  //    repasar el jueves apuntaría su trabajo al viernes.
+  //  · HOY: todo.
+  //  · FUTURO: se PLANIFICA. Se escriben objetivos y se crean sus tareas, pero no
+  //    se marca nada como hecho — nadie ha hecho aún el trabajo del jueves.
+  // La guarda de la auditoría era `!esHoy` y cerraba también el futuro, que es
+  // justo para lo que existe el calendario de esta sección.
+  const esPasado = dia < todayKey()
+  const esFuturo = dia > todayKey()
 
   /**
    * Las tareas contra las que se empareja el diario: las MÍAS y las de ESTE día.
@@ -198,6 +209,10 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   const rechazadas = useRef<Set<string>>(new Set())
 
   const cargar = useCallback(async () => {
+    // Aquí, y no en el efecto del día: ese corre DESPUÉS de este, así que ponerlo
+    // allí dejaba `cargando` en true para siempre — el esqueleto fijo y el panel
+    // sin dejar escribir. Lo marca quien carga.
+    setCargando(true)
     if (demo) {
       setEntradas(demo)
       setPorPersona(demo.map(e => ({ persona: (e.autor || { id: e.user_id }) as PersonaDelDia['persona'], entrada: e, tareas: [] })))
@@ -227,9 +242,6 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
     vaciarPendiente()
     sembrado.current = false; setObjetivos(''); setBalance(''); setFilas([''])
     setEstadoGuardado('limpio')
-    // Y se vuelve a «cargando»: sin esto se seguía pintando el día anterior como
-    // si fuera el elegido mientras llegaba el nuevo.
-    setCargando(true)
     pendiente.current = { dia }
   }, [dia])
 
@@ -398,8 +410,8 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
    * aguanta que retoques una línea.
    */
   const fichar = async (campo: 'entrada' | 'cierre') => {
-    // Mismo motivo que arriba: fichar en un día pasado sella la hora de AHORA.
-    if (!esHoy) { showToast('Solo se puede fichar en el día de hoy'); return }
+    // Un día pasado no se reescribe; uno futuro SÍ se planifica.
+    if (esPasado) { showToast('Un día pasado no se puede modificar'); return }
     const valor = campo === 'entrada' ? objetivos : balance
     if (!valor.trim()) { showToast(campo === 'entrada' ? 'Escribe tus objetivos primero' : 'Cuenta qué has hecho'); return }
     setFichando(true)
@@ -467,16 +479,15 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
 
   const crearTodas = async () => {
     if (!propuestas.length) return
-    // Solo HOY. Aceptar propuestas mirando un día pasado creaba tareas con
-    // `done: true`, y /api/tasks sella `completed_at` con el instante actual: el
-    // trabajo del jueves se apuntaba al viernes. Las burbujas ya estaban cerradas
-    // para días pasados; este camino se había quedado abierto.
-    if (!esHoy) { showToast('Solo se pueden crear tareas en el día de hoy'); return }
+    // Un día pasado no se reescribe: crear una tarea ya hecha sella
+    // `completed_at` con el instante actual, así que el trabajo del jueves se
+    // apuntaría al viernes.
+    if (esPasado) { showToast('Un día pasado no se puede modificar'); return }
     setCreando(true)
     let ok = 0
     for (const p of propuestas) {
       try {
-        await data.createTask({ text: p.text, level: p.level, done: p.hecha, assigned_to: profile?.id, source: 'ai', diario_dia: dia, diario_objetivo: p.text })
+        await data.createTask({ text: p.text, level: p.level, done: esFuturo ? false : p.hecha, assigned_to: profile?.id, source: 'ai', diario_dia: dia, diario_objetivo: p.text })
         ok++
       } catch { /* se cuenta abajo */ }
     }
@@ -611,7 +622,9 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Navegar dias. `esHoy` desactiva el "siguiente": no hay futuro que ver. */}
+          {/* Navegar días, adelante y atrás. El «siguiente» estaba desactivado en
+              hoy —«no hay futuro que ver»— y sí lo hay: planificar la semana es
+              justo para lo que existe esta sección. */}
           <div className="flex items-center rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}` }}>
             <button onClick={() => setDia(sumarDias(dia, -1))} aria-label="Día anterior"
               className="w-8 h-8 flex items-center justify-center transition-opacity hover:opacity-70">
@@ -623,7 +636,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
               <LucideIcon name="calendar" size={11} color={esHoy ? 'rgba(255,255,255,0.4)' : VIO} />
               {etiquetaDia(dia)}
             </button>
-            <button onClick={() => setDia(sumarDias(dia, 1))} disabled={esHoy} aria-label="Día siguiente"
+            <button onClick={() => setDia(sumarDias(dia, 1))} aria-label="Día siguiente"
               className="w-8 h-8 flex items-center justify-center transition-opacity hover:opacity-70 disabled:opacity-20">
               <LucideIcon name="chevron-right" size={14} color="rgba(255,255,255,0.45)" />
             </button>
@@ -700,6 +713,18 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
           </div>
         </div>
       </div>
+
+      {/* La semana entera, delante y siempre. Estaba dentro de un modal, así que
+          para ver cómo venía había que abrirlo, mirar y cerrarlo — lo contrario de
+          para lo que sirve: el valor de planificar está en tener el plano DELANTE
+          mientras escribes. El mensual sigue estando, a un clic, para ir más lejos. */}
+      <SemanaDiario
+        diaSeleccionado={dia}
+        onElegirDia={setDia}
+        onAbrirMes={() => setVerCalendario(true)}
+        demo={diasDemo}
+        isMobile={isMobile}
+      />
 
       {/* ── LOS DOS PANELES ────────────────────────────────────────────
           Lado a lado en escritorio: proponerse y cumplir son las dos mitades de lo
