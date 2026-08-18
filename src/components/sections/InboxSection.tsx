@@ -358,7 +358,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1" style={{color:'rgba(255,255,255,0.18)'}}>SEÑALES</div>
-                  <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.04em'}}>Inbox</h1>
+                  <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Inbox</h1>
                 </div>
                 <div className="flex items-center gap-2">
                   {/* Confirmación en dos toques: marcaba 97 mensajes de golpe,

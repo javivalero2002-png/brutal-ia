@@ -526,7 +526,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
             className="flex-1 bg-transparent text-[13px] outline-none resize-none leading-relaxed"
             style={{caretColor:BLU,color:'rgba(255,255,255,0.88)',maxHeight:'120px'}}
           />
-          <button onClick={send} disabled={!chatInput.trim()||chatLoading} className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 disabled:opacity-25 transition-all" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}} aria-label="Enviar"><LucideIcon name="send" size={13} color="white"/></button>
+          <button onClick={send} disabled={!chatInput.trim()||chatLoading} className={`${isMobile?'w-10 h-10':'w-8 h-8'} rounded-xl flex items-center justify-center flex-shrink-0 disabled:opacity-25 transition-all`} style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}} aria-label="Enviar"><LucideIcon name="send" size={13} color="white"/></button>
         </div>
         <div className="flex items-center justify-between mt-2 px-0.5">
           <div className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>{isMobile ? '' : 'ENTER enviar · SHIFT+ENTER nueva línea'}</div>

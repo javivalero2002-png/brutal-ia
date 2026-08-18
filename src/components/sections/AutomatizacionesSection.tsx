@@ -117,7 +117,7 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: PropsAuto
       <div className="flex items-end justify-between mb-8 flex-wrap gap-4">
         <div className="min-w-0">
           <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>SISTEMA</div>
-          <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Automatizaciones</h1>
+          <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Automatizaciones</h1>
           <div className="nx-kbd-hints flex items-center gap-2 mt-1.5">
             {(['J/K NAVEGAR','E ACTIVAR','N NUEVA'] as const).map((hint,i,arr)=>(
               <span key={hint} className="flex items-center gap-2">
@@ -145,7 +145,7 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: PropsAuto
             </button>
           )}
           {isOwner && (
-            <button onClick={()=>onOpenModal('regla')} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white flex-shrink-0" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
+            <button onClick={()=>onOpenModal('regla')} className="flex items-center gap-2 px-5 py-2.5 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white flex-shrink-0 transition-opacity hover:opacity-85" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
               <LucideIcon name="plus" size={12} color="white"/> REGLA
             </button>
           )}

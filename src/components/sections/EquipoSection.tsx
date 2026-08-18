@@ -270,7 +270,7 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
               </button>
             )}
           </div>
-          <h1 className="font-figtree text-[22px] font-black text-white leading-none mb-1" style={{letterSpacing:'-0.03em'}}>Equipo</h1>
+          <h1 className="font-figtree text-[26px] font-black text-white leading-none mb-1" style={{letterSpacing:'-0.03em'}}>Equipo</h1>
           <div className="nx-kbd-hints flex items-center gap-2 mb-3">
             {(['J/K NAVEGAR','M MENSAJE','ESC CERRAR'] as const).map((hint,i,arr)=>(
               <span key={hint} className="flex items-center gap-2">

@@ -795,7 +795,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
           <div className="flex items-end gap-3 mb-6 flex-wrap">
             <div className="flex-1 min-w-0">
               <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1" style={{color:'rgba(255,255,255,0.18)'}}>GESTIÓN</div>
-              <h1 className="font-figtree font-black text-white leading-none" style={{fontSize:'30px',letterSpacing:'-0.03em'}}>Tareas</h1>
+              <h1 className="font-figtree font-black text-white leading-none" style={{fontSize:'26px',letterSpacing:'-0.03em'}}>Tareas</h1>
             </div>
             {isMobile ? (
               <button onClick={()=>onOpenModal('tarea')}
@@ -827,7 +827,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                 </div>
                 {/* Nueva tarea */}
                 <button onClick={()=>onOpenModal('tarea')}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl font-syne text-[10px] font-black tracking-wide text-white"
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl font-syne text-[10px] font-black tracking-wide text-white transition-opacity hover:opacity-85"
                   style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
                   <LucideIcon name="plus" size={13} color="white"/> Nueva tarea
                 </button>
@@ -1034,7 +1034,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                   <button onClick={()=>setFiltrosAbiertos(o=>!o)}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-widest"
                     style={{background:SURF2,border:`1px solid ${activos?BLU+'55':BORDER}`,color:activos?'#7aa5ff':'rgba(255,255,255,0.45)'}}>
-                    <LucideIcon name="sliders-horizontal" size={11} color={activos?BLU:'rgba(255,255,255,0.35)'}/>
+                    <LucideIcon name="sliders-horizontal" size={11} color={activos?'#7aa5ff':'rgba(255,255,255,0.45)'}/>
                     FILTROS{activos?` · ${activos}`:''}
                   </button>
                 )
@@ -1063,7 +1063,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
         </div>
 
         {/* ── TASK LIST ──────────────────────────────────────────────────────── */}
-        <div className={isMobile ? `px-4 pb-24 pt-4` : `flex-1 overflow-y-auto px-8 pb-8 pt-4`}>
+        <div className={isMobile ? `px-4 pb-36 pt-4` : `flex-1 overflow-y-auto px-8 pb-8 pt-4`}>
           {focusMode && (
             <div className="flex items-center gap-3 px-4 py-3 rounded-2xl mb-4" style={{background:`linear-gradient(135deg,${BLU}14,${BLU}06)`,border:`1px solid ${BLU}33`}}>
               <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:BLU+'20'}}>
