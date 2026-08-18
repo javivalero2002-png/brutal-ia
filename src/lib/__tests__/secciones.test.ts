@@ -252,3 +252,62 @@ describe('Diario · no repite tareas ya creadas', () => {
       'quitar una propuesta no la recuerda: la siguiente relectura la resucita').toBe(true)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// El diario cierra el círculo: los objetivos SON las tareas.
+//
+// Escribir un objetivo por línea y luego tener que aceptar una a una lo que ya
+// habías escrito era trabajo repetido. Al fichar se crean; al cerrar, las que
+// tachaste se completan.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Diario · fichar crea tareas y cerrar las completa', () => {
+  const D = readFileSync('src/components/sections/DiarioSection.tsx', 'utf8')
+
+  it('fichar la entrada crea una tarea por objetivo', () => {
+    // Anclado a `fichar`, no al primer `if (campo === 'entrada')` del fichero:
+    // ese está en `alEscribir` (el autoguardado) y la ventana no llegaba hasta
+    // aquí, así que la regla fallaba con el código correcto delante.
+    const f = D.indexOf('const fichar = async')
+    expect(f, 'ya no existe fichar: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = D.slice(f, f + 2600)
+    const i = cuerpo.indexOf("if (campo === 'entrada')")
+    expect(i, 'fichar ya no distingue entrada de cierre').toBeGreaterThan(-1)
+    const rama = cuerpo.slice(i, i + 900)
+    expect(/createTask\(/.test(rama), 'fichar la entrada ya no crea las tareas').toBe(true)
+    // Fichar dos veces no puede duplicar la lista.
+    expect(/yaSon\.has\(/.test(rama), 'no comprueba las que ya existen: fichar dos veces duplicaría todo').toBe(true)
+  })
+
+  it('cerrar el día completa las que tachaste', () => {
+    const i = D.indexOf('// Cerrar: completar lo tachado.')
+    expect(i, 'ya no se completan al cerrar').toBeGreaterThan(-1)
+    const rama = D.slice(i, i + 700)
+    expect(/updateTask\([\s\S]{0,60}done: true/.test(rama), 'no marca las tareas como hechas').toBe(true)
+    expect(/!t\.done/.test(rama), 'reabre o reescribe tareas ya completadas').toBe(true)
+  })
+})
+
+// El briefing es una vista AGREGADA del trabajo de otras personas. En una app
+// donde todo lo demás es compartido a propósito, esto sí es distinto: leer el
+// diario de un compañero es una cosa, y un panel de rendimiento de todos es otra.
+describe('briefing del equipo · solo el propietario', () => {
+  const B = readFileSync('src/app/api/diario/briefing/route.ts', 'utf8')
+
+  it('corta con 403 a quien no es owner', () => {
+    expect(/getAuthCtx\(\)/.test(B), 'no resuelve el rol en el servidor').toBe(true)
+    expect(/role !== 'owner'[\s\S]{0,160}403/.test(B),
+      'cualquiera con sesión puede leer el panel de rendimiento de todo el equipo').toBe(true)
+  })
+
+  it('y resuelve al usuario antes de usar el service role', () => {
+    const auth = B.indexOf('auth.getUser()')
+    const admin = B.indexOf('createAdminClient()')
+    expect(auth).toBeGreaterThan(-1)
+    expect(auth, 'usa el service role antes de comprobar la sesión').toBeLessThan(admin)
+  })
+
+  it('ningún fallo de consulta se disfraza de equipo sin actividad', () => {
+    expect(/errDiario \|\| errEquipo \|\| errTareas/.test(B),
+      '«nadie hizo nada» y «no se pudo leer» se verían igual').toBe(true)
+  })
+})
