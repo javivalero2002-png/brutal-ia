@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { todayKey, localDayKey } from '@/components/shared/helpers'
+import { todayKey, localDayKey, ventanaDelDia, esTareaDe } from '@/components/shared/helpers'
 import { webSearch, needsWebSearch, formatSearchContextVoice } from '@/lib/ai'
 import { checkHarveyRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
@@ -155,7 +155,12 @@ export async function POST(request: NextRequest) {
     const { data: plantilla } = await admin.from('profiles').select('id,name')
     const nombraAAlguien = (plantilla ?? []).some(p =>
       p.name && p.name.trim().length > 2 && pregunta.includes(p.name.toLowerCase().split(' ')[0]))
-    const preguntaPorTrabajo = /\b(hizo|hicieron|hecho|hiciste|avanz|complet|equipo|semana|ayer|diario|fich)/.test(pregunta)
+    // Nombrar a alguien ya basta (`nombraAAlguien`), así que «¿en qué anda Paula?»
+    // entra por ahí. Esto cubre las de equipo SIN nombre. Se amplía con lo que un
+    // jefe dice de verdad —«cómo anda el equipo», «dame el parte», «quién está
+    // liado»— y no con palabras corrientes como «hoy» o «tarea», que dispararían
+    // en la mayoría de preguntas y se pagan en tokens cada vez.
+    const preguntaPorTrabajo = /\b(hizo|hicieron|hecho|hiciste|avanz|complet|equipo|semana|ayer|diario|fich|anda|liad|parte|trabaj|progres|rendimiento|objetiv)/.test(pregunta)
 
     let resumenEquipo = ''
     if (nombraAAlguien || preguntaPorTrabajo) {
@@ -164,17 +169,33 @@ export async function POST(request: NextRequest) {
       const desdeClave = localDayKey(desde)
 
       const [{ data: diarios }, { data: hechas }] = await Promise.all([
-        admin.from('diario').select('dia,user_id,entrada,cierre,cierre_at').gte('dia', desdeClave),
-        admin.from('tasks').select('text,assigned_to,completed_at').eq('done', true)
-          .gte('completed_at', `${desdeClave}T00:00:00Z`),
+        // `.lte` con hoy: el calendario del Diario deja PLANIFICAR días futuros
+        // a propósito, y sin tope por arriba Harvey leía esos planes y los
+        // contaba como trabajo terminado delante de quien preguntara.
+        admin.from('diario').select('dia,user_id,entrada,cierre,cierre_at')
+          .gte('dia', desdeClave).lte('dia', todayKey()),
+        admin.from('tasks').select('text,assigned_to,co_assigned_to,completed_at').eq('done', true)
+          .gte('completed_at', ventanaDelDia(desdeClave).desde),
       ])
 
       const lineasEquipo = (plantilla ?? []).map(p => {
         const mios = (diarios ?? []).filter(d => d.user_id === p.id)
-        const tareas = (hechas ?? []).filter(t => t.assigned_to === p.id)
+        const tareas = (hechas ?? []).filter(t =>
+          esTareaDe(t, p) && t.completed_at && localDayKey(t.completed_at) >= desdeClave)
         if (!mios.length && !tareas.length) return null
-        const porDia = mios.map(d =>
-          `    ${d.dia}: ${(d.entrada || '').split('\n').filter(Boolean).join(' / ') || 'sin objetivos'}${d.cierre ? ` — balance: ${d.cierre}` : ''}`)
+        // Las dos mitades van ETIQUETADAS y son cosas opuestas: `entrada` es lo
+        // que alguien SE PROPUSO (el esquema lo dice: «lo que voy a hacer hoy») y
+        // `cierre` lo que HIZO. Iban las dos seguidas bajo una cabecera que decía
+        // «DIARIO DEL EQUIPO», así que Harvey leía los planes como resultados.
+        // Y un día sin cerrar se dice, en vez de dejar que parezca un cero.
+        const porDia = mios.map(d => {
+          const objetivos = (d.entrada || '').split('\n').filter(Boolean).join(' / ')
+          const partes = [
+            objetivos ? `se propuso: ${objetivos}` : 'no escribió objetivos',
+            d.cierre ? `hizo (cierre del día): ${d.cierre}` : (d.cierre_at ? 'cerró el día sin escribir balance' : 'no cerró el día'),
+          ]
+          return `    ${d.dia} — ${partes.join(' · ')}`
+        })
         // Se recorta a 8: un mensaje no se lee mejor por llevar treinta tareas.
         const lista = tareas.slice(0, 8).map(t => t.text).join(' · ')
         return `  ${p.name}: ${tareas.length} tarea(s) completada(s) en 7 días${lista ? ` (${lista})` : ''}\n${porDia.join('\n')}`
@@ -189,6 +210,8 @@ export async function POST(request: NextRequest) {
 
 CON QUIEN ESTAS HABLANDO AHORA: ${nombreUsuario || 'un miembro del equipo'}.${resumenEquipo}
 
+Lo que va tras «se propuso» es un PLAN, no un hecho: no lo cuentes como trabajo
+terminado. Lo hecho es lo que va tras «hizo (cierre del día)» y las tareas completadas.
 Si te preguntan qué ha hecho alguien y NO aparece en el diario de arriba, dilo:
 «no tengo su diario de esos días». No lo deduzcas de las tareas ni te lo inventes.
 Cuando diga "para mi", "asignamela", "me lo apunto" o hable en primera persona sin

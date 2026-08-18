@@ -1082,4 +1082,47 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
       'piden el permiso a mano en vez de usar activarPush(): un permiso concedido sin suscripcion es una pantalla que promete avisos que no llegan')
       .toEqual([])
   })
+
+  // El dia del diario es un dia de MADRID; `completed_at` es un instante UTC.
+  // Compararlos como texto (`${dia}T00:00:00Z`) desplaza el dia dos horas en
+  // verano: lo cerrado entre medianoche y las dos se apuntaba al dia anterior,
+  // mientras Reportes —que si usa localDayKey— lo colocaba bien. Dos pantallas
+  // dando dos respuestas del mismo trabajo. Estaba escrito en TRES sitios.
+  it('ninguna ventana de tareas se construye pegando la Z a una clave de dia', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      const C = leerCodigo(ruta)
+      // Solo cuando se usa para acotar `completed_at`: la cadena por si sola
+      // aparece en sitios legitimos (calcular un dia, por ejemplo).
+      if (/completed_at'[^)]*\$\{[a-zA-Z]+\}T00:00:00Z/.test(C)) infractores.push(ruta)
+    }
+    expect(infractores,
+      'acota completed_at pegando la Z a una clave de dia: usa ventanaDelDia() y decide con localDayKey')
+      .toEqual([])
+  })
+
+  // «Tarea de quien» estaba escrito de dos maneras: Reportes contaba tambien al
+  // co-responsable y el Diario, el briefing y Harvey no. Una tarea compartida
+  // sumaba en un comprobador y no en el otro.
+  it('los cuatro sitios cuentan igual de quien es una tarea', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (!/api\/(diario|harvey)/.test(ruta)) continue
+      if (/assigned_to === p\.id/.test(leerCodigo(ruta))) infractores.push(ruta)
+    }
+    expect(infractores,
+      'compara assigned_to a pelo en vez de esTareaDe(): las tareas con co-responsable se cuentan distinto que en Reportes')
+      .toEqual([])
+  })
+
+  // El calendario del Diario deja PLANIFICAR dias futuros a proposito. Sin tope
+  // por arriba, Harvey leia esos planes y los contaba como trabajo hecho.
+  it('harvey no lee dias del diario que aun no han pasado', () => {
+    const C = leerCodigo('src/app/api/harvey/chat/route.ts')
+    const i = C.indexOf("from('diario')")
+    expect(i, 'harvey ya no lee el diario: revisa esta regla').toBeGreaterThan(-1)
+    const consulta = C.slice(i, i + 260)
+    expect(/lte\('dia'/.test(consulta),
+      'la consulta del diario no tiene tope por arriba: Harvey contaria como hecho lo que solo esta planificado').toBe(true)
+  })
 })

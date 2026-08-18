@@ -1,5 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { todayKey } from '@/components/shared/helpers'
+import { todayKey, localDayKey, ventanaDelDia, esTareaDe } from '@/components/shared/helpers'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Solo columnas conocidas. Misma razón que en el resto de rutas: impide que un
@@ -33,16 +33,23 @@ export async function GET(request: NextRequest) {
     // Completadas ESE día. `completed_at` es cuándo se terminó; `updated_at`
     // contaría como trabajo de hoy cualquier retoque posterior.
     admin.from('tasks')
-      .select('id,text,level,assigned_to,completed_at')
+      .select('id,text,level,assigned_to,co_assigned_to,completed_at')
       .eq('done', true)
-      .gte('completed_at', `${dia}T00:00:00Z`)
-      .lt('completed_at', `${dia}T23:59:59Z`),
+      // Con margen: el día que se quiere es de MADRID y `completed_at` es UTC.
+      // Se acota abajo con `localDayKey`, que es lo único que sabe a qué día de
+      // Madrid pertenece un instante. El `.lt(...23:59:59Z)` de antes, además de
+      // desplazar el día, se comía el último segundo.
+      .gte('completed_at', ventanaDelDia(dia).desde)
+      .lte('completed_at', ventanaDelDia(dia).hasta),
   ])
 
   // Ningún error se disfraza de lista vacía: "nadie ha fichado" y "no se pudo
   // leer" se verían igual, que es el bug que este repo ya ha pagado.
   const fallo = error || errEquipo || errTareas
   if (fallo) return NextResponse.json({ error: fallo.message }, { status: 500 })
+
+  // El día de Madrid al que pertenece de verdad cada tarea.
+  const tareasDelDia = (tareas ?? []).filter(t => t.completed_at && localDayKey(t.completed_at) === dia)
 
   const entradas = data ?? []
   // Una fila por persona, tenga diario, tareas o las dos cosas. Quien cerró tres
@@ -51,7 +58,7 @@ export async function GET(request: NextRequest) {
     .map(p => ({
       persona: p,
       entrada: entradas.find(e => e.user_id === p.id) ?? null,
-      tareas: (tareas ?? []).filter(t => t.assigned_to === p.id),
+      tareas: tareasDelDia.filter(t => esTareaDe(t, p)),
     }))
     .filter(x => x.entrada || x.tareas.length > 0)
 

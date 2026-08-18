@@ -107,11 +107,46 @@ export const plural = (n: number, singular: string, plural?: string): string =>
 //
 // Por id y no por nombre: `profiles.name` no es unique, y dos homonimos se
 // fusionaban en uno.
+/**
+ * El rango que hay que PEDIR a la base para quedarse luego con un día de Madrid.
+ *
+ * `completed_at` es un instante UTC y el día del diario es un día de Madrid, así
+ * que no se pueden comparar como texto: `${dia}T00:00:00Z` empieza a las 02:00 de
+ * Madrid en verano. Lo cerrado entre medianoche y las dos se apuntaba al día
+ * anterior — y Reportes, que sí usa `localDayKey`, lo colocaba bien. Dos
+ * pantallas dando dos respuestas del mismo trabajo.
+ *
+ * Se pide con un día de margen por cada lado y se decide en JS con `localDayKey`,
+ * que es la única fuente de verdad de a qué día pertenece algo.
+ */
+export const ventanaDelDia = (dia: string, diasAntes = 0) => {
+  const t = Date.parse(`${dia}T12:00:00Z`)
+  const clave = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+  return {
+    desde: `${clave(t - (diasAntes + 1) * 86400000)}T00:00:00Z`,
+    hasta: `${clave(t + 86400000)}T23:59:59.999Z`,
+  }
+}
+
+// Acepta las DOS formas de una tarea: la del cliente, que trae los perfiles
+// embebidos (`assignee`), y la cruda del servidor, que solo trae los ids.
+//
+// Hacía falta porque el criterio de «tarea de quién» estaba escrito de dos
+// maneras: Reportes usaba esta función (que cuenta al co-responsable) y el
+// Diario, el briefing y Harvey usaban `assigned_to === id` a secas. Una tarea
+// con dos responsables sumaba en un sitio y no en el otro, así que los dos
+// comprobadores daban números distintos del mismo trabajo.
 export const esTareaDe = (
-  t: { assignee?: { id?: string } | null; co_assignee?: { id?: string } | null; co_assigned_to?: string | null },
+  t: {
+    assignee?: { id?: string } | null; co_assignee?: { id?: string } | null
+    assigned_to?: string | null; co_assigned_to?: string | null
+  },
   miembro: { id?: string },
 ): boolean =>
-  !!miembro?.id && (t.assignee?.id === miembro.id || t.co_assignee?.id === miembro.id || t.co_assigned_to === miembro.id)
+  !!miembro?.id && (
+    t.assignee?.id === miembro.id || t.co_assignee?.id === miembro.id ||
+    t.assigned_to === miembro.id || t.co_assigned_to === miembro.id
+  )
 
 /** Tiene responsable, sea principal o co-responsable. */
 export const tieneResponsable = (
