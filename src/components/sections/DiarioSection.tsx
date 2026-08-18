@@ -221,10 +221,15 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   // Al cambiar de día se vuelve a sembrar: lo que se ve es de OTRO día, y
   // arrastrar el borrador del anterior sería escribir en el día equivocado.
   useEffect(() => {
+    // Lo pendiente se MANDA antes de cambiar, con el día en que se escribió.
+    // Tirarlo era perder lo que acababas de teclear si el retardo aún no había
+    // saltado; `vaciarPendiente` ya usa el día guardado en el ref, no el nuevo.
+    vaciarPendiente()
     sembrado.current = false; setObjetivos(''); setBalance(''); setFilas([''])
-    // Y se olvida lo pendiente del día anterior: ya se guardó al escribirlo, y
-    // arrastrarlo haría que el guardado de salida lo escribiera en el día nuevo.
-    if (guardadoTimer.current) { clearTimeout(guardadoTimer.current); guardadoTimer.current = null }
+    setEstadoGuardado('limpio')
+    // Y se vuelve a «cargando»: sin esto se seguía pintando el día anterior como
+    // si fuera el elegido mientras llegaba el nuevo.
+    setCargando(true)
     pendiente.current = { dia }
   }, [dia])
 
@@ -245,15 +250,17 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   // indicador parpadeando, y el usuario escribiendo un rato entero contra nada.
   const sesionCaida = useRef(false)
 
-  const guardarBorrador = useCallback(async (campos: { entrada?: string; cierre?: string }) => {
+  const guardarBorrador = useCallback(async (campos: { entrada?: string; cierre?: string }, diaDestino: string) => {
     if (demo || sesionCaida.current) return
     setEstadoGuardado('guardando')
     try {
       const res = await fetch('/api/diario', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // El DIA viaja: si no, rellenar el lunes el martes escribiria en el martes.
-        body: JSON.stringify({ ...campos, dia, borrador: true }),
+        // El DÍA llega por PARÁMETRO, no de la clausura: al cambiar de día hay que
+        // vaciar lo pendiente en el día VIEJO, y con el de la clausura se
+        // escribiría en el nuevo.
+        body: JSON.stringify({ ...campos, dia: diaDestino, borrador: true }),
       })
       setEstadoGuardado(res.ok ? 'guardado' : 'limpio')
       if (res.status === 401) {
@@ -263,20 +270,58 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
       }
       if (!res.ok) showToast('No se pudo guardar el diario')
     } catch { setEstadoGuardado('limpio'); showToast('No se pudo guardar el diario') }
-  }, [dia, demo, showToast])
+  }, [demo, showToast])
+
+  /**
+   * Manda lo que quede sin guardar. El ÚNICO sitio que escribe el borrador.
+   *
+   * Antes cada camino hacía lo suyo y se perdía texto por dos sitios, los dos
+   * introducidos hoy:
+   *
+   *  · Al CAMBIAR DE DÍA se hacía `clearTimeout` y se tiraba lo pendiente. El
+   *    comentario decía «ya se guardó al escribirlo», que es justo lo que NO
+   *    había pasado si el retardo aún no había saltado: escribías un objetivo y
+   *    pulsabas la flecha para mirar ayer, y ese objetivo no había existido nunca.
+   *  · Y los dos campos compartían temporizador, pero al dispararse solo se
+   *    mandaba EL CAMPO que lo armó. Escribir el balance justo después de un
+   *    objetivo cancelaba el guardado del objetivo y mandaba solo el balance.
+   *    Peor: hasta hoy había una red —el guardado de salida se disparaba siempre—
+   *    y al anular el temporizador se la quité.
+   *
+   * Ahora se manda TODO lo pendiente, con SU día, y se vacía. Da igual quién lo
+   * llame ni desde dónde.
+   */
+  // El efecto de desmontaje lleva `[]`, así que su clausura se queda con la
+  // primera versión de la función. Este ref le da SIEMPRE la de ahora, que es la
+  // que conoce el día y el texto actuales.
+  const vaciarPendienteRef = useRef<((o?: { keepalive?: boolean }) => void) | null>(null)
+  const vaciarPendiente = useCallback((opciones?: { keepalive?: boolean }) => {
+    if (guardadoTimer.current) { clearTimeout(guardadoTimer.current); guardadoTimer.current = null }
+    const { entrada, cierre, dia: diaPendiente } = pendiente.current
+    if (entrada === undefined && cierre === undefined) return
+    const campos = { ...(entrada !== undefined ? { entrada } : {}), ...(cierre !== undefined ? { cierre } : {}) }
+    pendiente.current = { dia: diaPendiente }
+    if (opciones?.keepalive) {
+      // Al desmontar no se puede esperar: `keepalive` hace que el navegador
+      // termine la petición aunque la página cambie.
+      if (!demo && !sesionCaida.current) {
+        fetch('/api/diario', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...campos, dia: diaPendiente, borrador: true }), keepalive: true,
+        }).catch(() => {})
+      }
+      return
+    }
+    guardarBorrador(campos, diaPendiente)
+  }, [demo, guardarBorrador])
+  vaciarPendienteRef.current = vaciarPendiente
 
   const alEscribir = (campo: 'entrada' | 'cierre', valor: string) => {
     if (campo === 'entrada') setObjetivos(valor); else setBalance(valor)
     setEstadoGuardado('guardando')
-    // Solo lo TOCADO queda pendiente, y con el día en que se tocó.
     pendiente.current = { ...pendiente.current, [campo]: valor, dia }
     if (guardadoTimer.current) clearTimeout(guardadoTimer.current)
-    guardadoTimer.current = setTimeout(() => {
-      // Se limpia al dispararse: si no, queda «pendiente» para siempre y el
-      // guardado de salida vuelve a mandar lo que ya está escrito.
-      guardadoTimer.current = null
-      guardarBorrador({ [campo]: valor })
-    }, 1200)
+    guardadoTimer.current = setTimeout(() => vaciarPendiente(), 1200)
   }
 
   // Guardar lo pendiente al salir de la sección. `pendienteRef` lleva lo último
@@ -298,24 +343,8 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   //    para siempre y este guardado salía aunque ya estuviera todo escrito.
   const pendiente = useRef<{ entrada?: string; cierre?: string; dia: string }>({ dia })
   pendiente.current = { ...pendiente.current, dia }
-  useEffect(() => () => {
-    const { entrada, cierre, dia: diaPendiente } = pendiente.current
-    if (!guardadoTimer.current) return
-    clearTimeout(guardadoTimer.current)
-    if (entrada === undefined && cierre === undefined) return
-    fetch('/api/diario', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // Sin `await`: el componente se está desmontando. `keepalive` hace que el
-      // navegador termine la petición aunque la página cambie.
-      body: JSON.stringify({
-        ...(entrada !== undefined ? { entrada } : {}),
-        ...(cierre !== undefined ? { cierre } : {}),
-        dia: diaPendiente, borrador: true,
-      }),
-      keepalive: true,
-    }).catch(() => {})
-  }, [])
+  // Al salir de la sección, lo mismo: un solo camino para vaciar.
+  useEffect(() => () => { vaciarPendienteRef.current?.({ keepalive: true }) }, [])
 
   // ── Las tareas se proponen solas ──────────────────────────────────────────
   useEffect(() => {
@@ -369,6 +398,8 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
    * aguanta que retoques una línea.
    */
   const fichar = async (campo: 'entrada' | 'cierre') => {
+    // Mismo motivo que arriba: fichar en un día pasado sella la hora de AHORA.
+    if (!esHoy) { showToast('Solo se puede fichar en el día de hoy'); return }
     const valor = campo === 'entrada' ? objetivos : balance
     if (!valor.trim()) { showToast(campo === 'entrada' ? 'Escribe tus objetivos primero' : 'Cuenta qué has hecho'); return }
     setFichando(true)
@@ -383,8 +414,11 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
       if (campo === 'entrada') {
         // Una tarea por objetivo, saltando lo que ya existe: fichar dos veces no
         // puede duplicar la lista.
-        const yaSon = new Set(misTareasDelDia.map((t: { text?: string }) => normalizar(t.text || '')))
-        const nuevas = lineas(valor).filter(o => !yaSon.has(normalizar(o)))
+        // El MISMO criterio que usa el botón para decir cuántas va a crear
+        // (`porCrear`, que empareja por el vínculo y solo cae al texto si no lo
+        // hay). Con dos criterios distintos, el botón decía «CREA 0 TAREAS» y
+        // creaba una duplicada: bastaba con haber retocado el texto de la tarea.
+        const nuevas = lineas(valor).filter(o => !tareaDe(o))
         let creadas = 0
         for (const o of nuevas) {
           try {
@@ -433,6 +467,11 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
 
   const crearTodas = async () => {
     if (!propuestas.length) return
+    // Solo HOY. Aceptar propuestas mirando un día pasado creaba tareas con
+    // `done: true`, y /api/tasks sella `completed_at` con el instante actual: el
+    // trabajo del jueves se apuntaba al viernes. Las burbujas ya estaban cerradas
+    // para días pasados; este camino se había quedado abierto.
+    if (!esHoy) { showToast('Solo se pueden crear tareas en el día de hoy'); return }
     setCreando(true)
     let ok = 0
     for (const p of propuestas) {
@@ -730,7 +769,10 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
               })}
 
               <button
-                onClick={() => { cambiarFilas([...filas, '']); enfocarFila(filas.length) }}
+                // Por `anadirObjetivo`, que es quien comprueba si la última fila
+                // ya está vacía. Llamando a `cambiarFilas` a pelo, pulsarlo dos
+                // veces dejaba dos huecos y parecía que no había funcionado.
+                onClick={anadirObjetivo}
                 className="flex items-center gap-2 px-2 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest transition-all active:scale-[0.99] self-start"
                 style={{ color: BLU }}>
                 <LucideIcon name="plus" size={12} color={BLU} /> AÑADIR OBJETIVO

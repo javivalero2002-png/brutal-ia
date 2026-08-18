@@ -227,18 +227,34 @@ describe('Diario · no se pierde lo escrito', () => {
 
   it('se autoguarda mientras escribes', () => {
     expect(/borrador: true/.test(D), 'ya no hay autoguardado: se vuelve a perder al cambiar de sección').toBe(true)
-    expect(/setTimeout\([\s\S]{0,260}guardarBorrador/.test(D), 'guarda en cada tecla, sin retardo').toBe(true)
+    expect(/setTimeout\([\s\S]{0,120}vaciarPendiente\(\)/.test(D), 'guarda en cada tecla, sin retardo').toBe(true)
+
+    // TODO lo pendiente se manda junto, no solo el campo que armó el temporizador.
+    // Los dos campos comparten temporizador: mandando uno solo, escribir el
+    // balance justo después de un objetivo cancelaba el guardado del objetivo.
+    const iV = D.indexOf('const vaciarPendiente')
+    expect(iV, 'ya no existe vaciarPendiente: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpoV = D.slice(iV, D.indexOf('\n  }, [', iV))
+    expect(/entrada !== undefined \? \{ entrada \}/.test(cuerpoV) && /cierre !== undefined \? \{ cierre \}/.test(cuerpoV),
+      'solo se manda uno de los dos campos: escribir el balance cancelaría el guardado de los objetivos').toBe(true)
+
+    // Y al CAMBIAR DE DÍA se vacía antes, con el día viejo. Tirarlo era perder lo
+    // recién tecleado si el retardo aún no había saltado.
+    const iD = D.indexOf('}, [dia])')
+    const efectoDia = D.slice(Math.max(0, iD - 700), iD)
+    expect(/vaciarPendiente\(\)/.test(efectoDia),
+      'al cambiar de día se tira lo pendiente en vez de mandarlo: se pierde lo que acabas de escribir').toBe(true)
     // El temporizador se anula al dispararse. Sin esto queda «pendiente» para
     // siempre y el guardado de salida reenvía lo que ya estaba escrito — que es
     // justo por donde se colaba el borrado del día.
-    // Anclado al CUERPO del setTimeout, no al fichero: `guardadoTimer.current =
-    // null` aparece también al cambiar de día, y con esa aparición la regla
-    // pasaba en verde con el fallo puesto. Comprobado por mutación.
-    const iT = D.indexOf('guardadoTimer.current = setTimeout(')
-    expect(iT, 'ya no hay autoguardado con retardo: revisa esta regla').toBeGreaterThan(-1)
-    const cuerpoT = D.slice(iT, D.indexOf('}, 1200)', iT))
-    expect(/guardadoTimer\.current = null/.test(cuerpoT),
-      'el temporizador no se limpia al dispararse: queda «pendiente» para siempre y el guardado de salida reenvía lo ya guardado').toBe(true)
+    // El temporizador lo limpia `vaciarPendiente`, que es quien manda. Antes esa
+    // limpieza estaba en el cuerpo del setTimeout y por ahí se coló el fallo: al
+    // anularlo, el guardado de salida —que hasta entonces corría SIEMPRE— dejó de
+    // correr, y con él la red que tapaba que solo se mandara un campo.
+    const iV2 = D.indexOf('const vaciarPendiente')
+    const cuerpoV2 = D.slice(iV2, D.indexOf('\n  }, [', iV2))
+    expect(/clearTimeout\(guardadoTimer\.current\)[\s\S]{0,60}guardadoTimer\.current = null/.test(cuerpoV2),
+      'vaciarPendiente no anula el temporizador: lo pendiente se mandaría dos veces').toBe(true)
   })
 
   it('y guarda lo pendiente al desmontarse', () => {
@@ -267,8 +283,14 @@ describe('Diario · no repite tareas ya creadas', () => {
   const D = readFileSync('src/components/sections/DiarioSection.tsx', 'utf8')
 
   it('filtra contra las tareas que ya existen', () => {
-    expect(/yaSon\.has\(/.test(D),
-      'vuelve a proponer lo que ya es una tarea: al cerrar el día se duplica todo').toBe(true)
+        // El MISMO criterio que el botón, no otro. Con dos criterios distintos —el
+    // botón por el vínculo, `fichar` por el texto— el botón decía «CREA 0 TAREAS»
+    // y creaba una duplicada en cuanto alguien había retocado el texto.
+    const iF = D.indexOf('const fichar = async')
+    expect(iF, 'ya no existe fichar: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpoF = D.slice(iF, D.indexOf('\n  const ', iF + 10))
+    expect(/filter\(o => !tareaDe\(o\)\)/.test(cuerpoF),
+      'fichar empareja con un criterio distinto al del botón: prometería «CREA 0» y duplicaría').toBe(true)
     // Y contra el conjunto ACOTADO, no contra `data.tasks` entero.
     //
     // Esta regla decía antes lo contrario —exigía comparar contra `data.tasks`—
@@ -288,6 +310,20 @@ describe('Diario · no repite tareas ya creadas', () => {
       'el conjunto no se acota al día: un objetivo recurrente casaría con la tarea de otro día').toBe(true)
     expect(/data\.tasks[\s\S]{0,120}normalizar\(t\.text/.test(D),
       'vuelve a emparejar contra las tareas de todo el equipo desde siempre').toBe(false)
+  })
+
+  it('en un día pasado no se puede crear nada', () => {
+    // /api/tasks sella `completed_at` con el instante ACTUAL, así que crear una
+    // tarea ya hecha mientras repasas el jueves apunta ese trabajo al viernes: el
+    // jueves sigue en cero y hoy se infla. Las burbujas ya estaban cerradas; los
+    // otros dos caminos —fichar y aceptar propuestas— se habían quedado abiertos.
+    for (const fn of ['const fichar = async', 'const crearTodas']) {
+      const i = D.indexOf(fn)
+      expect(i, `ya no existe ${fn}: revisa esta regla`).toBeGreaterThan(-1)
+      const cabeza = D.slice(i, i + 420)
+      expect(/if \(!esHoy\)/.test(cabeza),
+        `${fn} no comprueba que sea hoy: repasar un día pasado lo reescribiría`).toBe(true)
+    }
   })
 
   it('el vínculo con la tarea sobrevive a que cambie el texto', () => {
@@ -336,7 +372,8 @@ describe('Diario · fichar crea tareas y cerrar las completa', () => {
     const rama = cuerpo.slice(i, i + 900)
     expect(/createTask\(/.test(rama), 'fichar la entrada ya no crea las tareas').toBe(true)
     // Fichar dos veces no puede duplicar la lista.
-    expect(/yaSon\.has\(/.test(rama), 'no comprueba las que ya existen: fichar dos veces duplicaría todo').toBe(true)
+    expect(/!tareaDe\(o\)/.test(rama),
+      'fichar no comprueba las que ya existen con el mismo criterio que el botón: prometería «CREA 0» y duplicaría').toBe(true)
   })
 
   // Marcar un objetivo escribe en LA TAREA, no en un estado de React.

@@ -68,13 +68,25 @@ export default function ResetPasswordPage() {
     if (!emailNuevo.trim()) return
     setPidiendo('si')
     const supabase = createClient()
-    await supabase.auth.resetPasswordForEmail(emailNuevo.trim(), {
+    const { error: errEnvio } = await supabase.auth.resetPasswordForEmail(emailNuevo.trim(), {
       // El dominio canónico, no el del navegador: esto viaja por CORREO y la app
       // sirve en dos hosts. Es lo que fija la regla de `enlaces compartibles`.
       redirectTo: rutaApp('/reset-password'),
     })
-    // Se dice lo mismo exista o no la cuenta: responder distinto convierte esta
-    // pantalla en un comprobador de qué correos están dados de alta.
+    // Un fallo REAL de envío (red caída, límite de peticiones) se dice, y el
+    // formulario vuelve para poder reintentar: antes se decía «Hecho» pasara lo
+    // que pasara y el formulario desaparecía, así que quien no recibiera nada se
+    // quedaba esperando un correo que nunca salió y sin forma de volver a pedirlo.
+    //
+    // Que la cuenta NO EXISTA no es un fallo y se sigue diciendo lo mismo: Supabase
+    // no lo distingue a propósito, y responder distinto convertiría esta pantalla
+    // en un comprobador de qué correos están dados de alta.
+    if (errEnvio) {
+      setError('No se pudo enviar. Comprueba la conexión y vuelve a intentarlo.')
+      setPidiendo('no')
+      return
+    }
+    setError('')
     setPidiendo('hecho')
   }
 
