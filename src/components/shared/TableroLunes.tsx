@@ -39,8 +39,11 @@ export default function TableroLunes({ isMobile }: { isMobile: boolean }) {
         // En ESCRITORIO a la derecha, y no por gusto: a la izquierda está la barra
         // lateral, así que el botón caía justo encima del bloque de tu perfil. En
         // la demo no se nota porque no tiene barra; en la app sí.
+        // En ESCRITORIO, arriba del todo de la esquina: abajo a la izquierda está
+        // la barra lateral y abajo a la derecha el buscador de ⌘K, que además va
+        // en z-50. Ponerlo a la derecha sin subirlo lo dejaba DEBAJO de aquello.
         ...(isMobile ? { left: '1rem' } : { right: '1.5rem' }),
-        bottom: `calc(${isMobile ? '5.25rem' : '1.5rem'} + env(safe-area-inset-bottom))`,
+        bottom: `calc(${isMobile ? '5.25rem' : '5rem'} + env(safe-area-inset-bottom))`,
         height: '2.75rem',
         width: abierto && !isMobile ? '13.5rem' : '2.75rem',
         padding: '0 0.6rem',

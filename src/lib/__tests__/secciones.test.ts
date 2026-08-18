@@ -312,18 +312,25 @@ describe('Diario · no repite tareas ya creadas', () => {
       'vuelve a emparejar contra las tareas de todo el equipo desde siempre').toBe(false)
   })
 
-  it('en un día pasado no se puede crear nada', () => {
+  it('el pasado es de solo lectura, el futuro se planifica', () => {
     // /api/tasks sella `completed_at` con el instante ACTUAL, así que crear una
-    // tarea ya hecha mientras repasas el jueves apunta ese trabajo al viernes: el
-    // jueves sigue en cero y hoy se infla. Las burbujas ya estaban cerradas; los
-    // otros dos caminos —fichar y aceptar propuestas— se habían quedado abiertos.
+    // tarea ya hecha mientras repasas el jueves apunta ese trabajo al viernes.
+    //
+    // Pero la guarda tiene que ser `esPasado`, NO `!esHoy`: con `!esHoy` se cerró
+    // también el FUTURO, que es justo para lo que existe el calendario de esta
+    // sección — planificar la semana. Un arreglo que se pasa de frenada.
     for (const fn of ['const fichar = async', 'const crearTodas']) {
       const i = D.indexOf(fn)
       expect(i, `ya no existe ${fn}: revisa esta regla`).toBeGreaterThan(-1)
-      const cabeza = D.slice(i, i + 420)
+      const cabeza = D.slice(i, i + 460)
+      expect(/if \(esPasado\)/.test(cabeza),
+        `${fn} no cierra el pasado: repasar un día pasado lo reescribiría`).toBe(true)
       expect(/if \(!esHoy\)/.test(cabeza),
-        `${fn} no comprueba que sea hoy: repasar un día pasado lo reescribiría`).toBe(true)
+        `${fn} cierra también el futuro: no se podría planificar la semana`).toBe(false)
     }
+    // Y en un día futuro nada nace ya hecho: aún no ha pasado.
+    expect(/done: esFuturo \? false/.test(D),
+      'planificar el jueves crearía tareas ya completadas').toBe(true)
   })
 
   it('el vínculo con la tarea sobrevive a que cambie el texto', () => {

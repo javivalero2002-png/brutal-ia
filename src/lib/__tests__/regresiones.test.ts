@@ -1242,4 +1242,24 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
     expect(/MUESTRA, no la lista completa/.test(H),
       'no se avisa de que los ejemplos son una muestra: Harvey diria «solo ha hecho estas»').toBe(true)
   })
+
+  // Arrastrar a hoy lo que quedo pendiente MUEVE `diario_dia`, que es la columna
+  // por la que el Diario decide de que dia es cada tarea. Las tres condiciones
+  // tienen que ir en el propio UPDATE, no en una comprobacion previa: entre mirar
+  // y escribir hay un hueco, y ahi cabe mover el trabajo de otra persona.
+  it('arrastrar solo mueve MIS tareas sin terminar, y siempre a hoy', () => {
+    const A = leerCodigo('src/app/api/diario/arrastrar/route.ts')
+    const i = A.indexOf("update({ diario_dia")
+    expect(i, 'ya no existe el update de arrastrar: revisa esta regla').toBeGreaterThan(-1)
+    const consulta = A.slice(i, i + 420)
+    expect(/\.eq\('assigned_to', user\.id\)/.test(consulta),
+      'no acota a mis tareas: se podria mover el trabajo de otra persona a mi dia').toBe(true)
+    expect(/\.eq\('done', false\)/.test(consulta),
+      'no excluye las terminadas: resucitaria trabajo ya cerrado y descuadraria los reportes').toBe(true)
+    // El dia NO puede venir del cliente: siempre hoy.
+    expect(/diario_dia: hoy/.test(A),
+      'el dia de destino sale de otro sitio que no es todayKey(): se podria mover una tarea a cualquier dia').toBe(true)
+    expect(/body\?\.dia|body\.dia/.test(A),
+      'acepta el dia por el body: eso permite colocar trabajo en el dia que se quiera').toBe(false)
+  })
 })

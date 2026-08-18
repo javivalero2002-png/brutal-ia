@@ -186,6 +186,17 @@ describe('rutas API · co_assigned_to cuenta como tuya', () => {
         if (!m[1].includes('co_assigned_to')) olvidos.push(`${nombre(f)}: .or(${m[1].slice(0, 70)}…)`)
       }
       for (const m of s.matchAll(/\.eq\('assigned_to',\s*user\.id\)/g)) {
+        // Excepcion con su motivo escrito, como pide CLAUDE.md.
+        //
+        // `diario/arrastrar` MUEVE `diario_dia`, y esa columna es UNA sola
+        // compartida por los dos responsables: arrastrar a mi hoy una tarea de la
+        // que solo soy co-responsable se la quitaria del dia al principal, y su
+        // diario y sus reportes dejarian de cuadrar sin que el hiciera nada.
+        //
+        // Aqui «mis tareas» significa a proposito «las que tengo asignadas a mi»,
+        // que es distinto de «en las que participo». No es un olvido: es la unica
+        // lectura que no rompe el dia de otra persona.
+        if (f.includes('diario/arrastrar')) continue
         olvidos.push(`${nombre(f)}: .eq('assigned_to', user.id) sin co_assigned_to`)
       }
     }
