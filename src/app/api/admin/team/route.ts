@@ -247,8 +247,31 @@ export async function DELETE(request: NextRequest) {
     )
   }
 
+  // Se SUELTAN sus tareas antes de borrarlo. Dos motivos, y el segundo es el que
+  // hacía que el botón no funcionara:
+  //
+  //  · Una tarea asignada a alguien que ya no está es una tarea perdida: no sale
+  //    en la carga de nadie y nadie la va a recoger. Queda sin responsable, que
+  //    es lo que de verdad es.
+  //  · Y varias tablas apuntan a `profiles` SIN regla de borrado (por ejemplo
+  //    `task_attachments.created_by`), así que la baja rebotaba con un error de
+  //    clave foránea. Eso llegaba como un mensaje de Postgres en inglés y sin
+  //    contexto: desde fuera, «el botón no hace nada».
+  await admin.from('tasks').update({ assigned_to: null }).eq('assigned_to', profile.id)
+  await admin.from('tasks').update({ co_assigned_to: null }).eq('co_assigned_to', profile.id)
+
   const { error: authErr } = await admin.auth.admin.deleteUser(profile.id)
-  if (authErr) return NextResponse.json({ error: authErr.message }, { status: 500 })
+  if (authErr) {
+    // Un fallo de clave foránea se explica en cristiano y se dice QUÉ lo bloquea:
+    // el mensaje crudo de Postgres no le sirve a nadie.
+    const fk = /foreign key|violates|constraint/i.test(authErr.message)
+    console.error('[team] no se pudo dar de baja a', profile.id, '—', authErr.message)
+    return NextResponse.json({
+      error: fk
+        ? `No se puede dar de baja: quedan cosas suyas enlazadas en la base (${authErr.message}). Dímelo y lo desenganchamos.`
+        : authErr.message,
+    }, { status: 500 })
+  }
 
   await admin.from('profiles').delete().eq('id', profile.id)
   return NextResponse.json({ ok: true })

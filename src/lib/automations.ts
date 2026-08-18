@@ -173,6 +173,8 @@ interface Match { key: string; vars: Record<string, string>; clientId?: string; 
 // el motor de un cron que crea tareas y notifica al equipo sin humano delante.
 export function evaluateTrigger(cfg: RuleConfig, ctx: {
   inbox: any[]; tasks: any[]; projects: any[]; clients: any[]
+  /** Sin leer en el buzón PERSONAL de quien creó la regla. Solo lo usa `unread_pileup`. */
+  sinLeerMios?: number
 }): Match[] {
   const t = cfg.trigger
   const out: Match[] = []
@@ -228,7 +230,19 @@ export function evaluateTrigger(cfg: RuleConfig, ctx: {
     }
   } else if (t.type === 'unread_pileup') {
     const threshold = t.threshold ?? 10
-    const unread = ctx.inbox.filter(m => !m.is_read).length
+    // QUÉ buzón se cuenta depende de A QUIÉN avisa la regla, y no es un detalle:
+    //
+    //  · `notify_team` mira SOLO el compartido. Empujarle a los siete que a
+    //    alguien se le acumula el correo personal no es lo que nadie espera al
+    //    conectar su Gmail — esa es la decisión que ya estaba tomada aquí.
+    //  · `notify_owner` («avisarme a mí») avisa a UNA persona: la suya. Ahí ese
+    //    motivo no aplica, y contar solo el compartido hacía que la regla no
+    //    saltara nunca por mucho correo sin leer que uno tuviera. Es lo que
+    //    reportó Javi: 96 sin leer y el motor diciendo «nada que disparar».
+    const compartidos = ctx.inbox.filter(m => !m.is_read).length
+    const unread = cfg.action.type === 'notify_owner'
+      ? compartidos + (ctx.sinLeerMios ?? 0)
+      : compartidos
     if (unread >= threshold) {
       // todayKey() y no toISOString(): la clave UTC saltaba de día a las 22:00 de
       // Madrid, permitiendo que la regla se disparara dos veces el mismo día español.
@@ -370,6 +384,17 @@ async function ejecutarReglas(
     // existen las reglas. ESTO ESTRECHA EL COMPORTAMIENTO a proposito: una regla
     // que hoy salte por un correo personal dejara de hacerlo.
     admin.from('inbox_messages').select('id,subject,from_name,from_email,ai_client,ai_urgency,is_read,received_at').eq('shared', true).order('received_at', { ascending: false }).limit(200),
+    // El correo PERSONAL va en su propia lista y NO entra en `ctx.inbox`.
+    //
+    // Mezclarlos habría sido el arreglo fácil y el error grave: los otros tres
+    // disparadores que miran el buzón —email urgente, de un cliente— dependen de
+    // que ahí solo haya correspondencia de empresa, y con el personal dentro
+    // empezarían a saltar por correo privado y a empujárselo a los siete. Solo
+    // `unread_pileup` con «avisarme a mí» mira esta lista.
+    //
+    // Se piden únicamente los SIN LEER: es lo único que se cuenta, y así el
+    // límite no se lo comen los leídos.
+    admin.from('inbox_messages').select('user_id').eq('shared', false).eq('is_read', false).limit(2000),
     // `level` y `assigned_to` van AQUI porque el disparador «urgentes sin asignar»
     // los evalua (:253-254) y sin traerlos llegaban `undefined`: `tk.level !==
     // 'urgent' && tk.level !== 'high'` era siempre cierto, asi que la regla
@@ -386,7 +411,12 @@ async function ejecutarReglas(
   // Si una consulta falla, su lista queda vacía y el motor decide sobre datos
   // incompletos — p. ej. "0 tareas vencidas" cuando en realidad no pudo leerlas.
   logQueryErrors('automations', snapshot)
-  const [{ data: inbox }, { data: tasks }, { data: projects }, { data: clients }] = snapshot
+  const [{ data: inbox }, { data: personales }, { data: tasks }, { data: projects }, { data: clients }] = snapshot
+  // Cuántos sin leer tiene cada uno en su buzón personal.
+  const sinLeerPorPersona = new Map<string, number>()
+  for (const m of personales || []) {
+    if (m.user_id) sinLeerPorPersona.set(m.user_id, (sinLeerPorPersona.get(m.user_id) || 0) + 1)
+  }
   const ctx = { inbox: inbox || [], tasks: tasks || [], projects: projects || [], clients: clients || [] }
 
   // Marcas de dedup ya existentes en tareas creadas por el motor
@@ -401,7 +431,7 @@ async function ejecutarReglas(
 
   for (const { r, cfg } of structured) {
     let fired = false
-    const matches = evaluateTrigger(cfg, ctx)
+    const matches = evaluateTrigger(cfg, { ...ctx, sinLeerMios: sinLeerPorPersona.get(r.created_by || '') || 0 })
     if (matches.length === 0) continue
 
     // El tope, aqui: cuenta acciones REALIZADAS, no coincidencias miradas. Las
