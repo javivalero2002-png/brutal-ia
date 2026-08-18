@@ -11,6 +11,8 @@ export interface Profile {
   gmail_colabs_connected?: boolean
   gmail_colabs_refresh_token?: string
   gmail_colabs_account?: string
+  /** Cuándo pasó por la puesta en marcha. Sin valor = todavía no la ha visto. */
+  onboarding_at?: string | null
 }
 
 export interface Client {
