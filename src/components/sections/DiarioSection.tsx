@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { BLU, GRN, AMBAR, RED, VIO, SURFACE, SURF2, BORDER } from '@/components/shared/design-tokens'
-import { LucideIcon, useIsMobile, plural, ProgressRing } from '@/components/shared'
+import { LucideIcon, useIsMobile, plural, ProgressRing, todayKey, localDayKey } from '@/components/shared'
 import type { NexusData, Profile } from '@/types'
 import type { IrASeccion } from '@/components/shared/secciones'
 
@@ -57,6 +57,33 @@ const horaCorta = (iso?: string | null) =>
 const normalizar = (t: string) =>
   (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
 
+/**
+ * Suma (o resta) días a una clave 'YYYY-MM-DD'.
+ *
+ * Ancla a mediodía UTC antes de mover el día: a esa hora Madrid va por la tarde,
+ * así que ni el cambio de hora ni el desfase de zona pueden hacer que se salte o
+ * repita una fecha. Y el resultado sale de `localDayKey`, no de cortar el ISO —
+ * cortar da el día en UTC, que a partir de las ~22:00 de Madrid ya es el siguiente.
+ */
+const sumarDias = (clave: string, n: number): string => {
+  const d = new Date(`${clave}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + n)
+  return localDayKey(d)
+}
+
+const fechaLarga = (clave: string) =>
+  new Date(`${clave}T12:00:00Z`).toLocaleDateString('es-ES', {
+    weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Madrid',
+  })
+
+/** «Hoy», «Ayer» o la fecha. Un día reciente se reconoce antes por el nombre. */
+const etiquetaDia = (clave: string): string => {
+  const hoy = todayKey()
+  if (clave === hoy) return 'Hoy'
+  if (clave === sumarDias(hoy, -1)) return 'Ayer'
+  return fechaLarga(clave).replace(/^\w/, c => c.toUpperCase())
+}
+
 /** Los objetivos, uno por línea. Es el formato que permite tacharlos luego. */
 const lineas = (t?: string | null) =>
   (t || '').split('\n').map(l => l.replace(/^[-•*\s]+/, '').trim()).filter(Boolean)
@@ -80,10 +107,20 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
   const [briefing, setBriefing] = useState<any>(null)
   const [rango, setRango] = useState<'dia' | 'semana'>('dia')
   const [cargandoBrief, setCargandoBrief] = useState(false)
+  // El día que se está mirando. Hoy por defecto; se puede retroceder para
+  // consultar lo que hizo el equipo cualquier otro día — el diario es un
+  // histórico que se va llenando, no solo la pantalla de hoy.
+  const [dia, setDia] = useState<string>(() => todayKey())
+  const esHoy = dia === todayKey()
+  // Los objetivos se ENSEÑAN como lista y se EDITAN en un textarea. Ver una lista
+  // con viñetas y editar texto plano son dos cosas distintas, y mezclarlas en un
+  // textarea siempre visible es lo que hacía que la sección pareciera un borrador.
+  const [editando, setEditando] = useState(false)
 
   const miEntrada = entradas.find(e => e.user_id === profile?.id) || null
   const sembrado = useRef(false)
   const guardadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const refObjetivos = useRef<HTMLTextAreaElement>(null)
   const extraerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const ultimoExtraido = useRef('')
   // Lo que has quitado a mano no vuelve. Sin esto, cada relectura del texto lo
@@ -92,19 +129,23 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
 
   const cargar = useCallback(async () => {
     try {
-      const res = await fetch('/api/diario')
+      const res = await fetch(`/api/diario?dia=${dia}`)
       if (!res.ok) { setErrorCarga(true); return }
       const j = await res.json()
       setErrorCarga(false)
       setEntradas(Array.isArray(j.entradas) ? j.entradas : [])
     } catch { setErrorCarga(true) }
     finally { setCargando(false) }
-  }, [])
+  }, [dia])
 
   useEffect(() => { cargar() }, [cargar])
 
   // Se siembra UNA vez. Si se resembrara en cada recarga, escribir mientras otro
   // ficha te borraría lo tecleado — que es justo el bug que esto viene a cerrar.
+  // Al cambiar de día se vuelve a sembrar: lo que se ve es de OTRO día, y
+  // arrastrar el borrador del anterior sería escribir en el día equivocado.
+  useEffect(() => { sembrado.current = false; setObjetivos(''); setBalance(''); setCumplidos(new Set()) }, [dia])
+
   useEffect(() => {
     if (sembrado.current || !miEntrada) return
     sembrado.current = true
@@ -251,6 +292,19 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
     finally { setFichando(false) }
   }
 
+  /** Abre la edición con una línea nueva al final, lista para escribir. */
+  const anadirObjetivo = () => {
+    setEditando(true)
+    setObjetivos(v => (v.trim() ? v.replace(/\n+$/, '') + '\n' : ''))
+    // El foco va al final del textarea, que es donde acaba de aparecer el hueco.
+    setTimeout(() => {
+      const ta = refObjetivos.current
+      if (!ta) return
+      ta.focus()
+      ta.setSelectionRange(ta.value.length, ta.value.length)
+    }, 40)
+  }
+
   const pedirBriefing = useCallback(async (r: 'dia' | 'semana') => {
     setRango(r); setCargandoBrief(true)
     try {
@@ -289,108 +343,184 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
   return (
     <div className="h-full overflow-y-auto" style={{ padding: isMobile ? '1rem' : '1.75rem' }}>
 
-      {/* ── ESTADO DEL DÍA ─────────────────────────────────────────────
-          Una franja que informa en vez de titular: a qué hora entraste, cuántos
-          objetivos llevas y si el día sigue abierto. Antes eran dos cabeceras
-          gemelas ocupando el doble y sin decir nada que no estuviera debajo. */}
-      <div className="relative rounded-3xl mb-4 overflow-hidden" style={{ background: SURF2, border: `1px solid ${BORDER}` }}>
-        {/* Halo del color del estado. Es el mismo recurso que usa el orbe de
-            Harvey, y ata la sección al resto de la app en vez de inventar otro. */}
+      {/* ── CABECERA ───────────────────────────────────────────────────
+          Titulo, dia que se esta mirando y la accion principal. El selector de dia
+          no es decoracion: el diario se llena todos los dias y sirve para mirar
+          atras, asi que llegar a "el martes pasado" tiene que costar dos clics. */}
+      <div className="flex items-start gap-3 mb-4 flex-wrap">
+        <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
+          style={{ background: `linear-gradient(140deg, ${VIO}2E, ${BLU}1A)`, border: `1px solid ${VIO}38` }}>
+          <LucideIcon name="pen-line" size={19} color={VIO} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h1 className="font-syne text-[22px] font-black text-white leading-none" style={{ letterSpacing: '-0.02em' }}>
+            DIARIO
+          </h1>
+          <div className="font-figtree text-[11.5px] mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            Lo que se propone y lo que hace el equipo, cada día.
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Navegar dias. `esHoy` desactiva el "siguiente": no hay futuro que ver. */}
+          <div className="flex items-center rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}` }}>
+            <button onClick={() => setDia(sumarDias(dia, -1))} aria-label="Día anterior"
+              className="w-8 h-8 flex items-center justify-center transition-opacity hover:opacity-70">
+              <LucideIcon name="chevron-left" size={14} color="rgba(255,255,255,0.45)" />
+            </button>
+            <button onClick={() => setDia(todayKey())} disabled={esHoy}
+              className="px-3 h-8 font-figtree text-[11px] whitespace-nowrap disabled:opacity-100"
+              style={{ color: esHoy ? 'rgba(255,255,255,0.6)' : VIO }}>
+              {etiquetaDia(dia)}
+            </button>
+            <button onClick={() => setDia(sumarDias(dia, 1))} disabled={esHoy} aria-label="Día siguiente"
+              className="w-8 h-8 flex items-center justify-center transition-opacity hover:opacity-70 disabled:opacity-20">
+              <LucideIcon name="chevron-right" size={14} color="rgba(255,255,255,0.45)" />
+            </button>
+          </div>
+
+          {/* Solo en hoy: no se ficha en un dia que ya paso. */}
+          {esHoy && (
+            <button onClick={anadirObjetivo}
+              className="flex items-center gap-1.5 pl-3 pr-4 h-9 rounded-full font-syne text-[9px] font-black tracking-widest transition-all active:scale-95"
+              style={{ background: `linear-gradient(140deg, ${VIO}30, ${BLU}22)`, border: `1px solid ${VIO}48`, color: '#DCD3FF' }}>
+              <LucideIcon name="plus" size={13} color="#DCD3FF" />
+              NUEVO OBJETIVO
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── HÉROE: EL ESTADO DEL DÍA ───────────────────────────────────── */}
+      <div className="relative rounded-3xl mb-4 overflow-hidden"
+        style={{ background: `linear-gradient(120deg, ${VIO}1C 0%, ${BLU}12 45%, ${SURF2} 100%)`, border: `1px solid ${VIO}2E` }}>
+        {/* Dos halos difuminados. Mismo recurso que el orbe de Harvey: ata la
+            seccion al lenguaje que la app ya tiene en vez de inventar otro. */}
         <div className="absolute pointer-events-none" aria-hidden
-          style={{ width: '60%', height: '160%', top: '-40%', right: '-10%', borderRadius: '9999px',
-                   background: `radial-gradient(closest-side, ${yaCerrado ? GRN : BLU}1A, transparent)`, filter: 'blur(28px)' }} />
-        <div className="relative flex items-center gap-4 px-5 py-4">
+          style={{ width: '46%', height: '190%', top: '-45%', right: '-6%', borderRadius: '9999px',
+                   background: `radial-gradient(closest-side, ${VIO}30, transparent)`, filter: 'blur(34px)' }} />
+        <div className="absolute pointer-events-none" aria-hidden
+          style={{ width: '30%', height: '150%', top: '-25%', right: '22%', borderRadius: '9999px',
+                   background: `radial-gradient(closest-side, ${BLU}26, transparent)`, filter: 'blur(30px)' }} />
+
+        <div className="relative flex items-center gap-5 px-6 py-6">
           <div className="flex-shrink-0" style={{ position: 'relative' }}>
-            <ProgressRing pct={pctObjetivos} size={54} stroke={3} color={yaCerrado ? GRN : BLU} />
+            <ProgressRing pct={pctObjetivos} size={82} stroke={4} color={yaCerrado ? GRN : VIO} />
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="font-syne text-[13px] font-black" style={{ color: yaCerrado ? GRN : BLU }}>
-                {objetivosDeHoy.length ? cumplidosVivos : '·'}
+              <span className="font-syne text-[17px] font-black" style={{ color: yaCerrado ? GRN : '#E6DEFF' }}>
+                {pctObjetivos}%
               </span>
             </div>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="font-syne text-[8px] font-black tracking-widest mb-0.5" style={{ color: 'rgba(255,255,255,0.28)' }}>
-              MI DÍA · {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Madrid' }).toUpperCase()}
+            <div className="font-syne text-[8px] font-black tracking-[0.18em] mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              MI DÍA · {fechaLarga(dia).toUpperCase()}
             </div>
-            <div className="font-figtree text-[14px] font-bold text-white leading-tight">
+            <div className="font-figtree font-bold text-white leading-tight" style={{ fontSize: isMobile ? '19px' : '23px', letterSpacing: '-0.02em' }}>
               {objetivosDeHoy.length
                 ? `${cumplidosVivos} de ${plural(objetivosDeHoy.length, 'objetivo', 'objetivos')}`
                 : 'Sin objetivos todavía'}
             </div>
-            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-              <span className="font-syne text-[7px] font-black tracking-widest px-2 py-0.5 rounded-full"
-                style={{ background: yaCerrado ? `${GRN}18` : `${AMBAR}18`, color: yaCerrado ? GRN : AMBAR }}>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <span className="font-syne text-[7.5px] font-black tracking-widest px-2.5 py-1 rounded-full"
+                style={{ background: yaCerrado ? `${GRN}1E` : miEntrada?.entrada_at ? `${AMBAR}1E` : 'rgba(255,255,255,0.06)',
+                         color: yaCerrado ? GRN : miEntrada?.entrada_at ? AMBAR : 'rgba(255,255,255,0.4)' }}>
                 {yaCerrado ? 'CERRADO' : miEntrada?.entrada_at ? 'EN MARCHA' : 'SIN FICHAR'}
               </span>
               {miEntrada?.entrada_at && (
-                <span className="font-figtree text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                <span className="font-figtree text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>
                   entrada {horaCorta(miEntrada.entrada_at)}{miEntrada.cierre_at ? ` · cierre ${horaCorta(miEntrada.cierre_at)}` : ''}
                 </span>
               )}
             </div>
           </div>
-          {/* El guardado, discreto pero visible: "se guarda solo" tiene que poder
-              comprobarse o no es una promesa, es fe. */}
-          <div className="font-syne text-[7px] font-black tracking-widest flex-shrink-0 transition-opacity"
-            style={{ color: estadoGuardado === 'guardado' ? GRN : 'rgba(255,255,255,0.25)', opacity: estadoGuardado === 'limpio' ? 0 : 1 }}>
+          <div className="font-syne text-[7px] font-black tracking-widest flex-shrink-0 transition-opacity self-start"
+            style={{ color: estadoGuardado === 'guardado' ? GRN : 'rgba(255,255,255,0.3)', opacity: estadoGuardado === 'limpio' ? 0 : 1 }}>
             {estadoGuardado === 'guardando' ? 'GUARDANDO' : 'GUARDADO'}
           </div>
         </div>
       </div>
 
-      {/* ── LOS DOS PANELES ────────────────────────────────────────────────
-          Lado a lado en escritorio: proponerse y cumplir son las dos mitades de
-          lo mismo, y verlas juntas es la mitad del valor. Apilados en móvil. */}
-      <div className={isMobile ? 'flex flex-col gap-3 mb-5' : 'grid gap-3 mb-5'} style={isMobile ? undefined : { gridTemplateColumns: '1fr 1fr' }}>
+      {/* ── LOS DOS PANELES ────────────────────────────────────────────
+          Lado a lado en escritorio: proponerse y cumplir son las dos mitades de lo
+          mismo, y verlas juntas es la mitad del valor. Apilados en móvil. */}
+      <div className={isMobile ? 'flex flex-col gap-3 mb-4' : 'grid gap-3 mb-4'} style={isMobile ? undefined : { gridTemplateColumns: '1fr 1fr' }}>
 
-        {/* OBJETIVOS */}
-        <div className="rounded-3xl flex flex-col" style={{ background: SURFACE, border: `1px solid ${miEntrada?.entrada_at ? BLU + '28' : BORDER}` }}>
-          <div className="flex items-center gap-2 px-4 pt-3.5 pb-2">
-            <LucideIcon name="target" size={13} color={BLU} />
-            <div className="font-syne text-[8.5px] font-black tracking-widest" style={{ color: BLU }}>QUÉ ME PROPONGO</div>
+        {/* OBJETIVOS — lista para leer, textarea para editar. */}
+        <div className="rounded-3xl flex flex-col overflow-hidden" style={{ background: SURFACE, border: `1px solid ${BLU}26` }}>
+          <div className="flex items-center gap-2 px-4 pt-3.5 pb-2.5">
+            <LucideIcon name="target" size={14} color={BLU} />
+            <div className="font-syne text-[9px] font-black tracking-widest flex-1" style={{ color: BLU }}>¿QUÉ ME PROPONGO?</div>
+            {esHoy && (
+              <button onClick={() => setEditando(e => !e)} aria-label={editando ? 'Ver la lista' : 'Editar objetivos'}
+                className="w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90"
+                style={{ background: editando ? `${BLU}20` : 'rgba(255,255,255,0.04)' }}>
+                <LucideIcon name={editando ? 'check' : 'pencil'} size={12} color={editando ? BLU : 'rgba(255,255,255,0.4)'} />
+              </button>
+            )}
           </div>
           <div className="px-4 pb-4 flex-1 flex flex-col">
-            <textarea
-              value={objetivos}
-              onChange={e => alEscribir('entrada', e.target.value)}
-              placeholder={'Cerrar el presupuesto de Nike\nMontar el reel de Mango\nLlamar al proveedor'}
-              rows={4}
-              className="w-full px-3 py-2.5 rounded-2xl text-[12.5px] text-white placeholder-white/20 outline-none resize-none leading-relaxed flex-1"
-              style={{ background: 'rgba(255,255,255,0.035)', border: `1px solid ${BORDER}`, caretColor: BLU, minHeight: '6rem' }}
-            />
-            {!miEntrada?.entrada_at && (
+            {editando || (!objetivosDeHoy.length && esHoy) ? (
+              <textarea
+                ref={refObjetivos}
+                value={objetivos}
+                onChange={e => alEscribir('entrada', e.target.value)}
+                onBlur={() => setEditando(false)}
+                placeholder={'Cerrar el presupuesto de Nike\nMontar el reel de Mango\nLlamar al proveedor'}
+                rows={5}
+                className="w-full px-3.5 py-3 rounded-2xl text-[12.5px] text-white placeholder-white/20 outline-none resize-none leading-relaxed flex-1"
+                style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, caretColor: BLU, minHeight: '7rem' }}
+              />
+            ) : (
+              <div className="rounded-2xl px-4 py-3.5 flex-1" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, minHeight: '7rem' }}>
+                {objetivosDeHoy.length ? (
+                  <ul className="flex flex-col gap-2">
+                    {objetivosDeHoy.map((o, i) => (
+                      <li key={i} className="flex items-start gap-2.5">
+                        <span className="mt-[7px] w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: `${BLU}AA` }} />
+                        <span className="font-figtree text-[13px] leading-snug" style={{ color: 'rgba(255,255,255,0.86)' }}>{o}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="font-figtree text-[12px]" style={{ color: 'rgba(255,255,255,0.22)' }}>
+                    {esHoy ? 'Sin objetivos. Pulsa NUEVO OBJETIVO para empezar.' : 'No escribió objetivos ese día.'}
+                  </div>
+                )}
+              </div>
+            )}
+            {esHoy && !miEntrada?.entrada_at && objetivosDeHoy.length > 0 && (
               <button onClick={() => fichar('entrada')} disabled={fichando}
                 className="mt-2.5 w-full py-2.5 rounded-2xl font-syne text-[9px] font-black tracking-widest disabled:opacity-40 transition-all active:scale-[0.99]"
-                style={{ background: `${BLU}16`, border: `1px solid ${BLU}32`, color: BLU }}>
-                FICHAR ENTRADA
+                style={{ background: `${BLU}18`, border: `1px solid ${BLU}38`, color: BLU }}>
+                FICHAR ENTRADA · CREA {plural(objetivosDeHoy.length, 'TAREA', 'TAREAS').toUpperCase()}
               </button>
             )}
           </div>
         </div>
 
-        {/* BALANCE — los objetivos como burbujas tachables. Esto es lo que hace
-            que la salida no sea otra caja de texto igual que la entrada. */}
-        <div className="rounded-3xl flex flex-col" style={{ background: SURFACE, border: `1px solid ${yaCerrado ? GRN + '28' : BORDER}` }}>
-          <div className="flex items-center gap-2 px-4 pt-3.5 pb-2">
-            <LucideIcon name="check-circle" size={13} color={GRN} />
-            <div className="font-syne text-[8.5px] font-black tracking-widest" style={{ color: GRN }}>¿LO COMPLETÉ?</div>
+        {/* ¿LO COMPLETÉ? — burbujas con círculo, y el balance debajo. */}
+        <div className="rounded-3xl flex flex-col overflow-hidden" style={{ background: SURFACE, border: `1px solid ${yaCerrado ? GRN + '2E' : BORDER}` }}>
+          <div className="flex items-center gap-2 px-4 pt-3.5 pb-2.5">
+            <LucideIcon name="check-circle" size={14} color={GRN} />
+            <div className="font-syne text-[9px] font-black tracking-widest" style={{ color: GRN }}>¿LO COMPLETÉ?</div>
           </div>
 
           {objetivosDeHoy.length > 0 ? (
-            <div className="px-4 pb-2 flex flex-wrap gap-1.5">
+            <div className="px-4 pb-2.5 flex flex-wrap gap-2">
               {objetivosDeHoy.map((o, i) => {
                 const hecho = cumplidos.has(o)
                 return (
-                  <button key={i}
+                  <button key={i} disabled={!esHoy}
                     onClick={() => setCumplidos(s => { const n = new Set(s); n.has(o) ? n.delete(o) : n.add(o); return n })}
-                    className="flex items-center gap-1.5 pl-1.5 pr-3 py-1.5 rounded-full text-left transition-all active:scale-95"
-                    style={{ background: hecho ? `${GRN}16` : 'rgba(255,255,255,0.04)', border: `1px solid ${hecho ? GRN + '3A' : BORDER}`, maxWidth: '100%' }}>
-                    <span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{ background: hecho ? GRN : 'transparent', border: `1.5px solid ${hecho ? GRN : 'rgba(255,255,255,0.2)'}` }}>
-                      {hecho && <LucideIcon name="check" size={9} color="#06110A" />}
+                    className="flex items-center gap-2 pl-2 pr-3.5 py-2 rounded-full text-left transition-all active:scale-95 disabled:active:scale-100"
+                    style={{ background: hecho ? `${GRN}16` : 'rgba(255,255,255,0.045)', border: `1px solid ${hecho ? GRN + '42' : BORDER}`, maxWidth: '100%' }}>
+                    <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center flex-shrink-0"
+                      style={{ background: hecho ? GRN : 'transparent', border: `1.5px solid ${hecho ? GRN : 'rgba(255,255,255,0.22)'}` }}>
+                      {hecho && <LucideIcon name="check" size={10} color="#06110A" />}
                     </span>
-                    <span className="font-figtree text-[11.5px] truncate"
-                      style={{ color: hecho ? 'rgba(255,255,255,0.42)' : 'rgba(255,255,255,0.82)', textDecoration: hecho ? 'line-through' : 'none' }}>
+                    <span className="font-figtree text-[12px] truncate"
+                      style={{ color: hecho ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.86)', textDecoration: hecho ? 'line-through' : 'none' }}>
                       {o}
                     </span>
                   </button>
@@ -398,27 +528,32 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
               })}
             </div>
           ) : (
-            <div className="px-4 pb-2 font-figtree text-[11px]" style={{ color: 'rgba(255,255,255,0.22)' }}>
+            <div className="px-4 pb-2.5 font-figtree text-[12px]" style={{ color: 'rgba(255,255,255,0.22)' }}>
               Escribe objetivos y aquí los vas tachando.
             </div>
           )}
 
-          <div className="px-4 pt-1.5 pb-4 flex-1 flex flex-col">
-            <textarea
-              value={balance}
-              onChange={e => alEscribir('cierre', e.target.value)}
-              placeholder="Qué se quedó a medias y por qué…"
-              rows={3}
-              className="w-full px-3 py-2.5 rounded-2xl text-[12.5px] text-white placeholder-white/20 outline-none resize-none leading-relaxed flex-1"
-              style={{ background: 'rgba(255,255,255,0.035)', border: `1px solid ${BORDER}`, caretColor: GRN, minHeight: '4.5rem' }}
-            />
-            {!yaCerrado && (
-              <button onClick={() => fichar('cierre')} disabled={fichando}
-                className="mt-2.5 w-full py-2.5 rounded-2xl font-syne text-[9px] font-black tracking-widest disabled:opacity-40 transition-all active:scale-[0.99]"
-                style={{ background: `${GRN}16`, border: `1px solid ${GRN}32`, color: GRN }}>
-                CERRAR EL DÍA
-              </button>
-            )}
+          <div className="px-4 pt-1 pb-4 flex-1 flex flex-col">
+            <div className="relative flex-1 flex">
+              <textarea
+                value={balance}
+                onChange={e => alEscribir('cierre', e.target.value)}
+                disabled={!esHoy}
+                placeholder="Qué se quedó a medias y por qué…"
+                rows={3}
+                className="w-full px-3.5 py-3 pr-12 rounded-2xl text-[12.5px] text-white placeholder-white/20 outline-none resize-none leading-relaxed flex-1"
+                style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, caretColor: GRN, minHeight: '5.5rem' }}
+              />
+              {/* Cerrar el día, dentro del propio campo: es la acción que sigue a
+                  escribirlo, y así no hace falta bajar la vista a otro botón. */}
+              {esHoy && !yaCerrado && (
+                <button onClick={() => fichar('cierre')} disabled={fichando} aria-label="Cerrar el día"
+                  className="absolute bottom-3 right-3 w-8 h-8 rounded-xl flex items-center justify-center transition-all active:scale-90 disabled:opacity-40"
+                  style={{ background: `${GRN}1E`, border: `1px solid ${GRN}45` }}>
+                  <LucideIcon name="check" size={14} color={GRN} />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
