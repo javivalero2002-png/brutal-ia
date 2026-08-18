@@ -481,3 +481,20 @@ html.theme-light .nx-boot-barra { background: rgba(255,255,255,0.16); }
   .nx-boot, .nx-boot-contenido, .nx-boot-glow, .nx-boot-latido, .nx-boot-barra i { animation: none; }
   .nx-boot-opcion, .nx-boot-opcion img { transition: none; }
 }
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Pistas de atajos: legibles, o no son pistas.
+   
+   Estaban escritas en línea a `rgba(255,255,255,0.05)`–`0.1` con 7,5px de
+   tipografía. Sobre el fondo casi negro de la app eso no se lee: ocupaban alto en
+   la cabecera de OCHO secciones sin enseñar el atajo a nadie — el peor reparto
+   posible, porque el coste es real y el beneficio cero.
+   
+   Se sube aquí y no en cada sección porque el valor va en `style` en línea, que
+   gana a cualquier clase: hace falta `!important`, y repetirlo ocho veces sería
+   ocho sitios donde volver a desincronizarse. En móvil siguen ocultas (regla de
+   arriba): un atajo de teclado no sirve de nada en táctil.
+   ──────────────────────────────────────────────────────────────────────────── */
+.nx-kbd-hints span { color: rgba(255, 255, 255, 0.3) !important; }
+.nx-kbd-hints span span:last-child { color: rgba(255, 255, 255, 0.16) !important; }

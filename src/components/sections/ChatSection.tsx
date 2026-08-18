@@ -250,7 +250,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
             <div>
               <div className="font-figtree text-[16px] font-black text-white leading-none" style={{letterSpacing:'-0.025em'}}>BRUTAL<span style={{color:BLU}}>.IA</span></div>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.15)'}}>ASISTENTE CON CONTEXTO COMPLETO</span>
+                <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.3)'}}>ASISTENTE CON CONTEXTO COMPLETO</span>
                 {!isMobile && <>
                 <span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
                 <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>N ESCRIBIR</span>
@@ -400,7 +400,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
 
             {/* Prompts */}
             <div>
-              <div className="font-syne text-[7px] font-black tracking-widest mb-2 px-0.5" style={{color:'rgba(255,255,255,0.14)'}}>SUGERENCIAS RÁPIDAS</div>
+              <div className="font-syne text-[7px] font-black tracking-widest mb-2 px-0.5" style={{color:'rgba(255,255,255,0.28)'}}>SUGERENCIAS RÁPIDAS</div>
               <div className="grid grid-cols-2 gap-2">
                 {PROMPTS.map((p,pi)=>(
                   <button key={p.text} onClick={()=>sendText(p.text)} className="text-left p-3.5 rounded-2xl transition-all relative" style={{background:SURF2,border:`1px solid ${BORDER}`}}
