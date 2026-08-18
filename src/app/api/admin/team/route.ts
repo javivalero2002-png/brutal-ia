@@ -4,6 +4,11 @@ import { APP_URL } from '@/lib/appUrl'
 import { NextRequest, NextResponse } from 'next/server'
 import { PUSH_ROW } from '@/lib/push'
 
+// Tres viajes a Supabase seguidos —crear la cuenta de auth, insertar el perfil y
+// generar el enlace— y el primero, en frío, no es rápido. Se declara el techo a
+// propósito: sin él rige el defecto y el fallo no se distingue de un cuelgue.
+export const maxDuration = 60
+
 // Only the owner can call these endpoints
 async function requireOwner() {
   const supabase = await createClient()
@@ -88,7 +93,11 @@ export async function POST(request: NextRequest) {
     // Antes se devolvia ok:true sin mirar el resultado: un fallo del UPDATE se
     // reportaba como exito y el cambio no se veia hasta recargar.
     if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 })
-    return NextResponse.json({ ok: true, action: 'updated', email })
+    // Y se devuelve enlace TAMBIÉN al actualizar. Sin esto, repetir un alta que
+    // se quedó a medias —lo primero que hace cualquiera— entraba por aquí y salía
+    // sin enlace, que es justo lo que se venía a buscar.
+    const { link, motivo } = await generarEnlace(admin, email)
+    return NextResponse.json({ ok: true, action: 'updated', email, inviteLink: link, avisoEnlace: motivo })
   }
 
   // Create new auth user (pre-confirmed — owner creates accounts, no email verify loop)
@@ -116,18 +125,13 @@ export async function POST(request: NextRequest) {
   if (profileErr) return NextResponse.json({ error: profileErr.message }, { status: 500 })
 
   // Generate a password-reset link so the new member can set their own password
-  const appUrl = APP_URL
-  let inviteLink: string | null = null
-  try {
-    const { data: linkData } = await admin.auth.admin.generateLink({
-      type: 'recovery',
-      email,
-      options: { redirectTo: `${appUrl}/reset-password` },
-    })
-    inviteLink = (linkData as any)?.properties?.action_link || null
-  } catch { /* non-fatal */ }
+  const { link: inviteLink, motivo } = await generarEnlace(admin, email)
 
-  return NextResponse.json({ ok: true, action: 'created', email, inviteLink })
+  // El enlace es lo ÚNICO que se le puede mandar a la persona nueva: si no sale,
+  // hay que decirlo. Antes el fallo se tragaba con un `catch {}` y la respuesta
+  // era ok:true sin enlace, así que parecía que el alta no había funcionado — y
+  // lo lógico entonces es repetirla.
+  return NextResponse.json({ ok: true, action: 'created', email, inviteLink, avisoEnlace: motivo })
 }
 
 // PATCH: update profile by email, or regenerate invite link
@@ -164,6 +168,26 @@ export async function PATCH(request: NextRequest) {
 }
 
 // DELETE: remove a team member (cannot delete owner)
+/**
+ * El enlace para que la persona ponga su contraseña. Devuelve el motivo cuando no
+ * sale, en vez de un null mudo.
+ */
+async function generarEnlace(admin: Awaited<ReturnType<typeof createAdminClient>>, email: string) {
+  try {
+    const { data, error } = await admin.auth.admin.generateLink({
+      type: 'recovery',
+      email,
+      options: { redirectTo: `${APP_URL}/reset-password` },
+    })
+    // supabase-js no lanza: el error viaja en la respuesta.
+    if (error) return { link: null, motivo: error.message }
+    const link = (data as { properties?: { action_link?: string } })?.properties?.action_link || null
+    return { link, motivo: link ? null : 'Supabase no devolvió el enlace' }
+  } catch (e) {
+    return { link: null, motivo: e instanceof Error ? e.message : 'No se pudo generar el enlace' }
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   const ctx = await requireOwner()
   if (!ctx) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -174,7 +198,27 @@ export async function DELETE(request: NextRequest) {
 
   const { data: profile } = await admin.from('profiles').select('id, role').eq('email', email).single()
   if (!profile) return NextResponse.json({ error: 'User not found' }, { status: 404 })
-  if (profile.role === 'owner') return NextResponse.json({ error: 'Cannot delete owner' }, { status: 403 })
+  // Los propietarios SÍ se pueden dar de baja — antes estaba prohibido a machete y
+  // dejaba cuentas de gente que ya no está sin forma de quitarlas. Pero con las
+  // dos guardas que de verdad importan, y las dos son irreversibles si fallan:
+  //
+  //  · No el ÚLTIMO: sin ningún propietario nadie puede volver a nombrar a otro,
+  //    porque esta misma ruta exige serlo. El workspace se queda sin gobierno.
+  //  · No a TI MISMO: te quedarías fuera de tu propia app a mitad de clic, y no
+  //    hay otra puerta para volver a entrar.
+  if (profile.role === 'owner') {
+    if (profile.id === ctx.user.id) {
+      return NextResponse.json({ error: 'No puedes darte de baja a ti mismo' }, { status: 400 })
+    }
+    const { count, error: errCuenta } = await admin
+      .from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'owner')
+    // Un fallo al contar NO puede leerse como «hay de sobra»: sin este corte, un
+    // error de consulta autorizaría borrar al último.
+    if (errCuenta) return NextResponse.json({ error: errCuenta.message }, { status: 500 })
+    if ((count ?? 0) <= 1) {
+      return NextResponse.json({ error: 'Es el único propietario: nombra a otro antes de darlo de baja' }, { status: 400 })
+    }
+  }
 
   // La suscripcion push se borra TAMBIEN, y antes que el perfil.
   //
