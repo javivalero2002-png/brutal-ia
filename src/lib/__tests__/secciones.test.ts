@@ -694,3 +694,48 @@ describe('diario · el arranque de semana no depende de la IA', () => {
       'el botón no está guardado: sin la prop reventaría en vez de omitirse').toBe(true)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Todo objetivo escrito acaba siendo una tarea. También los tardíos.
+//
+// Las tareas se creaban SOLO al fichar, y ese botón desaparece en cuanto fichas.
+// Un objetivo escrito después se quedaba como texto en el diario: no salía en la
+// carga de nadie, no contaba en Reportes, y al día siguiente no aparecía en
+// «vienen de antes» —que lee TAREAS—, así que desaparecía sin más. Javi lo vio
+// con «Prueba top»: la escribió, no la cerró, y al día siguiente no estaba.
+//
+// El único camino que quedaba era tacharla, y entonces nacía ya COMPLETADA: solo
+// se podía registrar lo que sí hiciste, justo al revés de para lo que sirve.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('diario · un objetivo escrito después de fichar también es una tarea', () => {
+  const D = readFileSync('src/components/sections/DiarioSection.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  it('salir de la fila crea su tarea', () => {
+    const i = D.indexOf('const crearTareaDe')
+    expect(i, 'ya no existe crearTareaDe: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = D.slice(i, D.indexOf('\n  }', i))
+    // Pendiente, no completada: el objetivo se escribe ANTES de hacerlo.
+    expect(/done: false/.test(cuerpo),
+      'la tarea del objetivo nace ya completada: solo se podría registrar lo que ya hiciste').toBe(true)
+    // Y con el vínculo, o no emparejaría con su objetivo.
+    expect(/diario_dia: dia/.test(cuerpo) && /diario_objetivo: o/.test(cuerpo),
+      'la tarea nace sin vínculo: no emparejaría con su objetivo ni podría arrastrarse').toBe(true)
+
+    // Cableada al SALIR de la fila, no al teclear: con el retardo del autoguardado
+    // se crearía una tarea «Prue» a mitad de escribir y el vínculo se quedaría así.
+    const iF = D.indexOf('value={fila}')
+    expect(iF, 'ya no existe la fila de objetivo: revisa esta regla').toBeGreaterThan(-1)
+    expect(/onBlur=\{\(\) => crearTareaDe\(fila\)\}/.test(D.slice(iF, D.indexOf('/>', iF))),
+      'la fila no crea su tarea al salir: un objetivo escrito tras fichar no llegaría nunca a Tareas').toBe(true)
+  })
+
+  it('no crea nada en un día pasado ni antes de fichar', () => {
+    const i = D.indexOf('const crearTareaDe')
+    const guarda = D.slice(i, i + 420)
+    expect(/esPasado/.test(guarda),
+      'crearía tareas al repasar un día pasado, y se apuntarían a hoy').toBe(true)
+    expect(/miEntrada\?\.entrada_at/.test(guarda),
+      'crea antes de fichar: el botón FICHAR las crea todas de golpe y prometería lo que ya está').toBe(true)
+  })
+})

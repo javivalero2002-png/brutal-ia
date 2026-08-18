@@ -657,6 +657,34 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
     finally { setArrastrando(false) }
   }
 
+  /**
+   * Crea la tarea de un objetivo que aún no la tiene.
+   *
+   * Las tareas se creaban SOLO al fichar, y ese botón desaparece en cuanto
+   * fichas. O sea que un objetivo escrito después no llegaba nunca a Tareas: se
+   * quedaba como texto en el diario, no salía en la carga de nadie, no contaba en
+   * Reportes y —lo que lo destapó— al día siguiente no aparecía en «vienen de
+   * antes», porque eso lee TAREAS. Javi lo vio con «Prueba top»: la escribió,
+   * no la cerró, y al día siguiente había desaparecido.
+   *
+   * El único camino que quedaba era tacharla, y entonces nacía ya completada —
+   * o sea que solo podías registrar lo que SÍ hiciste. Justo al revés de para lo
+   * que sirve.
+   *
+   * Se dispara al SALIR de la fila, no mientras escribes: el retardo del
+   * autoguardado crearía una tarea «Prue» a mitad de teclear, y el vínculo se
+   * quedaría con ese texto.
+   */
+  const crearTareaDe = async (texto: string) => {
+    const o = texto.trim()
+    // Solo con el día ya abierto: antes de fichar es el botón quien las crea
+    // todas de golpe, y adelantarse dejaría el botón prometiendo lo que ya está.
+    if (!o || demo || esPasado || !miEntrada?.entrada_at || tareaDe(o)) return
+    try {
+      await data.createTask({ text: o, level: 'high', done: false, assigned_to: profile?.id, source: 'ai', diario_dia: dia, diario_objetivo: o })
+    } catch { /* silencioso: el objetivo ya está guardado en el diario */ }
+  }
+
   /** Los objetivos que todavía no son tarea mía de este día. */
   const porCrear = objetivosDeHoy.filter(o => !tareaDe(o))
 
@@ -889,6 +917,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
                       ref={el => { refsFilas.current[i] = el }}
                       value={fila}
                       onChange={e => cambiarFilas(filas.map((f, k) => (k === i ? e.target.value : f)))}
+                      onBlur={() => crearTareaDe(fila)}
                       onKeyDown={e => {
                         if (e.key === 'Enter') {
                           e.preventDefault()
