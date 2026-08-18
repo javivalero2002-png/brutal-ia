@@ -45,6 +45,11 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}))
   const campos = pick(body, ['entrada', 'cierre']) as { entrada?: string; cierre?: string }
+  // `borrador` NO se guarda: solo decide si esto cuenta como fichar. El
+  // autoguardado escribe el texto cada pocos segundos mientras se teclea, y sin
+  // esto cada pulsación habría puesto la hora de entrada — que debe ser cuándo
+  // empezaste, no cuándo tocaste el teclado por última vez.
+  const esBorrador = body?.borrador === true
 
   const dia = todayKey()
   const ahora = new Date().toISOString()
@@ -58,8 +63,8 @@ export async function POST(request: NextRequest) {
   if (errLeer) return NextResponse.json({ error: errLeer.message }, { status: 500 })
 
   const fila: Record<string, unknown> = { user_id: user.id, dia, updated_at: ahora, ...campos }
-  if (campos.entrada !== undefined && !previo?.entrada_at) fila.entrada_at = ahora
-  if (campos.cierre !== undefined && !previo?.cierre_at) fila.cierre_at = ahora
+  if (!esBorrador && campos.entrada !== undefined && !previo?.entrada_at) fila.entrada_at = ahora
+  if (!esBorrador && campos.cierre !== undefined && !previo?.cierre_at) fila.cierre_at = ahora
 
   const { data, error } = await admin
     .from('diario')

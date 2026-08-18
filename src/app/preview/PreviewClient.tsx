@@ -26,6 +26,7 @@ import EquipoSection from '@/components/sections/EquipoSection'
 import ChatSection from '@/components/sections/ChatSection'
 import HarveySection from '@/components/sections/HarveySection'
 import AjustesSection from '@/components/sections/AjustesSection'
+import DiarioSection from '@/components/sections/DiarioSection'
 
 // Base DETERMINISTA: mediodía UTC del día de hoy en Madrid.
 //
@@ -320,6 +321,7 @@ export default function PreviewClient({
     { id:'tareas', label:'Tareas' },
     { id:'automatizaciones', label:'Automatizaciones' },
     { id:'inbox', label:'Inbox' },
+    { id:'diario', label:'Diario' },
     { id:'reportes', label:'Reportes' },
     { id:'clientes', label:'Clientes' },
     { id:'proyectos', label:'Proyectos' },
@@ -359,6 +361,7 @@ export default function PreviewClient({
         {section==='tareas' && <SectionErrorBoundary section="tareas"><TareasSection data={data} onOpenModal={abrirModal} showToast={showToast} isOwner profile={profile} onNavigate={setSection} onSelectProject={()=>{}} onSelectClient={()=>{}} initialView={initialView} initialFocus={initialFocus} initialGroupBy={initialGroupBy}/></SectionErrorBoundary>}
         {section==='automatizaciones' && <SectionErrorBoundary section="automatizaciones"><AutomatizacionesSection data={data} onOpenModal={abrirModal} showToast={showToast} isOwner/></SectionErrorBoundary>}
         {section==='inbox' && <SectionErrorBoundary section="inbox"><InboxSection data={data} showToast={showToast} profile={profile} onNavigate={setSection} onSelectClient={()=>{}} onAskHarvey={()=>{}}/></SectionErrorBoundary>}
+        {section==='diario' && <SectionErrorBoundary section="diario"><DiarioSection data={data} profile={profile} showToast={showToast} onNavigate={setSection}/></SectionErrorBoundary>}
         {section==='reportes' && <SectionErrorBoundary section="reportes"><ReportesSection data={data} onNavigate={setSection}/></SectionErrorBoundary>}
         {section==='clientes' && <SectionErrorBoundary section="clientes"><ClientesSection data={data} selectedId={null} onSelect={()=>{}} onOpenModal={abrirModal} showToast={showToast} isOwner onNavigate={setSection} onSelectProject={()=>{}}/></SectionErrorBoundary>}
         {section==='proyectos' && <SectionErrorBoundary section="proyectos"><ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={abrirModal} showToast={showToast} isOwner onNavigate={setSection} onSelectClient={()=>{}} justCreatedId={null} onJustCreatedScrolled={()=>{}}/></SectionErrorBoundary>}

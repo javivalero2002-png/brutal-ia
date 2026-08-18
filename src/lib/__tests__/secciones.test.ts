@@ -168,3 +168,64 @@ describe('Diario · cableado completo', () => {
       'la ruta de extracción escribe tareas: tiene que proponer y que decida una persona').toBe(false)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// La demo (/preview y /preview-boot) en producción: solo el propietario.
+//
+// Devolvía 404 sin más, con el motivo escrito «nunca expone datos ni UI sin auth
+// en el entorno real». Ese motivo sigue valiendo, así que al abrirla hay que
+// mantenerlo: no hay ni un dato real dentro —PreviewClient trae su propio juego
+// de muestra— y encima exige sesión y rol owner, resuelto en el servidor.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('la demo no queda abierta en producción', () => {
+  const leerCod2 = (f: string) =>
+    readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  for (const f of ['src/app/preview/page.tsx', 'src/app/preview-boot/page.tsx']) {
+    it(`${f.split('/')[2]} exige owner en producción`, () => {
+      const src = leerCod2(f)
+      expect(/NODE_ENV === 'production'/.test(src), 'ya no distingue producción').toBe(true)
+      // El rol, del servidor. Nunca de la URL ni de una cabecera.
+      expect(/getAuthCtx\(\)/.test(src), 'no resuelve el rol en el servidor').toBe(true)
+      expect(/role !== 'owner'[\s\S]{0,40}notFound\(\)/.test(src),
+        'la demo queda accesible en producción a quien no es propietario').toBe(true)
+    })
+  }
+
+  it('la demo no lee datos reales', () => {
+    const P = leerCod2('src/app/preview/PreviewClient.tsx')
+    expect(/useNexusData\(/.test(P),
+      'PreviewClient engancha el hook de datos reales: dejaría de ser una demo').toBe(false)
+  })
+})
+
+// El bug que hizo inservible la primera versión del Diario: cambiar de sección
+// desmonta el componente y el borrador moría con él. Un diario que te pierde lo
+// escrito no se usa dos veces.
+describe('Diario · no se pierde lo escrito', () => {
+  const D = readFileSync('src/components/sections/DiarioSection.tsx', 'utf8')
+
+  it('se autoguarda mientras escribes', () => {
+    expect(/borrador: true/.test(D), 'ya no hay autoguardado: se vuelve a perder al cambiar de sección').toBe(true)
+    expect(/setTimeout\([\s\S]{0,80}guardarBorrador/.test(D), 'guarda en cada tecla, sin retardo').toBe(true)
+  })
+
+  it('y guarda lo pendiente al desmontarse', () => {
+    expect(/keepalive: true/.test(D),
+      'al salir de la sección lo tecleado en el último segundo se pierde: el navegador cancela la petición').toBe(true)
+  })
+
+  it('el autoguardado no ficha la hora', () => {
+    const R = readFileSync('src/app/api/diario/route.ts', 'utf8')
+    expect(/esBorrador/.test(R),
+      'un guardado automático pondría la hora de entrada en cada pulsación').toBe(true)
+  })
+
+  it('las tareas salen solas, sin botón', () => {
+    expect(/diario\/extraer/.test(D)).toBe(true)
+    // Se dispara desde un efecto sobre el texto, no desde un onClick.
+    const i = D.indexOf('diario/extraer')
+    expect(/useEffect/.test(D.slice(Math.max(0, i - 1200), i)),
+      'la extracción vuelve a depender de que el usuario pulse un botón').toBe(true)
+  })
+})

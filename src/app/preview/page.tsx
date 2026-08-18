@@ -1,7 +1,19 @@
 import { notFound } from 'next/navigation'
+import { getAuthCtx } from '@/lib/authz'
 import PreviewClient from './PreviewClient'
 
-// Ruta de preview SOLO para desarrollo. En producción devuelve 404 —
+// La demo con datos de muestra. En desarrollo, abierta; en PRODUCCION, solo para
+// el propietario con sesion.
+//
+// Antes devolvia 404 en produccion sin mas. El motivo escrito era «nunca expone
+// datos ni UI sin auth en el entorno real», y sigue valiendo: aqui no hay ni un
+// dato real —PreviewClient lleva su propio juego de muestra— y ahora ademas exige
+// sesion y rol owner, que es la misma senal de autorizacion que usa el resto de la
+// app (`profiles.role`, resuelto en el servidor).
+//
+// Para que sirve: es la unica forma de ensenar la app —o una seccion nueva— sin
+// dar acceso a los datos del estudio.
+//
 // nunca expone datos ni UI sin auth en el entorno real.
 //
 // Los parámetros de la URL se leen AQUÍ, en el servidor, y bajan como props.
@@ -15,7 +27,10 @@ export default async function PreviewPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  if (process.env.NODE_ENV === 'production') notFound()
+  if (process.env.NODE_ENV === 'production') {
+    const ctx = await getAuthCtx()
+    if (ctx?.role !== 'owner') notFound()
+  }
 
   const p = await searchParams
   const uno = (k: string) => { const v = p[k]; return Array.isArray(v) ? v[0] : v }
