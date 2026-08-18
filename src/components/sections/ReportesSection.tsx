@@ -165,7 +165,11 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-[1fr_1fr] gap-2 md:gap-4 mb-4 flex-shrink-0">
+      {/* Una columna en móvil. Con dos, cada celda mide ~124 px y dentro va un
+          dónut de 104 más su leyenda: la leyenda se quedaba en CUATRO píxeles de
+          ancho, ilegible, y el conjunto desbordaba la celda. Dos gráficos de esa
+          clase no caben uno al lado del otro en un teléfono. */}
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-2 md:gap-4 mb-4 flex-shrink-0">
         {/* Task completion — radial gauge */}
         <div className="rounded-2xl p-5" style={{background:SURF2,border:'1px solid rgba(255,255,255,0.07)'}}>
           <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-3">Estado de tareas</div>

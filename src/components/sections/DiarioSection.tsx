@@ -551,11 +551,15 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
           Titulo, dia que se esta mirando y la accion principal. El selector de dia
           no es decoracion: el diario se llena todos los dias y sirve para mirar
           atras, asi que llegar a "el martes pasado" tiene que costar dos clics. */}
+      {/* En móvil el título ocupa su propia fila y los botones bajan.
+          Con `flex-1 min-w-0` los botones se llevaban 277 de 340 px y el título
+          quedaba comprimido a 51: «Diario» necesita 71, así que se salía de su
+          propia caja y arrastraba la sección de lado. */}
       <div className="flex items-start gap-3 mb-4 flex-wrap">
         {/* La misma cabecera que las otras once secciones: kicker Syne + título
             Figtree. Esta era la única en Syne mayúsculas con caja de icono
             violeta — el acento genérico que ya se retiró de la puesta en marcha. */}
-        <div className="flex-1 min-w-0">
+        <div className={isMobile ? 'w-full min-w-0' : 'flex-1 min-w-0'}>
           <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{ color: 'rgba(255,255,255,0.18)' }}>
             DÍA A DÍA
           </div>

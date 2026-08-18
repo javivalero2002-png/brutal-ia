@@ -908,10 +908,16 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
           )}
 
           {/* ── TABS (underline style) ─────────────────────────────────────── */}
-          <div className="flex items-center gap-0 mb-1" style={{borderBottom:`1px solid ${BORDER}`}}>
+          {/* Las cinco pestañas miden más que la pantalla de un móvil (438 px en
+              343), y sin desbordamiento controlado no se quedaban dentro: EMPUJABAN
+              el ancho de la sección entera a 454, así que la página se podía
+              arrastrar de lado y los rótulos aparecían cortados por la izquierda.
+              Mismo patrón que Operativa: scroll horizontal sin barra visible. */}
+          <div className="flex items-center gap-0 mb-1 overflow-x-auto"
+            style={{borderBottom:`1px solid ${BORDER}`, scrollbarWidth:'none', overflowY:'hidden', touchAction:'pan-x', overscrollBehavior:'contain'}}>
             {TABS.map(tab=>(
               <button key={tab.id} onClick={()=>setTabFilter(tab.id)}
-                className="flex items-center gap-1.5 font-syne font-black tracking-wide transition-all relative"
+                className="flex items-center gap-1.5 font-syne font-black tracking-wide transition-all relative flex-shrink-0"
                 style={{
                   padding: isMobile ? '10px 8px' : '12px 16px',
                   fontSize: isMobile?'9px':'9.5px',
