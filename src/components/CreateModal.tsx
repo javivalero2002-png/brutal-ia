@@ -90,6 +90,29 @@ const ACTIONS = [
   { v:'notify_owner', icon:'user',         label:'Avisarme a mí',     desc:'Notificación push solo para ti' },
 ] as const
 
+
+// Las variables que RELLENA cada disparador, sacadas de `evaluateTrigger`.
+//
+// Antes la ayuda era fija —«{cliente} {asunto} {remitente} {proyecto}»— para los
+// ocho, y no es verdad de ninguno: `{remitente}` existe en 2 de 8 y `{proyecto}`
+// en 1 de 8. Con «Inbox saturado» o «Muchas tareas vencidas» no funciona NINGUNA
+// de las cuatro, y la unica que sirve —`{total}`— no aparecia escrita en ningun
+// sitio de la app. Resultado: la tarea se creaba literalmente como «Revisar  de».
+const VARS_POR_DISPARADOR: Record<string, string[]> = {
+  email_urgent:            ['asunto', 'remitente', 'cliente'],
+  email_from_client:       ['asunto', 'remitente', 'cliente'],
+  project_deadline:        ['proyecto', 'cliente', 'dias'],
+  task_overdue:            ['tarea', 'asunto'],
+  unread_pileup:           ['total'],
+  many_overdue:            ['total'],
+  high_priority_unassigned:['tarea', 'asunto'],
+  client_followup:         ['cliente', 'dias'],
+}
+
+/** Las que valen para el disparador elegido, en el formato de la ayuda. */
+const varsDe = (trigger?: string): string =>
+  (VARS_POR_DISPARADOR[trigger || ''] || []).map(v => `{${v}}`).join(' ')
+
 export default function CreateModal({ modal, onClose, onDismiss, mf, setMf, saving, onSave, team, clients = [] }: CreateModalProps) {
   const isMobile = useIsMobile()
   const m = meta[modal]
@@ -338,9 +361,11 @@ function RuleBuilder({ mf, setMf, team, clients }: {
           <div className="mt-3 space-y-3">
             <div>
               <Eyebrow>TEXTO DE LA TAREA</Eyebrow>
-              <input value={mf.act_task||''} onChange={e=>set('act_task', e.target.value)} placeholder="Ej: Responder a {remitente} sobre {asunto}" className={inputCls} style={inputStyle}/>
+              <input value={mf.act_task||''} onChange={e=>set('act_task', e.target.value)} placeholder={varsDe(trigger) ? `Ej: Revisar ${varsDe(trigger).split(' ')[0]}` : 'Ej: Revisar esto'} className={inputCls} style={inputStyle}/>
               <div className="text-[10px] mt-2" style={{color:'rgba(255,255,255,0.25)'}}>
-                Variables: <span style={{color:'rgba(100,140,255,0.6)'}}>{'{cliente} {asunto} {remitente} {proyecto}'}</span>
+                {varsDe(trigger)
+                  ? <>Variables: <span style={{color:'rgba(100,140,255,0.6)'}}>{varsDe(trigger)}</span></>
+                  : 'Elige antes el disparador para ver qué variables puedes usar.'}
               </div>
             </div>
             <div>

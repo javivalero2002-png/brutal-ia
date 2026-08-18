@@ -8,7 +8,7 @@
 // Vive aquí y no en NexusDashboard porque las secciones necesitan el TIPO para
 // declarar su prop `onNavigate`, e importar desde el dashboard sería un ciclo:
 // el dashboard ya las importa a ellas.
-export const SECCIONES = ['hoy','inbox','tareas','clientes','proyectos','contenido','calendario','memoria','automatizaciones','chat','equipo','reportes','ajustes','harvey'] as const
+export const SECCIONES = ['hoy','inbox','tareas','clientes','proyectos','contenido','calendario','memoria','diario','automatizaciones','chat','equipo','reportes','ajustes','harvey'] as const
 
 export type Section = typeof SECCIONES[number]
 

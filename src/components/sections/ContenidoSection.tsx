@@ -275,6 +275,24 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
     { key:'publicado', label:'Publicado', color:BLU },
   ]
 
+  // Con la hoja de móvil abierta, el CUERPO de detrás seguía desplazándose.
+  //
+  // La hoja es `fixed inset-0`, así que no es que se mueva ella: es la página de
+  // debajo rebotando (el efecto elástico de iOS), y desde fuera se siente igual —
+  // «la hoja se mueve». Se bloquea el scroll del documento mientras está abierta y
+  // se restaura exactamente como estaba, sin dar por hecho que era `visible`.
+  useEffect(() => {
+    if (!(activeItem && isMobile)) return
+    const previo = document.body.style.overflow
+    const previoOver = document.body.style.overscrollBehavior
+    document.body.style.overflow = 'hidden'
+    document.body.style.overscrollBehavior = 'none'
+    return () => {
+      document.body.style.overflow = previo
+      document.body.style.overscrollBehavior = previoOver
+    }
+  }, [activeItem, isMobile])
+
   const openItem = (item: any) => {
     setActiveItem(item)
     setEditNotes(item.notes||'')
@@ -943,6 +961,17 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                 <div>
                   <div className="font-syne text-[7px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>VÍDEO</div>
                   <input value={editVideoUrl} onChange={e=>{videoTocado.current=true; setEditVideoUrl(e.target.value)}} placeholder="YouTube · Vimeo · Drive…" className="w-full px-3 py-2.5 rounded-xl text-[11px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+
+                  {/* Se dice por qué no hay botón de subir, en vez de dejar un hueco
+                      donde la portada sí lo tiene. La subida de vídeo está apagada a
+                      propósito (api/agenda/[id]/upload-video devuelve 400 con este
+                      mismo motivo): un vídeo ocupa cientos de veces lo que una
+                      portada y el almacenamiento se paga. */}
+                  {!(editVideoUrl || activeItem.video_url) && (
+                    <div className="font-figtree text-[10px] mt-1.5 leading-snug" style={{color:'rgba(255,255,255,0.28)'}}>
+                      Los vídeos van por enlace: súbelo a YouTube, Vimeo o Drive y pega aquí la dirección.
+                    </div>
+                  )}
                   {(editVideoUrl || activeItem.video_url) && (
                     <div className="rounded-xl overflow-hidden mt-2">
                       {videoEmbed(editVideoUrl||activeItem.video_url)
@@ -1130,6 +1159,17 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                   </div>
                   <div className="flex gap-2 mb-2.5">
                     <input value={editVideoUrl} onChange={e=>{videoTocado.current=true; setEditVideoUrl(e.target.value)}} placeholder="Pega el enlace del vídeo…" className="flex-1 px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU,minWidth:0}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+
+                  {/* Se dice por qué no hay botón de subir, en vez de dejar un hueco
+                      donde la portada sí lo tiene. La subida de vídeo está apagada a
+                      propósito (api/agenda/[id]/upload-video devuelve 400 con este
+                      mismo motivo): un vídeo ocupa cientos de veces lo que una
+                      portada y el almacenamiento se paga. */}
+                  {!(editVideoUrl || activeItem.video_url) && (
+                    <div className="font-figtree text-[10px] mt-1.5 leading-snug" style={{color:'rgba(255,255,255,0.28)'}}>
+                      Los vídeos van por enlace: súbelo a YouTube, Vimeo o Drive y pega aquí la dirección.
+                    </div>
+                  )}
                   </div>
                   {videoEmbed(editVideoUrl)&&<div className="rounded-2xl overflow-hidden" style={{aspectRatio:'16/9',background:'#000'}}><iframe src={videoEmbed(editVideoUrl)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>}
                   {!videoEmbed(editVideoUrl)&&editVideoUrl&&<div className="rounded-2xl overflow-hidden" style={{background:'#000'}}><video src={editVideoUrl} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/></div>}

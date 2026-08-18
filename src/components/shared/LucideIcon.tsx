@@ -88,6 +88,10 @@ const icons: Record<string,string> = {
   circle:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z',
   layout:'M3 3h7v7H3V3zM14 3h7v7h-7V3zM14 14h7v7h-7v-7zM3 14h7v7H3v-7z',
   'user-check':'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm7 2 2 2 4-4',
+  // Diario: un cuaderno con pluma. Trazo de Lucide `pen-line`, añadido aquí
+  // porque el mapa es explícito a propósito — un nombre que no esté pinta un
+  // hueco vacío, y hay un test que lo impide. (`sparkles` ya estaba arriba.)
+  'pen-line':'M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z',
   'file-text':'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8',
   house:'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9zM9 22V12h6v10',
   archive:'M2 4h20v4H2zM4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4',

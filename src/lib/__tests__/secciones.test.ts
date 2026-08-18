@@ -121,3 +121,50 @@ describe('nivelTarea — lo que escribe el modelo nunca llega crudo a la base', 
     expect(nivelTarea(undefined)).toBe('high')
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Una sección nueva está cableada del todo, o no está.
+//
+// Registrarla en SECCIONES y olvidar pintarla deja una entrada de menú que no
+// hace nada; pintarla sin registrarla la deja inalcanzable por `?s=`. Las dos
+// mitades fallan en silencio, así que se comprueban juntas.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Diario · cableado completo', () => {
+  const leerCod = (f: string) =>
+    readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  it('está declarada como sección', () => {
+    expect(/'diario'/.test(leerCod('src/components/shared/secciones.ts'))).toBe(true)
+  })
+
+  it('el dashboard la pinta y la ofrece en el menú', () => {
+    const D = leerCod('src/components/NexusDashboard.tsx')
+    expect(/section === 'diario' &&/.test(D), 'la sección no se pinta: el menú llevaría a una pantalla vacía').toBe(true)
+    expect(/navItem\('diario'/.test(D), 'no hay entrada de menú: sería inalcanzable salvo por ?s=').toBe(true)
+  })
+
+  it('sus rutas de API resuelven al usuario antes de tocar el admin client', () => {
+    for (const f of ['src/app/api/diario/route.ts', 'src/app/api/diario/extraer/route.ts']) {
+      const src = leerCod(f)
+      const auth = src.indexOf('auth.getUser()')
+      const admin = src.indexOf('createAdminClient()')
+      expect(auth, `${f}: no resuelve al usuario`).toBeGreaterThan(-1)
+      if (admin > -1) expect(auth, `${f}: usa el service role antes de comprobar la sesión`).toBeLessThan(admin)
+    }
+  })
+
+  it('el día y el autor los pone el servidor, no el cuerpo de la petición', () => {
+    const R = leerCod('src/app/api/diario/route.ts')
+    // Si `dia` o `user_id` salieran del body, cualquiera podría escribir en el día
+    // de otro o retocar un día ya cerrado.
+    expect(/pick\(body, \['entrada', 'cierre'\]\)/.test(R),
+      'la allowlist deja pasar más que los dos textos: el día o el autor podrían venir del cliente').toBe(true)
+    expect(/const dia = todayKey\(\)/.test(R), 'el día no se calcula en el servidor con todayKey()').toBe(true)
+  })
+
+  it('la extracción propone, no crea', () => {
+    const E = leerCod('src/app/api/diario/extraer/route.ts')
+    expect(/createTask|from\('tasks'\)/.test(E),
+      'la ruta de extracción escribe tareas: tiene que proponer y que decida una persona').toBe(false)
+  })
+})

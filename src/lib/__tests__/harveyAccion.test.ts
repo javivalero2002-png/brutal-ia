@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { parsearAccionHarvey } from '@/lib/harveyAccion'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -85,5 +86,40 @@ describe('parsearAccionHarvey', () => {
       expect(() => parsearAccionHarvey(raro)).not.toThrow()
       expect(parsearAccionHarvey(raro).texto).not.toContain('[ACCION')
     }
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sin persona = PARA QUIEN HABLA.
+//
+// El prompt lo prometía desde siempre —«persona = …, o vacío si es para quien
+// habla»— y el ejecutor no lo cumplía: dejaba `null` y la tarea nacía huérfana.
+// Le pedías a Harvey «créame una tarea», él decía que la creaba, y no aparecía en
+// las de nadie. El contrato estaba roto por el lado del código.
+//
+// Y de fondo había algo peor: Harvey no sabía CON QUIÉN hablaba. Nada en su
+// prompt decía quién era el usuario, así que «para mí» no tenía referente.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Harvey · a quién se asigna una tarea', () => {
+  const leerCodigo = (f: string) =>
+    readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  it('una acción sin persona cae en quien habla, no en nadie', () => {
+    const EJ = leerCodigo('src/lib/harveyEjecutar.ts')
+    const i = EJ.indexOf('const miembro =')
+    expect(i, 'ya no se resuelve el miembro así: revisa esta regla').toBeGreaterThan(-1)
+    const rama = EJ.slice(i, i + 320)
+    expect(/perfil\?\.(id|name)/.test(rama),
+      'sin persona vuelve a quedarse en null: la tarea nace sin asignar y no aparece en las de nadie').toBe(true)
+  })
+
+  it('Harvey sabe con quién está hablando', () => {
+    const R = leerCodigo('src/app/api/harvey/chat/route.ts')
+    expect(/CON QUIEN ESTAS HABLANDO/.test(R),
+      'el prompt no dice quién es el usuario: «para mí» no tiene referente').toBe(true)
+    // Del servidor, no del body: el nombre de quien habla no es entrada del cliente.
+    const i = R.indexOf('nombreUsuario')
+    expect(/from\('profiles'\)[\s\S]{0,120}eq\('id', user\.id\)/.test(R.slice(Math.max(0, i - 400), i + 200)),
+      'el nombre no se resuelve desde la sesión en el servidor').toBe(true)
   })
 })

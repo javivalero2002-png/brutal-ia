@@ -1,4 +1,5 @@
 import { daysBetweenKeys } from '@/components/shared/helpers'
+import { readFileSync } from 'node:fs'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { evaluateTrigger, isSelfFeedingRule, AUTO_MARK, type RuleConfig } from '@/lib/automations'
 
@@ -231,10 +232,27 @@ describe('isSelfFeedingRule', () => {
 })
 
 describe('límites y ventanas', () => {
-  it('nunca devuelve más de MAX_MATCHES_PER_RULE (8)', () => {
+  // El tope de 8 ya NO vive aquí, y el cambio es la corrección de un bug: cortando
+  // en el evaluador, las coincidencias ya atendidas seguían ocupando plaza. Con 12
+  // tareas vencidas se creaban 8 la primera vez y CERO en todas las siguientes —
+  // las mismas 8 llenaban el cupo y el dedup las descartaba una a una. Cuatro
+  // tareas sin seguimiento para siempre, y la app diciendo «sin acciones
+  // pendientes». Ahora el evaluador devuelve todo y el tope cuenta acciones
+  // REALIZADAS, dentro del bucle de runAutomations.
+  it('el evaluador devuelve TODAS las coincidencias, sin cortar', () => {
     vi.setSystemTime(new Date('2026-08-09T10:00:00Z'))
     const tasks = Array.from({ length: 30 }, (_, i) => task({ id: `t${i}`, level: 'urgent' }))
-    expect(evaluateTrigger(rule({ type: 'high_priority_unassigned' }), ctx({ tasks }))).toHaveLength(8)
+    expect(evaluateTrigger(rule({ type: 'high_priority_unassigned' }), ctx({ tasks }))).toHaveLength(30)
+  })
+
+  // Pero el tope sigue existiendo, y sigue siendo 8: el motor no puede ponerse a
+  // crear treinta tareas de una tacada. Se comprueba donde ahora está.
+  it('el tope sigue puesto, contando acciones hechas y no coincidencias miradas', () => {
+    const src = readFileSync('src/lib/automations.ts', 'utf8')
+    expect(/hechasEnEstaRegla >= MAX_MATCHES_PER_RULE/.test(src),
+      'el tope por regla ha desaparecido: una regla podría crear tareas sin límite').toBe(true)
+    expect(/return out\.slice\(0, MAX_MATCHES_PER_RULE\)/.test(src),
+      'el tope vuelve a cortar en el evaluador, antes del dedup').toBe(false)
   })
 
   it('email_urgent solo mira los últimos 3 días', () => {
@@ -284,5 +302,105 @@ describe('daysBetweenKeys · días naturales, no bloques de 24h', () => {
 
   it('es negativo si la fecha de destino es anterior', () => {
     expect(daysBetweenKeys('2026-08-11', '2026-08-04')).toBe(-7)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lo que encontró la auditoría del motor (46 agentes, 2026-08-17).
+//
+// El modo de fallo dominante era el SILENCIO: nada duplicaba datos ni mandaba
+// spam, pero varias reglas no saltaban nunca y la sección decía «Todo en orden».
+// En algo que corre cada hora sin nadie delante, eso es lo peor que puede pasar.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('motor · lo que el snapshot tiene que traer', () => {
+  const MOTOR = readFileSync('src/lib/automations.ts', 'utf8')
+
+  // «Urgentes sin asignar» evaluaba `tk.level` y `tk.assigned_to`, y el snapshot
+  // no los traía: llegaban `undefined`, la condición cortaba siempre, y la regla
+  // no produjo una sola tarea desde que existe. Un snapshot que no trae lo que el
+  // evaluador mira no da error — da cero coincidencias para siempre.
+  it('el snapshot de tareas trae lo que los disparadores evalúan', () => {
+    const m = MOTOR.match(/from\('tasks'\)\.select\('([^']+)'\)/)
+    expect(m, 'ya no se lee el snapshot de tareas así: revisa esta regla').toBeTruthy()
+    const cols = (m![1]).split(',').map(c => c.trim())
+    for (const necesaria of ['level', 'assigned_to', 'done', 'due_date']) {
+      expect(cols, `el snapshot no trae «${necesaria}», que el evaluador sí mira`).toContain(necesaria)
+    }
+  })
+
+  // Un aviso que no llega a nadie se contaba como enviado: mismo resultado que uno
+  // correcto, más el UPDATE que bloquea el reintento 6 h. Justo el caso en que hace
+  // falta reintentar era el que se marcaba como hecho.
+  it('un aviso solo cuenta si de verdad se envió', () => {
+    const i = MOTOR.indexOf('sendPushToAll(admin, payload)')
+    expect(i, 'ya no se envía así: revisa esta regla').toBeGreaterThan(-1)
+    const bloque = MOTOR.slice(i - 400, i + 900)
+    expect(/enviado = true/.test(bloque), 'no se distingue un envío hecho de uno fallido').toBe(true)
+    expect(/if \(!enviado\) break/.test(bloque),
+      'un envío fallido sigue marcando la regla como disparada y se auto-bloquea 6 h').toBe(true)
+  })
+
+  // `followup` es un estado sostenido, no un hecho puntual: con la fecha en la
+  // clave, treinta días de silencio eran treinta tareas idénticas.
+  it('la clave de un estado sostenido no lleva el día', () => {
+    expect(/key: `followup:\$\{cli\.id\}:\$\{todayKey\(\)\}`/.test(MOTOR),
+      'la clave de followup vuelve a llevar el día: una tarea idéntica cada 24 h, indefinidamente').toBe(false)
+  })
+})
+
+// El modal ofrecía las mismas cuatro variables para los ocho disparadores, y no
+// eran ciertas de ninguno: `{remitente}` existe en 2 de 8 y `{proyecto}` en 1 de 8.
+// Con «Inbox saturado» no servía NINGUNA, y la única que sí —`{total}`— no estaba
+// escrita en ningún sitio. La tarea se creaba literalmente como «Revisar  de».
+describe('las variables que ofrece el modal son las que rellena el motor', () => {
+  const MOTOR = readFileSync('src/lib/automations.ts', 'utf8')
+  const MODAL = readFileSync('src/components/CreateModal.tsx', 'utf8')
+
+  it('la ayuda depende del disparador elegido', () => {
+    expect(/VARS_POR_DISPARADOR/.test(MODAL), 'la ayuda vuelve a ser una lista fija').toBe(true)
+    expect(/\{'\{cliente\} \{asunto\} \{remitente\} \{proyecto\}'\}/.test(MODAL),
+      'vuelve la lista fija de cuatro variables que no son ciertas de ningún disparador').toBe(false)
+  })
+
+  // Lo que de verdad importa: que el mapa del modal no prometa nada que el motor
+  // no ponga. Se compara contra el código del motor, no contra una copia.
+  // Trocea el motor POR DISPARADOR y compara cada lista con la suya.
+  //
+  // La primera version solo miraba si la variable existia en algun sitio del
+  // motor, y con eso ofrecer {remitente} en «Inbox saturado» pasaba en verde:
+  // {remitente} existe... en otro disparador. Comprobado reintroduciendo ese
+  // cambio exacto. Una regla que no distingue el sitio no comprueba nada aqui,
+  // porque el bug ERA ofrecer la variable del disparador equivocado.
+  it('cada disparador ofrece solo las variables que él rellena', () => {
+    const mapa = MODAL.slice(MODAL.indexOf('VARS_POR_DISPARADOR'), MODAL.indexOf('const varsDe'))
+    const ofrecido: Record<string, string[]> = {}
+    for (const m of mapa.matchAll(/(\w+):\s*\[([^\]]*)\]/g)) {
+      ofrecido[m[1]] = [...m[2].matchAll(/'(\w+)'/g)].map(x => x[1])
+    }
+    expect(Object.keys(ofrecido).length, 'el mapa del modal quedó vacío').toBeGreaterThan(6)
+
+    // Acotado a evaluateTrigger. Los mismos `t.type === '...'` aparecen ANTES,
+    // en la función que compone la etiqueta legible, y esa no rellena variables:
+    // buscando en todo el fichero se cogía siempre esa primera copia y la regla
+    // fallaba con el código correcto.
+    const EVAL = MOTOR.slice(MOTOR.indexOf('export function evaluateTrigger'))
+    expect(EVAL, 'no se encontró evaluateTrigger').not.toBe('')
+    const cortes = [...EVAL.matchAll(/t\.type === '(\w+)'/g)]
+    const tramo = (tipo: string) => {
+      const k = cortes.findIndex(c => c[1] === tipo)
+      if (k === -1) return ''
+      const desde = cortes[k].index as number
+      const hasta = k + 1 < cortes.length ? (cortes[k + 1].index as number) : EVAL.length
+      return EVAL.slice(desde, hasta)
+    }
+
+    for (const [disparador, vars] of Object.entries(ofrecido)) {
+      const cuerpo = tramo(disparador)
+      expect(cuerpo, `el motor no tiene rama para «${disparador}»`).not.toBe('')
+      for (const v of vars) {
+        expect(new RegExp(`\\b${v}\\s*:`).test(cuerpo),
+          `el modal ofrece {${v}} en «${disparador}», y esa rama del motor no lo rellena`).toBe(true)
+      }
+    }
   })
 })
