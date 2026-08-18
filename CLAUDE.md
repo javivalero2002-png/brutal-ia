@@ -70,6 +70,29 @@ recuperación de contraseña llevaba semanas mandando a la gente a una página m
 y la sección Equipo dice justo que usen esa vía para entrar. No lo detectó nadie
 porque recuperar contraseña es raro. Si algo va por correo, comprueba a dónde apunta.
 
+**3-ter. Si la suscripción de Vercel está suspendida, los merges a `main` NO
+despliegan — y no te enteras.** Pasó el 2026-08-18. La cuenta quedó suspendida
+(`402 DEPLOYMENT_DISABLED` en el dominio, chip **Paused** en el panel, banner
+«Your account has been suspended»), y el merge de la PR #24 se quedó con **0
+checks**: no un build fallido, sino ningún intento. Producción siguió sirviendo el
+merge anterior tan tranquila.
+
+Lo que lo hace traicionero es que **reactivar la cuenta no reintenta ese commit**.
+La app vuelve a responder 200, el panel se pone verde, y parece que ya está — pero
+lo que hay vivo es el despliegue viejo. Si `main` tiene commits sin desplegar, hay
+que **forzar una construcción nueva**, y no vale ni redesplegar desde el panel
+(repite el commit viejo) ni `vercel --prod` (sube el árbol de trabajo, que es por
+lo que se retiró `deploy.sh`). Un commit nuevo por PR es la única vía limpia, y el
+push directo a `main` lo rechaza el ruleset.
+
+Ojo también con el diagnóstico, que tiene dos códigos parecidos y distintos:
+`402 DEPLOYMENT_DISABLED` es **facturación** (factura pendiente, límites del plan
+o suscripción suspendida); `503 DEPLOYMENT_PAUSED` es el límite de gasto que uno
+se pone a sí mismo. Y pagar la factura **no** reactiva una suscripción suspendida:
+esto se cayó dos veces el mismo día porque lo primero se arregló y lo segundo no.
+Se comprueba con `curl -sD- -o /dev/null https://brutalia.tech/login | grep
+x-vercel-error`.
+
 **4. `deploy.sh` está retirado a propósito** y falla si lo ejecutas. Desplegaba el
 *árbol de trabajo*, no un commit, y así llegó a producción código que no existía
 en ningún commit de git.
