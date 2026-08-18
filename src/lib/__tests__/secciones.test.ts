@@ -657,4 +657,40 @@ describe('harvey · no pierde el hilo de la conversación', () => {
     expect(/askHarvey\(texto, previos\)/.test(cuerpo),
       'manda `nuevo` en vez de `previos`: el servidor ya añade el mensaje actual, así que iría duplicado').toBe(true)
   })
+
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// El arranque de semana: el DATO antes que la IA.
+//
+// HOY y SEMANA miran hacia atrás y se piden al servidor. ARRANQUE mira hacia
+// adelante y se compone de lo que YA está cargado — `data.tasks` y
+// `data.calendarEvents` — así que no cuesta una ruta, ni una llamada al modelo,
+// ni un céntimo. La lectura de Harvey es un botón encima, no el mecanismo.
+//
+// Si algún día esto pasara a pedirle el resumen a la IA para PODER pintarlo, un
+// lunes con la API caída dejaría al equipo sin su parte. El dato tiene que estar
+// aunque la IA no conteste.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('diario · el arranque de semana no depende de la IA', () => {
+  const D = readFileSync('src/components/sections/DiarioSection.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  it('se compone de lo que ya está cargado, sin pedir nada', () => {
+    const i = D.indexOf('const arranque = useMemo')
+    expect(i, 'ya no existe `arranque`: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = D.slice(i, D.indexOf('\n  }, [', i))
+    expect(/data\.tasks/.test(cuerpo) && /data\.calendarEvents/.test(cuerpo),
+      'el arranque ya no sale de los datos cargados').toBe(true)
+    expect(/fetch\(/.test(cuerpo),
+      'el arranque pide algo al servidor: era gratis y ahora cuesta una ruta').toBe(false)
+  })
+
+  it('la lectura de Harvey es opcional, no el mecanismo', () => {
+    // `onAskHarvey` va con `?`: sin él la sección sigue enseñando el arranque.
+    expect(/onAskHarvey\?:/.test(D),
+      'onAskHarvey dejó de ser opcional: sin él la sección no podría pintar el arranque').toBe(true)
+    expect(/\{onAskHarvey && \(/.test(D),
+      'el botón no está guardado: sin la prop reventaría en vez de omitirse').toBe(true)
+  })
 })
