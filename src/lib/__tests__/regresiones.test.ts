@@ -1286,4 +1286,34 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
     expect(/parseImporte\([^)]*\)\.mensual/.test(R),
       'el MRR suma el importe tal cual: un contrato anual contaria doce veces lo que vale').toBe(true)
   })
+
+  // Memoria solo sirve si esta TODO, y para que este todo tiene que entrar solo.
+  // Pero «las 12 mas recientes» convertia eso en una trampa: cada documento que
+  // entra echa fuera una decision o un aprendizaje escritos a mano, que son pocos
+  // y son justo lo que dice COMO se trabaja aqui. Guardar mas haria saber menos.
+  it('harvey elige la memoria por relevancia, no por fecha', () => {
+    const H = leerCodigo('src/components/sections/HarveySection.tsx')
+    expect(/data\.memoria[^\n]{0,40}\.slice\(0\s*,\s*12\)/.test(H),
+      'vuelve a coger «las 12 mas recientes»: los documentos echarian fuera lo escrito a mano').toBe(false)
+    const i = H.indexOf('const memoriaRelevante')
+    expect(i, 'ya no existe memoriaRelevante: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = H.slice(i, H.indexOf('\n  const buildContext', i))
+    // Lo curado entra SIEMPRE; los documentos, los que vengan a cuento.
+    expect(/curadas/.test(cuerpo) && /esDoc/.test(cuerpo),
+      'no separa lo curado de los documentos: vuelven a competir por el mismo hueco').toBe(true)
+    expect(/buildContext\(userText\)/.test(H),
+      'el contexto se construye sin saber que se ha preguntado: no puede elegir por relevancia').toBe(true)
+  })
+
+  // Si la nota entra sola, tiene que poder entrar mil veces sin duplicar: abrir el
+  // mismo proyecto tres veces dejaria tres notas identicas y Memoria pasaria de
+  // ser conocimiento a ser ruido.
+  it('llevar un documento a memoria es idempotente', () => {
+    const P = leerCodigo('src/components/sections/ProyectosSection.tsx')
+    const i = P.indexOf('const llevarAMemoria')
+    expect(i, 'ya no existe llevarAMemoria: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = P.slice(i, i + 900)
+    expect(/data\.memoria[\s\S]{0,120}m\.title === titulo/.test(cuerpo),
+      'no comprueba si ya hay nota de ese proyecto: correr solo lo duplicaria en cada visita').toBe(true)
+  })
 })

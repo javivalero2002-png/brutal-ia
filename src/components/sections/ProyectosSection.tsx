@@ -171,6 +171,15 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
       if ((proj as any)?.pdf_analysis) { try { restored = JSON.parse((proj as any).pdf_analysis) } catch {} }
       setPdfAnalysis(restored)
       setPdfChat([])
+      // Un análisis que ya existía y aún no está en Memoria entra SOLO. Es la
+      // respuesta a «¿qué gano llevándolo?»: nada — lo que hace falta es que no
+      // haya que llevarlo. Memoria solo sirve si está TODO; lo que no llega, la
+      // IA no lo sabe, y acordarse de pulsar un botón no es un plan.
+      //
+      // Puede correr sin miedo porque `llevarAMemoria` es idempotente: comprueba
+      // si ya hay una nota de ese proyecto antes de crear nada. Y en silencio: es
+      // un efecto de abrir el proyecto, no algo que hayas pedido.
+      if (restored && selectedId) { const pid = selectedId; setTimeout(() => llevarAMemoria(pid, true), 400) }
     }
     setPdfQ('')
     // Si la respuesta de Claude sobre el PDF anterior sigue en vuelo, askPdf ya no
@@ -247,11 +256,19 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
    * decide quien mira, que además es quien sabe si ese documento merece estar.
    */
   const [llevando, setLlevando] = useState(false)
-  const llevarAMemoria = async (proyectoId: string) => {
+  const llevarAMemoria = async (proyectoId: string, silencioso = false) => {
     const a = pdfAnalysisRef.current
     const proy = data.projects?.find((p: Project) => p.id === proyectoId)
     const url = pdfDocRef.current?.ident || pdfDocRef.current?.url
     if (!a || !proy) return
+    const titulo = `${proy.name || 'Proyecto'} — documento`
+    // Idempotente. Es lo que permite que esto pueda correr solo: sin la
+    // comprobación, abrir el mismo proyecto tres veces dejaría tres notas
+    // idénticas y Memoria pasaría de ser conocimiento a ser ruido.
+    if ((data.memoria || []).some((m: { title?: string }) => m.title === titulo)) {
+      if (!silencioso) showToast('Ya estaba en Memoria')
+      return
+    }
     setLlevando(true)
     try {
       const ficha = [
@@ -261,7 +278,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
         a.data?.scope ? `Alcance: ${a.data.scope}` : '',
       ].filter(Boolean).join(' · ')
       await data.createMemoria?.({
-        title: `${proy.name || 'Proyecto'} — documento`,
+        title: titulo,
         category: 'Documento',
         ...(proy.client_id ? { client_id: proy.client_id } : {}),
         content: [
@@ -271,8 +288,8 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
           url ? `📎 Documento: ${rutaApp('/api/archivo?u=' + encodeURIComponent(url))}` : '',
         ].filter(Boolean).join('\n\n'),
       })
-      showToast('Guardado en Memoria')
-    } catch { showToast('No se pudo guardar en Memoria') }
+      if (!silencioso) showToast('Guardado en Memoria')
+    } catch { if (!silencioso) showToast('No se pudo guardar en Memoria') }
     finally { setLlevando(false) }
   }
 

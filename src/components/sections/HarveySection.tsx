@@ -166,7 +166,49 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
     return askHarvey(texto, previos)
   }
 
-  const buildContext = () => {
+  /**
+   * La memoria que se le enseña a Harvey, elegida por lo que se le PREGUNTA.
+   *
+   * Antes eran «las 12 más recientes», y eso tenía un efecto perverso: en cuanto
+   * los documentos empezaran a entrar solos —que es lo que hace falta para que la
+   * IA sepa de la empresa— irían echando fuera las decisiones y aprendizajes
+   * escritos a mano, que son pocos y son justo lo que dice CÓMO se trabaja aquí.
+   * Meter más habría hecho que supiera menos.
+   *
+   * Ahora se separan dos cosas que no compiten:
+   *
+   *  · Lo CURADO (decisiones, procesos, aprendizajes, clientes) entra siempre.
+   *    Es la identidad del estudio, se escribe poco y no caduca.
+   *  · Los DOCUMENTOS entran los que tengan que ver con lo que se pregunta, y si
+   *    no hay pregunta —el saludo del principio— los más recientes.
+   *
+   * Así se puede guardar todo sin que guardar más valga menos.
+   */
+  const memoriaRelevante = (pregunta?: string) => {
+    const todas = (data.memoria || []) as { title?: string; category?: string; content?: string }[]
+    const esDoc = (m: { category?: string }) => (m.category || '').toLowerCase() === 'documento'
+    const curadas = todas.filter(m => !esDoc(m))
+    const docs = todas.filter(esDoc)
+
+    const limpia = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    // Palabras de 4+ letras: las cortas («que», «con») casan con todo y no
+    // seleccionan nada.
+    const claves = limpia(pregunta || '').split(/[^a-z0-9]+/).filter(p => p.length >= 4)
+
+    const puntua = (m: { title?: string; content?: string }) => {
+      if (!claves.length) return 0
+      const texto = limpia(`${m.title || ''} ${m.content || ''}`)
+      return claves.reduce((n, k) => n + (texto.includes(k) ? 1 : 0), 0)
+    }
+
+    const docsElegidos = claves.length
+      ? [...docs].map(m => ({ m, p: puntua(m) })).filter(x => x.p > 0).sort((a, b) => b.p - a.p).slice(0, 6).map(x => x.m)
+      : docs.slice(0, 4)
+
+    return [...curadas.slice(0, 10), ...docsElegidos]
+  }
+
+  const buildContext = (pregunta?: string) => {
     const tasks = (data.tasks||[]) as any[]
     const projects = (data.projects||[]) as any[]
     const clients = (data.clients||[]) as any[]
@@ -214,7 +256,7 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
       return `${e.title} (${e.start?.slice(0,10)||'?'}${timeStr})`
     }).join(' · ')
 
-    const memLines2 = ((data.memoria||[]) as any[]).slice(0,12).map((m:any)=>`  - ${m.title}${m.category?` [${m.category}]`:''}: ${(m.content||'').replace(/\s+/g,' ').slice(0,400)}`).join('\n')
+    const memLines2 = memoriaRelevante(pregunta).map((m:any)=>`  - ${m.title}${m.category?` [${m.category}]`:''}: ${(m.content||'').replace(/\s+/g,' ').slice(0,400)}`).join('\n')
 
     return `BRUTAL STUDIOS — ${madridDateLabel()}
 
@@ -373,7 +415,7 @@ ${memLines2||'  sin documentos'}`
     try {
       const res = await fetch('/api/harvey/chat', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ message:userText, context:buildContext(), history:(historial ?? conversationRef.current).slice(-10), stream:true }),
+        body: JSON.stringify({ message:userText, context:buildContext(userText), history:(historial ?? conversationRef.current).slice(-10), stream:true }),
         signal: AbortSignal.timeout(60000),
       })
       if (!aliveRef.current || run !== voiceRunRef.current) { setIsSearching(false); return }
