@@ -1,6 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getAuthCtx } from '@/lib/authz'
-import { todayKey, localDayKey } from '@/components/shared/helpers'
+import { todayKey, localDayKey, ventanaDelDia, esTareaDe } from '@/components/shared/helpers'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Lee varios días de diario y las tareas de ese tramo. Sin llamadas al modelo:
@@ -59,9 +59,11 @@ export async function GET(request: NextRequest) {
       // Completadas dentro del tramo. `completed_at` es el que dice CUÁNDO se
       // terminó; usar `updated_at` contaría como trabajo de hoy cualquier retoque.
       admin.from('tasks')
-        .select('id,text,done,assigned_to,completed_at,level')
+        .select('id,text,done,assigned_to,co_assigned_to,completed_at,level')
         .eq('done', true)
-        .gte('completed_at', `${desde}T00:00:00Z`),
+        // Con margen y decidido después con `localDayKey`: el tramo es de días
+        // de Madrid y `completed_at` es UTC. Mismo gemelo que /api/diario.
+        .gte('completed_at', ventanaDelDia(desde).desde),
     ])
 
   // Ningún fallo se disfraza de lista vacía: «nadie hizo nada» y «no pude leerlo»
@@ -71,7 +73,8 @@ export async function GET(request: NextRequest) {
 
   const porPersona = (equipo ?? []).map(p => {
     const suyas = (entradas ?? []).filter(e => e.user_id === p.id)
-    const completadas = (tareas ?? []).filter(t => t.assigned_to === p.id)
+    const completadas = (tareas ?? []).filter(t =>
+      esTareaDe(t, p) && t.completed_at && localDayKey(t.completed_at) >= desde)
     const objetivos = suyas.flatMap(e =>
       (e.entrada || '').split('\n').map((l: string) => l.replace(/^[-•*\s]+/, '').trim()).filter(Boolean))
     return {

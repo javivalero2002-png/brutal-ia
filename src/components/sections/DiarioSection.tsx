@@ -129,6 +129,28 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   // histórico que se va llenando, no solo la pantalla de hoy.
   const [dia, setDia] = useState<string>(() => todayKey())
   const esHoy = dia === todayKey()
+
+  /**
+   * Las tareas contra las que se empareja el diario: las MÍAS y las de ESTE día.
+   *
+   * Antes se emparejaba contra `data.tasks` entero, que es el histórico completo
+   * de TODO el equipo (GET /api/tasks no filtra por persona ni por fecha, a
+   * propósito: el workspace es compartido). Eso rompía tres cosas a la vez:
+   *
+   *  · Si otra persona ya tenía una tarea con tu mismo texto, tu objetivo se
+   *    descartaba al fichar —no se creaba NADA tuyo— y tu casilla marcaba la
+   *    tarea de ella. El día decía «Paula · 1 hecha» y «Javi · 0».
+   *  · Un objetivo recurrente («responder correos») casaba con la tarea de otro
+   *    día, así que salía tachado al 100 % antes de empezar. Y destacharlo hacía
+   *    `updateTask` sobre la tarea VIEJA, borrando el completado del día en que
+   *    de verdad se hizo.
+   *  · Dos personas nunca podían proponerse lo mismo el mismo día.
+   *
+   * El día se decide por `created_at`, no por `completed_at`: la tarea nace el
+   * día en que la fichaste, y ahí sigue perteneciendo aunque la cierres mañana.
+   */
+  const misTareasDelDia = (data.tasks || []).filter((t: { assigned_to?: string | null; created_at?: string }) =>
+    t.assigned_to === profile?.id && !!t.created_at && localDayKey(t.created_at) === dia)
   // Los objetivos se ENSEÑAN como lista y se EDITAN en un textarea. Ver una lista
   // con viñetas y editar texto plano son dos cosas distintas, y mezclarlas en un
   // textarea siempre visible es lo que hacía que la sección pareciera un borrador.
@@ -174,7 +196,13 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   // ficha te borraría lo tecleado — que es justo el bug que esto viene a cerrar.
   // Al cambiar de día se vuelve a sembrar: lo que se ve es de OTRO día, y
   // arrastrar el borrador del anterior sería escribir en el día equivocado.
-  useEffect(() => { sembrado.current = false; setObjetivos(''); setBalance('') }, [dia])
+  useEffect(() => {
+    sembrado.current = false; setObjetivos(''); setBalance('')
+    // Y se olvida lo pendiente del día anterior: ya se guardó al escribirlo, y
+    // arrastrarlo haría que el guardado de salida lo escribiera en el día nuevo.
+    if (guardadoTimer.current) { clearTimeout(guardadoTimer.current); guardadoTimer.current = null }
+    pendiente.current = { dia }
+  }, [dia])
 
   useEffect(() => {
     if (sembrado.current || !miEntrada) return
@@ -215,26 +243,53 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   const alEscribir = (campo: 'entrada' | 'cierre', valor: string) => {
     if (campo === 'entrada') setObjetivos(valor); else setBalance(valor)
     setEstadoGuardado('guardando')
+    // Solo lo TOCADO queda pendiente, y con el día en que se tocó.
+    pendiente.current = { ...pendiente.current, [campo]: valor, dia }
     if (guardadoTimer.current) clearTimeout(guardadoTimer.current)
-    guardadoTimer.current = setTimeout(() => guardarBorrador({ [campo]: valor }), 1200)
+    guardadoTimer.current = setTimeout(() => {
+      // Se limpia al dispararse: si no, queda «pendiente» para siempre y el
+      // guardado de salida vuelve a mandar lo que ya está escrito.
+      guardadoTimer.current = null
+      guardarBorrador({ [campo]: valor })
+    }, 1200)
   }
 
   // Guardar lo pendiente al salir de la sección. `pendienteRef` lleva lo último
   // tecleado porque el cleanup no ve el estado nuevo.
-  const pendiente = useRef<{ entrada?: string; cierre?: string }>({})
-  pendiente.current = { entrada: objetivos, cierre: balance }
+  // Lo que queda por guardar al salir de la sección. Tres cosas que parecen
+  // detalles y las tres borraban texto ya escrito:
+  //
+  // 1. El efecto lleva `[]`, así que su clausura se queda con el `dia` del PRIMER
+  //    render. Si mirabas otro día y te ibas, el guardado de salida escribía en el
+  //    día de entrada. Por eso el día viaja en un ref, no capturado.
+  // 2. Se mandaban SIEMPRE los dos campos. Cambiar de día vacía `objetivos` y
+  //    `balance` (el efecto de [dia]), así que al salir se mandaba `''` — y el
+  //    `pick` de /api/diario, a diferencia del de /api/tasks, NO descarta la
+  //    cadena vacía: la escribía encima. Escribías tus objetivos, mirabas el
+  //    lunes, salías, y lo de hoy había desaparecido.
+  //    Es la regla que CLAUDE.md ya tenía escrita: un campo que el usuario no ha
+  //    tocado no viaja en el guardado.
+  // 3. El temporizador no se limpiaba al dispararse, así que quedaba «pendiente»
+  //    para siempre y este guardado salía aunque ya estuviera todo escrito.
+  const pendiente = useRef<{ entrada?: string; cierre?: string; dia: string }>({ dia })
+  pendiente.current = { ...pendiente.current, dia }
   useEffect(() => () => {
-    if (guardadoTimer.current) {
-      clearTimeout(guardadoTimer.current)
+    const { entrada, cierre, dia: diaPendiente } = pendiente.current
+    if (!guardadoTimer.current) return
+    clearTimeout(guardadoTimer.current)
+    if (entrada === undefined && cierre === undefined) return
+    fetch('/api/diario', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       // Sin `await`: el componente se está desmontando. `keepalive` hace que el
       // navegador termine la petición aunque la página cambie.
-      fetch('/api/diario', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...pendiente.current, dia, borrador: true }),
-        keepalive: true,
-      }).catch(() => {})
-    }
+      body: JSON.stringify({
+        ...(entrada !== undefined ? { entrada } : {}),
+        ...(cierre !== undefined ? { cierre } : {}),
+        dia: diaPendiente, borrador: true,
+      }),
+      keepalive: true,
+    }).catch(() => {})
   }, [])
 
   // ── Las tareas se proponen solas ──────────────────────────────────────────
@@ -264,7 +319,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
         // los objetivos de la mañana y te ofrecía otra vez las tareas que acabas de
         // aceptar. Comparar contra `data.tasks` en vez de contra una lista en
         // memoria hace que siga funcionando tras recargar.
-        const yaSon = new Set((data.tasks || []).map((t: { text?: string }) => normalizar(t.text || '')))
+        const yaSon = new Set(misTareasDelDia.map((t: { text?: string }) => normalizar(t.text || '')))
         setPropuestas(brutas.filter(p => {
           const k = normalizar(p.text)
           return k && !yaSon.has(k) && !rechazadas.current.has(k)
@@ -303,7 +358,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
       if (campo === 'entrada') {
         // Una tarea por objetivo, saltando lo que ya existe: fichar dos veces no
         // puede duplicar la lista.
-        const yaSon = new Set((data.tasks || []).map((t: { text?: string }) => normalizar(t.text || '')))
+        const yaSon = new Set(misTareasDelDia.map((t: { text?: string }) => normalizar(t.text || '')))
         const nuevas = lineas(valor).filter(o => !yaSon.has(normalizar(o)))
         let creadas = 0
         for (const o of nuevas) {
@@ -383,9 +438,12 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   // lista de Tareas y lo que ve tu compañero no pueden discrepar: son el mismo
   // dato. Emparejadas por texto normalizado, que es como nacieron.
   const tareaDe = (o: string) =>
-    (data.tasks || []).find((t: { text?: string }) => normalizar(t.text || '') === normalizar(o)) as
+    misTareasDelDia.find((t: { text?: string }) => normalizar(t.text || '') === normalizar(o)) as
       { id: string; text?: string; done?: boolean } | undefined
   const estaHecho = (o: string) => !!tareaDe(o)?.done
+
+  /** Los objetivos que todavía no son tarea mía de este día. */
+  const porCrear = objetivosDeHoy.filter(o => !tareaDe(o))
 
   /** Marca o desmarca. Escribe en la tarea, que es donde vive el estado. */
   const alternarObjetivo = async (o: string) => {
@@ -395,6 +453,11 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
       // Sin tarea todavía —marcaste antes de fichar— se crea ya completada, que es
       // lo que acabas de decir que pasó.
       else await data.createTask({ text: o, level: 'high', done: true, assigned_to: profile?.id, source: 'ai' })
+      // Y se recarga: el bloque «HOY EN EL EQUIPO» sale de `cargar()`, que solo
+      // corría al montar, al cambiar de día y al fichar. Tachabas tres burbujas y
+      // tu propia fila, dos dedos más abajo, seguía diciendo «0 HECHAS». La misma
+      // verdad pintada en dos sitios que no se refrescaban igual.
+      await cargar()
     } catch { showToast('No se pudo guardar') }
   }
   // Los objetivos ya no existen se descuentan solos: si borras una línea, su
@@ -579,7 +642,10 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
               <button onClick={() => fichar('entrada')} disabled={fichando}
                 className="mt-2.5 w-full py-2.5 rounded-2xl font-syne text-[9px] font-black tracking-widest disabled:opacity-40 transition-all active:scale-[0.99]"
                 style={{ background: `${BLU}18`, border: `1px solid ${BLU}38`, color: BLU }}>
-                FICHAR ENTRADA · CREA {plural(objetivosDeHoy.length, 'TAREA', 'TAREAS').toUpperCase()}
+                {/* El número sale de lo que SE VA A CREAR, no de los objetivos
+                    escritos: los que ya son tarea se saltan, y prometer «CREA 3»
+                    para luego crear una es lo que hacía dudar de si había fichado. */}
+                FICHAR ENTRADA · CREA {plural(porCrear.length, 'TAREA', 'TAREAS').toUpperCase()}
               </button>
             )}
           </div>
@@ -599,7 +665,13 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
                 return (
                   <button key={i}
                     onClick={() => alternarObjetivo(o)}
-                    className="flex items-center gap-2 pl-2 pr-3.5 py-2 rounded-full text-left transition-all active:scale-95 disabled:active:scale-100"
+                    // Solo en HOY. En un día pasado, marcar sellaba `completed_at`
+                    // con el instante actual: el jueves seguía en cero y hoy se
+                    // inflaba. Repasar la semana no puede reescribir la semana.
+                    // La clase `disabled:` ya estaba escrita; faltaba el prop.
+                    disabled={!esHoy}
+                    title={esHoy ? undefined : 'Solo se puede marcar en el día de hoy'}
+                    className="flex items-center gap-2 pl-2 pr-3.5 py-2 rounded-full text-left transition-all active:scale-95 disabled:active:scale-100 disabled:cursor-default"
                     style={{ background: hecho ? `${GRN}16` : 'rgba(255,255,255,0.045)', border: `1px solid ${hecho ? GRN + '42' : BORDER}`, maxWidth: '100%' }}>
                     <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center flex-shrink-0"
                       style={{ background: hecho ? GRN : 'transparent', border: `1.5px solid ${hecho ? GRN : 'rgba(255,255,255,0.22)'}` }}>

@@ -227,7 +227,18 @@ describe('Diario · no se pierde lo escrito', () => {
 
   it('se autoguarda mientras escribes', () => {
     expect(/borrador: true/.test(D), 'ya no hay autoguardado: se vuelve a perder al cambiar de sección').toBe(true)
-    expect(/setTimeout\([\s\S]{0,80}guardarBorrador/.test(D), 'guarda en cada tecla, sin retardo').toBe(true)
+    expect(/setTimeout\([\s\S]{0,260}guardarBorrador/.test(D), 'guarda en cada tecla, sin retardo').toBe(true)
+    // El temporizador se anula al dispararse. Sin esto queda «pendiente» para
+    // siempre y el guardado de salida reenvía lo que ya estaba escrito — que es
+    // justo por donde se colaba el borrado del día.
+    // Anclado al CUERPO del setTimeout, no al fichero: `guardadoTimer.current =
+    // null` aparece también al cambiar de día, y con esa aparición la regla
+    // pasaba en verde con el fallo puesto. Comprobado por mutación.
+    const iT = D.indexOf('guardadoTimer.current = setTimeout(')
+    expect(iT, 'ya no hay autoguardado con retardo: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpoT = D.slice(iT, D.indexOf('}, 1200)', iT))
+    expect(/guardadoTimer\.current = null/.test(cuerpoT),
+      'el temporizador no se limpia al dispararse: queda «pendiente» para siempre y el guardado de salida reenvía lo ya guardado').toBe(true)
   })
 
   it('y guarda lo pendiente al desmontarse', () => {
@@ -258,10 +269,19 @@ describe('Diario · no repite tareas ya creadas', () => {
   it('filtra contra las tareas que ya existen', () => {
     expect(/yaSon\.has\(/.test(D),
       'vuelve a proponer lo que ya es una tarea: al cerrar el día se duplica todo').toBe(true)
-    // Contra data.tasks y no contra una lista en memoria: así sigue funcionando
-    // tras recargar la página.
-    expect(/data\.tasks[\s\S]{0,120}normalizar/.test(D),
-      'compara contra una lista en memoria, que se pierde al recargar').toBe(true)
+    // Y contra el conjunto ACOTADO, no contra `data.tasks` entero.
+    //
+    // Esta regla decía antes lo contrario —exigía comparar contra `data.tasks`—
+    // y con eso en verde convivían tres fallos: si otra persona tenía tu mismo
+    // texto no se creaba tu tarea y tu casilla marcaba la suya; un objetivo
+    // recurrente salía tachado antes de empezar; y destacharlo borraba el
+    // completado del día en que se hizo de verdad. La regla protegía el bug.
+    expect(/const misTareasDelDia[\s\S]{0,400}assigned_to === profile\?\.id/.test(D),
+      'el conjunto contra el que se empareja no se acota a mis tareas').toBe(true)
+    expect(/const misTareasDelDia[\s\S]{0,400}localDayKey\([\s\S]{0,40}=== dia/.test(D),
+      'el conjunto no se acota al día: un objetivo recurrente casaría con la tarea de otro día').toBe(true)
+    expect(/data\.tasks[\s\S]{0,120}normalizar\(t\.text/.test(D),
+      'vuelve a emparejar contra las tareas de todo el equipo desde siempre').toBe(false)
   })
 
   it('y lo que quitas a mano no vuelve', () => {
