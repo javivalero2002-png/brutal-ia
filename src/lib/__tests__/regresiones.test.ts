@@ -1316,4 +1316,20 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
     expect(/data\.memoria[\s\S]{0,120}m\.title === titulo/.test(cuerpo),
       'no comprueba si ya hay nota de ese proyecto: correr solo lo duplicaria en cada visita').toBe(true)
   })
+
+  // Reportes es el COMPROBADOR: si no puede leer el diario del equipo tiene que
+  // DECIRLO, no pintar ceros. «Nadie ha trabajado» y «no pude leerlo» son cosas
+  // distintas, y confundirlas es como un error vive semanas en este repo — es la
+  // misma trampa que motivo src/lib/queryLog.ts, ahora en el cliente.
+  it('reportes no disfraza un fallo del diario de «nadie ficho»', () => {
+    const R = leerCodigo('src/components/sections/ReportesSection.tsx')
+    expect(/diario\/briefing/.test(R), 'Reportes ya no lee el diario: revisa esta regla').toBe(true)
+    // Tres estados distintos, no dos: cargando, error y ok.
+    expect(/briefEstado === 'error'/.test(R),
+      'no distingue el fallo: un 500 se pintaria igual que una semana sin fichar').toBe(true)
+    const i = R.indexOf('/api/diario/briefing')
+    const carga = R.slice(Math.max(0, i - 400), i + 500)
+    expect(/if \(!r\.ok\)/.test(carga),
+      'no comprueba r.ok: un 403 o un 500 resuelven la promesa y se leerian como datos vacios').toBe(true)
+  })
 })
