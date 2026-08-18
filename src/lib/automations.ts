@@ -277,7 +277,13 @@ export function evaluateTrigger(cfg: RuleConfig, ctx: {
       if (mostRecent > 0 && mostRecent < cutoff) {
         const daysSince = Math.floor((Date.now() - mostRecent) / DAY_MS)
         out.push({
-          key: `followup:${cli.id}:${todayKey()}`,
+          // Sin el dia. `followup` es un estado SOSTENIDO —«este cliente lleva N
+          // dias sin escribir»— no un hecho puntual: con la fecha dentro, cada dia
+          // era una clave nueva y salia una tarea identica cada 24 h,
+          // indefinidamente, porque escribirle TU al cliente no deja rastro en el
+          // buzon y la condicion solo se apaga si contesta el. Treinta dias de
+          // silencio eran treinta tareas iguales.
+          key: `followup:${cli.id}`,
           clientId: cli.id,
           vars: { cliente: cli.name, dias: String(daysSince) },
         })
@@ -285,7 +291,15 @@ export function evaluateTrigger(cfg: RuleConfig, ctx: {
     }
   }
 
-  return out.slice(0, MAX_MATCHES_PER_RULE)
+  // Se devuelven TODAS las coincidencias. El tope se aplica mas adelante, dentro
+  // del bucle, contando solo las que pasan el dedup.
+  //
+  // Cortando aqui, las coincidencias ya atendidas seguian ocupando plaza: con 12
+  // tareas vencidas se creaban 8 la primera vez y CERO en todas las siguientes —
+  // las mismas 8 llenaban el cupo y el dedup las descartaba una por una. Cuatro
+  // tareas vencidas sin seguimiento para siempre, y la app diciendo «sin acciones
+  // pendientes».
+  return out
 }
 
 // ── Ejecución ────────────────────────────────────────────────────────────────
@@ -356,7 +370,16 @@ async function ejecutarReglas(
     // existen las reglas. ESTO ESTRECHA EL COMPORTAMIENTO a proposito: una regla
     // que hoy salte por un correo personal dejara de hacerlo.
     admin.from('inbox_messages').select('id,subject,from_name,from_email,ai_client,ai_urgency,is_read,received_at').eq('shared', true).order('received_at', { ascending: false }).limit(200),
-    admin.from('tasks').select('id,text,done,due_date,project_id,client_id,notes'),
+    // `level` y `assigned_to` van AQUI porque el disparador «urgentes sin asignar»
+    // los evalua (:253-254) y sin traerlos llegaban `undefined`: `tk.level !==
+    // 'urgent' && tk.level !== 'high'` era siempre cierto, asi que la regla
+    // descartaba TODAS las tareas y no ha saltado una sola vez desde que existe.
+    // Y no basta con `level`: sin `assigned_to`, el filtro de "ya tiene
+    // responsable" tampoco funciona y avisaria de tareas que si lo tienen.
+    //
+    // Un snapshot que no trae lo que el evaluador mira es un fallo mudo: no hay
+    // error, solo cero coincidencias para siempre.
+    admin.from('tasks').select('id,text,done,due_date,project_id,client_id,notes,level,assigned_to'),
     admin.from('projects').select('id,name,status,deadline,client_id'),
     admin.from('clients').select('id,name'),
   ])
@@ -381,7 +404,13 @@ async function ejecutarReglas(
     const matches = evaluateTrigger(cfg, ctx)
     if (matches.length === 0) continue
 
+    // El tope, aqui: cuenta acciones REALIZADAS, no coincidencias miradas. Las
+    // ramas de aviso hacen `break` a la primera, asi que esto solo afecta de hecho
+    // a create_task, que es donde estaba el problema.
+    let hechasEnEstaRegla = 0
+
     for (const match of matches) {
+      if (hechasEnEstaRegla >= MAX_MATCHES_PER_RULE) break
       const a = cfg.action
 
       if (a.type === 'create_task') {
@@ -405,6 +434,7 @@ async function ejecutarReglas(
         if (error) console.error(`[automations] insert de tarea falló (regla ${r.name}):`, error.message)
         if (!error) {
           existingMarks.add(markId)
+          hechasEnEstaRegla++
           fired = true
           results.push({ ruleId: r.id, ruleName: r.name, action: 'create_task', detail: text })
           // Avisar al asignado. CON await, como las ramas notify_* de más abajo.
@@ -452,13 +482,31 @@ async function ejecutarReglas(
         //
         // El aviso de esta vuelta se pierde: canSendPush ya escribió la ventana.
         // Queda en el log, que es la diferencia con antes.
+        // `fired` se pone DENTRO del try, no despues.
+        //
+        // Estaba fuera, asi que un envio que fallaba —o un notify_owner con
+        // created_by nulo, que ni llegaba a llamar a push— quedaba byte a byte
+        // igual que uno correcto: «1 accion ejecutada», etiqueta EQUIPO AVISADO,
+        // trigger_count +1, y el UPDATE de abajo bloqueando el reintento 6 horas.
+        // O sea que el unico caso en el que hace falta reintentar era justamente el
+        // que se marcaba como hecho.
+        let enviado = false
         try {
           if (a.type === 'notify_team') {
             await sendPushToAll(admin, payload)
-          } else if (r.created_by) await sendPushToUser(admin, r.created_by, payload)
+            enviado = true
+          } else if (r.created_by) {
+            await sendPushToUser(admin, r.created_by, payload)
+            enviado = true
+          } else {
+            // notify_owner sin dueño: no hay a quién avisar. No es un fallo de red,
+            // es una regla mal configurada, y callarlo la deja muda para siempre.
+            console.error(`[automations] la regla "${r.name}" avisa al dueño pero no tiene created_by`)
+          }
         } catch (err) {
           console.error(`[automations] el aviso de la regla "${r.name}" no se pudo enviar y se pierde:`, err)
         }
+        if (!enviado) break   // sin throttle: que la siguiente vuelta lo reintente
         fired = true
         results.push({ ruleId: r.id, ruleName: r.name, action: a.type, detail: body })
         break // un aviso por ejecución basta
