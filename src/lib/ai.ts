@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { textOf } from '@/lib/aiText'
 import { sanearHistorial } from './historialIA'
 import { estadoDeadline } from '@/components/shared/helpers'
-import { nivelTarea } from '@/components/shared/helpers'
+import { nivelTarea, type NivelTarea } from '@/components/shared/helpers'
 
 // Sin topes, el SDK se queda con sus valores por defecto: 10 MINUTOS de timeout
 // y 2 reintentos con backoff. Los presupuestos de tiempo de los bucles de sync
@@ -420,4 +420,83 @@ Responde siempre en español. Sé directo, concreto y profesional. Formato markd
 
   const reply = textOf(msg) || 'No pude procesar tu mensaje.'
   return { reply, searched: shouldSearch && results.length > 0 }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// De lo que alguien escribe en su diario, a tareas.
+//
+// La idea del diario es que escribir en prosa cuesta menos que rellenar un
+// formulario por cada cosa que haces. Esto cierra el círculo: lee el texto y
+// propone las tareas que hay dentro.
+//
+// PROPONE, no crea. Es el mismo patrón que la tarjeta «HARVEY PROPONE»: el modelo
+// se equivoca —parte una frase en dos tareas, o convierte en tarea algo que ya
+// estaba hecho— y en una app que avisa por push a siete personas, crear a ciegas
+// es cómo se enseña a la gente a ignorar los avisos.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface TareaPropuesta {
+  text: string
+  level: NivelTarea
+  /** true si el texto dice que ya está hecho: se propone marcada. */
+  hecha: boolean
+}
+
+export async function extraerTareasDelDiario(
+  texto: string,
+  nombre: string,
+  plazoMs?: number,
+): Promise<TareaPropuesta[]> {
+  const limpio = (texto || '').trim()
+  // Por debajo de una frase no hay nada que extraer, y una llamada al modelo por
+  // cada pulsación sería absurda. El cliente además va con retardo.
+  if (limpio.length < 15) return []
+
+  let msg: Awaited<ReturnType<typeof anthropic.messages.create>>
+  try {
+    msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 700,
+      messages: [{
+        role: 'user',
+        content: `${nombre ? sanitize(nombre) : 'Alguien'} del equipo ha escrito esto en su diario de trabajo de hoy:
+
+"""
+${sanitize(limpio).slice(0, 4000)}
+"""
+
+Extrae las TAREAS concretas que contiene. Reglas:
+- Una tarea por unidad de trabajo real. Si dice "llamar a Nike y mandarles el presupuesto", son DOS.
+- Ignora lo que no es trabajo accionable: saludos, cómo se siente, "hoy entro a las 10".
+- Respeta sus palabras. No inventes detalle que no esté ahí, no adornes.
+- "hecha": true solo si el texto dice claramente que ya está terminado (pasado: "he enviado", "terminé"). Si es intención o está a medias, false.
+- "level": "urgent" solo si el texto lo marca como urgente o dice que vence hoy. "high" si hay cliente o fecha de por medio. Si no, "normal".
+- Si no hay ninguna tarea clara, devuelve una lista vacía. Es una respuesta válida y preferible a inventar.
+
+Responde SOLO con JSON válido, sin explicación:
+{"tareas":[{"text":"...","level":"urgent|high|normal","hecha":true|false}]}`,
+      }],
+    }, plazoMs ? { timeout: Math.min(TIMEOUT_MS, Math.max(1_000, plazoMs)), maxRetries: 0 } : undefined)
+  } catch (err: any) {
+    console.error('[diario] no se pudieron extraer tareas:', err?.status ?? '', err?.message ?? err)
+    return []
+  }
+
+  try {
+    const bruto = parseJsonLoose(textOf(msg) || '{}')
+    const lista = Array.isArray(bruto?.tareas) ? bruto.tareas : []
+    return lista
+      // El texto es lo único imprescindible: sin él no hay tarea que crear.
+      .filter((t: any) => typeof t?.text === 'string' && t.text.trim())
+      .slice(0, 12)   // tope: un diario largo no debe soltar treinta propuestas
+      .map((t: any) => ({
+        text: String(t.text).trim().slice(0, 300),
+        // Misma frontera que analyzeEmail: `level` acaba en una columna con CHECK
+        // y sale literalmente de lo que escriba el modelo.
+        level: nivelTarea(t.level, 'normal'),
+        hecha: t.hecha === true,
+      }))
+  } catch {
+    return []
+  }
 }

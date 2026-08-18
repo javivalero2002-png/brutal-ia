@@ -21,6 +21,7 @@ import NexusBootScreen from '@/components/NexusBootScreen'
 
 // "Hoy" es la vista inicial: se carga con el bundle principal.
 import HoySection from '@/components/sections/HoySection'
+import DiarioSection from '@/components/sections/DiarioSection'
 
 // El resto se carga bajo demanda (code splitting). Antes las 14 secciones
 // viajaban en el bundle inicial, así que entrar a "Hoy" descargaba también
@@ -444,7 +445,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   const gPendingRef = useRef(false)
   const gTimerRef = useRef<ReturnType<typeof setTimeout>|null>(null)
   useEffect(() => {
-    const NAV: Record<string, Section> = { h:'hoy', t:'tareas', i:'inbox', c:'clientes', p:'proyectos', k:'contenido', a:'calendario', m:'memoria', e:'equipo', r:'reportes', s:'ajustes', v:'automatizaciones', n:'chat', y:'harvey' }
+    const NAV: Record<string, Section> = { d:'diario', h:'hoy', t:'tareas', i:'inbox', c:'clientes', p:'proyectos', k:'contenido', a:'calendario', m:'memoria', e:'equipo', r:'reportes', s:'ajustes', v:'automatizaciones', n:'chat', y:'harvey' }
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(true); setSearchQuery(''); setSearchIdx(-1); return }
       if (e.key === 'Escape') {
@@ -648,7 +649,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   mfRef.current = mf
   sectionRef.current = section
 
-  const NAV_SC: Partial<Record<Section,string>> = { hoy:'H', tareas:'T', inbox:'I', clientes:'C', proyectos:'P', contenido:'K', calendario:'A', memoria:'M', equipo:'E', reportes:'R', ajustes:'S', automatizaciones:'V', chat:'N', harvey:'Y' }
+  const NAV_SC: Partial<Record<Section,string>> = { diario:'D', hoy:'H', tareas:'T', inbox:'I', clientes:'C', proyectos:'P', contenido:'K', calendario:'A', memoria:'M', equipo:'E', reportes:'R', ajustes:'S', automatizaciones:'V', chat:'N', harvey:'Y' }
 
   const navItem = (id: Section, label: string, icon: string, badge?: number) => {
     const act = section === id
@@ -835,6 +836,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
 
           {navLabel('GESTIÓN')}
           {navItem('tareas','Tareas','check-square',data.tasks.filter((t:Task)=>!t.done&&t.level==='urgent').length||undefined)}
+          {navItem('diario','Diario','pen-line')}
           {navItem('clientes','Clientes','users')}
           {/* La cuenta del badge estaba escrita otra vez aquí, con la misma resta
               de timestamps: la campana y el menú podían discrepar. Es la misma
@@ -967,6 +969,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
           {section === 'tareas' && <SectionErrorBoundary section="tareas"><TareasSection data={data} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} profile={profile} onNavigate={setSection} onSelectProject={setSelectedProject} onSelectClient={setSelectedClient} /></SectionErrorBoundary>}
           {section === 'equipo' && <SectionErrorBoundary section="equipo"><EquipoSection data={data} profile={profile} showToast={showToast} /></SectionErrorBoundary>}
           {section === 'reportes' && <SectionErrorBoundary section="reportes">{isOwner ? <ReportesSection data={data} onNavigate={setSection} /> : <div className="h-full flex items-center justify-center"><div className="text-center"><div className="font-syne text-[10px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>SECCIÓN RESTRINGIDA</div><div className="text-[12px]" style={{color:'rgba(255,255,255,0.3)'}}>Solo disponible para propietarios</div></div></div>}</SectionErrorBoundary>}
+          {section === 'diario' && <SectionErrorBoundary section="diario"><DiarioSection data={data} profile={profile} showToast={showToast} onNavigate={setSection} /></SectionErrorBoundary>}
           {section === 'clientes' && <SectionErrorBoundary section="clientes"><ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} onNavigate={setSection} onSelectProject={setSelectedProject} /></SectionErrorBoundary>}
           {section === 'proyectos' && <SectionErrorBoundary section="proyectos"><ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} onNavigate={setSection} onSelectClient={setSelectedClient} justCreatedId={justCreatedProjId} onJustCreatedScrolled={()=>setJustCreatedProjId(null)} /></SectionErrorBoundary>}
           {section === 'contenido' && <SectionErrorBoundary section="contenido"><ContenidoSection data={data} onOpenModal={openModal} showToast={showToast} onNavigate={setSection} onSelectClient={setSelectedClient} profile={profile} /></SectionErrorBoundary>}
@@ -1148,7 +1151,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
           automatizaciones: [{key:'J / K',label:'Navegar reglas'},{key:'E',label:'Activar/pausar'},{key:'N',label:'Nueva regla'}],
         }
         const sectionHints = SECTION_HINTS[section] || []
-        const sectionLabels: Record<Section,string> = {hoy:'Hoy',tareas:'Tareas',inbox:'Inbox',clientes:'Clientes',proyectos:'Proyectos',contenido:'Contenido',calendario:'Calendario',memoria:'Memoria',equipo:'Equipo',chat:'Chat IA',automatizaciones:'Automatizaciones',reportes:'Reportes',ajustes:'Operativa',harvey:'Harvey'}
+        const sectionLabels: Record<Section,string> = {hoy:'Hoy',diario:'Diario',tareas:'Tareas',inbox:'Inbox',clientes:'Clientes',proyectos:'Proyectos',contenido:'Contenido',calendario:'Calendario',memoria:'Memoria',equipo:'Equipo',chat:'Chat IA',automatizaciones:'Automatizaciones',reportes:'Reportes',ajustes:'Operativa',harvey:'Harvey'}
         return (
           <div onClick={()=>setShowShortcuts(false)} className="fixed inset-0 z-[120] flex items-center justify-center" style={{background:'rgba(2,2,8,0.75)',backdropFilter:'blur(6px)'}}>
             <div onClick={e=>e.stopPropagation()} className="w-[560px] max-w-[94vw] rounded-3xl" style={{background:'linear-gradient(180deg,#0D0D1E 0%,#080810 100%)',border:`1px solid rgba(27,95,250,0.2)`,boxShadow:'0 40px 100px rgba(0,0,0,0.85),0 0 0 1px rgba(27,95,250,0.04)',maxHeight:'94dvh',overflowY:'auto'}}>
