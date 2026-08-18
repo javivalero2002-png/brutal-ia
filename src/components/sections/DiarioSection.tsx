@@ -162,7 +162,24 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   // Los objetivos se ENSEÑAN como lista y se EDITAN en un textarea. Ver una lista
   // con viñetas y editar texto plano son dos cosas distintas, y mezclarlas en un
   // textarea siempre visible es lo que hacía que la sección pareciera un borrador.
-  const [editando, setEditando] = useState(false)
+  /**
+   * Los objetivos, uno por fila.
+   *
+   * Antes era un `<textarea>` y una línea era un objetivo por convenio: nada te
+   * decía dónde acababa uno y empezaba otro, no se podía borrar el tercero sin
+   * seleccionar su línea a mano, y al leerlo era un párrafo. Para lo que es —una
+   * lista corta de cosas concretas— la forma correcta es una lista.
+   *
+   * Se guarda IGUAL, un objetivo por línea en `entrada`: no cambia el esquema ni
+   * nada de lo que hay debajo (fichar, las tareas, Harvey, el briefing). Solo se
+   * escribe distinto.
+   *
+   * `filas` vive aparte del texto guardado porque una fila recién añadida está
+   * vacía, y las vacías no se guardan: si se derivaran del texto, la fila nueva
+   * desaparecería en el mismo instante de crearla.
+   */
+  const [filas, setFilas] = useState<string[]>([''])
+  const refsFilas = useRef<(HTMLInputElement | null)[]>([])
   // El calendario se abre a demanda: la mayoria de las visitas son «abro, escribo
   // lo de hoy y me voy», y un mes entero de rejilla ahi arriba estorbaria a eso.
   const [verCalendario, setVerCalendario] = useState(false)
@@ -174,7 +191,6 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   const miEntrada = entradas.find(e => e.user_id === profile?.id) || null
   const sembrado = useRef(false)
   const guardadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const refObjetivos = useRef<HTMLTextAreaElement>(null)
   const extraerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const ultimoExtraido = useRef('')
   // Lo que has quitado a mano no vuelve. Sin esto, cada relectura del texto lo
@@ -205,7 +221,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   // Al cambiar de día se vuelve a sembrar: lo que se ve es de OTRO día, y
   // arrastrar el borrador del anterior sería escribir en el día equivocado.
   useEffect(() => {
-    sembrado.current = false; setObjetivos(''); setBalance('')
+    sembrado.current = false; setObjetivos(''); setBalance(''); setFilas([''])
     // Y se olvida lo pendiente del día anterior: ya se guardó al escribirlo, y
     // arrastrarlo haría que el guardado de salida lo escribiera en el día nuevo.
     if (guardadoTimer.current) { clearTimeout(guardadoTimer.current); guardadoTimer.current = null }
@@ -216,6 +232,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
     if (sembrado.current || !miEntrada) return
     sembrado.current = true
     setObjetivos(miEntrada.entrada || '')
+    setFilas(lineas(miEntrada.entrada).length ? lineas(miEntrada.entrada) : [''])
     setBalance(miEntrada.cierre || '')
   }, [miEntrada])
 
@@ -394,17 +411,14 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
     finally { setFichando(false) }
   }
 
-  /** Abre la edición con una línea nueva al final, lista para escribir. */
+  /** Añade una fila vacía al final y pone el cursor dentro. */
   const anadirObjetivo = () => {
-    setEditando(true)
-    setObjetivos(v => (v.trim() ? v.replace(/\n+$/, '') + '\n' : ''))
-    // El foco va al final del textarea, que es donde acaba de aparecer el hueco.
-    setTimeout(() => {
-      const ta = refObjetivos.current
-      if (!ta) return
-      ta.focus()
-      ta.setSelectionRange(ta.value.length, ta.value.length)
-    }, 40)
+    // Si la última está vacía no se añade otra: se va a la que ya hay. Pulsar dos
+    // veces dejaba dos huecos y parecía que no había funcionado.
+    const ultima = filas[filas.length - 1]
+    if (ultima !== undefined && !ultima.trim()) { enfocarFila(filas.length - 1); return }
+    cambiarFilas([...filas, ''])
+    enfocarFila(filas.length)
   }
 
   const pedirBriefing = useCallback(async (r: 'dia' | 'semana') => {
@@ -434,7 +448,14 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
       : `${ok} de ${propuestas.length} creadas — el resto falló`)
   }
 
-  const objetivosDeHoy = lineas(miEntrada?.entrada || objetivos)
+  // Lo que se PINTA sale de lo que estás editando, no de lo último guardado.
+  //
+  // Antes ganaba `miEntrada?.entrada`, así que en cuanto fichabas el objetivo
+  // nuevo no aparecía en «¿lo completé?» hasta recargar: la sección se
+  // contradecía a sí misma con el objetivo delante. `objetivos` es la verdad viva
+  // porque se siembra desde la entrada al cargar; el respaldo cubre el único
+  // render en que la entrada ya está y la siembra aún no ha corrido.
+  const objetivosDeHoy = lineas(sembrado.current ? objetivos : (miEntrada?.entrada ?? objetivos))
 
   // Un objetivo está cumplido si SU TAREA está hecha. No hay estado local.
   //
@@ -471,7 +492,34 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   }
   const estaHecho = (o: string) => !!tareaDe(o)?.done
 
-  /** Los objetivos que todavía no son tarea mía de este día. */
+  /**
+   * Toda mutación de la lista pasa por aquí: cambia las filas Y guarda el texto.
+   *
+   * El texto que se guarda va SIN las vacías —una fila a medio escribir no es un
+   * objetivo— pero las filas se conservan tal cual, para que puedas tener una
+   * abierta mientras piensas.
+   */
+  const cambiarFilas = (nuevas: string[]) => {
+    setFilas(nuevas.length ? nuevas : [''])
+    alEscribir('entrada', nuevas.map(x => x.trim()).filter(Boolean).join('\n'))
+  }
+
+  /**
+   * Pedir el foco para una fila. Se apunta y lo hace un efecto DESPUÉS del
+   * render, no un `requestAnimationFrame`: el rAF se adelantaba al commit de
+   * React, así que la fila nueva aún no estaba en el DOM y el foco se quedaba
+   * donde estaba. Enter creaba la fila pero seguías escribiendo en la anterior.
+   * Medido en el navegador.
+   */
+  const [focoPendiente, setFocoPendiente] = useState<number | null>(null)
+  const enfocarFila = (i: number) => setFocoPendiente(i)
+  useEffect(() => {
+    if (focoPendiente === null) return
+    refsFilas.current[focoPendiente]?.focus()
+    setFocoPendiente(null)
+  }, [focoPendiente, filas.length])
+
+    /** Los objetivos que todavía no son tarea mía de este día. */
   const porCrear = objetivosDeHoy.filter(o => !tareaDe(o))
 
   /** Marca o desmarca. Escribe en la tarea, que es donde vive el estado. */
@@ -620,53 +668,63 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
           <div className="flex items-center gap-2 px-4 pt-3.5 pb-2.5">
             <LucideIcon name="target" size={14} color={BLU} />
             <div className="font-syne text-[9px] font-black tracking-widest flex-1" style={{ color: BLU }}>¿QUÉ ME PROPONGO?</div>
-            {(
-              <button onClick={() => setEditando(e => !e)} aria-label={editando ? 'Ver la lista' : 'Editar objetivos'}
-                className="w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90"
-                style={{ background: editando ? `${BLU}20` : 'rgba(255,255,255,0.04)' }}>
-                <LucideIcon name={editando ? 'check' : 'pencil'} size={12} color={editando ? BLU : 'rgba(255,255,255,0.4)'} />
-              </button>
-            )}
           </div>
           <div className="px-4 pb-4 flex-1 flex flex-col">
-            {editando || (!objetivosDeHoy.length && esHoy) ? (
-              <textarea
-                ref={refObjetivos}
-                value={objetivos}
-                onChange={e => alEscribir('entrada', e.target.value)}
-                // Sin esto el campo se desmontaba al teclear la PRIMERA letra, y
-                // solo le pasaba a quien no había escrito nada ese día: la
-                // condición de arriba mira `objetivosDeHoy`, que sale del propio
-                // texto, así que en cuanto había una línea dejaba de cumplirse y
-                // React cambiaba el <textarea> por la lista de solo lectura. Se
-                // perdía el foco y lo que siguieras escribiendo no llegaba a
-                // ninguna parte. Al enfocar se marca `editando`, y entonces el
-                // campo ya no depende de su propio contenido para existir.
-                onFocus={() => setEditando(true)}
-                onBlur={() => setEditando(false)}
-                placeholder={'Cerrar el presupuesto de Nike\nMontar el reel de Mango\nLlamar al proveedor'}
-                rows={5}
-                className="w-full px-3.5 py-3 rounded-2xl text-[12.5px] text-white placeholder-white/20 outline-none resize-none leading-relaxed flex-1"
-                style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, caretColor: BLU, minHeight: '7rem' }}
-              />
-            ) : (
-              <div className="rounded-2xl px-4 py-3.5 flex-1" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, minHeight: '7rem' }}>
-                {objetivosDeHoy.length ? (
-                  <ul className="flex flex-col gap-2">
-                    {objetivosDeHoy.map((o, i) => (
-                      <li key={i} className="flex items-start gap-2.5">
-                        <span className="mt-[7px] w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: `${BLU}AA` }} />
-                        <span className="font-figtree text-[13px] leading-snug" style={{ color: 'rgba(255,255,255,0.86)' }}>{o}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div className="font-figtree text-[12px]" style={{ color: 'rgba(255,255,255,0.22)' }}>
-                    {esHoy ? 'Sin objetivos. Pulsa NUEVO OBJETIVO para empezar.' : 'No escribió objetivos ese día.'}
+            {/* Una fila por objetivo. Enter encadena el siguiente, Retroceso en una
+                fila vacía la quita y vuelve a la anterior: se escribe la lista
+                entera sin tocar el ratón, que es como se escribe una lista. */}
+            <div className="flex flex-col gap-1.5 flex-1">
+              {filas.map((fila, i) => {
+                const hecho = !!fila.trim() && estaHecho(fila)
+                return (
+                  <div key={i} className="group flex items-center gap-2 rounded-xl pl-2 pr-1.5 py-1"
+                    style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}` }}>
+                    <span className="flex items-center justify-center flex-shrink-0 rounded-md font-syne text-[8.5px] font-black"
+                      style={{ width: '18px', height: '18px', background: hecho ? `${GRN}22` : `${BLU}18`, color: hecho ? GRN : BLU }}>
+                      {hecho ? '✓' : i + 1}
+                    </span>
+                    <input
+                      ref={el => { refsFilas.current[i] = el }}
+                      value={fila}
+                      onChange={e => cambiarFilas(filas.map((f, k) => (k === i ? e.target.value : f)))}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          const nuevas = [...filas]
+                          nuevas.splice(i + 1, 0, '')
+                          cambiarFilas(nuevas)
+                          enfocarFila(i + 1)
+                        } else if (e.key === 'Backspace' && !fila && filas.length > 1) {
+                          e.preventDefault()
+                          cambiarFilas(filas.filter((_, k) => k !== i))
+                          enfocarFila(Math.max(0, i - 1))
+                        }
+                      }}
+                      placeholder={i === 0 ? 'Cerrar el presupuesto de Nike' : 'Otro objetivo…'}
+                      className="flex-1 min-w-0 bg-transparent text-[12.5px] text-white placeholder-white/20 outline-none py-1"
+                      style={{ caretColor: BLU, textDecoration: hecho ? 'line-through' : undefined, opacity: hecho ? 0.55 : 1 }}
+                    />
+                    {(filas.length > 1 || !!fila) && (
+                      <button
+                        onClick={() => { cambiarFilas(filas.filter((_, k) => k !== i)); enfocarFila(Math.max(0, i - 1)) }}
+                        aria-label={`Quitar objetivo ${i + 1}`}
+                        className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 transition-opacity opacity-0 group-hover:opacity-100 focus:opacity-100"
+                        style={{ opacity: isMobile ? 1 : undefined }}>
+                        <LucideIcon name="x" size={11} color="rgba(255,255,255,0.35)" />
+                      </button>
+                    )}
                   </div>
-                )}
-              </div>
-            )}
+                )
+              })}
+
+              <button
+                onClick={() => { cambiarFilas([...filas, '']); enfocarFila(filas.length) }}
+                className="flex items-center gap-2 px-2 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest transition-all active:scale-[0.99] self-start"
+                style={{ color: BLU }}>
+                <LucideIcon name="plus" size={12} color={BLU} /> AÑADIR OBJETIVO
+              </button>
+            </div>
+
             {!miEntrada?.entrada_at && objetivosDeHoy.length > 0 && (
               <button onClick={() => fichar('entrada')} disabled={fichando}
                 className="mt-2.5 w-full py-2.5 rounded-2xl font-syne text-[9px] font-black tracking-widest disabled:opacity-40 transition-all active:scale-[0.99]"

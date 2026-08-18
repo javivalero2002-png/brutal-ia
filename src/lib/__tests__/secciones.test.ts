@@ -520,35 +520,44 @@ describe('puesta en marcha · no puede dejar a nadie fuera', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// El campo de objetivos del Diario: que no se desmonte solo.
+// Los objetivos del Diario: lo que se ve es lo que estás escribiendo.
 //
-// La condición que decide si se pinta el <textarea> o la lista de solo lectura
-// mira `objetivosDeHoy`, que se DERIVA del propio texto. Con el día en blanco la
-// condición se cumple y sale el campo; al teclear la primera letra ya hay una
-// línea, deja de cumplirse, y React sustituye el campo por la lista. Se pierde
-// el foco y lo que sigas escribiendo no llega a ninguna parte.
+// Dos fallos distintos que producían la misma sensación —«esto no responde»— y
+// que la lista por filas no arregla sola:
 //
-// Solo le pasaba a quien NO había escrito nada ese día — o sea, a todo el que
-// estrena la sección, y a nadie más. Por eso no lo vio nadie: quien ya tiene
-// entrada del día entra al campo por el botón, que sí marca `editando`.
-//
-// Lo que lo arregla es que enfocar marque `editando`: entonces el campo deja de
-// depender de su propio contenido para seguir existiendo.
+//  · `objetivosDeHoy` salía de `miEntrada?.entrada || objetivos`, o sea que en
+//    cuanto fichabas ganaba lo GUARDADO: añadías un objetivo y no aparecía en
+//    «¿lo completé?» hasta recargar. La sección se contradecía a sí misma.
+//  · Antes había un <textarea> cuya existencia dependía de su propio contenido,
+//    así que se desmontaba al teclear la primera letra. Ahora son filas
+//    independientes y ese fallo no puede volver por esa vía — pero sí volvería
+//    si alguien reintrodujera una condición sobre el contenido.
 // ─────────────────────────────────────────────────────────────────────────────
-describe('diario · el campo de objetivos no se desmonta al escribir', () => {
+describe('diario · los objetivos responden al escribirlos', () => {
   const D = readFileSync('src/components/sections/DiarioSection.tsx', 'utf8')
 
-  it('enfocar el campo lo mantiene montado', () => {
-    // Anclado al textarea de OBJETIVOS por su `value`, no al primero del fichero:
-    // hay otro más abajo (el cierre del día) que no lleva condición ninguna, y una
-    // ventana a ojo lo habría cogido a él.
-    const i = D.indexOf('value={objetivos}')
-    expect(i, 'ya no existe el campo de objetivos: revisa esta regla').toBeGreaterThan(-1)
-    const campo = D.slice(i, D.indexOf('/>', i))
+  it('lo que se pinta sale del valor vivo, no del último guardado', () => {
+    const i = D.indexOf('const objetivosDeHoy')
+    expect(i, 'ya no existe objetivosDeHoy: revisa esta regla').toBeGreaterThan(-1)
+    const linea = D.slice(i, D.indexOf('\n', i))
+    expect(/miEntrada\?\.entrada \|\| objetivos/.test(linea),
+      'lo guardado vuelve a ganar sobre lo que estás escribiendo: un objetivo nuevo no aparecería hasta recargar').toBe(false)
+    expect(/sembrado\.current \? objetivos/.test(linea),
+      'no se prefiere el valor vivo').toBe(true)
+  })
 
-    expect(/onFocus=\{\(\) => setEditando\(true\)\}/.test(campo),
-      'el campo no marca `editando` al enfocarlo: se desmonta al teclear la primera letra y solo le pasa a quien estrena la sección')
-      .toBe(true)
+  it('cada objetivo es una fila propia, no un párrafo', () => {
+    expect(/filas\.map\(/.test(D),
+      'los objetivos vuelven a ser texto corrido: no se puede quitar el tercero sin seleccionar su línea a mano').toBe(true)
+    // Toda mutación pasa por `cambiarFilas`, que es quien ADEMÁS guarda. Escribir
+    // un `setFilas` suelto cambiaría la lista en pantalla sin guardarla.
+    const sueltos = (D.match(/setFilas\(/g) || []).length
+    expect(sueltos,
+      'hay setFilas fuera de cambiarFilas/siembra: esa fila se vería pero no se guardaría').toBeLessThanOrEqual(3)
+    const iC = D.indexOf('const cambiarFilas')
+    expect(iC, 'ya no existe cambiarFilas: revisa esta regla').toBeGreaterThan(-1)
+    expect(/alEscribir\('entrada'/.test(D.slice(iC, D.indexOf('\n  }', iC))),
+      'cambiar la lista no guarda: lo escrito se perdería al salir').toBe(true)
   })
 })
 
