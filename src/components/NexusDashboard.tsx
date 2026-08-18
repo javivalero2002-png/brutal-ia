@@ -1133,7 +1133,6 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
         <PuestaEnMarcha
           profile={profile}
           showToast={showToast}
-          onTema={claro => { guardarTema(claro); document.documentElement.classList.toggle('theme-light', claro) }}
           onTerminar={() => setPuestaHecha(true)}
         />
       )}

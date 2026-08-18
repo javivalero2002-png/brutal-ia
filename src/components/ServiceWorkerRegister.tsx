@@ -1,5 +1,9 @@
 'use client'
 import { useEffect } from 'react'
+// Solo por el efecto de importarlo: engancha el oyente de `beforeinstallprompt`
+// en cuanto corre el chunk. Este componente está en el layout raíz, que es lo
+// más pronto que hay. Ver el comentario largo en ese fichero.
+import '@/lib/instalarPwa'
 
 // Registra el service worker al cargar la app. Necesario para:
 //  - Instalación como PWA (escritorio + iOS)

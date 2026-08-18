@@ -357,6 +357,47 @@ describe('puesta en marcha · no puede dejar a nadie fuera', () => {
       'no hay forma de saltar: quien no pueda conectar Gmail se queda fuera de la app el primer día').toBe(true)
   })
 
+  it('no vuelve a preguntar el tema, que ya se elige al arrancar', () => {
+    // `NexusBootScreen` enseña «Elige tu versión» con las dos insignias cuando no
+    // hay cookie `nx_theme` — o sea, ANTES de esta pantalla. Un paso de aspecto
+    // aquí es la misma pregunta dos veces en el primer minuto, y la segunda peor
+    // presentada. Se quitó a propósito; esta regla evita que vuelva sin querer.
+    const B = readFileSync('src/components/NexusBootScreen.tsx', 'utf8')
+    expect(/nx-boot-insignia|logo-claro\.svg/.test(B),
+      'el arranque ya no elige tema: entonces este paso SÍ hace falta y hay que reponerlo').toBe(true)
+    expect(/theme-light|onTema/.test(P),
+      'la puesta en marcha vuelve a preguntar el tema, que el arranque ya preguntó').toBe(false)
+  })
+
+  it('el instalador no se escucha desde el componente, que llega tarde', () => {
+    // `beforeinstallprompt` se emite UNA vez y puede llegar antes de que monte
+    // esta pantalla (en visita repetida el service worker ya está registrado).
+    // Un `addEventListener` dentro del componente se lo pierde y el botón no sale
+    // nunca en Chrome — el caso normal, no el raro.
+    expect(/addEventListener\(\s*['"]beforeinstallprompt/.test(P),
+      'escucha el evento desde el componente: si llegó antes de montar, se pierde').toBe(false)
+    expect(/promptGuardado\(\)/.test(P),
+      'no consulta el prompt ya guardado al montar').toBe(true)
+    // Que el oyente del módulo se enganche a tiempo NO se comprueba aquí por
+    // forma: lo hace por conducta `instalarPwa.test.ts`, disparando el evento sin
+    // suscriptores. Una regla de texto sobre «está dentro de una función» casaba
+    // con la propia flecha del oyente y pasaba en verde con el fallo puesto.
+  })
+
+  it('el paso de instalar cubre a Safari, que no da instalador', () => {
+    // Chrome ofrece `beforeinstallprompt` y ahí basta un botón. Safari no lo
+    // implementa NI en iPhone NI en Mac: si solo hubiera botón, media plantilla
+    // se queda sin instalar la app y sin saber por qué.
+    const i = P.indexOf('ACCESO DIRECTO')
+    expect(i, 'ya no existe el paso de instalar: revisa esta regla').toBeGreaterThan(-1)
+    const paso = P.slice(i, P.indexOf('{paso === 4', i))
+    for (const [caso, pista] of [['ios', 'pantalla de inicio'], ['safari-mac', 'Dock']] as const) {
+      expect(paso.includes(caso), `el paso de instalar no contempla «${caso}»`).toBe(true)
+      expect(paso.includes(pista),
+        `«${caso}» no tiene instrucciones propias: sin instalador y sin pasos, no hay salida`).toBe(true)
+    }
+  })
+
   it('un fallo al guardar no bloquea la entrada', () => {
     const i = P.indexOf('const terminar')
     expect(i, 'ya no existe terminar: revisa esta regla').toBeGreaterThan(-1)

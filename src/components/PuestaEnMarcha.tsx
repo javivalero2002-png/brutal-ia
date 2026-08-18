@@ -1,8 +1,9 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { BLU, GRN, VIO, AMBAR, SURFACE, SURF2, BORDER, ACCENT_COLORS } from '@/components/shared/design-tokens'
+import { BLU, GRN, AMBAR, AMARILLO, SURFACE, SURF2, BORDER, ACCENT_COLORS } from '@/components/shared/design-tokens'
 import LucideIcon from '@/components/shared/LucideIcon'
 import type { Profile } from '@/types'
+import { promptGuardado, alCambiarPrompt, lanzarInstalacion, type PromptInstalacion } from '@/lib/instalarPwa'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUESTA EN MARCHA — lo primero que ve cada persona del equipo.
@@ -28,12 +29,10 @@ const CLAVE_PASO = 'nx_onboarding_paso'
 interface Props {
   profile: Profile
   onTerminar: () => void
-  /** Cambia el tema y lo persiste. Lo pasa el dashboard, que ya lo tenía. */
-  onTema: (claro: boolean) => void
   showToast: (m: string) => void
 }
 
-export default function PuestaEnMarcha({ profile, onTerminar, onTema, showToast }: Props) {
+export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props) {
   const [paso, setPaso] = useState(0)
   const [guardando, setGuardando] = useState(false)
 
@@ -48,8 +47,20 @@ export default function PuestaEnMarcha({ profile, onTerminar, onTema, showToast 
   const [repetida, setRepetida] = useState('')
   const [claveCambiada, setClaveCambiada] = useState(false)
 
-  const [claro, setClaro] = useState(false)
   const [avisos, setAvisos] = useState(false)
+
+  // Instalar la app. Los navegadores NO se comportan igual y ese es todo el
+  // problema de este paso:
+  //   · Chrome (Android y escritorio) dispara `beforeinstallprompt` -> se puede
+  //     ofrecer un botón que instala de verdad.
+  //   · Safari no implementa ese evento, ni en iPhone ni en Mac. Ahí no hay
+  //     botón posible y solo caben instrucciones.
+  // Por eso no se detecta el navegador para decidir: se GUARDA el evento si
+  // llega, y las instrucciones son el camino de quien no lo tiene. Así un
+  // navegador que mañana lo implemente entra solo por la rama buena.
+  const [promptInstalar, setPromptInstalar] = useState<PromptInstalacion | null>(null)
+  const [yaInstalada, setYaInstalada] = useState(false)
+  const [comoInstalar, setComoInstalar] = useState<'ios' | 'safari-mac' | 'otro'>('otro')
 
   // Al volver de Google se retoma donde estaba. Sin esto, conectar Gmail te
   // devolvía al principio y había que pasar otra vez por todo.
@@ -57,8 +68,29 @@ export default function PuestaEnMarcha({ profile, onTerminar, onTema, showToast 
     try {
       const guardado = Number(localStorage.getItem(CLAVE_PASO))
       if (Number.isFinite(guardado) && guardado > 0) setPaso(guardado)
-      setClaro(document.documentElement.classList.contains('theme-light'))
     } catch { /* sin localStorage se empieza por el principio, que tampoco es grave */ }
+  }, [])
+
+  useEffect(() => {
+    // Puede que el evento ya hubiera llegado antes de montar: se pregunta Y se
+    // escucha, porque cualquiera de las dos por su cuenta se deja un caso.
+    setPromptInstalar(promptGuardado())
+    const dejar = alCambiarPrompt(setPromptInstalar)
+
+    try {
+      const ua = navigator.userAgent
+      const iOS = /iphone|ipad|ipod/i.test(ua) ||
+        // iPadOS 13+ se presenta como Mac; lo que lo delata es que tiene táctil.
+        (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1)
+      const safari = /safari/i.test(ua) && !/chrome|chromium|crios|edg|firefox|fxios/i.test(ua)
+      setComoInstalar(iOS ? 'ios' : safari ? 'safari-mac' : 'otro')
+      setYaInstalada(
+        window.matchMedia('(display-mode: standalone)').matches ||
+        (navigator as unknown as { standalone?: boolean }).standalone === true,
+      )
+    } catch {}
+
+    return dejar
   }, [])
 
   const irA = useCallback((n: number) => {
@@ -122,14 +154,17 @@ export default function PuestaEnMarcha({ profile, onTerminar, onTema, showToast 
     } catch { showToast('No se pudieron activar los avisos') }
   }
 
-  const PASOS = ['Bienvenida', 'Tu ficha', 'Contraseña', 'Aspecto', 'Gmail', 'Avisos', 'Listo']
+  // El ASPECTO no está aquí a propósito: ya se elige al arrancar la app, en la
+  // pantalla de la insignia, y con mejor tratamiento que unas muestras de color.
+  // Repetirlo aquí sería preguntar dos veces lo mismo en el primer minuto.
+  const PASOS = ['Bienvenida', 'Tu ficha', 'Contraseña', 'Instalar', 'Gmail', 'Avisos', 'Listo']
   const ultimo = PASOS.length - 1
 
   const Cabecera = ({ icono, eyebrow, titulo, bajada }: { icono: string; eyebrow: string; titulo: string; bajada: string }) => (
     <div className="flex items-start gap-3 mb-5">
       <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
-        style={{ background: `${VIO}1E`, border: `1px solid ${VIO}3A` }}>
-        <LucideIcon name={icono} size={17} color={VIO} />
+        style={{ background: `${BLU}1A`, border: `1px solid ${BLU}42` }}>
+        <LucideIcon name={icono} size={17} color={BLU} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="font-syne text-[8px] font-black tracking-[0.2em] mb-1" style={{ color: 'rgba(255,255,255,0.3)' }}>{eyebrow}</div>
@@ -143,24 +178,40 @@ export default function PuestaEnMarcha({ profile, onTerminar, onTema, showToast 
     <button onClick={onClick} disabled={disabled || guardando}
       className="px-5 py-2.5 rounded-2xl font-syne text-[9px] font-black tracking-widest transition-all active:scale-95 disabled:opacity-40"
       style={primario
-        ? { background: `linear-gradient(140deg, ${VIO}38, ${BLU}26)`, border: `1px solid ${VIO}55`, color: '#E6DEFF' }
+        ? { background: `linear-gradient(140deg, ${BLU}42, ${AMARILLO}1A)`, border: `1px solid ${BLU}66`, color: '#DCE6FF' }
         : { border: `1px solid ${BORDER}`, color: 'rgba(255,255,255,0.4)' }}>
       {children}
     </button>
   )
 
   const campo = 'w-full px-3.5 py-3 rounded-2xl text-[13px] text-white placeholder-white/20 outline-none'
-  const estiloCampo = { background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}`, caretColor: VIO }
+  const estiloCampo = { background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}`, caretColor: BLU }
 
   return (
     <div className="fixed inset-0 z-[130] flex items-center justify-center p-4" style={{ background: 'rgba(2,2,10,0.88)', backdropFilter: 'blur(10px)' }}>
-      <div className="w-full rounded-3xl overflow-hidden flex flex-col" style={{ maxWidth: '30rem', maxHeight: '92vh', background: SURFACE, border: `1px solid ${VIO}30` }}>
+      <div className="w-full rounded-3xl overflow-hidden flex flex-col" style={{ maxWidth: '30rem', maxHeight: '92vh', background: SURFACE, border: `1px solid ${BLU}2E` }}>
+
+        {/* La cabecera de la marca. Sin esto la ventana podía ser la de cualquier
+            app: es la primera pantalla que ve el equipo y tiene que decir de quién
+            es. El logotipo sale de `public/`, que es donde ya vive el de login. */}
+        <div className="relative px-5 pt-5 pb-4 overflow-hidden">
+          <div className="absolute inset-0 pointer-events-none"
+            style={{ background: `radial-gradient(120% 100% at 12% 0%, ${BLU}1F, transparent 62%), radial-gradient(80% 70% at 92% 0%, ${AMARILLO}12, transparent 60%)` }} />
+          <div className="relative flex items-center gap-3">
+            <img src="/logo-oscuro.svg" alt="Brutal Studios" width={34} height={34} className="nx-boot-insignia-oscura flex-shrink-0" />
+            <img src="/logo-claro.svg" alt="" aria-hidden width={34} height={34} className="nx-boot-insignia-clara flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <img src="/brutal-logo.svg" alt="" aria-hidden style={{ height: '13px', opacity: 0.9 }} />
+              <div className="font-syne text-[7px] font-black tracking-[0.24em] mt-1" style={{ color: AMARILLO }}>PUESTA EN MARCHA</div>
+            </div>
+          </div>
+        </div>
 
         {/* Progreso. Enseña cuántos pasos quedan: sin eso, un proceso de siete
             pantallas parece que no se acaba nunca. */}
-        <div className="flex gap-1 px-5 pt-5">
+        <div className="flex gap-1 px-5">
           {PASOS.map((_, i) => (
-            <div key={i} className="flex-1 rounded-full" style={{ height: '3px', background: i <= paso ? VIO : 'rgba(255,255,255,0.08)' }} />
+            <div key={i} className="flex-1 rounded-full" style={{ height: '3px', background: i <= paso ? BLU : 'rgba(255,255,255,0.08)' }} />
           ))}
         </div>
         <div className="px-5 pt-2.5 font-syne text-[7.5px] font-black tracking-widest" style={{ color: 'rgba(255,255,255,0.25)' }}>
@@ -171,13 +222,24 @@ export default function PuestaEnMarcha({ profile, onTerminar, onTema, showToast 
 
           {paso === 0 && (
             <>
-              <Cabecera icono="sparkles" eyebrow="BRUTAL STUDIOS" titulo={`Bienvenido, ${(profile?.name || '').split(' ')[0] || 'compañero'}`}
-                bajada="Vamos a dejar tu cuenta lista en un minuto. Puedes saltarte cualquier paso y hacerlo luego desde Operativa." />
+              <div className="flex flex-col items-center text-center mb-5">
+                <div className="relative mb-3.5">
+                  <div className="absolute inset-0 rounded-full blur-xl" style={{ background: `${BLU}30` }} />
+                  <img src="/logo-oscuro.svg" alt="Brutal Studios" width={82} height={82} className="nx-boot-insignia-oscura relative" />
+                  <img src="/logo-claro.svg" alt="" aria-hidden width={82} height={82} className="nx-boot-insignia-clara relative" />
+                </div>
+                <h2 className="font-figtree text-[21px] font-black text-white leading-tight" style={{ letterSpacing: '-0.02em' }}>
+                  Bienvenido, {(profile?.name || '').split(' ')[0] || 'compañero'}
+                </h2>
+                <p className="font-figtree text-[12.5px] mt-2 leading-snug px-2" style={{ color: 'rgba(255,255,255,0.42)' }}>
+                  Vamos a dejar tu cuenta lista en un minuto. Puedes saltarte cualquier paso y hacerlo luego desde Operativa.
+                </p>
+              </div>
               <div className="flex flex-col gap-2">
                 {[
                   { i: 'user', t: 'Tu ficha', d: 'Nombre, iniciales y color con los que te verá el equipo' },
                   { i: 'key', t: 'Tu contraseña', d: 'La actual te la dio otra persona' },
-                  { i: 'sun', t: 'Aspecto', d: 'Claro u oscuro' },
+                  { i: 'download', t: 'Instalar la app', d: 'Acceso directo, sin barra del navegador' },
                   { i: 'mail', t: 'Gmail', d: 'Para que tu correo entre en la app' },
                   { i: 'bell', t: 'Avisos', d: 'Notificaciones de lo urgente' },
                 ].map(x => (
@@ -240,22 +302,50 @@ export default function PuestaEnMarcha({ profile, onTerminar, onTema, showToast 
 
           {paso === 3 && (
             <>
-              <Cabecera icono="sun" eyebrow="ASPECTO" titulo="Claro u oscuro"
-                bajada="Se guarda en este aparato. Puedes cambiarlo cuando quieras desde la barra lateral." />
-              <div className="grid gap-3" style={{ gridTemplateColumns: '1fr 1fr' }}>
-                {[
-                  { c: false, t: 'Oscuro', d: 'El de siempre', bg: '#0A0A14', fg: '#F2F3F9' },
-                  { c: true, t: 'Claro', d: 'Para mucha luz', bg: '#F2F3F5', fg: '#12131A' },
-                ].map(o => (
-                  <button key={o.t} onClick={() => { setClaro(o.c); onTema(o.c) }}
-                    className="rounded-2xl p-3 text-left transition-all active:scale-95"
-                    style={{ background: o.bg, border: `2px solid ${claro === o.c ? VIO : BORDER}` }}>
-                    <div className="rounded-lg mb-2" style={{ height: '2.2rem', background: claro === o.c ? `${VIO}30` : 'rgba(128,128,150,0.18)' }} />
-                    <div className="font-figtree text-[12.5px] font-bold" style={{ color: o.fg }}>{o.t}</div>
-                    <div className="font-figtree text-[10.5px]" style={{ color: o.fg, opacity: 0.5 }}>{o.d}</div>
-                  </button>
-                ))}
-              </div>
+              <Cabecera icono="download" eyebrow="ACCESO DIRECTO" titulo="Instala Nexus"
+                bajada="Se abre a pantalla completa, sin barra del navegador, y los avisos llegan aunque la tengas cerrada." />
+              {yaInstalada ? (
+                <div className="flex items-center gap-2 px-3.5 py-3 rounded-2xl font-figtree text-[12.5px]"
+                  style={{ background: `${GRN}10`, border: `1px solid ${GRN}30`, color: GRN }}>
+                  <LucideIcon name="check" size={14} color={GRN} /> Ya la estás usando instalada
+                </div>
+              ) : promptInstalar ? (
+                /* Android y escritorio dan un instalador de verdad: un boton, no
+                   instrucciones. Se usa siempre que el navegador lo ofrezca. */
+                <button onClick={lanzarInstalacion}
+                  className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl font-syne text-[9px] font-black tracking-widest"
+                  style={{ background: `${AMARILLO}1A`, border: `1px solid ${AMARILLO}45`, color: AMARILLO }}>
+                  <LucideIcon name="download" size={13} color={AMARILLO} />
+                  INSTALAR AHORA
+                </button>
+              ) : (
+                /* iOS no lo ofrece: Safari obliga a hacerlo a mano. Se dan los
+                   pasos de SU navegador y no una lista de todos los casos, que es
+                   lo que convierte esta pantalla en la peor del recorrido. */
+                <div className="rounded-2xl px-4 py-3.5" style={{ background: SURF2, border: `1px solid ${BORDER}` }}>
+                  <div className="font-syne text-[7.5px] font-black tracking-widest mb-2.5" style={{ color: AMARILLO }}>
+                    {comoInstalar === 'ios' ? 'EN IPHONE O IPAD'
+                      : comoInstalar === 'safari-mac' ? 'EN SAFARI, EN EL MAC'
+                      : 'EN ESTE NAVEGADOR'}
+                  </div>
+                  <ol className="flex flex-col gap-2">
+                    {({
+                      ios: ['Pulsa el botón de Compartir, abajo en el centro', 'Baja y elige «Añadir a pantalla de inicio»', 'Confirma con «Añadir»'],
+                      'safari-mac': ['Abre el menú Archivo, arriba del todo', 'Elige «Añadir al Dock»', 'Confirma con «Añadir»'],
+                      otro: ['Abre el menú del navegador (los tres puntos)', 'Busca «Instalar aplicación» o «Añadir a la pantalla de inicio»', 'Confirma'],
+                    } as const)[comoInstalar].map((t, k) => (
+                      <li key={k} className="flex items-start gap-2.5">
+                        <span className="flex items-center justify-center flex-shrink-0 rounded-full font-syne text-[8px] font-black"
+                          style={{ width: '17px', height: '17px', background: `${AMARILLO}22`, color: AMARILLO, marginTop: '1px' }}>{k + 1}</span>
+                        <span className="font-figtree text-[12.5px] leading-snug" style={{ color: 'rgba(255,255,255,0.7)' }}>{t}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+              <p className="font-figtree text-[11px] mt-3" style={{ color: 'rgba(255,255,255,0.28)' }}>
+                Hazlo desde <strong style={{ color: 'rgba(255,255,255,0.5)' }}>brutalia.tech</strong>, que es la dirección buena.
+              </p>
             </>
           )}
 

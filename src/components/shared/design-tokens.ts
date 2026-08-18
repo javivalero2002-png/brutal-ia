@@ -12,6 +12,12 @@ export const AMBAR = '#FFB020'
 // resplandor del boton de voz desaparecian JUSTO en modo 'thinking'. Es el
 // mismo tono: #8B5CF6 al 90% es exactamente ese rgba.
 export const VIO = '#8B5CF6'
+
+// El amarillo de la marca, el de la insignia de Instagram (`public/brutal-logo-ig.svg`).
+// Está aquí y no escrito a mano en un componente porque la comprobación de
+// opacidad de `scripts/check-color-opacity.mjs` exige que la base sea hex: en
+// cuanto alguien lo concatene con '18' tiene que salir un color válido.
+export const AMARILLO = '#FFE000'
 export const SURFACE = '#0A0A14'
 export const SURF2 = '#0F0F1E'
 export const BORDER = 'rgba(255,255,255,0.06)'
