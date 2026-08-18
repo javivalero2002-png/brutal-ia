@@ -59,6 +59,19 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
   const [platformFilter, setPlatformFilter] = useState('Todas')
   const [accountLogoUrl, setAccountLogoUrl] = useState<string>('')
   const [allAccountLogos, setAllAccountLogos] = useState<Record<string,string>>({})
+/**
+ * El avatar de una cuenta cuando nadie ha subido uno.
+ *
+ * La app ya trae la insignia de la marca en `public/brutal-logo-ig.svg` —el
+ * círculo amarillo— y no la usaba en ningún sitio: la cuenta del estudio se
+ * pintaba con una «B» sobre un gris, que es lo que Javi veía y echaba de menos.
+ * Para las cuentas de CLIENTES sigue la inicial, que ahí sí es lo correcto: poner
+ * el logo de Brutal en la cuenta de otro sería mentir sobre de quién es la pieza.
+ */
+const LOGO_MARCA = '/brutal-logo-ig.svg'
+const esCuentaDelEstudio = (nombre: string) => /brutal/i.test((nombre || '').trim())
+const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MARCA : '')
+
   const logoFileInputRef = useRef<HTMLInputElement>(null)
   const [contentSearch, setContentSearch] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
@@ -119,7 +132,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
     const key = editAccountName.trim() || 'Brutal Studios'
     const fromServer = allAccountLogos[key]
     if (fromServer) { setAccountLogoUrl(fromServer); return }
-    try { setAccountLogoUrl(localStorage.getItem(`account-logo-${key}`) || '') } catch { setAccountLogoUrl('') }
+    try { setAccountLogoUrl(localStorage.getItem(`account-logo-${key}`) || logoPorDefecto(key)) } catch { setAccountLogoUrl(logoPorDefecto(key)) }
   }, [editAccountName, allAccountLogos])
   const coverFileInputRef = useRef<HTMLInputElement>(null)
   const filteredAgendaRef = useRef<any[]>([])
@@ -710,7 +723,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                                   </div>
                                 )
                                 // Post — imagen cuadrada (default)
-                                const cardLogoUrl = allAccountLogos[acc] || (() => { try { return localStorage.getItem(`account-logo-${acc}`) || '' } catch { return '' } })()
+                                const cardLogoUrl = allAccountLogos[acc] || (() => { try { return localStorage.getItem(`account-logo-${acc}`) || '' } catch { return '' } })() || logoPorDefecto(acc)
                                 const cardInitial = (acc.trim().charAt(0)||'B').toUpperCase()
                                 return (
                                   <div className="relative overflow-hidden flex-shrink-0 mx-2 mt-2 rounded-xl"

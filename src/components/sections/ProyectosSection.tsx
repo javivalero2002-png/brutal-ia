@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { rutaApp } from '@/lib/appUrl'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, dlLabel, todayKey, estadoDeadline, AMBAR } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
@@ -251,6 +252,37 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
       const pid = proyectoId
       if (pid && j.analysis) {
         fetch(`/api/projects/${pid}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pdf_analysis: JSON.stringify(j.analysis) }) }).catch(() => {})
+
+        // Y TAMBIÉN a Memoria. El análisis se quedaba solo dentro del proyecto:
+        // había que saber que existía ese proyecto y entrar a mirarlo, no salía al
+        // buscar en Memoria, y sobre todo Harvey no lo veía — así que lo que la
+        // app acababa de aprender de un contrato no lo sabía nadie más.
+        //
+        // El coste es CERO: se guarda el análisis que ya se ha pagado, no se
+        // vuelve a leer el PDF.
+        const a = j.analysis
+        const proy = data.projects?.find((p: Project) => p.id === pid)
+        const ficha = [
+          a.data?.client ? `Cliente: ${a.data.client}` : '',
+          a.data?.budget ? `Presupuesto: ${a.data.budget}` : '',
+          a.data?.dates ? `Fechas: ${a.data.dates}` : '',
+          a.data?.scope ? `Alcance: ${a.data.scope}` : '',
+        ].filter(Boolean).join(' · ')
+        const puntos = (a.keyPoints || []).slice(0, 5).map((p: string) => `· ${p}`).join('\n')
+
+        data.createMemoria?.({
+          title: `${nombre || 'Proyecto'} — documento`,
+          category: 'Documento',
+          // Enlazada al cliente del proyecto: es el que ya sabemos con certeza,
+          // mejor que el nombre que haya leído la IA dentro del PDF.
+          ...(proy?.client_id ? { client_id: proy.client_id } : {}),
+          content: [
+            a.summary || '',
+            ficha,
+            puntos,
+            `📎 Documento: ${rutaApp('/api/archivo?u=' + encodeURIComponent(pdfUrl))}`,
+          ].filter(Boolean).join('\n\n'),
+        })?.catch?.(() => { /* la nota es un extra: si falla, el análisis del proyecto sigue guardado */ })
       }
     } catch { showToast('Error al analizar el PDF') }
     finally { setPdfBusy(false) }
