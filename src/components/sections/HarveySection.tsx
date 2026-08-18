@@ -18,6 +18,12 @@ interface PropsHarvey {
   onClearPreload: any
 }
 
+// La hora de las burbujas, en un solo sitio y en Madrid. Los turnos de Harvey ya
+// la forzaban y los del usuario no: dos burbujas seguidas podían enseñar relojes
+// distintos para quien estuviera fuera de España.
+const horaMadrid = () =>
+  new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' })
+
 function HarveySection({data, profile, showToast, onNavigate, preloadMessage, onClearPreload}: PropsHarvey) {
   const isMobile = useIsMobile()
   type HarveyMode = 'idle'|'recording'|'thinking'|'speaking'
@@ -25,6 +31,11 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
   const [lastAudioUrl, setLastAudioUrl] = useState<string|null>(null)
   const lastAudioUrlRef = useRef<string|null>(null)
   const [conversation, setConversation] = useState<Array<{role:'user'|'harvey',text:string,searched?:boolean,ts?:string}>>([])
+  // El estado de React todavía no se ha actualizado cuando el manejador que
+  // acaba de cambiarlo sigue corriendo. Este espejo sí, porque se escribe a mano
+  // y en el momento. Es lo que garantiza que el historial que recibe Harvey sea
+  // el de AHORA y no el del turno anterior.
+  const conversationRef = useRef<Array<{role:'user'|'harvey',text:string,searched?:boolean,ts?:string}>>([])
   const [textInput, setTextInput] = useState('')
   const [copiedHarveyIdx, setCopiedHarveyIdx] = useState<number|null>(null)
   // El tipo lo fija el modulo del parser: declararlo a mano aqui era la tercera
@@ -100,8 +111,7 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
     if (!preloadMessage) return
     const msg = preloadMessage
     onClearPreload?.()
-    setConversation(prev=>[...prev,{role:'user',text:msg,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}])
-    askHarvey(msg)
+    preguntar(msg)
   }, [preloadMessage]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Spacebar shortcut: toggle recording (only when not typing)
@@ -129,6 +139,32 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [mode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { conversationRef.current = conversation }, [conversation])
+
+  /**
+   * El ÚNICO camino para mandarle algo a Harvey.
+   *
+   * Antes cada sitio lo hacía a su manera y convivían dos semánticas: los de
+   * texto pasaban el historial a mano —incluyendo el mensaje actual, que el
+   * servidor vuelve a añadir por su cuenta— y los de VOZ y el precargado no
+   * pasaban nada, así que caían al `conversation` de la clausura.
+   *
+   * Eso es lo que hacía que hablando se perdiera el hilo: le pedías una tarea,
+   * Harvey preguntaba de qué iba, respondías «urgente, editar vídeos» y le
+   * llegaba esa frase suelta, sin la pregunta que la había provocado. Medido
+   * contra el modelo real: sin historial crea la tarea 1 de cada 3 veces; con
+   * historial, 3 de 3. Las otras dos vuelve a preguntar lo mismo.
+   */
+  const preguntar = (texto: string) => {
+    const previos = conversationRef.current
+    const nuevo = [...previos, { role: 'user' as const, text: texto, ts: horaMadrid() }]
+    conversationRef.current = nuevo          // a mano: askHarvey corre antes del re-render
+    setConversation(nuevo)
+    // `previos` y no `nuevo`: el servidor añade el mensaje actual desde `message`,
+    // así que mandarlo también en el historial lo duplicaba.
+    return askHarvey(texto, previos)
+  }
 
   const buildContext = () => {
     const tasks = (data.tasks||[]) as any[]
@@ -318,12 +354,10 @@ ${memLines2||'  sin documentos'}`
     return suggestions.slice(0, 3)
   }
 
-  // `historial` llega como parametro en vez de leerse de `conversation`.
-  // Todos los llamantes hacen `setConversation(prev => [...prev, {user}])` y acto
-  // seguido llaman aqui, en el MISMO handler: el estado todavia no se ha
-  // actualizado, asi que `conversation` era el de antes de la pregunta y siempre
-  // le faltaba el ultimo turno. Ademas empezaba en el saludo de Harvey, que es lo
-  // que hacia que Anthropic devolviera 400.
+  // NO se llama desde fuera: el único camino es `preguntar()`, que es quien
+  // garantiza que `historial` sea el de ahora. Aquí queda el respaldo por si
+  // alguna vez llega sin él — el espejo, nunca el estado de la clausura, que es
+  // lo que estaba atrasado y hacía que Harvey perdiera el hilo hablando.
   const askHarvey = async (userText: string, historial?: Array<{role:'user'|'harvey',text:string,searched?:boolean,ts?:string}>) => {
     const run = ++voiceRunRef.current
     setMode('thinking')
@@ -339,7 +373,7 @@ ${memLines2||'  sin documentos'}`
     try {
       const res = await fetch('/api/harvey/chat', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ message:userText, context:buildContext(), history:(historial ?? conversation).slice(-10), stream:true }),
+        body: JSON.stringify({ message:userText, context:buildContext(), history:(historial ?? conversationRef.current).slice(-10), stream:true }),
         signal: AbortSignal.timeout(60000),
       })
       if (!aliveRef.current || run !== voiceRunRef.current) { setIsSearching(false); return }
@@ -441,8 +475,7 @@ ${memLines2||'  sin documentos'}`
       }
 
       if (!text) { setMode('idle'); showToast('No te escuché — vuelve a intentarlo'); return }
-      setConversation(prev=>[...prev,{role:'user',text,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}])
-      await askHarvey(text)
+      await preguntar(text)
     } catch { setMode('idle'); showToast('Error al procesar audio') }
   }
 
@@ -835,7 +868,7 @@ ${memLines2||'  sin documentos'}`
         {followUps.length > 0 && mode === 'idle' && !pendingAction && (
           <div className="flex flex-wrap gap-2 justify-start pt-1 animate-fadeUp">
             {followUps.map((f,i)=>(
-              <button key={i} onClick={()=>{ setFollowUps([]); const nuevo=[...conversation,{role:'user' as const,text:f,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}]; setConversation(nuevo); askHarvey(f,nuevo) }}
+              <button key={i} onClick={()=>{ setFollowUps([]); preguntar(f) }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all hover:opacity-80"
                 style={{background:'rgba(27,95,250,0.08)',border:'1px solid rgba(27,95,250,0.18)',color:'rgba(255,255,255,0.5)'}}>
                 <LucideIcon name="corner-down-right" size={9} color={BLU}/>
@@ -881,7 +914,7 @@ ${memLines2||'  sin documentos'}`
         <div className="flex gap-2 mb-3 flex-wrap">
           {quickActions.map((a,i)=>(
             <button key={i} disabled={mode!=='idle'}
-              onClick={()=>{ const nuevo=[...conversation,{role:'user' as const,text:a.t,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}]; setConversation(nuevo); askHarvey(a.t,nuevo) }}
+              onClick={()=>{ preguntar(a.t) }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all hover:opacity-80 disabled:opacity-25"
               style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.45)'}}>
               <LucideIcon name={a.icon} size={10} color={a.c}/>
@@ -933,9 +966,7 @@ ${memLines2||'  sin documentos'}`
             const txt = textInput.trim()
             if (!txt || mode !== 'idle') return
             setTextInput('')
-            const nuevo=[...conversation,{role:'user' as const,text:txt,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}]
-            setConversation(nuevo)
-            askHarvey(txt,nuevo)
+            preguntar(txt)
           }} className="flex-1 flex items-center gap-2.5 px-4 py-3 rounded-2xl" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${mode!=='idle'?'rgba(27,95,250,0.25)':BORDER}`,transition:'border-color 0.2s'}}>
             <input
               value={textInput}
