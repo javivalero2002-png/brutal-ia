@@ -98,10 +98,16 @@ export default function ResetPasswordPage() {
           <form onSubmit={guardar}>
             <label style={s.label}>Nueva contraseña</label>
             <input style={s.input} type="password" value={pwd} onChange={e => setPwd(e.target.value)}
-                   placeholder="Mínimo 8 caracteres" required autoComplete="new-password" disabled={sesion === 'no' || ok} />
+                   placeholder="Mínimo 8 caracteres" required autoComplete="new-password" disabled={sesion === 'no' || ok} 
+              onFocus={e=>{e.currentTarget.style.borderColor='rgba(27,95,250,0.55)'}}
+              onBlur={e=>{e.currentTarget.style.borderColor='rgba(27,95,250,0.2)'}}
+              />
             <label style={s.label}>Repítela</label>
             <input style={s.input} type="password" value={pwd2} onChange={e => setPwd2(e.target.value)}
-                   required autoComplete="new-password" disabled={sesion === 'no' || ok} />
+                   required autoComplete="new-password" disabled={sesion === 'no' || ok} 
+              onFocus={e=>{e.currentTarget.style.borderColor='rgba(27,95,250,0.55)'}}
+              onBlur={e=>{e.currentTarget.style.borderColor='rgba(27,95,250,0.2)'}}
+              />
             <button style={{ ...s.btn, opacity: (loading || sesion !== 'si' || ok) ? 0.5 : 1 }}
                     type="submit" disabled={loading || sesion !== 'si' || ok}>
               {loading ? 'GUARDANDO…' : 'GUARDAR Y ENTRAR'}

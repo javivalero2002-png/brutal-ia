@@ -114,7 +114,10 @@ export default function LoginPage() {
               placeholder="pablo@brutalstudios.es"
               required
               autoComplete="email"
-            />
+            
+              onFocus={e=>{e.currentTarget.style.borderColor='rgba(27,95,250,0.55)'}}
+              onBlur={e=>{e.currentTarget.style.borderColor='rgba(27,95,250,0.2)'}}
+              />
 
             <label style={s.label}>Contraseña</label>
             <input
@@ -125,7 +128,10 @@ export default function LoginPage() {
               placeholder="••••••••"
               required
               autoComplete="current-password"
-            />
+            
+              onFocus={e=>{e.currentTarget.style.borderColor='rgba(27,95,250,0.55)'}}
+              onBlur={e=>{e.currentTarget.style.borderColor='rgba(27,95,250,0.2)'}}
+              />
 
             <button
               type="submit"

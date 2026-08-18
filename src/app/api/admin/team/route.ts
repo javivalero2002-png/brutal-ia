@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { ACCENT_COLORS } from '@/components/shared/design-tokens'
 import { APP_URL } from '@/lib/appUrl'
 import { NextRequest, NextResponse } from 'next/server'
 import { PUSH_ROW } from '@/lib/push'
@@ -54,8 +55,11 @@ export async function POST(request: NextRequest) {
   if (!email || !name) return NextResponse.json({ error: 'email and name required' }, { status: 400 })
 
   const rawInitials = initials || name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
-  const colors = ['#1B5FFA','#9B5FFA','#E51D2A','#FA8B1B','#1BFA9B','#F97316','#06B6D4']
-  const color = avatar_color || colors[Math.abs(email.charCodeAt(0)) % colors.length]
+  // La paleta compartida, no una lista a mano. Tres de los colores que había
+  // aquí eran barajados de los dígitos de 1B5FFA que no existían en ningún otro
+  // sitio de la app — y el picker de Ajustes ofrece exactamente ACCENT_COLORS,
+  // así que el color de un miembro nuevo ni siquiera aparecía seleccionable.
+  const color = avatar_color || ACCENT_COLORS[Math.abs(email.charCodeAt(0)) % ACCENT_COLORS.length]
   const { randomBytes } = await import('crypto')
   const pwd = password || randomBytes(16).toString('base64url') + 'Aa1!'
 

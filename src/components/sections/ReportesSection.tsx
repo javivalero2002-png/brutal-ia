@@ -3,7 +3,7 @@ import { useEffect, useRef, useMemo } from 'react'
 import { esTareaDe } from '@/components/shared/helpers'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { Task, Project, Client, Profile, NexusData } from '@/types'
-import { PLATAFORMA_COLOR, useIsMobile, BLU, RED, GRN, BORDER, LucideIcon, dlDate, dlLabel, estadoDeadline, Donut, Gauge, AreaChart, localDayKey } from '@/components/shared'
+import { PLATAFORMA_COLOR, useIsMobile, BLU, RED, GRN, BORDER, SURF2, LucideIcon, dlDate, dlLabel, estadoDeadline, Donut, Gauge, AreaChart, localDayKey } from '@/components/shared'
 import type { IrASeccion, Section } from '@/components/shared/secciones'
 
 interface PropsReportes {
@@ -105,7 +105,7 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
           printWin.document.write(`<!DOCTYPE html><html><head><title>Reporte Brutal Studios — ${now}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111;padding:40px;max-width:800px;margin:0 auto}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111;padding-bottom:20px;margin-bottom:30px}.logo-area h1{font-size:28px;font-weight:900;letter-spacing:-1px}.logo-area p{color:#666;font-size:13px;margin-top:4px}.date-area{text-align:right;color:#666;font-size:13px}.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:30px}.kpi{padding:16px;border:1px solid #e0e0e0;border-radius:8px;text-align:center}.kpi .num{font-size:36px;font-weight:900;color:#1B5FFA}.kpi .lbl{font-size:11px;color:#666;margin-top:4px}.section{margin-bottom:28px}.section h2{font-size:16px;font-weight:900;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;color:#333;padding-bottom:6px;border-bottom:1px solid #e0e0e0}.footer{margin-top:40px;padding-top:16px;border-top:1px solid #e0e0e0;color:#999;font-size:11px;display:flex;justify-content:space-between}@media print{body{padding:20px}}</style></head><body><div class="header"><div class="logo-area"><h1>Brutal Studios</h1><p>Informe de gestión</p></div><div class="date-area"><strong>${now}</strong><br>brutal.ia · sistema interno</div></div><div class="kpis"><div class="kpi"><div class="num">${donePct}%</div><div class="lbl">Tareas completadas</div></div><div class="kpi"><div class="num" style="color:${urgentTasks>0?'#E51D2A':'#1B5FFA'}">${urgentTasks}</div><div class="lbl">Urgentes pendientes</div></div><div class="kpi"><div class="num" style="color:${overdueProjects.length>0?'#E51D2A':'#1B5FFA'}">${overdueProjects.length}</div><div class="lbl">Proyectos atrasados</div></div><div class="kpi"><div class="num">${projects.length}</div><div class="lbl">Proyectos totales</div></div><div class="kpi"><div class="num">${clients.length}</div><div class="lbl">Clientes</div></div></div><div class="section"><h2>Carga de trabajo del equipo</h2>${membersHtml}</div><div class="section"><h2>Estado de proyectos</h2>${projHtml}</div><div class="footer"><span>Brutal Studios · brutal.ia</span><span>Generado: ${now}</span></div></body></html>`)
           printWin.document.close()
           setTimeout(()=>printWin.print(),500)
-        }} ref={printBtnRef} className="flex items-center gap-2 px-4 py-2 rounded-xl font-syne text-[10px] font-black tracking-wide transition-colors" style={{background:'rgba(27,95,250,0.1)',color:BLU,border:'1px solid rgba(27,95,250,0.2)'}}>
+        }} ref={printBtnRef} className="flex items-center gap-2 px-4 py-2 rounded-2xl font-syne text-[10px] font-black tracking-wide transition-colors" style={{background:'rgba(27,95,250,0.1)',color:BLU,border:'1px solid rgba(27,95,250,0.2)'}}>
           <LucideIcon name="download" size={13} color={BLU}/>EXPORTAR PDF
           {!isMobile && <span className="font-syne text-[7px] font-black ml-1 px-1.5 py-0.5 rounded" style={{background:'rgba(27,95,250,0.2)',color:BLU+'bb'}}>P</span>}
         </button>
@@ -128,7 +128,7 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
         const total7 = counts.reduce((a,b)=>a+b,0)
         if (total7 === 0) return null
         return (
-          <div className="flex items-stretch gap-4 mb-5 px-4 py-3.5 rounded-xl" style={{background:'rgba(27,95,250,0.04)',border:'1px solid rgba(27,95,250,0.1)'}}>
+          <div className="flex items-stretch gap-4 mb-5 px-4 py-3.5 rounded-2xl" style={{background:'rgba(27,95,250,0.04)',border:'1px solid rgba(27,95,250,0.1)'}}>
             <div className="flex-1 min-w-0 flex flex-col justify-center">
               <div className="font-syne text-[7px] font-black tracking-widest mb-1" style={{color:'rgba(255,255,255,0.2)'}}>TAREAS COMPLETADAS · ÚLTIMOS 7 DÍAS</div>
               <AreaChart values={counts} color={GRN} height={52}/>
@@ -158,8 +158,8 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
         // `satisfies` y no `as`: con `as` el tipo se AFIRMA sin comprobarse —un
         // nav:'proyecto' en singular pasaba tsc igual. Verificado metiendo el typo.
         ] satisfies {v:string;l:string;accent:string|null;nav:Section}[]).map((k,i)=>(
-          <button key={i} onClick={()=>onNavigate?.(k.nav)} className={isMobile ? 'rounded-xl p-2.5 text-left transition-all hover:opacity-80' : 'rounded-xl p-4 text-left transition-all hover:opacity-80'} style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)',borderTop:`2px solid ${k.accent||'rgba(255,255,255,0.1)'}`}}>
-            <div className="font-syne font-black mb-1 leading-none" style={{color:k.accent||'#F0F0F8',fontSize:isMobile?'clamp(15px,5vw,22px)':totalMRR>0?'clamp(20px,2.2vw,36px)':'36px',overflowWrap:'anywhere'}}>{k.v}</div>
+          <button key={i} onClick={()=>onNavigate?.(k.nav)} className={isMobile ? 'rounded-2xl p-2.5 text-left transition-all hover:opacity-80' : 'rounded-2xl p-4 text-left transition-all hover:opacity-80'} style={{background:SURF2,border:'1px solid rgba(255,255,255,0.07)',borderTop:`2px solid ${k.accent||'rgba(255,255,255,0.1)'}`}}>
+            <div className="font-syne font-black mb-1 leading-none" style={{color:k.accent||'#F0F0F8',fontSize:isMobile?'clamp(15px,5vw,22px)':k.v.length>6?'clamp(16px,1.7vw,27px)':totalMRR>0?'clamp(20px,2.2vw,36px)':'36px',whiteSpace:'nowrap'}}>{k.v}</div>
             <div className={isMobile ? 'text-[10px] text-white/35 leading-tight' : 'text-xs text-white/35'}>{k.l}</div>
           </button>
         ))}
@@ -167,7 +167,7 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
 
       <div className="grid grid-cols-2 md:grid-cols-[1fr_1fr] gap-2 md:gap-4 mb-4 flex-shrink-0">
         {/* Task completion — radial gauge */}
-        <div className="rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+        <div className="rounded-2xl p-5" style={{background:SURF2,border:'1px solid rgba(255,255,255,0.07)'}}>
           <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-3">Estado de tareas</div>
           <div className="flex items-center gap-4">
             <div className="flex-shrink-0">
@@ -190,7 +190,7 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
         </div>
 
         {/* Projects by status — donut */}
-        <div className="rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+        <div className="rounded-2xl p-5" style={{background:SURF2,border:'1px solid rgba(255,255,255,0.07)'}}>
           <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-3">Proyectos por estado</div>
           {projects.length === 0 ? (
             <div className="text-center text-white/20 text-sm py-6">Sin proyectos</div>
@@ -228,7 +228,7 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
       {/* Carga del equipo e inbox: solo escritorio (en movil la pagina es estatica y compacta) */}
       {!isMobile && <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-4 flex-shrink-0">
         {/* Team workload */}
-        <div className="rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+        <div className="rounded-2xl p-5" style={{background:SURF2,border:'1px solid rgba(255,255,255,0.07)'}}>
           <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-5">Carga de trabajo por persona</div>
           <div className="space-y-4">
             {tasksByMember.map((m: any,i: number)=>(
@@ -255,7 +255,7 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
         </div>
 
         {/* Inbox urgency */}
-        <div className="rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+        <div className="rounded-2xl p-5" style={{background:SURF2,border:'1px solid rgba(255,255,255,0.07)'}}>
           <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Inbox por urgencia</div>
           {inbox.length === 0 ? (
             <div className="text-center text-white/20 text-sm py-4 mb-3">Inbox vacío</div>
@@ -283,13 +283,13 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
                 {label:'WhatsApp', n:inbox.filter(m=>m.source==='whatsapp').length, color:'#25D366'},
                 {label:'Interno', n:inbox.filter(m=>m.source==='internal').length, color:'#FFB020'},
               ].filter(s=>s.n>0).map((s,i)=>(
-                <div key={i} className="flex-1 text-center px-3 py-2 rounded-xl" style={{background:s.color+'0A',border:`1px solid ${s.color}22`}}>
+                <div key={i} className="flex-1 text-center px-3 py-2 rounded-2xl" style={{background:s.color+'0A',border:`1px solid ${s.color}22`}}>
                   <div className="font-figtree text-[18px] font-black" style={{color:s.color}}>{s.n}</div>
                   <div className="font-syne text-[7.5px] font-black tracking-wide" style={{color:'rgba(255,255,255,0.25)'}}>{s.label.toUpperCase()}</div>
                 </div>
               ))}
               {inbox.filter(m=>!['gmail','whatsapp','internal'].includes(m.source)).length > 0 && (
-                <div className="flex-1 text-center px-3 py-2 rounded-xl" style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)'}}>
+                <div className="flex-1 text-center px-3 py-2 rounded-2xl" style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)'}}>
                   <div className="font-figtree text-[18px] font-black" style={{color:'rgba(255,255,255,0.4)'}}>{inbox.filter(m=>!['gmail','whatsapp','internal'].includes(m.source)).length}</div>
                   <div className="font-syne text-[7.5px] font-black tracking-wide" style={{color:'rgba(255,255,255,0.2)'}}>OTROS</div>
                 </div>
@@ -314,7 +314,7 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
 
       {/* Content pipeline: solo escritorio */}
       {!isMobile && agendaItems.length > 0 && (
-        <div className="mt-4 rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+        <div className="mt-4 rounded-2xl p-5" style={{background:SURF2,border:'1px solid rgba(255,255,255,0.07)'}}>
           <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Pipeline de contenido</div>
           <div className="grid grid-cols-4 gap-6 mb-5">
             {([{k:'borrador',l:'En bruto',c:'rgba(255,255,255,0.42)'},{k:'pendiente',l:'En prod.',c:'rgba(255,176,32,0.9)'},{k:'listo',l:'Listo',c:GRN},{k:'publicado',l:'Publicado',c:BLU}] as const).map((s)=>{
@@ -370,7 +370,7 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
           .slice(0,8)
         if (!upcoming.length) return null
         return (
-          <div className="mt-4 rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+          <div className="mt-4 rounded-2xl p-5" style={{background:SURF2,border:'1px solid rgba(255,255,255,0.07)'}}>
             <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Próximos vencimientos</div>
             <div className="space-y-1">
               {upcoming.map((p:Project,i:number)=>{
@@ -420,7 +420,7 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
           .sort((a: any, b: any) => b.pendingT - a.pendingT)
         if (!rows.length) return null
         return (
-          <div className="mt-4 rounded-xl p-5" style={{background:'#0C0C15',border:'1px solid rgba(255,255,255,0.07)'}}>
+          <div className="mt-4 rounded-2xl p-5" style={{background:SURF2,border:'1px solid rgba(255,255,255,0.07)'}}>
             <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Resumen por cliente</div>
             <div className="space-y-1">
               {rows.map(({c,nProj,pendingT,avgProg}: any, i: number) => (

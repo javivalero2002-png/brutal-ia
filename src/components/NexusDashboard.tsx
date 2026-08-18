@@ -1143,7 +1143,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
         const isOk = /^✓|creado|guardado|actualizado|eliminado|leído|enviado|añadid|salvo|pieza/i.test(toast)&&!isErr
         const tc = isErr ? RED : isOk ? GRN : BLU
         return (
-          <div className="fixed left-1/2 z-[200] flex items-center gap-3 px-5 py-3 rounded-xl animate-riseT" style={{ bottom: isMobile ? 'calc(72px + env(safe-area-inset-bottom, 0px))' : '24px', transform:'translateX(-50%)', background:'#14142A', border:`1px solid ${tc}35`, boxShadow:`0 16px 44px rgba(0,0,0,0.55),0 0 0 1px ${tc}10` }}>
+          <div className="fixed left-1/2 z-[200] flex items-center gap-3 px-5 py-3 rounded-xl animate-riseT" style={{ bottom: isMobile ? 'calc(72px + env(safe-area-inset-bottom, 0px))' : '24px', transform:'translateX(-50%)', width:'max-content', maxWidth:'calc(100vw - 24px)', background:'#14142A', border:`1px solid ${tc}35`, boxShadow:`0 16px 44px rgba(0,0,0,0.55),0 0 0 1px ${tc}10` }}>
             <div className="w-1.5 h-1.5 rounded-full animate-pls" style={{ background:tc }} />
             <span className="text-sm" style={{color:'rgba(255,255,255,0.88)'}}>{toast}</span>
           </div>

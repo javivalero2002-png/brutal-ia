@@ -520,7 +520,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
       <div className={`flex items-end justify-between ${isMobile?'mb-5':'mb-8'} flex-wrap gap-3`}>
         <div>
           <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>GESTIÓN</div>
-          <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Proyectos</h1>
+          <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Proyectos</h1>
           <div className="nx-kbd-hints flex items-center gap-2 mt-1.5">
             {(['V VISTA','N NUEVO'] as const).map((hint,i,arr)=>(
               <span key={hint} className="flex items-center gap-2">
@@ -657,7 +657,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                     </div>
                   </div>
                 ))}
-                {col.items.length===0&&<div className="py-8 text-center text-[11px]" style={{color:'rgba(255,255,255,0.12)'}}>Arrastra aquí</div>}
+                {col.items.length===0&&<div className="py-8 text-center text-[11px]" style={{color:'rgba(255,255,255,0.22)'}}>Arrastra aquí</div>}
               </div>
             </div>
           ))}

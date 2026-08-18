@@ -412,7 +412,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
             <div className="min-w-0">
               <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>PRODUCCIÓN</div>
               <div className="flex items-baseline gap-3 flex-wrap">
-                <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.04em'}}>Pipeline</h1>
+                <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Pipeline</h1>
                 {!isMobile && <div className="flex items-center gap-2">
                   {(['J/K NAVEGAR','S ESTADO','F BUSCAR','N NUEVA'] as const).map((hint,i,arr)=>(
                     <span key={hint} className="flex items-center gap-2">

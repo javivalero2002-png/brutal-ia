@@ -134,10 +134,10 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
               de palabras a opacidad 0,15 y los atajos a 0,10. Las dos últimas eran
               invisibles y aun así ocupaban alto: el resultado era una cabecera
               apelmazada que no se leía. Lo que dicen cabe en una frase. */}
-          <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.22)'}}>
+          <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>
             CEREBRO
           </div>
-          <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Memoria</h1>
+          <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Memoria</h1>
           {data.memoria.length > 0 && (()=>{
             const palabras = data.memoria.reduce((s: number, m: any)=>s+(m.content||'').split(/\s+/).filter(Boolean).length,0)
             return (
@@ -183,7 +183,7 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
           <button onClick={()=>docInputRef.current?.click()} disabled={uploadingDoc} className="flex items-center gap-2 px-4 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest disabled:opacity-50" style={{background:'rgba(27,95,250,0.08)',border:`1px solid rgba(27,95,250,0.2)`,color:BLU}} title="Sube un PDF: la IA lo resume y lo guarda en la memoria">
             {uploadingDoc ? <><div className="w-3.5 h-3.5 border-2 rounded-full animate-spin" style={{borderColor:'rgba(27,95,250,0.3)',borderTopColor:BLU}}/>{!isMobile && <span>SUBIENDO…</span>}</> : <><LucideIcon name="upload" size={13} color={BLU}/>{!isMobile && <span>+ DOCUMENTO</span>}</>}
           </button>
-          <button onClick={()=>onOpenModal('memoria')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ ENTRADA</button>
+          <button onClick={()=>onOpenModal('memoria')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white transition-opacity hover:opacity-85" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ ENTRADA</button>
         </div>
       </div>
       <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl mb-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
@@ -281,11 +281,22 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
           </div>
         )})}
         {filtered.length===0 && (
-          <div className="py-20 text-center">
-            <div className="font-syne text-[11px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.12)'}}>
-              {memSearch ? 'SIN RESULTADOS' : 'SIN ENTRADAS'}
+          /* El vacío explica qué ES esto, no solo que está vacío: es la memoria
+             compartida del estudio y una persona nueva la va a ver así el primer
+             día. Un label al 12% y un botón no le decían nada. */
+          <div className="py-16 text-center flex flex-col items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{background:'rgba(27,95,250,0.08)',border:'1px solid rgba(27,95,250,0.18)'}}>
+              <LucideIcon name="database" size={20} color={BLU}/>
             </div>
-            {!memSearch && <button onClick={()=>onOpenModal('memoria')} className="font-syne text-[9px] font-black px-4 py-2 rounded-xl" style={{background:'rgba(27,95,250,0.08)',color:BLU}}>CREAR PRIMERA ENTRADA</button>}
+            <div className="font-syne text-[10px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.35)'}}>
+              {memSearch ? 'SIN RESULTADOS' : 'LA MEMORIA DEL ESTUDIO'}
+            </div>
+            <div className="font-figtree text-[12.5px] max-w-[320px] leading-snug" style={{color:'rgba(255,255,255,0.35)'}}>
+              {memSearch
+                ? 'Nada casa con esa búsqueda. Prueba con otra palabra o quita el filtro.'
+                : 'Decisiones, procesos y aprendizajes que no deben vivir solo en la cabeza de alguien. Lo que se escribe aquí lo encuentra todo el equipo — y Harvey.'}
+            </div>
+            {!memSearch && <button onClick={()=>onOpenModal('memoria')} className="font-syne text-[9px] font-black px-4 py-2.5 rounded-xl transition-opacity hover:opacity-85" style={{background:'rgba(27,95,250,0.1)',border:'1px solid rgba(27,95,250,0.25)',color:BLU}}>CREAR PRIMERA ENTRADA</button>}
           </div>
         )}
       </div>

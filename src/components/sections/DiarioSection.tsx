@@ -412,15 +412,17 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
           no es decoracion: el diario se llena todos los dias y sirve para mirar
           atras, asi que llegar a "el martes pasado" tiene que costar dos clics. */}
       <div className="flex items-start gap-3 mb-4 flex-wrap">
-        <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
-          style={{ background: `linear-gradient(140deg, ${VIO}2E, ${BLU}1A)`, border: `1px solid ${VIO}38` }}>
-          <LucideIcon name="pen-line" size={19} color={VIO} />
-        </div>
+        {/* La misma cabecera que las otras once secciones: kicker Syne + título
+            Figtree. Esta era la única en Syne mayúsculas con caja de icono
+            violeta — el acento genérico que ya se retiró de la puesta en marcha. */}
         <div className="flex-1 min-w-0">
-          <h1 className="font-syne text-[22px] font-black text-white leading-none" style={{ letterSpacing: '-0.02em' }}>
-            DIARIO
+          <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{ color: 'rgba(255,255,255,0.18)' }}>
+            DÍA A DÍA
+          </div>
+          <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{ letterSpacing: '-0.03em' }}>
+            Diario
           </h1>
-          <div className="font-figtree text-[11.5px] mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          <div className="font-figtree text-[11.5px] mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
             Lo que se propone y lo que hace el equipo, cada día.
           </div>
         </div>

@@ -300,7 +300,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
         <div className={`flex items-center justify-between ${isMobile?'px-4':'px-8'} py-5 flex-shrink-0 flex-wrap gap-3`} style={{borderBottom:`1px solid ${BORDER}`}}>
           <div>
             <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>AGENDA</div>
-            <h1 className="font-figtree text-[24px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Calendario</h1>
+            <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Calendario</h1>
             <div className="nx-kbd-hints flex items-center gap-2 mt-1.5">
               <span className="font-syne text-[7.5px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>← → MES</span>
               <span className="font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
@@ -325,7 +325,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
             <button onClick={()=>openEventForm()} className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all hover:opacity-80" style={{background:'rgba(167,139,250,0.1)',border:'1px solid rgba(167,139,250,0.28)',color:'#a78bfa'}}>
               <LucideIcon name="calendar" size={12} color="#a78bfa"/> EVENTO
             </button>
-            <button onClick={()=>onOpenModal('contenido')} className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
+            <button onClick={()=>onOpenModal('contenido')} className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white transition-opacity hover:opacity-85" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
               + NUEVA PIEZA
             </button>
           </div>
