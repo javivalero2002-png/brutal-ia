@@ -45,6 +45,14 @@ interface Props {
   profile: Profile
   showToast: (m: string) => void
   onNavigate: IrASeccion
+  /**
+   * Entradas de muestra para /preview. Con esto la sección NO toca la red.
+   *
+   * Sin ellas, el demo llamaba a la API real sin sesión: cada autoguardado
+   * devolvía 401 y la sección se pintaba con «no se pudo cargar». Un demo que
+   * enseña una sección rota es peor que no enseñarla.
+   */
+  demo?: Entrada[]
 }
 
 const horaCorta = (iso?: string | null) =>
@@ -88,14 +96,13 @@ const etiquetaDia = (clave: string): string => {
 const lineas = (t?: string | null) =>
   (t || '').split('\n').map(l => l.replace(/^[-•*\s]+/, '').trim()).filter(Boolean)
 
-export default function DiarioSection({ data, profile, showToast, onNavigate }: Props) {
+export default function DiarioSection({ data, profile, showToast, onNavigate, demo }: Props) {
   const isMobile = useIsMobile()
   const [entradas, setEntradas] = useState<Entrada[]>([])
   const [cargando, setCargando] = useState(true)
   const [errorCarga, setErrorCarga] = useState(false)
   const [objetivos, setObjetivos] = useState('')
   const [balance, setBalance] = useState('')
-  const [cumplidos, setCumplidos] = useState<Set<string>>(new Set())
   const [estadoGuardado, setEstadoGuardado] = useState<'limpio' | 'guardando' | 'guardado'>('limpio')
   const [propuestas, setPropuestas] = useState<TareaPropuesta[]>([])
   const [leyendo, setLeyendo] = useState(false)
@@ -128,6 +135,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
   const rechazadas = useRef<Set<string>>(new Set())
 
   const cargar = useCallback(async () => {
+    if (demo) { setEntradas(demo); setErrorCarga(false); setCargando(false); return }
     try {
       const res = await fetch(`/api/diario?dia=${dia}`)
       if (!res.ok) { setErrorCarga(true); return }
@@ -136,7 +144,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
       setEntradas(Array.isArray(j.entradas) ? j.entradas : [])
     } catch { setErrorCarga(true) }
     finally { setCargando(false) }
-  }, [dia])
+  }, [dia, demo])
 
   useEffect(() => { cargar() }, [cargar])
 
@@ -144,7 +152,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
   // ficha te borraría lo tecleado — que es justo el bug que esto viene a cerrar.
   // Al cambiar de día se vuelve a sembrar: lo que se ve es de OTRO día, y
   // arrastrar el borrador del anterior sería escribir en el día equivocado.
-  useEffect(() => { sembrado.current = false; setObjetivos(''); setBalance(''); setCumplidos(new Set()) }, [dia])
+  useEffect(() => { sembrado.current = false; setObjetivos(''); setBalance('') }, [dia])
 
   useEffect(() => {
     if (sembrado.current || !miEntrada) return
@@ -157,7 +165,13 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
   // Con retardo: guardar en cada tecla sería una escritura por pulsación. Al
   // desmontar se vacía el temporizador y se guarda de golpe, que es lo que hace
   // que cambiar de sección ya no pierda nada.
+  // Un 401 corta el autoguardado en seco. Sin esto, una sesión caducada convierte
+  // cada pulsación en una petición rechazada: decenas de errores en consola, el
+  // indicador parpadeando, y el usuario escribiendo un rato entero contra nada.
+  const sesionCaida = useRef(false)
+
   const guardarBorrador = useCallback(async (campos: { entrada?: string; cierre?: string }) => {
+    if (demo || sesionCaida.current) return
     setEstadoGuardado('guardando')
     try {
       const res = await fetch('/api/diario', {
@@ -166,6 +180,11 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
         body: JSON.stringify({ ...campos, borrador: true }),
       })
       setEstadoGuardado(res.ok ? 'guardado' : 'limpio')
+      if (res.status === 401) {
+        sesionCaida.current = true
+        showToast('Tu sesión ha caducado — vuelve a entrar para seguir guardando')
+        return
+      }
       if (!res.ok) showToast('No se pudo guardar el diario')
     } catch { setEstadoGuardado('limpio'); showToast('No se pudo guardar el diario') }
   }, [showToast])
@@ -198,6 +217,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
   // ── Las tareas se proponen solas ──────────────────────────────────────────
   useEffect(() => {
     const texto = [objetivos, balance].filter(Boolean).join('\n').trim()
+    if (demo || sesionCaida.current) return
     if (texto.length < 15 || texto === ultimoExtraido.current) return
     if (extraerTimer.current) clearTimeout(extraerTimer.current)
     // 2,5 s tras dejar de escribir: bastante para no llamar a mitad de frase, poco
@@ -276,18 +296,14 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
         return
       }
 
-      // Cerrar: completar lo tachado.
-      const marcados = objetivosDeHoy.filter(o => cumplidos.has(o)).map(normalizar)
-      const aCerrar = (data.tasks || []).filter((t: { id: string; text?: string; done?: boolean }) =>
-        !t.done && marcados.includes(normalizar(t.text || '')))
-      let cerradas = 0
-      for (const t of aCerrar) {
-        try { await data.updateTask(t.id, { done: true }); cerradas++ } catch { /* idem */ }
-      }
+      // Cerrar ya no marca nada: los objetivos se completan al tocarlos, contra la
+      // tarea, y para cuando llegas aquí eso ya está guardado. Esto solo fija el
+      // balance y la hora de cierre.
       await cargar()
-      showToast(cerradas
-        ? `Día cerrado · ${plural(cerradas, 'tarea completada', 'tareas completadas')}`
-        : 'Día cerrado')
+      const pendientes = objetivosDeHoy.filter(o => !estaHecho(o)).length
+      showToast(pendientes
+        ? `Día cerrado · ${plural(pendientes, 'objetivo sin cumplir', 'objetivos sin cumplir')}`
+        : 'Día cerrado · todo cumplido')
     } catch { showToast('No se pudo fichar') }
     finally { setFichando(false) }
   }
@@ -333,9 +349,34 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
   }
 
   const objetivosDeHoy = lineas(miEntrada?.entrada || objetivos)
+
+  // Un objetivo está cumplido si SU TAREA está hecha. No hay estado local.
+  //
+  // Antes `cumplidos` era un Set en React: al recargar se perdía y ningún
+  // compañero lo veía. Y no es un detalle de implementación — es que el diario
+  // solo sirve si lo que marcas está donde lo mira todo el mundo.
+  //
+  // La tarea es la verdad y aquí solo se lee. Así el tachado, el porcentaje, la
+  // lista de Tareas y lo que ve tu compañero no pueden discrepar: son el mismo
+  // dato. Emparejadas por texto normalizado, que es como nacieron.
+  const tareaDe = (o: string) =>
+    (data.tasks || []).find((t: { text?: string }) => normalizar(t.text || '') === normalizar(o)) as
+      { id: string; text?: string; done?: boolean } | undefined
+  const estaHecho = (o: string) => !!tareaDe(o)?.done
+
+  /** Marca o desmarca. Escribe en la tarea, que es donde vive el estado. */
+  const alternarObjetivo = async (o: string) => {
+    const t = tareaDe(o)
+    try {
+      if (t) await data.updateTask(t.id, { done: !t.done })
+      // Sin tarea todavía —marcaste antes de fichar— se crea ya completada, que es
+      // lo que acabas de decir que pasó.
+      else await data.createTask({ text: o, level: 'high', done: true, assigned_to: profile?.id, source: 'ai' })
+    } catch { showToast('No se pudo guardar') }
+  }
   // Los objetivos ya no existen se descuentan solos: si borras una línea, su
   // marca de cumplido deja de contar en vez de inflar el porcentaje.
-  const cumplidosVivos = objetivosDeHoy.filter(o => cumplidos.has(o)).length
+  const cumplidosVivos = objetivosDeHoy.filter(estaHecho).length
   const pctObjetivos = objetivosDeHoy.length ? Math.round((cumplidosVivos / objetivosDeHoy.length) * 100) : 0
   const colorNivel = (l: string) => l === 'urgent' ? RED : l === 'high' ? AMBAR : BLU
   const yaCerrado = !!miEntrada?.cierre_at
@@ -509,10 +550,10 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
           {objetivosDeHoy.length > 0 ? (
             <div className="px-4 pb-2.5 flex flex-wrap gap-2">
               {objetivosDeHoy.map((o, i) => {
-                const hecho = cumplidos.has(o)
+                const hecho = estaHecho(o)
                 return (
                   <button key={i} disabled={!esHoy}
-                    onClick={() => setCumplidos(s => { const n = new Set(s); n.has(o) ? n.delete(o) : n.add(o); return n })}
+                    onClick={() => alternarObjetivo(o)}
                     className="flex items-center gap-2 pl-2 pr-3.5 py-2 rounded-full text-left transition-all active:scale-95 disabled:active:scale-100"
                     style={{ background: hecho ? `${GRN}16` : 'rgba(255,255,255,0.045)', border: `1px solid ${hecho ? GRN + '42' : BORDER}`, maxWidth: '100%' }}>
                     <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center flex-shrink-0"

@@ -163,6 +163,25 @@ const CAL_EVENTS: CalendarEvent[] = [
 // servidor pinte la sección por defecto y el navegador otra: React aborta la
 // hidratación y regenera el árbol. Con la lectura en el servidor los dos parten
 // del mismo valor y no hay nada que reconciliar.
+// Diario de muestra para el demo. Como el resto de datos de esta pagina: existe
+// para poder ENSENAR la seccion sin credenciales ni datos del estudio.
+const DIARIO_DEMO = [
+  {
+    id: 'd1', user_id: 'u1', dia: 'hoy',
+    entrada: 'Cerrar el presupuesto de Nike\nMontar el reel de Mango',
+    cierre: 'Presupuesto enviado. El reel se queda a falta de locución.',
+    entrada_at: new Date().toISOString(), cierre_at: new Date().toISOString(),
+    autor: { id: 'u1', name: 'Javier Valero', initials: 'JV', avatar_color: '#1B5FFA' },
+  },
+  {
+    id: 'd2', user_id: 'u2', dia: 'hoy',
+    entrada: 'Revisar creatividades de Zara\nLlamar al proveedor de attrezzo',
+    cierre: null,
+    entrada_at: new Date().toISOString(), cierre_at: null,
+    autor: { id: 'u2', name: 'Paula Bravo', initials: 'PB', avatar_color: '#22c55e' },
+  },
+]
+
 export default function PreviewClient({
   initialSection,
   initialView,
@@ -361,7 +380,7 @@ export default function PreviewClient({
         {section==='tareas' && <SectionErrorBoundary section="tareas"><TareasSection data={data} onOpenModal={abrirModal} showToast={showToast} isOwner profile={profile} onNavigate={setSection} onSelectProject={()=>{}} onSelectClient={()=>{}} initialView={initialView} initialFocus={initialFocus} initialGroupBy={initialGroupBy}/></SectionErrorBoundary>}
         {section==='automatizaciones' && <SectionErrorBoundary section="automatizaciones"><AutomatizacionesSection data={data} onOpenModal={abrirModal} showToast={showToast} isOwner/></SectionErrorBoundary>}
         {section==='inbox' && <SectionErrorBoundary section="inbox"><InboxSection data={data} showToast={showToast} profile={profile} onNavigate={setSection} onSelectClient={()=>{}} onAskHarvey={()=>{}}/></SectionErrorBoundary>}
-        {section==='diario' && <SectionErrorBoundary section="diario"><DiarioSection data={data} profile={profile} showToast={showToast} onNavigate={setSection}/></SectionErrorBoundary>}
+        {section==='diario' && <SectionErrorBoundary section="diario"><DiarioSection data={data} profile={profile} showToast={showToast} onNavigate={setSection} demo={DIARIO_DEMO}/></SectionErrorBoundary>}
         {section==='reportes' && <SectionErrorBoundary section="reportes"><ReportesSection data={data} onNavigate={setSection}/></SectionErrorBoundary>}
         {section==='clientes' && <SectionErrorBoundary section="clientes"><ClientesSection data={data} selectedId={null} onSelect={()=>{}} onOpenModal={abrirModal} showToast={showToast} isOwner onNavigate={setSection} onSelectProject={()=>{}}/></SectionErrorBoundary>}
         {section==='proyectos' && <SectionErrorBoundary section="proyectos"><ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={abrirModal} showToast={showToast} isOwner onNavigate={setSection} onSelectClient={()=>{}} justCreatedId={null} onJustCreatedScrolled={()=>{}}/></SectionErrorBoundary>}

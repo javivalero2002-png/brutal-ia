@@ -278,12 +278,25 @@ describe('Diario · fichar crea tareas y cerrar las completa', () => {
     expect(/yaSon\.has\(/.test(rama), 'no comprueba las que ya existen: fichar dos veces duplicaría todo').toBe(true)
   })
 
-  it('cerrar el día completa las que tachaste', () => {
-    const i = D.indexOf('// Cerrar: completar lo tachado.')
-    expect(i, 'ya no se completan al cerrar').toBeGreaterThan(-1)
-    const rama = D.slice(i, i + 700)
-    expect(/updateTask\([\s\S]{0,60}done: true/.test(rama), 'no marca las tareas como hechas').toBe(true)
-    expect(/!t\.done/.test(rama), 'reabre o reescribe tareas ya completadas').toBe(true)
+  // Marcar un objetivo escribe en LA TAREA, no en un estado de React.
+  //
+  // Antes `cumplidos` era un Set en memoria: al recargar se perdía y ningún
+  // compañero lo veía. Y eso no es un detalle de implementación — el diario solo
+  // sirve si lo que marcas está donde lo mira todo el equipo.
+  it('marcar un objetivo se guarda en la tarea, no en memoria', () => {
+    expect(/useState<Set<string>>/.test(D),
+      'vuelve el estado local de cumplidos: se pierde al recargar y no lo ve nadie más').toBe(false)
+
+    const i = D.indexOf('const alternarObjetivo')
+    expect(i, 'ya no existe alternarObjetivo: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = D.slice(i, i + 600)
+    expect(/updateTask\([\s\S]{0,50}done: !t\.done/.test(cuerpo),
+      'marcar ya no escribe en la tarea: el tachado dejaría de sincronizarse').toBe(true)
+  })
+
+  it('y lo que se pinta tachado sale de la tarea', () => {
+    expect(/const estaHecho = \(o: string\) => !!tareaDe\(o\)\?\.done/.test(D),
+      'el tachado se calcula de otra fuente: puede discrepar de lo que hay en Tareas').toBe(true)
   })
 })
 
