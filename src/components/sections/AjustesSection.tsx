@@ -25,9 +25,15 @@ interface PropsAjustes {
   // que los seis KPI de arriba —que son botones y se ven como botones— no hacian
   // absolutamente nada para el unico que puede verlos.
   onNavigate: IrASeccion
+  /**
+   * Reabre la puesta en marcha. Existe porque `onboarding_at` es de una sola vez
+   * y sin esto NADIE puede volver a verla — ni para repetir un paso que se saltó,
+   * ni para comprobar qué va a ver el equipo antes de darles acceso.
+   */
+  onVerPuestaEnMarcha: () => void
 }
 
-function AjustesSection({profile,data,showToast,memFilter,setMemFilter,onOpenModal,isOwner,onNavigate}: PropsAjustes) {
+function AjustesSection({profile,data,showToast,memFilter,setMemFilter,onOpenModal,isOwner,onNavigate,onVerPuestaEnMarcha}: PropsAjustes) {
   const isMobile = useIsMobile()
   const [ajTab, setAjTab] = useState<'perfil'|'notificaciones'|'sincronizacion'|'equipo'|'memoria'|'automatizaciones'|'reportes'>('perfil')
   const [editName, setEditName] = useState(profile?.name||'')
@@ -158,6 +164,21 @@ function AjustesSection({profile,data,showToast,memFilter,setMemFilter,onOpenMod
             </div>
           </div>
           <button onClick={saveOwnProfile} disabled={savingProfile} className="mt-4 px-5 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white disabled:opacity-40" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingProfile?'GUARDANDO…':'GUARDAR PERFIL'}</button>
+
+          {/* La puesta en marcha se enseña UNA vez y la marca vive en el perfil, así
+              que sin esto no hay forma de volver a verla: ni para rehacer un paso que
+              te saltaste, ni para comprobar qué se va a encontrar el equipo. */}
+          <div className="mt-5 pt-4" style={{borderTop:`1px solid ${BORDER}`}}>
+            <div className="font-figtree text-[12px] mb-2.5" style={{color:'rgba(255,255,255,0.4)'}}>
+              Vuelve a ver la bienvenida para repetir un paso que te saltaste, o para comprobar qué verá el equipo.
+            </div>
+            <button onClick={onVerPuestaEnMarcha}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all active:scale-95"
+              style={{border:`1px solid ${BLU}45`,color:'#DCE6FF',background:`${BLU}14`}}>
+              <LucideIcon name="sparkles" size={13} color={BLU} />
+              VER LA PUESTA EN MARCHA
+            </button>
+          </div>
         </AjCard>
 
         {/* Seguridad */}

@@ -22,7 +22,7 @@ import NexusBootScreen from '@/components/NexusBootScreen'
 // "Hoy" es la vista inicial: se carga con el bundle principal.
 import HoySection from '@/components/sections/HoySection'
 import DiarioSection from '@/components/sections/DiarioSection'
-import PuestaEnMarcha from '@/components/PuestaEnMarcha'
+import PuestaEnMarcha, { olvidarPasoGuardado } from '@/components/PuestaEnMarcha'
 
 // El resto se carga bajo demanda (code splitting). Antes las 14 secciones
 // viajaban en el bundle inicial, así que entrar a "Hoy" descargaba también
@@ -984,7 +984,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
           {section === 'automatizaciones' && <SectionErrorBoundary section="automatizaciones"><AutomatizacionesSection data={data} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} /></SectionErrorBoundary>}
           {section === 'chat' && <SectionErrorBoundary section="chat"><ChatSection profile={profile} data={data} chatInput={chatInput} setChatInput={setChatInput} chatLoading={chatLoading} setChatLoading={setChatLoading} showToast={showToast} onNavigate={setSection} /></SectionErrorBoundary>}
           {section === 'harvey' && <SectionErrorBoundary section="harvey"><HarveySection data={data} profile={profile} showToast={showToast} onNavigate={setSection} preloadMessage={harveyPreload} onClearPreload={()=>setHarveyPreload(null)} /></SectionErrorBoundary>}
-          {section === 'ajustes' && <SectionErrorBoundary section="ajustes"><AjustesSection profile={profile} data={data} showToast={showToast} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={openModal} isOwner={isOwner} onNavigate={setSection} /></SectionErrorBoundary>}
+          {section === 'ajustes' && <SectionErrorBoundary section="ajustes"><AjustesSection profile={profile} data={data} showToast={showToast} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={openModal} isOwner={isOwner} onNavigate={setSection} onVerPuestaEnMarcha={() => { olvidarPasoGuardado(); setPuestaHecha(false) }} /></SectionErrorBoundary>}
         </div>
 
         {/* Tab bar inferior móvil */}

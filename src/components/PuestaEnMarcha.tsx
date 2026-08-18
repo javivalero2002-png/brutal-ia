@@ -27,6 +27,18 @@ import { activarPush } from '@/lib/activarPush'
 
 const CLAVE_PASO = 'nx_onboarding_paso'
 
+/**
+ * Olvida el paso a medias. Se exporta porque quien REABRE el recorrido a mano
+ * (Operativa → «Ver la puesta en marcha») tiene que empezar por el principio, y
+ * si no se limpia esto aparecería en el paso donde lo dejó la última vez.
+ *
+ * Vive aquí y no escrita como cadena en quien la llama: la clave en dos sitios
+ * es la forma de que un día cambie en uno y no en el otro.
+ */
+export function olvidarPasoGuardado() {
+  try { localStorage.removeItem(CLAVE_PASO) } catch {}
+}
+
 // Los caminos para instalar la app, uno por sitio donde puede estar la gente.
 //
 // Safari NO tiene instalador que ofrecer, y no es un descuido de Apple: la
@@ -62,9 +74,12 @@ const CAMINOS: Record<Camino, { donde: string; pasos: { texto: string; icono?: s
   'safari-mac': {
     donde: 'EN SAFARI, EN EL MAC',
     pasos: [
-      { texto: 'Abre el menú Archivo, arriba del todo' },
+      // Está en DOS sitios y conviene decir los dos: el menú Archivo se pasa por
+      // alto (no hay nada en la página que lo sugiera) y el botón de Compartir se
+      // ve. Javi buscó esto y no encontró nada con una sola pista.
+      { texto: 'Pulsa Compartir', icono: 'share', cola: 'en la barra de Safari — o abre el menú Archivo' },
       { texto: 'Elige «Añadir al Dock»' },
-      { texto: 'Confirma con «Añadir»' },
+      { texto: 'Ponle el nombre que quieras y confirma con «Añadir»' },
     ],
   },
   otro: {
@@ -158,12 +173,16 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
     try {
       const res = await fetch('/api/onboarding', { method: 'POST' })
       if (!res.ok) showToast('No se pudo guardar — te la volveremos a enseñar')
-      try { localStorage.removeItem(CLAVE_PASO) } catch {}
       onTerminar()
     } catch {
       showToast('No se pudo guardar — te la volveremos a enseñar')
       onTerminar()
-    } finally { setGuardando(false) }
+    } finally {
+      // En las DOS ramas: si falla el POST y el paso guardado sobrevive, al
+      // volver a abrirla se cae a mitad del recorrido en vez de al principio.
+      olvidarPasoGuardado()
+      setGuardando(false)
+    }
   }, [onTerminar, showToast])
 
   const guardarPerfil = async () => {
