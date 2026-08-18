@@ -20,16 +20,42 @@ export async function GET(request: NextRequest) {
   const dia = pedido && /^\d{4}-\d{2}-\d{2}$/.test(pedido) ? pedido : todayKey()
 
   const admin = await createAdminClient()
-  const { data, error } = await admin
-    .from('diario')
-    .select('*, autor:profiles!user_id(id,name,initials,avatar_color)')
-    .eq('dia', dia)
-    .order('entrada_at', { ascending: true, nullsFirst: false })
 
-  // El error NO se disfraza de lista vacía: eso hace que "nadie ha fichado" y
-  // "no se pudo leer" se vean igual, que es el bug que este repo ya ha pagado.
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ dia, entradas: data ?? [] })
+  // Las tareas del día viajan con el diario, no en una segunda petición: la
+  // sección las pinta juntas —quién fichó y qué sacó adelante— y separarlas haría
+  // que la mitad de la pantalla llegara tarde.
+  const [{ data, error }, { data: equipo, error: errEquipo }, { data: tareas, error: errTareas }] = await Promise.all([
+    admin.from('diario')
+      .select('*, autor:profiles!user_id(id,name,initials,avatar_color)')
+      .eq('dia', dia)
+      .order('entrada_at', { ascending: true, nullsFirst: false }),
+    admin.from('profiles').select('id,name,initials,avatar_color,role'),
+    // Completadas ESE día. `completed_at` es cuándo se terminó; `updated_at`
+    // contaría como trabajo de hoy cualquier retoque posterior.
+    admin.from('tasks')
+      .select('id,text,level,assigned_to,completed_at')
+      .eq('done', true)
+      .gte('completed_at', `${dia}T00:00:00Z`)
+      .lt('completed_at', `${dia}T23:59:59Z`),
+  ])
+
+  // Ningún error se disfraza de lista vacía: "nadie ha fichado" y "no se pudo
+  // leer" se verían igual, que es el bug que este repo ya ha pagado.
+  const fallo = error || errEquipo || errTareas
+  if (fallo) return NextResponse.json({ error: fallo.message }, { status: 500 })
+
+  const entradas = data ?? []
+  // Una fila por persona, tenga diario, tareas o las dos cosas. Quien cerró tres
+  // tareas sin escribir el diario también trabajó ese día.
+  const porPersona = (equipo ?? [])
+    .map(p => ({
+      persona: p,
+      entrada: entradas.find(e => e.user_id === p.id) ?? null,
+      tareas: (tareas ?? []).filter(t => t.assigned_to === p.id),
+    }))
+    .filter(x => x.entrada || x.tareas.length > 0)
+
+  return NextResponse.json({ dia, entradas, porPersona })
 }
 
 /**
@@ -51,16 +77,16 @@ export async function POST(request: NextRequest) {
   // empezaste, no cuándo tocaste el teclado por última vez.
   const esBorrador = body?.borrador === true
 
-  // El día puede venir del cuerpo: se rellena el lunes el martes, que es lo normal
-  // cuando se te pasa. Pero con dos límites, y los dos importan:
+  // El día viene del cuerpo. Hacia atrás porque se te pasó el lunes y lo rellenas
+  // el martes; hacia ADELANTE porque planificar la semana es la mitad de para qué
+  // sirve esto.
   //
-  //  · el USUARIO nunca viene del cuerpo, sale de la sesión. Eso es lo que impide
-  //    escribir en el día de otro, que era el motivo original de fijarlo aquí;
-  //  · y no se puede escribir en el FUTURO. Un diario de mañana no es un diario,
-  //    y abre la puerta a inventarse un histórico.
+  // El límite que NO se mueve: el usuario sale de la sesión, nunca del cuerpo. Eso
+  // es lo que impide escribir en el día de otro, y era el motivo real por el que
+  // el día estaba fijado aquí.
   const hoy = todayKey()
-  const pedido = typeof body?.dia === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.dia) ? body.dia : hoy
-  const dia = pedido > hoy ? hoy : pedido
+  const dia = typeof body?.dia === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.dia) ? body.dia : hoy
+  const esFuturo = dia > hoy
   const ahora = new Date().toISOString()
 
   const admin = await createAdminClient()
@@ -72,8 +98,12 @@ export async function POST(request: NextRequest) {
   if (errLeer) return NextResponse.json({ error: errLeer.message }, { status: 500 })
 
   const fila: Record<string, unknown> = { user_id: user.id, dia, updated_at: ahora, ...campos }
-  if (!esBorrador && campos.entrada !== undefined && !previo?.entrada_at) fila.entrada_at = ahora
-  if (!esBorrador && campos.cierre !== undefined && !previo?.cierre_at) fila.cierre_at = ahora
+  // Un día futuro se PLANIFICA, no se ficha: se guardan los objetivos pero no la
+  // hora de entrada. Fichar es haber estado, y el jueves todavía no has estado —
+  // poner la hora ahí convertiría un plan en un registro de trabajo falso, que es
+  // justo lo que no debe poder hacerse.
+  if (!esBorrador && !esFuturo && campos.entrada !== undefined && !previo?.entrada_at) fila.entrada_at = ahora
+  if (!esBorrador && !esFuturo && campos.cierre !== undefined && !previo?.cierre_at) fila.cierre_at = ahora
 
   const { data, error } = await admin
     .from('diario')

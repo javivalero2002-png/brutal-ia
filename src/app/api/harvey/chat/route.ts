@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { todayKey } from '@/components/shared/helpers'
+import { todayKey, localDayKey } from '@/components/shared/helpers'
 import { webSearch, needsWebSearch, formatSearchContextVoice } from '@/lib/ai'
 import { checkHarveyRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
@@ -140,9 +140,57 @@ export async function POST(request: NextRequest) {
       .from('profiles').select('name, role').eq('id', user.id).maybeSingle()
     const nombreUsuario = (quienHabla?.name || '').trim()
 
+    // ── Quién hizo qué, y solo cuando lo preguntan ─────────────────────────
+    //
+    // «¿Qué hizo Pablo ayer?» o «¿cómo ha ido la semana del equipo?» no se pueden
+    // contestar sin este dato, y Harvey no lo tenía: su contexto lo arma el
+    // cliente y ahí no está el diario.
+    //
+    // Va CONDICIONADO a propósito. Son ~7 personas × 7 días: metido en cada
+    // mensaje serían cientos de tokens pagados en las preguntas que no van de
+    // esto, que son la mayoría. El disparador es tosco —nombres del equipo o
+    // palabras de balance— y se equivoca por defecto hacia NO incluirlo: si
+    // Harvey no lo trae, dice que no lo sabe, que es mejor que inventárselo.
+    const pregunta = String(userContent || '').toLowerCase()
+    const { data: plantilla } = await admin.from('profiles').select('id,name')
+    const nombraAAlguien = (plantilla ?? []).some(p =>
+      p.name && p.name.trim().length > 2 && pregunta.includes(p.name.toLowerCase().split(' ')[0]))
+    const preguntaPorTrabajo = /\b(hizo|hicieron|hecho|hiciste|avanz|complet|equipo|semana|ayer|diario|fich)/.test(pregunta)
+
+    let resumenEquipo = ''
+    if (nombraAAlguien || preguntaPorTrabajo) {
+      const desde = new Date(`${todayKey()}T12:00:00Z`)
+      desde.setUTCDate(desde.getUTCDate() - 6)
+      const desdeClave = localDayKey(desde)
+
+      const [{ data: diarios }, { data: hechas }] = await Promise.all([
+        admin.from('diario').select('dia,user_id,entrada,cierre,cierre_at').gte('dia', desdeClave),
+        admin.from('tasks').select('text,assigned_to,completed_at').eq('done', true)
+          .gte('completed_at', `${desdeClave}T00:00:00Z`),
+      ])
+
+      const lineasEquipo = (plantilla ?? []).map(p => {
+        const mios = (diarios ?? []).filter(d => d.user_id === p.id)
+        const tareas = (hechas ?? []).filter(t => t.assigned_to === p.id)
+        if (!mios.length && !tareas.length) return null
+        const porDia = mios.map(d =>
+          `    ${d.dia}: ${(d.entrada || '').split('\n').filter(Boolean).join(' / ') || 'sin objetivos'}${d.cierre ? ` — balance: ${d.cierre}` : ''}`)
+        // Se recorta a 8: un mensaje no se lee mejor por llevar treinta tareas.
+        const lista = tareas.slice(0, 8).map(t => t.text).join(' · ')
+        return `  ${p.name}: ${tareas.length} tarea(s) completada(s) en 7 días${lista ? ` (${lista})` : ''}\n${porDia.join('\n')}`
+      }).filter(Boolean)
+
+      if (lineasEquipo.length) {
+        resumenEquipo = `\n\nDIARIO DEL EQUIPO (últimos 7 días, desde ${desdeClave}):\n${lineasEquipo.join('\n')}`
+      }
+    }
+
     const systemPrompt = `Eres Harvey, la inteligencia artificial ejecutiva de Brutal Studios.
 
-CON QUIEN ESTAS HABLANDO AHORA: ${nombreUsuario || 'un miembro del equipo'}.
+CON QUIEN ESTAS HABLANDO AHORA: ${nombreUsuario || 'un miembro del equipo'}.${resumenEquipo}
+
+Si te preguntan qué ha hecho alguien y NO aparece en el diario de arriba, dilo:
+«no tengo su diario de esos días». No lo deduzcas de las tareas ni te lo inventes.
 Cuando diga "para mi", "asignamela", "me lo apunto" o hable en primera persona sin
 nombrar a nadie, se refiere a esta persona. Tu voz es serena, precisa y con autoridad. Como JARVIS para una agencia creativa.
 

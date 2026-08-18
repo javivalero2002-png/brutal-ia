@@ -89,7 +89,6 @@ export default function CalendarioDiario({
           <LucideIcon name="chevron-left" size={12} color="rgba(255,255,255,0.45)" />
         </button>
         <button onClick={() => setMes(m => moverMes(m, 1))} aria-label="Mes siguiente"
-          disabled={mes >= hoy.slice(0, 7)}
           className="w-7 h-7 rounded-lg flex items-center justify-center transition-opacity hover:opacity-70 disabled:opacity-20"
           style={{ background: 'rgba(255,255,255,0.04)' }}>
           <LucideIcon name="chevron-right" size={12} color="rgba(255,255,255,0.45)" />
@@ -114,7 +113,7 @@ export default function CalendarioDiario({
           const todosCerraron = !!resumen && resumen.cerrados === gente.length && gente.length > 0
 
           return (
-            <button key={clave} onClick={() => !futuro && onElegirDia(clave)} disabled={futuro}
+            <button key={clave} onClick={() => onElegirDia(clave)}
               aria-label={`${clave}${gente.length ? ` · ${gente.length} fichajes` : ''}`}
               aria-current={elegido ? 'date' : undefined}
               className="rounded-xl flex flex-col items-center justify-center gap-1 py-1.5 transition-all active:scale-95 disabled:active:scale-100"
@@ -122,7 +121,10 @@ export default function CalendarioDiario({
                 minHeight: '2.9rem',
                 background: elegido ? `${VIO}24` : gente.length ? 'rgba(255,255,255,0.035)' : 'transparent',
                 border: `1px solid ${elegido ? VIO + '55' : esHoy ? BLU + '40' : 'transparent'}`,
-                opacity: futuro ? 0.25 : 1,
+                // Los futuros se ven mas tenues pero SE PULSAN: ahi es donde se
+                // planifica la semana. Apagados del todo era el diseno de cuando no
+                // se podia escribir en ellos.
+                opacity: futuro ? 0.5 : 1,
               }}>
               <span className="font-figtree text-[11px] leading-none"
                 style={{ color: elegido ? '#E6DEFF' : esHoy ? BLU : 'rgba(255,255,255,0.55)', fontWeight: esHoy || elegido ? 700 : 400 }}>

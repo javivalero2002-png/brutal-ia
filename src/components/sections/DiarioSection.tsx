@@ -41,6 +41,13 @@ interface Entrada {
 
 interface TareaPropuesta { text: string; level: 'urgent' | 'high' | 'normal'; hecha: boolean }
 
+/** Lo que hizo una persona un día: su diario y las tareas que cerró. */
+interface PersonaDelDia {
+  persona: { id: string; name?: string; initials?: string; avatar_color?: string; role?: string }
+  entrada: Entrada | null
+  tareas: { id: string; text: string; level: string }[]
+}
+
 interface Props {
   data: NexusData
   profile: Profile
@@ -129,6 +136,10 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   // El calendario se abre a demanda: la mayoria de las visitas son «abro, escribo
   // lo de hoy y me voy», y un mes entero de rejilla ahi arriba estorbaria a eso.
   const [verCalendario, setVerCalendario] = useState(false)
+  const [porPersona, setPorPersona] = useState<PersonaDelDia[]>([])
+  // Quién está desplegado. Uno cada vez: abrir varios convierte la lista en un
+  // muro y se pierde justo lo que se venía a ver.
+  const [abierto, setAbierto] = useState<string | null>(null)
 
   const miEntrada = entradas.find(e => e.user_id === profile?.id) || null
   const sembrado = useRef(false)
@@ -141,13 +152,18 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   const rechazadas = useRef<Set<string>>(new Set())
 
   const cargar = useCallback(async () => {
-    if (demo) { setEntradas(demo); setErrorCarga(false); setCargando(false); return }
+    if (demo) {
+      setEntradas(demo)
+      setPorPersona(demo.map(e => ({ persona: (e.autor || { id: e.user_id }) as PersonaDelDia['persona'], entrada: e, tareas: [] })))
+      setErrorCarga(false); setCargando(false); return
+    }
     try {
       const res = await fetch(`/api/diario?dia=${dia}`)
       if (!res.ok) { setErrorCarga(true); return }
       const j = await res.json()
       setErrorCarga(false)
       setEntradas(Array.isArray(j.entradas) ? j.entradas : [])
+      setPorPersona(Array.isArray(j.porPersona) ? j.porPersona : [])
     } catch { setErrorCarga(true) }
     finally { setCargando(false) }
   }, [dia, demo])
@@ -780,45 +796,93 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
         </div>
       ) : cargando ? (
         <div className="font-figtree text-[12px] px-1" style={{ color: 'rgba(255,255,255,0.25)' }}>Cargando…</div>
-      ) : entradas.length === 0 ? (
+      ) : porPersona.length === 0 ? (
         <div className="rounded-2xl px-4 py-7 text-center" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-          <div className="font-figtree text-[12px]" style={{ color: 'rgba(255,255,255,0.35)' }}>Nadie ha fichado todavía hoy.</div>
+          <div className="font-figtree text-[12px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            {dia > todayKey() ? 'Nadie ha planificado este día todavía.' : 'Nadie fichó ni cerró tareas este día.'}
+          </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-2.5">
-          {entradas.map(e => {
-            const objs = lineas(e.entrada)
+        <div className="flex flex-col gap-2">
+          {porPersona.map(p => {
+            const e = p.entrada
+            const objs = lineas(e?.entrada)
+            const desplegado = abierto === p.persona.id
+            const color = p.persona.avatar_color || BLU
             return (
-              <div key={e.id} className="rounded-2xl px-4 py-3.5" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-                <div className="flex items-center gap-2.5 mb-2 flex-wrap">
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 font-syne text-[9px] font-black"
-                    style={{ background: `${e.autor?.avatar_color || BLU}22`, color: e.autor?.avatar_color || BLU }}>
-                    {e.autor?.initials || (e.autor?.name || '?').slice(0, 2).toUpperCase()}
+              <div key={p.persona.id} className="rounded-2xl overflow-hidden"
+                style={{ background: SURFACE, border: `1px solid ${desplegado ? color + '3A' : BORDER}` }}>
+                {/* La fila es el BOTÓN. Pulsar el nombre despliega lo que hizo —era
+                    el encargo— y con toda la fila activa no hay que apuntar. */}
+                <button onClick={() => setAbierto(a => a === p.persona.id ? null : p.persona.id)}
+                  aria-expanded={desplegado}
+                  className="w-full flex items-center gap-2.5 px-4 py-3 text-left transition-all active:scale-[0.995]">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 font-syne text-[9px] font-black"
+                    style={{ background: `${color}22`, color }}>
+                    {p.persona.initials || (p.persona.name || '?').slice(0, 2).toUpperCase()}
                   </div>
-                  <div className="font-figtree text-[12px] font-bold text-white">{e.autor?.name || 'Alguien'}</div>
-                  <div className="font-figtree text-[10px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                    {e.entrada_at ? `entró ${horaCorta(e.entrada_at)}` : ''}{e.cierre_at ? ` · cerró ${horaCorta(e.cierre_at)}` : ''}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-figtree text-[12.5px] font-bold text-white">{p.persona.name || 'Alguien'}</div>
+                    <div className="font-figtree text-[10.5px]" style={{ color: 'rgba(255,255,255,0.32)' }}>
+                      {e?.entrada_at ? `entró ${horaCorta(e.entrada_at)}` : objs.length ? 'planificado' : 'sin fichar'}
+                      {e?.cierre_at ? ` · cerró ${horaCorta(e.cierre_at)}` : ''}
+                      {objs.length ? ` · ${plural(objs.length, 'objetivo', 'objetivos')}` : ''}
+                    </div>
                   </div>
-                  {/* Se ve de un vistazo si sigue en marcha o ya cerró. */}
-                  <span className="font-syne text-[7px] font-black tracking-widest px-1.5 py-0.5 rounded-md"
-                    style={{ background: e.cierre_at ? `${GRN}18` : `${AMBAR}18`, color: e.cierre_at ? GRN : AMBAR }}>
-                    {e.cierre_at ? 'CERRADO' : 'EN MARCHA'}
-                  </span>
-                </div>
-                {objs.length > 0 && (
-                  <div className="flex flex-col gap-1 mb-1.5">
-                    {objs.map((o, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <span className="mt-1.5 w-1 h-1 rounded-full flex-shrink-0" style={{ background: 'rgba(255,255,255,0.25)' }} />
-                        <span className="font-figtree text-[12px] leading-snug" style={{ color: 'rgba(255,255,255,0.72)' }}>{o}</span>
+                  {/* El número que de verdad se busca: cuántas sacó adelante. */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="font-syne text-[7px] font-black tracking-widest px-2 py-1 rounded-full"
+                      style={{ background: `${GRN}16`, color: GRN }}>
+                      {p.tareas.length} {p.tareas.length === 1 ? 'HECHA' : 'HECHAS'}
+                    </span>
+                    <LucideIcon name={desplegado ? 'chevron-up' : 'chevron-down'} size={13} color="rgba(255,255,255,0.3)" />
+                  </div>
+                </button>
+
+                {desplegado && (
+                  <div className="px-4 pb-3.5 flex flex-col gap-2.5" style={{ borderTop: `1px solid ${BORDER}` }}>
+                    {objs.length > 0 && (
+                      <div className="pt-3">
+                        <div className="font-syne text-[7px] font-black tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.28)' }}>
+                          SE PROPUSO
+                        </div>
+                        <ul className="flex flex-col gap-1">
+                          {objs.map((o, k) => (
+                            <li key={k} className="flex items-start gap-2">
+                              <span className="mt-[6px] w-1 h-1 rounded-full flex-shrink-0" style={{ background: 'rgba(255,255,255,0.25)' }} />
+                              <span className="font-figtree text-[12px] leading-snug" style={{ color: 'rgba(255,255,255,0.72)' }}>{o}</span>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                    ))}
-                  </div>
-                )}
-                {e.cierre && (
-                  <div className="rounded-xl px-3 py-2 mt-2" style={{ background: `${GRN}0C`, borderLeft: `2px solid ${GRN}55` }}>
-                    <div className="font-syne text-[7px] font-black tracking-widest mb-1" style={{ color: GRN }}>BALANCE</div>
-                    <div className="font-figtree text-[12px] leading-snug" style={{ color: 'rgba(255,255,255,0.72)', whiteSpace: 'pre-wrap' }}>{e.cierre}</div>
+                    )}
+
+                    <div className={objs.length ? '' : 'pt-3'}>
+                      <div className="font-syne text-[7px] font-black tracking-widest mb-1.5" style={{ color: `${GRN}` }}>
+                        TAREAS COMPLETADAS
+                      </div>
+                      {p.tareas.length ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {p.tareas.map(t => (
+                            <span key={t.id} className="font-figtree text-[11px] px-2.5 py-1.5 rounded-full"
+                              style={{ background: `${GRN}0E`, border: `1px solid ${GRN}28`, color: 'rgba(255,255,255,0.72)' }}>
+                              {t.text}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="font-figtree text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                          Ninguna cerrada este día.
+                        </div>
+                      )}
+                    </div>
+
+                    {e?.cierre && (
+                      <div className="rounded-xl px-3 py-2" style={{ background: `${GRN}0C`, borderLeft: `2px solid ${GRN}55` }}>
+                        <div className="font-syne text-[7px] font-black tracking-widest mb-1" style={{ color: GRN }}>BALANCE</div>
+                        <div className="font-figtree text-[12px] leading-snug" style={{ color: 'rgba(255,255,255,0.72)', whiteSpace: 'pre-wrap' }}>{e.cierre}</div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
