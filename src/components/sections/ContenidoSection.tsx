@@ -1242,7 +1242,7 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                   className="w-full py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all flex items-center justify-center gap-2"
                   style={{color:'rgba(255,255,255,0.5)',border:`1px solid ${BORDER}`,background:'rgba(255,255,255,0.02)'}}
                 >
-                  <LucideIcon name="link" size={11} color="rgba(255,255,255,0.5)"/>COPIAR ENLACE PARA EL CLIENTE
+                  <LucideIcon name="link" size={11} color="rgba(255,255,255,0.5)"/>COPIAR ENLACE
                 </button>
                 <div className="flex gap-2 pt-1">
                   <button onClick={saveNotes} disabled={savingNotes} className="flex-1 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide text-white disabled:opacity-40 transition-opacity" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingNotes?'GUARDANDO…':'GUARDAR'}</button>
