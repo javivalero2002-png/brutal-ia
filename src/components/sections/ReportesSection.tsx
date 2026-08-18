@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useMemo } from 'react'
+import { useEffect, useRef, useMemo, useState } from 'react'
 import { esTareaDe } from '@/components/shared/helpers'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { Task, Project, Client, Profile, NexusData } from '@/types'
@@ -14,6 +14,40 @@ interface PropsReportes {
 function ReportesSection({data, onNavigate}: PropsReportes) {
   const isMobile = useIsMobile()
   const printBtnRef = useRef<HTMLButtonElement>(null)
+
+  /**
+   * El Diario, visto desde el comprobador.
+   *
+   * Reportes contaba TAREAS, y con eso solo se ve la mitad: quien organiza su día
+   * escribiendo no aparecía por ningún lado, y sobre todo faltaba la pregunta que
+   * este panel existe para responder — qué se propuso cada uno frente a qué hizo.
+   * Esa distancia no la enseña nada más en la app.
+   *
+   * Se lee de /api/diario/briefing, que ya existía y ya es solo-propietario, igual
+   * que esta sección. Cero endpoints nuevos.
+   */
+  type BriefPersona = {
+    persona: { id: string; name?: string; initials?: string; avatar_color?: string }
+    dias: number; cerrados: number; objetivos: number; completadas: number
+  }
+  const [brief, setBrief] = useState<{ equipo: BriefPersona[]; sinActividad: string[]; dias: number } | null>(null)
+  const [briefEstado, setBriefEstado] = useState<'cargando' | 'ok' | 'error'>('cargando')
+
+  useEffect(() => {
+    let vivo = true
+    fetch('/api/diario/briefing?rango=semana')
+      .then(async r => {
+        if (!vivo) return
+        // Un fallo NO puede pintarse como «nadie ha usado el Diario»: son cosas
+        // distintas y confundirlas es como un error vive semanas en este repo.
+        if (!r.ok) { setBriefEstado('error'); return }
+        const j = await r.json()
+        setBrief({ equipo: j.equipo || [], sinActividad: j.sinActividad || [], dias: j.dias ?? 7 })
+        setBriefEstado('ok')
+      })
+      .catch(() => { if (vivo) setBriefEstado('error') })
+    return () => { vivo = false }
+  }, [])
 
   useEffect(()=>{
     const handler = (e: KeyboardEvent) => {
@@ -102,10 +136,23 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
           if(!printWin) return
           const now = new Date().toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'})
           const donePct = totalTasks>0?Math.round((doneTasks/totalTasks)*100):0
+          // El diario entra TAMBIÉN en el informe. Es un PDF de gestión y hasta
+          // ahora solo contaba tareas: quien organiza su día escribiendo no salía,
+          // y la distancia entre lo propuesto y lo hecho —que es lo que se lleva a
+          // una reunión— no estaba en ningún sitio. Si no se pudo leer, la sección
+          // NO se imprime: mejor ausente que con ceros que parecen un dato.
+          const diarioHtml = briefEstado === 'ok' && brief && brief.equipo.length
+            ? `<div class="section"><h2>Diario del equipo · últimos ${brief.dias} días</h2>${brief.equipo.map(p=>{
+                const ratio = p.objetivos > 0 ? Math.min(100, Math.round((p.completadas/p.objetivos)*100)) : null
+                const sinCerrar = p.dias - p.cerrados
+                return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #eee"><div style="flex:1"><strong>${p.persona.name || ''}</strong>${sinCerrar>0?` <span style="color:#b8860b;font-size:12px">· ${sinCerrar} día(s) sin cerrar</span>`:''}</div><div style="color:#666;font-size:13px">${p.dias} días · ${p.objetivos} objetivos · ${p.completadas} hechas</div><div style="width:60px;text-align:right;font-weight:900;color:${ratio!==null&&ratio>=80?'#22a04a':'#666'}">${ratio!==null?ratio+'%':'—'}</div></div>`
+              }).join('')}${brief.sinActividad.length?`<p style="color:#999;font-size:12px;margin-top:10px">Sin usar el diario: ${brief.sinActividad.join(', ')}</p>`:''}</div>`
+            : ''
+
           const membersHtml = tasksByMember.map((m: any)=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #eee"><div style="width:32px;height:32px;border-radius:50%;background:${m.color}22;color:${m.color};display:flex;align-items:center;justify-content:center;font-weight:900;font-size:11px;flex-shrink:0">${m.initials}</div><div style="flex:1"><strong>${m.name}</strong></div><div style="color:#666;font-size:13px">${m.pending} pendientes · ${m.done} completadas</div><div style="width:120px;height:6px;background:#f0f0f0;border-radius:3px;overflow:hidden"><div style="width:${maxBar>0?((m.done/(m.done+m.pending||1))*100).toFixed(0):0}%;height:100%;background:${m.color}"></div></div></div>`).join('')
           const statusEs = (s: string) => ({'activo':'Activo','urgente':'Urgente','plan.':'Planificación','revisión':'Revisión'} as Record<string,string>)[s]||s
           const projHtml = projects.map((p: Project)=>`<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #eee"><div style="flex:1"><strong>${p.name}</strong> <span style="color:#999;font-size:12px">${p.client?.name||'—'}</span></div><span style="padding:2px 8px;background:#f5f5f5;border-radius:20px;font-size:11px;font-weight:700">${statusEs(p.status)}</span><div style="width:80px;height:6px;background:#f0f0f0;border-radius:3px;overflow:hidden"><div style="width:${p.progress}%;height:100%;background:${p.color||'#1B5FFA'}"></div></div><span style="font-size:12px;color:#666;width:30px;text-align:right">${p.progress}%</span></div>`).join('')
-          printWin.document.write(`<!DOCTYPE html><html><head><title>Reporte Brutal Studios — ${now}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111;padding:40px;max-width:800px;margin:0 auto}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111;padding-bottom:20px;margin-bottom:30px}.logo-area h1{font-size:28px;font-weight:900;letter-spacing:-1px}.logo-area p{color:#666;font-size:13px;margin-top:4px}.date-area{text-align:right;color:#666;font-size:13px}.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:30px}.kpi{padding:16px;border:1px solid #e0e0e0;border-radius:8px;text-align:center}.kpi .num{font-size:36px;font-weight:900;color:#1B5FFA}.kpi .lbl{font-size:11px;color:#666;margin-top:4px}.section{margin-bottom:28px}.section h2{font-size:16px;font-weight:900;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;color:#333;padding-bottom:6px;border-bottom:1px solid #e0e0e0}.footer{margin-top:40px;padding-top:16px;border-top:1px solid #e0e0e0;color:#999;font-size:11px;display:flex;justify-content:space-between}@media print{body{padding:20px}}</style></head><body><div class="header"><div class="logo-area"><h1>Brutal Studios</h1><p>Informe de gestión</p></div><div class="date-area"><strong>${now}</strong><br>brutal.ia · sistema interno</div></div><div class="kpis"><div class="kpi"><div class="num">${donePct}%</div><div class="lbl">Tareas completadas</div></div><div class="kpi"><div class="num" style="color:${urgentTasks>0?'#E51D2A':'#1B5FFA'}">${urgentTasks}</div><div class="lbl">Urgentes pendientes</div></div><div class="kpi"><div class="num" style="color:${overdueProjects.length>0?'#E51D2A':'#1B5FFA'}">${overdueProjects.length}</div><div class="lbl">Proyectos atrasados</div></div><div class="kpi"><div class="num">${projects.length}</div><div class="lbl">Proyectos totales</div></div><div class="kpi"><div class="num">${clients.length}</div><div class="lbl">Clientes</div></div></div><div class="section"><h2>Carga de trabajo del equipo</h2>${membersHtml}</div><div class="section"><h2>Estado de proyectos</h2>${projHtml}</div><div class="footer"><span>Brutal Studios · brutal.ia</span><span>Generado: ${now}</span></div></body></html>`)
+          printWin.document.write(`<!DOCTYPE html><html><head><title>Reporte Brutal Studios — ${now}</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111;padding:40px;max-width:800px;margin:0 auto}.header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #111;padding-bottom:20px;margin-bottom:30px}.logo-area h1{font-size:28px;font-weight:900;letter-spacing:-1px}.logo-area p{color:#666;font-size:13px;margin-top:4px}.date-area{text-align:right;color:#666;font-size:13px}.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:30px}.kpi{padding:16px;border:1px solid #e0e0e0;border-radius:8px;text-align:center}.kpi .num{font-size:36px;font-weight:900;color:#1B5FFA}.kpi .lbl{font-size:11px;color:#666;margin-top:4px}.section{margin-bottom:28px}.section h2{font-size:16px;font-weight:900;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;color:#333;padding-bottom:6px;border-bottom:1px solid #e0e0e0}.footer{margin-top:40px;padding-top:16px;border-top:1px solid #e0e0e0;color:#999;font-size:11px;display:flex;justify-content:space-between}@media print{body{padding:20px}}</style></head><body><div class="header"><div class="logo-area"><h1>Brutal Studios</h1><p>Informe de gestión</p></div><div class="date-area"><strong>${now}</strong><br>brutal.ia · sistema interno</div></div><div class="kpis"><div class="kpi"><div class="num">${donePct}%</div><div class="lbl">Tareas completadas</div></div><div class="kpi"><div class="num" style="color:${urgentTasks>0?'#E51D2A':'#1B5FFA'}">${urgentTasks}</div><div class="lbl">Urgentes pendientes</div></div><div class="kpi"><div class="num" style="color:${overdueProjects.length>0?'#E51D2A':'#1B5FFA'}">${overdueProjects.length}</div><div class="lbl">Proyectos atrasados</div></div><div class="kpi"><div class="num">${projects.length}</div><div class="lbl">Proyectos totales</div></div><div class="kpi"><div class="num">${clients.length}</div><div class="lbl">Clientes</div></div></div><div class="section"><h2>Carga de trabajo del equipo</h2>${membersHtml}</div><div class="section"><h2>Estado de proyectos</h2>${projHtml}</div>${diarioHtml}<div class="footer"><span>Brutal Studios · brutal.ia</span><span>Generado: ${now}</span></div></body></html>`)
           printWin.document.close()
           setTimeout(()=>printWin.print(),500)
         }} ref={printBtnRef} className="flex items-center gap-2 px-4 py-2 rounded-2xl font-syne text-[10px] font-black tracking-wide transition-colors" style={{background:'rgba(27,95,250,0.1)',color:BLU,border:'1px solid rgba(27,95,250,0.2)'}}>
@@ -320,6 +367,86 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
       </div>}
 
       {/* Content pipeline: solo escritorio */}
+      {/* ── EL DIARIO, VISTO DESDE EL COMPROBADOR ──────────────────────────
+          Lo que Reportes no podía responder contando tareas: qué se propuso cada
+          uno frente a qué hizo. Y quién está usando el Diario, que a la semana de
+          estrenarlo es el dato que dice si la sección va a vivir o no. */}
+      <div className="rounded-2xl p-5 mb-4 flex-shrink-0" style={{background:SURF2,border:'1px solid rgba(255,255,255,0.07)'}}>
+        <div className="flex items-center gap-2 mb-5 flex-wrap">
+          <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase flex-1">
+            El diario · últimos {brief?.dias ?? 7} días
+          </div>
+          <button onClick={()=>onNavigate?.('diario')}
+            className="font-syne text-[8px] font-black tracking-widest transition-opacity hover:opacity-70" style={{color:BLU}}>
+            VER DIARIO →
+          </button>
+        </div>
+
+        {briefEstado === 'cargando' ? (
+          <div className="text-white/20 text-sm py-4 text-center">Cargando…</div>
+        ) : briefEstado === 'error' ? (
+          /* Un fallo se dice. Pintar ceros sería afirmar que nadie ha trabajado. */
+          <div className="text-sm py-4 text-center" style={{color:'rgba(255,176,32,0.7)'}}>
+            No se pudo leer el diario del equipo.
+          </div>
+        ) : !brief?.equipo.length ? (
+          <div className="text-white/25 text-sm py-4 text-center">
+            Nadie ha fichado esta semana todavía.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {brief.equipo.map(p => {
+              // El RATIO es lo que este panel viene a contar. Se acota a 100: cerrar
+              // más tareas que objetivos escritos no es «140 % cumplido», es que
+              // hubo trabajo que no estaba planificado — se dice aparte.
+              const ratio = p.objetivos > 0 ? Math.min(100, Math.round((p.completadas / p.objetivos) * 100)) : null
+              const col = p.persona.avatar_color || BLU
+              const sinCerrar = p.dias - p.cerrados
+              return (
+                <div key={p.persona.id}>
+                  <div className="flex items-center gap-3 mb-1.5 flex-wrap">
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0"
+                      style={{background:col+'22',color:col}}>{p.persona.initials || p.persona.name?.[0] || '·'}</div>
+                    <span className="text-sm text-white/60 flex-1 min-w-0 truncate">{p.persona.name}</span>
+                    <span className="text-xs text-white/40">
+                      {p.dias} {p.dias === 1 ? 'día' : 'días'} · {p.objetivos} objetivos · {p.completadas} hechas
+                    </span>
+                    {/* Un día abierto y nunca cerrado es una señal, no ruido. */}
+                    {sinCerrar > 0 && (
+                      <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full flex-shrink-0"
+                        style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.75)'}}
+                        title="Días que abrió y no llegó a cerrar">
+                        {sinCerrar} sin cerrar
+                      </span>
+                    )}
+                    {ratio !== null && (
+                      <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full flex-shrink-0"
+                        style={{background:ratio>=80?'rgba(34,197,94,0.1)':ratio>=50?'rgba(255,176,32,0.1)':'rgba(255,255,255,0.04)',
+                                color:ratio>=80?GRN:ratio>=50?'rgba(255,176,32,0.8)':'rgba(255,255,255,0.35)'}}
+                        title="Objetivos cumplidos sobre los que se propuso">
+                        {ratio}%
+                      </span>
+                    )}
+                  </div>
+                  <div className="h-2 rounded-full ml-9" style={{background:'rgba(255,255,255,0.04)'}}>
+                    <div className="h-full rounded-full" style={{width:`${ratio ?? 0}%`,background:col+'99',transition:'width 0.5s'}}/>
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Quién NO lo está usando. A la semana de estrenarlo esto vale más que
+                cualquier porcentaje: sin adopción, la sección no existe. */}
+            {brief.sinActividad.length > 0 && (
+              <div className="pt-3 mt-1" style={{borderTop:'1px solid rgba(255,255,255,0.05)'}}>
+                <span className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>SIN USARLO · </span>
+                <span className="text-xs text-white/35">{brief.sinActividad.join(' · ')}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {!isMobile && agendaItems.length > 0 && (
         <div className="mt-4 rounded-2xl p-5" style={{background:SURF2,border:'1px solid rgba(255,255,255,0.07)'}}>
           <div className="font-syne text-[9px] font-bold tracking-widest text-white/25 uppercase mb-4">Pipeline de contenido</div>
