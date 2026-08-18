@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { rutaApp } from '@/lib/appUrl'
-import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, todayKey, localDayKey } from '@/components/shared'
+import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, todayKey, localDayKey, AMBAR } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
 import LucideIcon from '@/components/shared/LucideIcon'
 import type { Client, NexusData} from '@/types'
@@ -29,6 +29,9 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
   const [memSort, setMemSort] = useState<'reciente'|'az'>('reciente')
   const [memClientFilter, setMemClientFilter] = useState<string>('Todos')
   const [uploadingDoc, setUploadingDoc] = useState(false)
+  /** Cliente que la IA ha visto en un documento y que todavía no tenemos dado de alta. */
+  const [clientePropuesto, setClientePropuesto] = useState<{ nombre: string; sector: string } | null>(null)
+  const [creandoCliente, setCreandoCliente] = useState(false)
   const docInputRef = useRef<HTMLInputElement>(null)
   const uploadDoc = async (file: File) => {
     if (file.type !== 'application/pdf') { showToast('Solo se admiten PDF'); return }
@@ -55,8 +58,36 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
       const res = await fetch('/api/documents', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ url: urlJ.publicUrl, name: file.name }) })
       const j = await res.json().catch(()=>({}))
       if (!res.ok) { showToast(j.error || 'Error al analizar'); return }
-      await data.createMemoria({ title: (j.name||file.name).replace(/\.pdf$/i,''), category: 'Documento', content: `${j.summary||''}\n\n📎 Documento: ${rutaApp('/api/archivo?u=' + encodeURIComponent(j.url||urlJ.publicUrl))}` })
-      showToast('Documento guardado en la memoria')
+      // Los datos que la IA sacó del documento van en la nota, en una línea legible.
+      // Es lo que convierte «un PDF guardado» en algo que se puede buscar y que
+      // Harvey entiende: sin esto, «¿cuánto presupuestamos a Zara?» no tiene dónde
+      // mirar aunque el importe esté dentro del archivo.
+      const d = j.datos || {}
+      const ficha = [
+        d.tipo ? `Tipo: ${d.tipo}` : '',
+        d.cliente ? `Cliente: ${d.cliente}` : '',
+        d.fechas ? `Fechas: ${d.fechas}` : '',
+        d.importe ? `Importe: ${d.importe}` : '',
+      ].filter(Boolean).join(' · ')
+
+      await data.createMemoria({
+        title: (j.name||file.name).replace(/\.pdf$/i,''),
+        category: 'Documento',
+        // Enlazada a su cliente cuando lo reconocemos: así el documento aparece al
+        // mirar ESE cliente, en vez de quedarse suelto en una lista general.
+        ...(j.clientId ? { client_id: j.clientId } : {}),
+        content: `${j.summary||''}${ficha ? `\n\n${ficha}` : ''}\n\n📎 Documento: ${rutaApp('/api/archivo?u=' + encodeURIComponent(j.url||urlJ.publicUrl))}`,
+      })
+
+      if (j.clientePropuesto) {
+        // Se PROPONE, no se crea. Un cliente inventado por una lectura dudosa
+        // ensucia Clientes, Proyectos y Reportes a la vez, y limpiarlo cuesta más
+        // que el clic que ahorras.
+        setClientePropuesto(j.clientePropuesto)
+        showToast('Documento guardado · he detectado un cliente')
+      } else {
+        showToast(j.clientId ? 'Documento guardado y enlazado a su cliente' : 'Documento guardado en la memoria')
+      }
     } catch { showToast('Error al subir el documento') }
     finally { setUploadingDoc(false) }
   }
@@ -186,6 +217,42 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
           <button onClick={()=>onOpenModal('memoria')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white transition-opacity hover:opacity-85" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ ENTRADA</button>
         </div>
       </div>
+      {/* La IA ha visto un cliente en el documento que todavía no tenéis dado de
+          alta. Se PROPONE con un clic: crearlo solo sería más rápido y peor —un
+          cliente inventado por una lectura dudosa aparece en Clientes, en
+          Proyectos y en Reportes, y sacarlo de los tres cuesta más que este clic. */}
+      {clientePropuesto && (
+        <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl mb-4 flex-wrap" style={{background:`${AMBAR}0F`,border:`1px solid ${AMBAR}33`}}>
+          <LucideIcon name="sparkles" size={15} color={AMBAR}/>
+          <div className="flex-1 min-w-[180px]">
+            <div className="font-figtree text-[13px] text-white">
+              Este documento parece de <strong>{clientePropuesto.nombre}</strong>
+              {clientePropuesto.sector ? ` · ${clientePropuesto.sector}` : ''}
+            </div>
+            <div className="font-figtree text-[11.5px] mt-0.5" style={{color:'rgba(255,255,255,0.4)'}}>
+              No lo tenéis en Clientes. ¿Lo damos de alta?
+            </div>
+          </div>
+          <button onClick={()=>setClientePropuesto(null)}
+            className="px-3 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest transition-all hover:opacity-70"
+            style={{color:'rgba(255,255,255,0.4)',border:`1px solid ${BORDER}`}}>AHORA NO</button>
+          <button disabled={creandoCliente}
+            onClick={async()=>{
+              setCreandoCliente(true)
+              try {
+                await data.createClient({ name: clientePropuesto.nombre, industry: clientePropuesto.sector || undefined })
+                showToast(`${clientePropuesto.nombre} dado de alta en Clientes`)
+                setClientePropuesto(null)
+              } catch { showToast('No se pudo crear el cliente') }
+              finally { setCreandoCliente(false) }
+            }}
+            className="px-4 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest text-white transition-opacity hover:opacity-85 disabled:opacity-40"
+            style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
+            {creandoCliente ? 'CREANDO…' : 'DAR DE ALTA'}
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl mb-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
         <LucideIcon name="search" size={13} color="rgba(255,255,255,0.2)"/>
         <input ref={memSearchInputRef} value={memSearch} onChange={e=>setMemSearch(e.target.value)} placeholder="Busca en la memoria…" className="flex-1 bg-transparent text-[13px] outline-none" style={{caretColor:BLU,color:'rgba(255,255,255,0.8)'}}/>

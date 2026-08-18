@@ -9,10 +9,14 @@ export async function GET() {
   if (!user) return NextResponse.json({}, { status: 401 })
 
   const admin = await createAdminClient()
+  // SIN filtrar por quien lo subio: el logo de @Brutal Studios es un activo del
+  // estudio, no una preferencia personal. Filtrado por `created_by`, cada una de
+  // las siete personas tenia que subirlo por su cuenta y la MISMA pieza se veia
+  // distinta segun quien la mirara — que es justo lo contrario de para lo que
+  // sirve. El workspace es unico y compartido (ver CLAUDE.md).
   const { data, error } = await admin.from('reglas')
     .select('description,condition_text')
     .eq('name', LOGO_ROW)
-    .eq('created_by', user.id)
   // supabase-js NO lanza: descartando `error` esto devolvia {} con un 200, o sea
   // lo mismo que "esta persona no ha subido ningun logo". En Contenido los logos de
   // cuenta desaparecian de las piezas sin explicacion y sin nada que arreglar,
@@ -47,7 +51,10 @@ export async function POST(request: NextRequest) {
   // falla el INSERT de abajo deja DOS filas para la misma cuenta. El GET las recorre
   // en el orden que le venga y se queda con la ultima, o sea que el logo vuelve al
   // viejo a ratos, sin patron. Mejor no insertar si no se ha podido limpiar.
-  const { error: delErr } = await admin.from('reglas').delete().eq('name', LOGO_ROW).eq('created_by', user.id).eq('description', account)
+  // Tambien sin `created_by`: si se limpiara solo el propio, subir un logo que ya
+  // habia subido otra persona dejaria DOS filas para la misma cuenta y el logo
+  // iria alternando sin patron, que es el fallo que este mismo bloque evita.
+  const { error: delErr } = await admin.from('reglas').delete().eq('name', LOGO_ROW).eq('description', account)
   if (delErr) {
     console.error('[account-logos] no se pudo retirar el logo anterior de', account, '—', delErr.message)
     return NextResponse.json({ error: 'No se pudo guardar el logo' }, { status: 500 })

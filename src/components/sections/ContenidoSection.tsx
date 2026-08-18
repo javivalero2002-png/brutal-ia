@@ -924,14 +924,17 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                   <div>
                     <div className="font-syne text-[7px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>FORMATO</div>
                     <div className="flex gap-1.5">
-                      {([['publicacion','📷','POST'],['reel','🎬','REEL'],['story','⭕','STORY']] as const).map(([t,icon,label])=>{
+                      {([['publicacion','image','POST'],['reel','film','REEL'],['story','circle','STORY']] as const).map(([t,icon,label])=>{
                         const on = editContentType===t
                         const c = '#C33584'
                         return (
                           <button key={t} onClick={()=>setEditContentType(t)}
                             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl font-syne text-[7px] font-black tracking-wide transition-all active:opacity-70"
                             style={{background:on?c+'18':'rgba(255,255,255,0.03)',border:`1.5px solid ${on?c+'55':'rgba(255,255,255,0.06)'}`,color:on?c:'rgba(255,255,255,0.35)'}}>
-                            <span style={{fontSize:'13px'}}>{icon}</span><span>{label}</span>
+                            {/* Icono del sistema, no un emoji: los emojis los dibuja
+                                el sistema operativo, así que cada uno veía un
+                                cuadradito distinto y ninguno pegaba con el resto. */}
+                            <LucideIcon name={icon} size={13} color={on?c:'rgba(255,255,255,0.35)'}/><span>{label}</span>
                           </button>
                         )
                       })}
@@ -1143,13 +1146,13 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
                   <div>
                     <div className="font-syne text-[8.5px] font-black tracking-widest mb-2.5" style={{color:'rgba(255,255,255,0.2)'}}>TIPO DE CONTENIDO</div>
                     <div className="grid grid-cols-3 gap-2">
-                      {([['publicacion','📷','Publicación','Imagen fija en el feed'],['reel','🎬','Reel','Vídeo vertical 9:16'],['story','⭕','Story','Desaparece en 24h']] as const).map(([t,icon,label,desc])=>{
+                      {([['publicacion','image','Publicación','Imagen fija en el feed'],['reel','film','Reel','Vídeo vertical 9:16'],['story','circle','Story','Desaparece en 24h']] as const).map(([t,icon,label,desc])=>{
                         const on=editContentType===t
                         const colors: Record<string,string>={publicacion:'#C33584',reel:'#C33584',story:'#6B21A8'}
                         const c=colors[t]
                         return (
                           <button key={t} onClick={()=>setEditContentType(t)} className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl transition-all" style={{background:on?c+'18':'rgba(255,255,255,0.03)',border:`1.5px solid ${on?c+'55':'rgba(255,255,255,0.06)'}`}}>
-                            <span style={{fontSize:'20px'}}>{icon}</span>
+                            <LucideIcon name={icon} size={19} color={on?c:'rgba(255,255,255,0.4)'}/>
                             <span className="font-syne text-[9px] font-black tracking-wide" style={{color:on?c:'rgba(255,255,255,0.4)'}}>{label.toUpperCase()}</span>
                             <span className="font-figtree text-[9px] text-center leading-tight" style={{color:'rgba(255,255,255,0.25)'}}>{desc}</span>
                           </button>

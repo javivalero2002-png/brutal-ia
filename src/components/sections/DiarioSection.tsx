@@ -674,9 +674,17 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
             <div className="font-syne text-[9px] font-black tracking-widest flex-1" style={{ color: BLU }}>¿QUÉ ME PROPONGO?</div>
           </div>
           <div className="px-4 pb-4 flex-1 flex flex-col">
-            {/* Una fila por objetivo. Enter encadena el siguiente, Retroceso en una
-                fila vacía la quita y vuelve a la anterior: se escribe la lista
-                entera sin tocar el ratón, que es como se escribe una lista. */}
+            {/* Mientras carga NO se enseña la lista vacía. Tardaba un segundo en
+                llegar la entrada del día y en ese hueco la sección decía «Sin
+                objetivos. Pulsa NUEVO OBJETIVO», que es exactamente lo contrario
+                de lo que pasaba: los había, aún no habían llegado. */}
+            {cargando && !sembrado.current ? (
+              <div className="flex flex-col gap-1.5 flex-1" aria-busy="true">
+                {[0, 1].map(i => (
+                  <div key={i} className="rounded-xl animate-pls" style={{ height: '34px', background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}` }} />
+                ))}
+              </div>
+            ) : (
             <div className="flex flex-col gap-1.5 flex-1">
               {filas.map((fila, i) => {
                 const hecho = !!fila.trim() && estaHecho(fila)
@@ -728,6 +736,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
                 <LucideIcon name="plus" size={12} color={BLU} /> AÑADIR OBJETIVO
               </button>
             </div>
+            )}
 
             {!miEntrada?.entrada_at && objetivosDeHoy.length > 0 && (
               <button onClick={() => fichar('entrada')} disabled={fichando}
