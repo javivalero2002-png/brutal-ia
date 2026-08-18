@@ -1343,7 +1343,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
               </div>
               <div className="flex-1 px-7 py-6 space-y-4">
                 <div className="flex items-center justify-between">
-                  <div className="font-syne text-[8.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>OPINIONES DEL EQUIPO</div>
+                  <div className="font-syne text-[8.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>OPINIONES</div>
                   {(()=>{ try { const ops=JSON.parse(activeItem.feedback||'[]'); return Array.isArray(ops)&&ops.length>0?<span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:`${BLU}15`,color:`${BLU}bb`}}>{ops.length}</span>:null } catch { return null } })()}
                 </div>
                 {(()=>{ try { const ops=JSON.parse(activeItem.feedback||'[]'); return Array.isArray(ops)&&ops.length>0?(
@@ -1352,7 +1352,13 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                       <div key={i} className="flex items-start gap-3 p-3.5 rounded-2xl transition-all" style={{background:'rgba(255,255,255,0.03)',border:`1px solid rgba(255,255,255,0.06)`}}>
                         <div className="w-8 h-8 rounded-xl flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0" style={{background:`${op.color||BLU}18`,color:op.color||BLU}}>{op.initials}</div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap"><span className="font-figtree text-[12px] font-bold" style={{color:'rgba(255,255,255,0.8)'}}>{op.name}</span>{op.emoji&&<span className="text-[16px] leading-none">{op.emoji}</span>}<span className="font-syne text-[7px] ml-auto flex-shrink-0" style={{color:'rgba(255,255,255,0.18)'}}>{op.at?new Date(op.at).toLocaleDateString('es-ES',{day:'numeric',month:'short'}):''}</span></div>
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">{op.origen==='cliente'
+                            /* La opinión del cliente llega con el nombre de relleno
+                               «Cliente», y pintarlo como si fuera una persona del
+                               equipo confunde: no se sabe quién es ni hace falta.
+                               Una etiqueta dice de dónde viene sin fingir un autor. */
+                            ? <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,176,32,0.12)',color:'rgba(255,176,32,0.8)'}}>DEL CLIENTE</span>
+                            : <span className="font-figtree text-[12px] font-bold" style={{color:'rgba(255,255,255,0.8)'}}>{op.name}</span>}{op.emoji&&<span className="text-[16px] leading-none">{op.emoji}</span>}<span className="font-syne text-[7px] ml-auto flex-shrink-0" style={{color:'rgba(255,255,255,0.18)'}}>{op.at?new Date(op.at).toLocaleDateString('es-ES',{day:'numeric',month:'short'}):''}</span></div>
                           {op.note&&<p className="font-syne text-[10px] leading-relaxed" style={{color:'rgba(255,255,255,0.42)'}}>{op.note}</p>}
                         </div>
                       </div>

@@ -30,12 +30,14 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
   const [mode, setMode] = useState<HarveyMode>('idle')
   const [lastAudioUrl, setLastAudioUrl] = useState<string|null>(null)
   const lastAudioUrlRef = useRef<string|null>(null)
-  const [conversation, setConversation] = useState<Array<{role:'user'|'harvey',text:string,searched?:boolean,ts?:string}>>([])
+  const [conversation, setConversation] = useState<Array<{role:'user'|'harvey',text:string,searched?:boolean,ts?:string,fuentes?:{id?:string,title?:string,category?:string}[]}>>([])
   // El estado de React todavía no se ha actualizado cuando el manejador que
   // acaba de cambiarlo sigue corriendo. Este espejo sí, porque se escribe a mano
   // y en el momento. Es lo que garantiza que el historial que recibe Harvey sea
   // el de AHORA y no el del turno anterior.
-  const conversationRef = useRef<Array<{role:'user'|'harvey',text:string,searched?:boolean,ts?:string}>>([])
+  const fuentesRef = useRef<{id?:string,title?:string,category?:string}[]>([])
+  const [fuentesAbiertas, setFuentesAbiertas] = useState<number|null>(null)
+  const conversationRef = useRef<Array<{role:'user'|'harvey',text:string,searched?:boolean,ts?:string,fuentes?:{id?:string,title?:string,category?:string}[]}>>([])
   const [textInput, setTextInput] = useState('')
   const [copiedHarveyIdx, setCopiedHarveyIdx] = useState<number|null>(null)
   // El tipo lo fija el modulo del parser: declararlo a mano aqui era la tercera
@@ -163,6 +165,10 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
     setConversation(nuevo)
     // `previos` y no `nuevo`: el servidor añade el mensaje actual desde `message`,
     // así que mandarlo también en el historial lo duplicaba.
+    // Se apuntan las notas que se le van a enseñar para ESTA pregunta. No para
+    // que las recite —Javi lo pidió expresamente— sino para poder ofrecer un
+    // botón: quien dude de una respuesta puede ver de dónde salió.
+    fuentesRef.current = memoriaRelevante(texto).map(m => ({ id: (m as { id?: string }).id, title: m.title, category: m.category }))
     return askHarvey(texto, previos)
   }
 
@@ -400,7 +406,7 @@ ${memLines2||'  sin documentos'}`
   // garantiza que `historial` sea el de ahora. Aquí queda el respaldo por si
   // alguna vez llega sin él — el espejo, nunca el estado de la clausura, que es
   // lo que estaba atrasado y hacía que Harvey perdiera el hilo hablando.
-  const askHarvey = async (userText: string, historial?: Array<{role:'user'|'harvey',text:string,searched?:boolean,ts?:string}>) => {
+  const askHarvey = async (userText: string, historial?: Array<{role:'user'|'harvey',text:string,searched?:boolean,ts?:string,fuentes?:{id?:string,title?:string,category?:string}[]}>) => {
     const run = ++voiceRunRef.current
     setMode('thinking')
     // Una pregunta nueva invalida la propuesta anterior. La tarjeta se pinta con
@@ -481,7 +487,7 @@ ${memLines2||'  sin documentos'}`
       const texto = degradado
         ? `${reply}\n\n(No he podido conectar con mi cerebro ahora mismo — esto es lo que tengo guardado. Vuelve a preguntarme en un momento.)`
         : reply
-      setConversation(prev=>[...prev,{role:'harvey',text:texto,searched,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}])
+      setConversation(prev=>[...prev,{role:'harvey',text:texto,searched,fuentes:fuentesRef.current,ts:horaMadrid()}])
       setFollowUps(generateFollowUps(userText, reply))
       await speak(reply, prefetch)
     } catch (err: any) {
@@ -864,6 +870,31 @@ ${memLines2||'  sin documentos'}`
                   </div>
                 )}
                 <div className="font-figtree text-[13.5px] leading-relaxed whitespace-pre-wrap" style={{color:msg.role==='harvey'?'rgba(255,255,255,0.88)':'rgba(255,255,255,0.7)'}}>{msg.text}</div>
+                {/* Las fuentes NO se dicen: se ofrecen. Harvey citando notas en voz
+                    alta convertiría cada respuesta en una bibliografía —y esto se
+                    reproduce en audio—. Un botón deja comprobar de dónde salió a
+                    quien dude, sin estorbar a quien no. */}
+                {msg.role==='harvey' && !!msg.fuentes?.length && (
+                  <div className="mt-2">
+                    <button onClick={()=>setFuentesAbiertas(a=>a===i?null:i)}
+                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg font-syne text-[7px] font-black tracking-widest transition-opacity hover:opacity-80"
+                      style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.35)'}}>
+                      <LucideIcon name="database" size={9} color="rgba(255,255,255,0.35)"/>
+                      {fuentesAbiertas===i ? 'OCULTAR FUENTES' : `REVISAR FUENTES · ${msg.fuentes.length}`}
+                    </button>
+                    {fuentesAbiertas===i && (
+                      <div className="flex flex-col gap-1 mt-2 pl-1">
+                        {msg.fuentes.map((f,k)=>(
+                          <button key={k} onClick={()=>onNavigate('memoria')}
+                            className="flex items-baseline gap-2 text-left transition-opacity hover:opacity-70">
+                            <span className="font-syne text-[6.5px] font-black tracking-widest flex-shrink-0" style={{color:'rgba(255,255,255,0.2)'}}>{(f.category||'').toUpperCase()}</span>
+                            <span className="font-figtree text-[11px] truncate" style={{color:'rgba(255,255,255,0.5)'}}>{f.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               {/* Meta row: copy + timestamp (siempre visible en móvil, hover en escritorio) */}
               <div className={`flex items-center gap-2 mt-1 px-1 transition-opacity ${isMobile?'opacity-100':'opacity-0 group-hover/hconv:opacity-100'}`}>

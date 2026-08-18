@@ -770,3 +770,31 @@ describe('diario · el día cuenta también lo creado desde Tareas', () => {
       'las tareas del día se mezclan con los objetivos sin distinguirlas').toBe(true)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Las fuentes de Harvey se OFRECEN, no se dicen.
+//
+// Javi lo pidió expresamente: «no quiero que lo diga, como mucho un botón de
+// revisar fuentes». Y tiene razón técnica además de de gusto — esto se reproduce
+// EN VOZ ALTA, así que citar notas convertiría cada respuesta en una bibliografía
+// leída. El botón deja comprobar de dónde salió a quien dude, sin estorbar a
+// quien no.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('harvey · las fuentes son un botón, no parte de la respuesta', () => {
+  const H = readFileSync('src/components/sections/HarveySection.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  it('se guardan con el turno y se pintan aparte', () => {
+    expect(/fuentes:fuentesRef\.current/.test(H),
+      'el turno no guarda de qué notas salió: no se podrían revisar después').toBe(true)
+    expect(/REVISAR FUENTES/.test(H), 'ya no hay botón de fuentes').toBe(true)
+  })
+
+  it('el prompt NO le pide que las cite', () => {
+    // Si se le pidiera en el system prompt, las diría en voz alta — que es
+    // exactamente lo que se descartó.
+    const R = readFileSync('src/app/api/harvey/chat/route.ts', 'utf8')
+    expect(/cita (la|las) fuente|di de qué nota|menciona la nota/i.test(R),
+      'se le pide a Harvey que cite las fuentes: las leería en voz alta').toBe(false)
+  })
+})
