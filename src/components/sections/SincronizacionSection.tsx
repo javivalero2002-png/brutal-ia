@@ -414,16 +414,23 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
           {/* Quick stats bar */}
             {anyConnected && (
               <div className="grid grid-cols-5 gap-2 mt-5">
+                {/* Un solo tratamiento para los cinco. Antes cada caja llevaba su
+                    propio tinte —rojo, ámbar, violeta, verde— y con eso en pantalla
+                    ningún número destacaba sobre los demás: cinco cosas gritando
+                    equivalen a ninguna. El color se reserva para lo que SIGNIFICA
+                    algo, que aquí es solo tener urgentes sin ver. */}
                 {[
-                  {v:personalEmails+colabsEmails, l:'Emails', c:'rgba(234,67,53,0.8)', bg:'rgba(234,67,53,0.06)'},
-                  {v:unreadTotal, l:'Sin leer', c:urgentTotal>0?RED:'rgba(255,176,32,0.8)', bg:urgentTotal>0?`${RED}08`:'rgba(255,176,32,0.05)'},
-                  {v:urgentTotal, l:'Urgentes', c:urgentTotal>0?RED:'rgba(255,255,255,0.15)', bg:urgentTotal>0?`${RED}10`:'rgba(255,255,255,0.02)'},
-                  {v:calCount, l:'Eventos', c:'rgba(167,139,250,0.9)', bg:'rgba(167,139,250,0.05)'},
-                  {v:waCount, l:'WhatsApp', c:'rgba(37,211,102,0.9)', bg:'rgba(37,211,102,0.05)'},
+                  {v:personalEmails+colabsEmails, l:'Emails'},
+                  {v:unreadTotal, l:'Sin leer'},
+                  {v:urgentTotal, l:'Urgentes', alerta:urgentTotal>0},
+                  {v:calCount, l:'Eventos'},
+                  {v:waCount, l:'WhatsApp'},
                 ].map((s,i)=>(
-                  <div key={i} className="rounded-2xl px-3 py-3 text-center" style={{background:s.bg,border:`1px solid rgba(255,255,255,0.05)`}}>
-                    <div className={`font-figtree font-black leading-none mb-1 ${isMobile?'text-[16px]':'text-[20px]'}`} style={{color:s.c}}>{s.v}</div>
-                    <div className="font-syne text-[6.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>{s.l.toUpperCase()}</div>
+                  <div key={i} className="rounded-2xl px-3 py-3 text-center"
+                    style={{background:s.alerta?`${RED}0F`:'rgba(255,255,255,0.03)',border:`1px solid ${s.alerta?RED+'2A':'rgba(255,255,255,0.05)'}`}}>
+                    <div className={`font-figtree font-black leading-none mb-1 ${isMobile?'text-[16px]':'text-[20px]'}`}
+                      style={{color:s.alerta?RED:s.v?'rgba(255,255,255,0.92)':'rgba(255,255,255,0.22)'}}>{s.v}</div>
+                    <div className="font-syne text-[6.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.28)'}}>{s.l.toUpperCase()}</div>
                   </div>
                 ))}
               </div>
@@ -444,7 +451,7 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
         </div>
 
         {/* ── EMAIL ── */}
-        <AjGroup label="EMAIL" color="rgba(234,67,53,0.6)">
+        <AjGroup label="EMAIL">
           <div className="space-y-3">
 
             {/* Gmail Personal */}
@@ -673,10 +680,10 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
       </AjGroup>
 
       {/* ── CALENDARIO ── */}
-      <AjGroup label="CALENDARIO" color="rgba(167,139,250,0.6)" defaultOpen={false}>
+      <AjGroup label="CALENDARIO" defaultOpen={false}>
         <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${personalOk?'rgba(167,139,250,0.2)':BORDER}`}}>
           <div className="flex items-center gap-4 p-5 flex-wrap">
-            <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:'rgba(167,139,250,0.08)',border:'1px solid rgba(167,139,250,0.15)'}}>
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:personalOk?`${BLU}12`:'rgba(255,255,255,0.03)',border:`1px solid ${personalOk?BLU+'2A':BORDER}`}}>
               <svg viewBox="0 0 24 24" width={22} height={22} fill="none" stroke={personalOk?"#A78BFA":"rgba(167,139,250,0.3)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2.5"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><circle cx="8" cy="15" r="1" fill={personalOk?"#A78BFA":"rgba(167,139,250,0.3)"}/><circle cx="12" cy="15" r="1" fill={personalOk?"#A78BFA":"rgba(167,139,250,0.3)"}/><circle cx="16" cy="15" r="1" fill={personalOk?"#A78BFA":"rgba(167,139,250,0.3)"}/></svg>
             </div>
             <div className="flex-1 min-w-0">
@@ -781,7 +788,7 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
       </AjGroup>
 
       {/* ── WHATSAPP ── */}
-      <AjGroup label="WHATSAPP BUSINESS" color="rgba(37,211,102,0.6)" defaultOpen={false}>
+      <AjGroup label="WHATSAPP BUSINESS" defaultOpen={false}>
         <div className="space-y-3">
           {/* Webhook card */}
           <div className="rounded-2xl p-5" style={{background:'rgba(37,211,102,0.04)',border:'1px solid rgba(37,211,102,0.12)'}}>
@@ -848,7 +855,7 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
         const total = teamMembers.length
         const fullPct = Math.round((connectedP + connectedC) / (total * 2) * 100)
         return (
-        <AjGroup label="ESTADO DEL EQUIPO" color="rgba(167,139,250,0.5)" defaultOpen={false} extra={<span className="font-syne text-[7.5px] font-black" style={{color:fullPct===100?GRN:fullPct>50?'rgba(255,176,32,0.7)':'rgba(255,255,255,0.25)'}}>{fullPct}% CONECTADO</span>}>
+        <AjGroup label="ESTADO DEL EQUIPO" defaultOpen={false} extra={<span className="font-syne text-[7.5px] font-black" style={{color:fullPct===100?GRN:fullPct>50?'rgba(255,176,32,0.7)':'rgba(255,255,255,0.25)'}}>{fullPct}% CONECTADO</span>}>
 
           {/* Barra de completitud. Los dos tramos son mitades del MISMO total que la
               etiqueta («{fullPct}% CONECTADO»), que se calcula sobre total*2 — una
@@ -922,7 +929,7 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
 
       {/* ── ACTIVIDAD ── */}
       {syncLog.length > 0 && (
-        <AjGroup label="HISTORIAL DE SYNC" color="rgba(255,255,255,0.12)" defaultOpen={false} extra={
+        <AjGroup label="HISTORIAL DE SYNC" defaultOpen={false} extra={
           <span className="flex items-center gap-2">
             <button onClick={()=>setExpandLog(v=>!v)} className="font-syne text-[7.5px] font-black tracking-wide hover:opacity-70 transition-opacity" style={{color:'rgba(255,255,255,0.2)'}}>
               {expandLog?'MENOS':'VER TODO'}

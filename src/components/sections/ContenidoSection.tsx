@@ -690,7 +690,14 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                                     {coverUrl && <SafeImg src={coverUrl} className="absolute inset-0 w-full h-full object-cover" style={{opacity:0.8}}/>}
                                     {/* Overlay top */}
                                     <div className="absolute top-1.5 left-1.5 right-1.5 flex items-center gap-1">
-                                      <div className="w-4 h-4 rounded-full overflow-hidden flex-shrink-0" style={{background:'linear-gradient(45deg,#f09433,#dc2743,#bc1888)',padding:'1px'}}><div className="w-full h-full rounded-full bg-black"/></div>
+                                      <div className="w-4 h-4 rounded-full overflow-hidden flex-shrink-0" style={{background:'linear-gradient(45deg,#f09433,#dc2743,#bc1888)',padding:'1px'}}><div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center" style={{background:'#000'}}>
+                                        {(() => {
+                                          const u = allAccountLogos[acc] || (() => { try { return localStorage.getItem(`account-logo-${acc}`) || '' } catch { return '' } })() || logoPorDefecto(acc)
+                                          return u
+                                            ? <img src={u} alt="" className="w-full h-full object-cover"/>
+                                            : <span className="font-figtree font-black text-white" style={{fontSize:'5px'}}>{(acc.trim().charAt(0)||'B').toUpperCase()}</span>
+                                        })()}
+                                      </div></div>
                                       <span className="font-figtree text-[5.5px] font-bold text-white truncate">{acc}</span>
                                     </div>
                                     {/* Right actions */}
@@ -718,7 +725,14 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                                     </div>
                                     {/* Account */}
                                     <div className="absolute top-3 left-1.5 flex items-center gap-1">
-                                      <div className="w-4 h-4 rounded-full" style={{background:'linear-gradient(45deg,#f09433,#dc2743,#bc1888)',padding:'1px'}}><div className="w-full h-full rounded-full bg-black"/></div>
+                                      <div className="w-4 h-4 rounded-full" style={{background:'linear-gradient(45deg,#f09433,#dc2743,#bc1888)',padding:'1px'}}><div className="w-full h-full rounded-full overflow-hidden flex items-center justify-center" style={{background:'#000'}}>
+                                        {(() => {
+                                          const u = allAccountLogos[acc] || (() => { try { return localStorage.getItem(`account-logo-${acc}`) || '' } catch { return '' } })() || logoPorDefecto(acc)
+                                          return u
+                                            ? <img src={u} alt="" className="w-full h-full object-cover"/>
+                                            : <span className="font-figtree font-black text-white" style={{fontSize:'5px'}}>{(acc.trim().charAt(0)||'B').toUpperCase()}</span>
+                                        })()}
+                                      </div></div>
                                       <span className="font-figtree text-[5px] font-bold text-white">{acc}</span>
                                     </div>
                                     {/* Story content if no image */}

@@ -238,6 +238,44 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   // `proyectoId` entra por parametro y no se lee del ref al final: el analisis es
   // una llamada a Claude de hasta 60 segundos, y en ese hueco da tiempo de sobra a
   // cambiar de proyecto. Se persistia en el que estuvieras mirando al terminar.
+  /**
+   * Manda a Memoria un análisis que YA está hecho.
+   *
+   * Los proyectos analizados ANTES de que existiera el enlace con Memoria no
+   * tienen nota, y no se les puede crear sola: hacerlo al abrir el proyecto
+   * llenaría Memoria de notas que nadie ha pedido, y de golpe. Con un botón lo
+   * decide quien mira, que además es quien sabe si ese documento merece estar.
+   */
+  const [llevando, setLlevando] = useState(false)
+  const llevarAMemoria = async (proyectoId: string) => {
+    const a = pdfAnalysisRef.current
+    const proy = data.projects?.find((p: Project) => p.id === proyectoId)
+    const url = pdfDocRef.current?.ident || pdfDocRef.current?.url
+    if (!a || !proy) return
+    setLlevando(true)
+    try {
+      const ficha = [
+        a.data?.client ? `Cliente: ${a.data.client}` : '',
+        a.data?.budget ? `Presupuesto: ${a.data.budget}` : '',
+        a.data?.dates ? `Fechas: ${a.data.dates}` : '',
+        a.data?.scope ? `Alcance: ${a.data.scope}` : '',
+      ].filter(Boolean).join(' · ')
+      await data.createMemoria?.({
+        title: `${proy.name || 'Proyecto'} — documento`,
+        category: 'Documento',
+        ...(proy.client_id ? { client_id: proy.client_id } : {}),
+        content: [
+          a.summary || '',
+          ficha,
+          (a.keyPoints || []).slice(0, 5).map((p: string) => `· ${p}`).join('\n'),
+          url ? `📎 Documento: ${rutaApp('/api/archivo?u=' + encodeURIComponent(url))}` : '',
+        ].filter(Boolean).join('\n\n'),
+      })
+      showToast('Guardado en Memoria')
+    } catch { showToast('No se pudo guardar en Memoria') }
+    finally { setLlevando(false) }
+  }
+
   const analyzePdf = async (pdfUrl: string, proyectoId: string) => {
     setPdfBusy(true)
     try {
@@ -1020,9 +1058,19 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                   {/* Resumen ejecutivo */}
                   {pdfAnalysis.summary && (
                     <div className="rounded-2xl p-4" style={{background:'rgba(27,95,250,0.06)',border:`1px solid rgba(27,95,250,0.18)`}}>
-                      <div className="flex items-center gap-2 mb-3">
+                      <div className="flex items-center gap-2 mb-3 flex-wrap">
                         <LucideIcon name="sparkles" size={12} color={BLU}/>
-                        <span className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(120,155,255,0.85)'}}>RESUMEN EJECUTIVO</span>
+                        <span className="font-syne text-[8px] font-black tracking-widest flex-1" style={{color:'rgba(120,155,255,0.85)'}}>RESUMEN EJECUTIVO</span>
+                        {/* Para los analizados ANTES de que esto llegara a Memoria.
+                            Los nuevos van solos; estos los decide quien mira. */}
+                        {selectedId && (
+                          <button onClick={()=>llevarAMemoria(selectedId)} disabled={llevando}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-syne text-[7.5px] font-black tracking-widest transition-all active:scale-95 disabled:opacity-40"
+                            style={{background:'rgba(255,255,255,0.05)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.5)'}}>
+                            <LucideIcon name="database" size={10} color="rgba(255,255,255,0.5)"/>
+                            {llevando?'GUARDANDO…':'A MEMORIA'}
+                          </button>
+                        )}
                       </div>
                       <p className="font-figtree text-[13px] leading-[1.7]" style={{color:'rgba(255,255,255,0.8)'}}>{pdfAnalysis.summary}</p>
                     </div>
