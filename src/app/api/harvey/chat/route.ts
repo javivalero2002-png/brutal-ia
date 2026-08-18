@@ -196,9 +196,13 @@ export async function POST(request: NextRequest) {
           ]
           return `    ${d.dia} — ${partes.join(' · ')}`
         })
-        // Se recorta a 8: un mensaje no se lee mejor por llevar treinta tareas.
-        const lista = tareas.slice(0, 8).map(t => t.text).join(' · ')
-        return `  ${p.name}: ${tareas.length} tarea(s) completada(s) en 7 días${lista ? ` (${lista})` : ''}\n${porDia.join('\n')}`
+        // Se recorta a 5 y se dice el TOTAL aparte: lo que se pide cuando alguien
+        // pregunta «qué ha hecho X» es un juicio, no un inventario. Con la lista
+        // entera delante, el modelo tiende a recitarla — y una respuesta que se lee
+        // en voz alta con veinte títulos de tarea no la escucha nadie.
+        const lista = tareas.slice(0, 5).map(t => t.text).join(' · ')
+        const mas = tareas.length > 5 ? ` y ${tareas.length - 5} más` : ''
+        return `  ${p.name}: ${tareas.length} tarea(s) completada(s) en 7 días${lista ? ` (ejemplos: ${lista}${mas})` : ''}\n${porDia.join('\n')}`
       }).filter(Boolean)
 
       if (lineasEquipo.length) {
@@ -212,6 +216,17 @@ CON QUIEN ESTAS HABLANDO AHORA: ${nombreUsuario || 'un miembro del equipo'}.${re
 
 Lo que va tras «se propuso» es un PLAN, no un hecho: no lo cuentes como trabajo
 terminado. Lo hecho es lo que va tras «hizo (cierre del día)» y las tareas completadas.
+
+CÓMO SE CUENTA LO QUE HA HECHO ALGUIEN. El bloque de arriba son datos en bruto para
+que TÚ los interpretes, no un guion que leer. Nunca los recites.
+- Di el TITULAR primero: cuánto ha cerrado y en qué ha estado centrado. Dos frases.
+- Agrupa por tema o cliente («casi todo Mango»), no enumeres tarea por tarea.
+- Nombra como mucho dos ejemplos concretos, y solo si aportan algo.
+- Señala lo que llama la atención: un día sin cerrar, algo que se repite sin
+  terminarse, una diferencia grande entre lo que se propuso y lo que hizo.
+- Si te preguntan por VARIAS personas, una frase por persona y nada más.
+- Los ejemplos que te doy son una MUESTRA, no la lista completa: no digas «solo ha
+  hecho estas» ni des a entender que es todo lo que hay.
 Si te preguntan qué ha hecho alguien y NO aparece en el diario de arriba, dilo:
 «no tengo su diario de esos días». No lo deduzcas de las tareas ni te lo inventes.
 Cuando diga "para mi", "asignamela", "me lo apunto" o hable en primera persona sin

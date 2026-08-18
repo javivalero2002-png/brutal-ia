@@ -100,17 +100,56 @@ export async function POST(request: NextRequest) {
 
   // Resumen con Haiku
   let summary = ''
+  let datos: { tipo: string; cliente: string; sector: string; fechas: string; importe: string } | null = null
   try {
     if (buffer.length < 20 * 1024 * 1024) {
+      // La MISMA llamada de siempre —un documento se lee UNA vez y nunca más—,
+      // pero devolviendo DATOS además de prosa. El resumen suelto convertía cada
+      // documento en una nota huérfana: nadie sabía de qué cliente era, así que no
+      // aparecía al mirar ese cliente y Harvey no podía relacionarlo con nada.
+      // Extraer el cliente aquí no cuesta ni un céntimo más y es lo que convierte
+      // el documento en conocimiento en vez de en un archivo guardado.
       const msg = await anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 600,
+        max_tokens: 700,
         messages: [{ role: 'user', content: [
           { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } } as any,
-          { type: 'text', text: 'Resume este documento para la base de conocimiento de Brutal Studios. En español, 80-150 palabras: de qué trata, datos clave (cliente, presupuesto, fechas, entregables) y puntos importantes. Sin preámbulos.' }
+          { type: 'text', text: `Analiza este documento para la base de conocimiento de Brutal Studios, una agencia creativa.
+
+Responde SOLO con un objeto JSON, sin texto alrededor y sin vallas de código:
+{
+  "resumen": "80-150 palabras en español: de qué trata, datos clave y puntos importantes. Sin preámbulos.",
+  "tipo": "presupuesto | contrato | brief | factura | propuesta | informe | otro",
+  "cliente": "nombre de la empresa CLIENTE, tal cual aparece. Cadena vacía si no hay uno claro.",
+  "sector": "sector del cliente en una o dos palabras, o cadena vacía",
+  "fechas": "las fechas relevantes, en una línea, o cadena vacía",
+  "importe": "el importe principal con su moneda, o cadena vacía"
+}
+
+Para "cliente": el cliente ES QUIEN CONTRATA. Brutal Studios NO es el cliente: si
+el documento lo emite Brutal Studios, el cliente es el destinatario. Si no estás
+razonablemente seguro, deja la cadena vacía — es mejor no decir nada que decir un
+nombre equivocado.` }
         ] }],
       })
-      summary = textOf(msg).trim()
+      const bruto = textOf(msg).trim()
+      try {
+        // El modelo a veces envuelve el JSON en vallas pese a pedírselo.
+        const limpio = bruto.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
+        const j = JSON.parse(limpio)
+        summary = String(j.resumen || '').trim()
+        datos = {
+          tipo: String(j.tipo || '').trim(),
+          cliente: String(j.cliente || '').trim(),
+          sector: String(j.sector || '').trim(),
+          fechas: String(j.fechas || '').trim(),
+          importe: String(j.importe || '').trim(),
+        }
+      } catch {
+        // Si no vino JSON, el texto SIGUE valiendo como resumen: se degrada al
+        // comportamiento de antes en vez de perder el análisis que ya se ha pagado.
+        summary = bruto
+      }
     } else {
       summary = 'Documento subido (demasiado grande para resumir automáticamente).'
     }
@@ -135,5 +174,25 @@ export async function POST(request: NextRequest) {
   // Lo que SI queda: las notas creadas entre el 2026-07-30 y el 2026-08-13 llevan
   // la URL publica cruda dentro de `memoria.content`, que es texto libre y nadie
   // parsea. Se arreglan a mano desde la app anteponiendoles el enlace estable.
-  return NextResponse.json({ url: publicUrl, name: filename, summary })
+  // ¿Ese cliente ya lo tenemos? Se compara sin tildes, mayúsculas ni S.L.: «Zara»,
+  // «ZARA» e «Inditex, S.L.» escritos de tres formas son el mismo cliente, y sin
+  // esto el documento se quedaría suelto o propondría dar de alta un duplicado.
+  let clientId: string | null = null
+  let clientePropuesto: { nombre: string; sector: string } | null = null
+  if (datos?.cliente) {
+    const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\b(s\.?l\.?u?|s\.?a\.?|sl|sa|inc|ltd|llc)\b/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+    const objetivo = norm(datos.cliente)
+    const { data: clientes, error: errCli } = await admin.from('clients').select('id,name')
+    // Un fallo al leer clientes NO puede leerse como «no existe»: propondría dar
+    // de alta uno que ya está, y duplicar un cliente ensucia Proyectos y Reportes.
+    if (errCli) console.error('[documents] no se pudieron leer los clientes:', errCli.message)
+    else {
+      const ya = (clientes || []).find(c => objetivo && norm(c.name || '') === objetivo)
+      if (ya) clientId = ya.id
+      else if (objetivo.length > 2) clientePropuesto = { nombre: datos.cliente, sector: datos.sector || '' }
+    }
+  }
+
+  return NextResponse.json({ url: publicUrl, name: filename, summary, datos, clientId, clientePropuesto })
 }

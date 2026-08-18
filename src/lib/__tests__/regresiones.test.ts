@@ -1204,4 +1204,42 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
     expect(/status: 500/.test(cuerpo.slice(iC, iC + 400)),
       'un fallo al contar propietarios se trata como si hubiera de sobra: autorizaria borrar al ultimo').toBe(true)
   })
+
+  // Un cliente detectado en un PDF se PROPONE, nunca se crea solo. Una lectura
+  // dudosa que da de alta un cliente lo mete a la vez en Clientes, en Proyectos y
+  // en Reportes, y sacarlo de los tres cuesta mucho mas que el clic que ahorra.
+  it('el cliente que sale de un documento se propone, no se crea', () => {
+    const R = leerCodigo('src/app/api/documents/route.ts')
+    expect(/clientePropuesto/.test(R), 'la ruta ya no propone clientes: revisa esta regla').toBe(true)
+    // La ruta NO puede escribir en clients: solo leer para comparar.
+    expect(/from\('clients'\)\s*\.insert|from\('clients'\)\.insert/.test(R),
+      'la ruta de documentos crea clientes por su cuenta: una lectura dudosa ensucia Clientes, Proyectos y Reportes').toBe(false)
+
+    // Y un fallo al LEER los clientes no puede leerse como «no existe»: propondria
+    // dar de alta uno que ya esta.
+    const i = R.indexOf("from('clients')")
+    expect(i, 'ya no consulta los clientes: revisa esta regla').toBeGreaterThan(-1)
+    expect(/errCli/.test(R.slice(i, i + 700)),
+      'no captura el error al leer clientes: un fallo propondria duplicar un cliente existente').toBe(true)
+  })
+
+  // El documento se analiza UNA vez y lo que se guarda es el resultado. Volver a
+  // mandarle el PDF entero a Claude en cada pregunta seria pagar lo mismo cada dia
+  // por leer algo que ya se leyo.
+  it('un documento se lee una sola vez', () => {
+    const H = leerCodigo('src/app/api/harvey/chat/route.ts')
+    expect(/type: 'document'|media_type: 'application\/pdf'/.test(H),
+      'Harvey manda documentos crudos al modelo: eso se paga en CADA pregunta').toBe(false)
+  })
+
+  // Preguntar «que ha hecho X» pide un JUICIO, no un inventario. Sin instruccion,
+  // el modelo recita los titulos de las tareas uno por uno — medido: 130 palabras
+  // y los 5 titulos literales, con listas y emojis, en algo que se lee EN VOZ ALTA.
+  it('harvey resume el trabajo de alguien en vez de recitarlo', () => {
+    const H = leerCodigo('src/app/api/harvey/chat/route.ts')
+    expect(/CÓMO SE CUENTA LO QUE HA HECHO ALGUIEN/.test(H),
+      'se quitó la instrucción de sintetizar: Harvey volvera a leer la lista entera en voz alta').toBe(true)
+    expect(/MUESTRA, no la lista completa/.test(H),
+      'no se avisa de que los ejemplos son una muestra: Harvey diria «solo ha hecho estas»').toBe(true)
+  })
 })
