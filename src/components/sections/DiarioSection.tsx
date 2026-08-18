@@ -540,6 +540,15 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
                 ref={refObjetivos}
                 value={objetivos}
                 onChange={e => alEscribir('entrada', e.target.value)}
+                // Sin esto el campo se desmontaba al teclear la PRIMERA letra, y
+                // solo le pasaba a quien no había escrito nada ese día: la
+                // condición de arriba mira `objetivosDeHoy`, que sale del propio
+                // texto, así que en cuanto había una línea dejaba de cumplirse y
+                // React cambiaba el <textarea> por la lista de solo lectura. Se
+                // perdía el foco y lo que siguieras escribiendo no llegaba a
+                // ninguna parte. Al enfocar se marca `editando`, y entonces el
+                // campo ya no depende de su propio contenido para existir.
+                onFocus={() => setEditando(true)}
                 onBlur={() => setEditando(false)}
                 placeholder={'Cerrar el presupuesto de Nike\nMontar el reel de Mango\nLlamar al proveedor'}
                 rows={5}

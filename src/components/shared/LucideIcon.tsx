@@ -20,6 +20,12 @@ const icons: Record<string,string> = {
   'panel-left-open':'M22 3H2M22 21H2M22 12H2M15 3v18',
   search:'M11 17.25a6.25 6.25 0 1 1 0-12.5 6.25 6.25 0 0 1 0 12.5zM16 16l4.5 4.5',
   menu:'M4 6h16M4 12h16M4 18h16',
+  // El glifo de Compartir de iOS (cuadrado con flecha hacia arriba) y el menú de
+  // tres puntos de Chrome. Se dibujan dentro de las instrucciones de instalar la
+  // PWA: en Safari no hay instalador que ofrecer, así que lo único que queda es
+  // que la gente RECONOZCA el botón que tiene que pulsar.
+  share:'M12 3v13M8 7l4-4 4 4M20 14v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-5',
+  'more-vertical':'M12 5h.01M12 12h.01M12 19h.01',
   music:'M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zm12-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
   'map-pin-2':'M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0zM12 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
   image:'M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5zm5 4a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21',

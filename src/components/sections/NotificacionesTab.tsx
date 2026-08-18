@@ -1,4 +1,5 @@
 'use client'
+import { activarPush } from '@/lib/activarPush'
 
 import { useState, useEffect } from 'react'
 import { BLU, GRN, RED, AMBAR, SURFACE, BORDER, LucideIcon, useIsMobile, relTime } from '@/components/shared'
@@ -65,25 +66,18 @@ function NotificacionesTab({ showToast }: PropsNotificaciones) {
     navigator.serviceWorker.getRegistration('/sw.js').then(reg => reg?.pushManager.getSubscription()).then(sub => setSubscribed(!!sub)).catch(() => {})
   }, [])
 
+  // La activación vive en `src/lib/activarPush.ts`, compartida con la puesta en
+  // marcha. Estaba escrita solo aquí, y la copia de la puesta en marcha se quedó
+  // a medias —pedía el permiso y nada más—, así que prometía avisos que no
+  // llegaban. Una sola copia es lo que impide que vuelva a pasar.
   const activate = async () => {
     setBusy(true)
-    try {
-      const reg = await navigator.serviceWorker.register('/sw.js')
-      await navigator.serviceWorker.ready
-      const perm = await Notification.requestPermission()
-      setPermission(perm)
-      if (perm !== 'granted') { showToast('Permiso denegado — actívalo en los ajustes del navegador'); return }
-      const key = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || ''
-      const raw = atob(key.replace(/-/g, '+').replace(/_/g, '/'))
-      const appKey = new Uint8Array([...raw].map(c => c.charCodeAt(0)))
-      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey })
-      const r = await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub.toJSON(), userAgent: navigator.userAgent }) })
-      if (!r.ok) throw new Error('subscribe failed')
-      setSubscribed(true)
-      showToast('Notificaciones activadas en este dispositivo')
-    } catch {
-      showToast('No se pudieron activar. Inténtalo de nuevo.')
-    } finally { setBusy(false) }
+    const r = await activarPush()
+    setPermission(typeof Notification !== 'undefined' ? Notification.permission : 'default')
+    setBusy(false)
+    if (!r.ok) { showToast(r.mensaje); return }
+    setSubscribed(true)
+    showToast('Notificaciones activadas en este dispositivo')
   }
 
   const deactivate = async () => {

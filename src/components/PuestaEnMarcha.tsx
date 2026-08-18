@@ -4,6 +4,7 @@ import { BLU, GRN, AMBAR, AMARILLO, SURFACE, SURF2, BORDER, ACCENT_COLORS } from
 import LucideIcon from '@/components/shared/LucideIcon'
 import type { Profile } from '@/types'
 import { promptGuardado, alCambiarPrompt, lanzarInstalacion, type PromptInstalacion } from '@/lib/instalarPwa'
+import { activarPush } from '@/lib/activarPush'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUESTA EN MARCHA — lo primero que ve cada persona del equipo.
@@ -25,6 +26,56 @@ import { promptGuardado, alCambiarPrompt, lanzarInstalacion, type PromptInstalac
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CLAVE_PASO = 'nx_onboarding_paso'
+
+// Los caminos para instalar la app, uno por sitio donde puede estar la gente.
+//
+// Safari NO tiene instalador que ofrecer, y no es un descuido de Apple: la
+// petición de implementar `beforeinstallprompt` en WebKit está cerrada como
+// WONTFIX, porque su postura es que cualquier web se añade desde Compartir y por
+// eso no hace falta un aviso del navegador. O sea que aquí no hay botón posible
+// ni lo va a haber: lo único que se puede hacer es que estas instrucciones sean
+// tan buenas que den igual.
+//
+// Por eso van con el icono DIBUJADO y con el aviso de que hay que bajar en la
+// hoja de compartir, que es justo donde se pierde todo el mundo: «Añadir a
+// pantalla de inicio» queda por debajo de los contactos y las apps, fuera de lo
+// que se ve sin desplazar.
+type Camino = 'ios-safari' | 'ios-otro' | 'safari-mac' | 'otro'
+
+const CAMINOS: Record<Camino, { donde: string; pasos: { texto: string; icono?: string; cola?: string }[] }> = {
+  'ios-safari': {
+    donde: 'EN IPHONE O IPAD, CON SAFARI',
+    pasos: [
+      { texto: 'Pulsa Compartir', icono: 'share', cola: 'en la barra de abajo' },
+      { texto: 'Baja por la lista hasta «Añadir a pantalla de inicio» — está más abajo de lo que parece' },
+      { texto: 'Confirma con «Añadir», arriba a la derecha' },
+    ],
+  },
+  'ios-otro': {
+    donde: 'EN IPHONE O IPAD, CON CHROME',
+    pasos: [
+      { texto: 'Pulsa el menú', icono: 'more-vertical', cola: 'abajo a la derecha' },
+      { texto: 'Elige «Añadir a pantalla de inicio»' },
+      { texto: 'Confirma con «Añadir»' },
+    ],
+  },
+  'safari-mac': {
+    donde: 'EN SAFARI, EN EL MAC',
+    pasos: [
+      { texto: 'Abre el menú Archivo, arriba del todo' },
+      { texto: 'Elige «Añadir al Dock»' },
+      { texto: 'Confirma con «Añadir»' },
+    ],
+  },
+  otro: {
+    donde: 'EN ESTE NAVEGADOR',
+    pasos: [
+      { texto: 'Abre el menú del navegador (los tres puntos)' },
+      { texto: 'Busca «Instalar aplicación» o «Añadir a la pantalla de inicio»' },
+      { texto: 'Confirma' },
+    ],
+  },
+}
 
 interface Props {
   profile: Profile
@@ -60,7 +111,7 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
   // navegador que mañana lo implemente entra solo por la rama buena.
   const [promptInstalar, setPromptInstalar] = useState<PromptInstalacion | null>(null)
   const [yaInstalada, setYaInstalada] = useState(false)
-  const [comoInstalar, setComoInstalar] = useState<'ios' | 'safari-mac' | 'otro'>('otro')
+  const [comoInstalar, setComoInstalar] = useState<Camino>('otro')
 
   // Al volver de Google se retoma donde estaba. Sin esto, conectar Gmail te
   // devolvía al principio y había que pasar otra vez por todo.
@@ -82,8 +133,12 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
       const iOS = /iphone|ipad|ipod/i.test(ua) ||
         // iPadOS 13+ se presenta como Mac; lo que lo delata es que tiene táctil.
         (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1)
+      // En iPhone TODOS los navegadores son WebKit por dentro, así que ninguno
+      // instala solo — pero el botón no está en el mismo sitio: Safari lo tiene
+      // en la barra y Chrome lo esconde en su menú de tres puntos. Mandar a todo
+      // el mundo al de Safari deja tirado a quien use Chrome, que es medio equipo.
       const safari = /safari/i.test(ua) && !/chrome|chromium|crios|edg|firefox|fxios/i.test(ua)
-      setComoInstalar(iOS ? 'ios' : safari ? 'safari-mac' : 'otro')
+      setComoInstalar(iOS ? (safari ? 'ios-safari' : 'ios-otro') : safari ? 'safari-mac' : 'otro')
       setYaInstalada(
         window.matchMedia('(display-mode: standalone)').matches ||
         (navigator as unknown as { standalone?: boolean }).standalone === true,
@@ -145,13 +200,15 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
   }
 
   const activarAvisos = async () => {
-    try {
-      if (!('Notification' in window)) { showToast('Este navegador no admite avisos'); return }
-      const permiso = await Notification.requestPermission()
-      if (permiso !== 'granted') { showToast('Los avisos quedan desactivados — puedes activarlos en Operativa'); return }
-      setAvisos(true)
-      showToast('Avisos activados')
-    } catch { showToast('No se pudieron activar los avisos') }
+    setGuardando(true)
+    // Pedir el permiso NO basta: sin suscripción en el servidor no llega ni un
+    // aviso. Va por `activarPush()` para que esto y Operativa no puedan volver a
+    // separarse. Ver el comentario de src/lib/activarPush.ts.
+    const r = await activarPush()
+    setGuardando(false)
+    if (!r.ok) { showToast(r.mensaje); return }
+    setAvisos(true)
+    showToast('Avisos activados')
   }
 
   // El ASPECTO no está aquí a propósito: ya se elige al arrancar la app, en la
@@ -324,20 +381,27 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
                    lo que convierte esta pantalla en la peor del recorrido. */
                 <div className="rounded-2xl px-4 py-3.5" style={{ background: SURF2, border: `1px solid ${BORDER}` }}>
                   <div className="font-syne text-[7.5px] font-black tracking-widest mb-2.5" style={{ color: AMARILLO }}>
-                    {comoInstalar === 'ios' ? 'EN IPHONE O IPAD'
-                      : comoInstalar === 'safari-mac' ? 'EN SAFARI, EN EL MAC'
-                      : 'EN ESTE NAVEGADOR'}
+                    {CAMINOS[comoInstalar].donde}
                   </div>
-                  <ol className="flex flex-col gap-2">
-                    {({
-                      ios: ['Pulsa el botón de Compartir, abajo en el centro', 'Baja y elige «Añadir a pantalla de inicio»', 'Confirma con «Añadir»'],
-                      'safari-mac': ['Abre el menú Archivo, arriba del todo', 'Elige «Añadir al Dock»', 'Confirma con «Añadir»'],
-                      otro: ['Abre el menú del navegador (los tres puntos)', 'Busca «Instalar aplicación» o «Añadir a la pantalla de inicio»', 'Confirma'],
-                    } as const)[comoInstalar].map((t, k) => (
+                  <ol className="flex flex-col gap-2.5">
+                    {CAMINOS[comoInstalar].pasos.map((p, k) => (
                       <li key={k} className="flex items-start gap-2.5">
                         <span className="flex items-center justify-center flex-shrink-0 rounded-full font-syne text-[8px] font-black"
                           style={{ width: '17px', height: '17px', background: `${AMARILLO}22`, color: AMARILLO, marginTop: '1px' }}>{k + 1}</span>
-                        <span className="font-figtree text-[12.5px] leading-snug" style={{ color: 'rgba(255,255,255,0.7)' }}>{t}</span>
+                        <span className="font-figtree text-[12.5px] leading-snug" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                          {p.texto}
+                          {/* El icono va DIBUJADO, no descrito. «El botón de
+                              Compartir» no le dice nada a quien nunca se ha
+                              fijado; el cuadrado con la flecha lo reconoce
+                              cualquiera en cuanto lo ve en su pantalla. */}
+                          {p.icono && (
+                            <span className="inline-flex items-center justify-center align-middle rounded-md mx-1"
+                              style={{ width: '22px', height: '22px', background: `${AMARILLO}1A`, border: `1px solid ${AMARILLO}38` }}>
+                              <LucideIcon name={p.icono} size={13} color={AMARILLO} />
+                            </span>
+                          )}
+                          {p.cola}
+                        </span>
                       </li>
                     ))}
                   </ol>
