@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { BLU, GRN, AMBAR, RED, SURFACE, SURF2, BORDER } from '@/components/shared/design-tokens'
+import { BLU, GRN, AMBAR, RED, VIO, SURFACE, SURF2, BORDER } from '@/components/shared/design-tokens'
 import { LucideIcon, useIsMobile, plural, ProgressRing } from '@/components/shared'
 import type { NexusData, Profile } from '@/types'
 import type { IrASeccion } from '@/components/shared/secciones'
@@ -74,6 +74,12 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
   const [leyendo, setLeyendo] = useState(false)
   const [creando, setCreando] = useState(false)
   const [fichando, setFichando] = useState(false)
+  // Briefing: solo para el propietario. Se pide bajo demanda, no al abrir la
+  // sección — es una consulta pesada que la mayoría de las visitas no necesita.
+  const esJefe = profile?.role === 'owner'
+  const [briefing, setBriefing] = useState<any>(null)
+  const [rango, setRango] = useState<'dia' | 'semana'>('dia')
+  const [cargandoBrief, setCargandoBrief] = useState(false)
 
   const miEntrada = entradas.find(e => e.user_id === profile?.id) || null
   const sembrado = useRef(false)
@@ -185,6 +191,19 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
     return () => { if (extraerTimer.current) clearTimeout(extraerTimer.current) }
   }, [objetivos, balance])
 
+  /**
+   * Fichar. Y aquí está lo que hace que el diario sirva para algo:
+   *
+   *  · AL ENTRAR, cada objetivo se convierte en una tarea tuya. No hay que
+   *    aceptarlas una a una: las has escrito tú, línea a línea, así que ya has
+   *    dicho lo que son. La IA sigue haciendo falta para el BALANCE, que es prosa
+   *    libre; para una lista de objetivos, una línea es una tarea y punto.
+   *  · AL CERRAR, las que hayas tachado se marcan como completadas.
+   *
+   * Las tareas se emparejan por texto normalizado. No hace falta guardar ids: el
+   * objetivo y la tarea nacen del mismo texto, y comparar sin tildes ni mayúsculas
+   * aguanta que retoques una línea.
+   */
   const fichar = async (campo: 'entrada' | 'cierre') => {
     const valor = campo === 'entrada' ? objetivos : balance
     if (!valor.trim()) { showToast(campo === 'entrada' ? 'Escribe tus objetivos primero' : 'Cuenta qué has hecho'); return }
@@ -196,11 +215,51 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
         body: JSON.stringify({ [campo]: valor.trim() }),
       })
       if (!res.ok) { showToast('No se pudo fichar'); return }
+
+      if (campo === 'entrada') {
+        // Una tarea por objetivo, saltando lo que ya existe: fichar dos veces no
+        // puede duplicar la lista.
+        const yaSon = new Set((data.tasks || []).map((t: { text?: string }) => normalizar(t.text || '')))
+        const nuevas = lineas(valor).filter(o => !yaSon.has(normalizar(o)))
+        let creadas = 0
+        for (const o of nuevas) {
+          try {
+            await data.createTask({ text: o, level: 'high', done: false, assigned_to: profile?.id, source: 'ai' })
+            creadas++
+          } catch { /* se cuenta abajo */ }
+        }
+        await cargar()
+        showToast(creadas
+          ? `Día abierto · ${plural(creadas, 'tarea creada', 'tareas creadas')}`
+          : 'Día abierto')
+        return
+      }
+
+      // Cerrar: completar lo tachado.
+      const marcados = objetivosDeHoy.filter(o => cumplidos.has(o)).map(normalizar)
+      const aCerrar = (data.tasks || []).filter((t: { id: string; text?: string; done?: boolean }) =>
+        !t.done && marcados.includes(normalizar(t.text || '')))
+      let cerradas = 0
+      for (const t of aCerrar) {
+        try { await data.updateTask(t.id, { done: true }); cerradas++ } catch { /* idem */ }
+      }
       await cargar()
-      showToast(campo === 'entrada' ? 'Día abierto' : 'Día cerrado')
+      showToast(cerradas
+        ? `Día cerrado · ${plural(cerradas, 'tarea completada', 'tareas completadas')}`
+        : 'Día cerrado')
     } catch { showToast('No se pudo fichar') }
     finally { setFichando(false) }
   }
+
+  const pedirBriefing = useCallback(async (r: 'dia' | 'semana') => {
+    setRango(r); setCargandoBrief(true)
+    try {
+      const res = await fetch(`/api/diario/briefing?rango=${r}`)
+      if (!res.ok) { showToast('No se pudo cargar el briefing'); setBriefing(null); return }
+      setBriefing(await res.json())
+    } catch { showToast('No se pudo cargar el briefing'); setBriefing(null) }
+    finally { setCargandoBrief(false) }
+  }, [showToast])
 
   const crearTodas = async () => {
     if (!propuestas.length) return
@@ -408,6 +467,105 @@ export default function DiarioSection({ data, profile, showToast, onNavigate }: 
                   style={{ color: 'rgba(255,255,255,0.35)', border: `1px solid ${BORDER}` }}>
                   DESCARTAR
                 </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── BRIEFING (solo el propietario) ─────────────────────────────── */}
+      {esJefe && (
+        <div className="rounded-3xl mb-5 overflow-hidden" style={{ background: SURF2, border: `1px solid ${VIO}28` }}>
+          <div className="flex items-center gap-2.5 px-4 pt-3.5 pb-2.5 flex-wrap">
+            <LucideIcon name="bar-chart-2" size={13} color={VIO} />
+            <div className="font-syne text-[8.5px] font-black tracking-widest flex-1" style={{ color: VIO }}>
+              BRIEFING DEL EQUIPO
+            </div>
+            <div className="flex gap-1">
+              {(['dia', 'semana'] as const).map(r => (
+                <button key={r} onClick={() => pedirBriefing(r)}
+                  className="px-2.5 py-1 rounded-full font-syne text-[7.5px] font-black tracking-widest transition-all"
+                  style={{
+                    background: briefing && rango === r ? `${VIO}22` : 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${briefing && rango === r ? VIO + '40' : BORDER}`,
+                    color: briefing && rango === r ? VIO : 'rgba(255,255,255,0.4)',
+                  }}>
+                  {r === 'dia' ? 'HOY' : 'SEMANA'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {cargandoBrief ? (
+            <div className="px-4 pb-4 font-figtree text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>Cargando…</div>
+          ) : !briefing ? (
+            <div className="px-4 pb-4 font-figtree text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              Elige HOY o SEMANA para ver qué ha hecho cada uno.
+            </div>
+          ) : (
+            <>
+              {/* El conjunto primero: es la pregunta que se hace un jefe antes de
+                  mirar a nadie en concreto. */}
+              <div className="flex gap-2 px-4 pb-3 flex-wrap">
+                {[
+                  { n: briefing.total?.objetivos ?? 0, l: 'objetivos', c: BLU },
+                  { n: briefing.total?.completadas ?? 0, l: 'completadas', c: GRN },
+                  { n: briefing.total?.diasCerrados ?? 0, l: 'días cerrados', c: VIO },
+                ].map(k => (
+                  <div key={k.l} className="flex items-baseline gap-1.5 px-3 py-1.5 rounded-full"
+                    style={{ background: 'rgba(255,255,255,0.035)', border: `1px solid ${BORDER}` }}>
+                    <span className="font-syne text-[15px] font-black" style={{ color: k.c }}>{k.n}</span>
+                    <span className="font-figtree text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>{k.l}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex flex-col">
+                {(briefing.equipo || []).map((p: any) => (
+                  <div key={p.persona.id} className="px-4 py-3" style={{ borderTop: `1px solid ${BORDER}` }}>
+                    <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
+                      <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 font-syne text-[8px] font-black"
+                        style={{ background: `${p.persona.avatar_color || BLU}22`, color: p.persona.avatar_color || BLU }}>
+                        {p.persona.initials || (p.persona.name || '?').slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="font-figtree text-[12px] font-bold text-white flex-1 min-w-0">{p.persona.name}</div>
+                      <div className="font-figtree text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                        {p.completadas} {p.completadas === 1 ? 'completada' : 'completadas'} · {p.cerrados}/{p.dias} {p.dias === 1 ? 'día cerrado' : 'días cerrados'}
+                      </div>
+                    </div>
+                    {p.tareas.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-1">
+                        {p.tareas.slice(0, 8).map((t: any) => (
+                          <span key={t.id} className="font-figtree text-[10.5px] px-2 py-1 rounded-full truncate"
+                            style={{ background: `${GRN}0E`, border: `1px solid ${GRN}28`, color: 'rgba(255,255,255,0.65)', maxWidth: '100%' }}>
+                            {t.text}
+                          </span>
+                        ))}
+                        {p.tareas.length > 8 && (
+                          <span className="font-figtree text-[10px] px-1 py-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                            +{p.tareas.length - 8} más
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {/* Un día abierto y nunca cerrado es una señal, no un hueco. */}
+                    {p.dias > p.cerrados && (
+                      <div className="font-figtree text-[10px]" style={{ color: AMBAR }}>
+                        {p.dias - p.cerrados} {p.dias - p.cerrados === 1 ? 'día sin cerrar' : 'días sin cerrar'}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {(briefing.equipo || []).length === 0 && (
+                  <div className="px-4 pb-4 font-figtree text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    Nadie ha fichado en este tramo.
+                  </div>
+                )}
+                {(briefing.sinActividad || []).length > 0 && (
+                  <div className="px-4 py-2.5 font-figtree text-[10px]" style={{ borderTop: `1px solid ${BORDER}`, color: 'rgba(255,255,255,0.28)' }}>
+                    Sin actividad: {briefing.sinActividad.join(', ')}
+                  </div>
+                )}
               </div>
             </>
           )}
