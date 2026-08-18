@@ -705,8 +705,28 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
   }
   // Los objetivos ya no existen se descuentan solos: si borras una línea, su
   // marca de cumplido deja de contar en vez de inflar el porcentaje.
+  /**
+   * Las tareas de MI día que no escribí como objetivo.
+   *
+   * Crear una tarea en Tareas y escribir un objetivo en el Diario son dos formas
+   * de decir lo mismo —esto es de mi día—, pero el Diario solo miraba lo segundo:
+   * si te organizabas desde Tareas, tu día salía vacío y el anillo decía «0 de 2»
+   * ignorando cinco tareas hechas. Dos maneras de marcar el día que no se hablaban.
+   *
+   * Van APARTE y etiquetadas, no mezcladas con los objetivos: lo que uno se
+   * propuso por la mañana y lo que fue apareciendo no son lo mismo, y fundirlos
+   * borraría justo la distancia que el Diario existe para enseñar.
+   */
+  const otrasDelDia = misTareasDelDia.filter((t: { text?: string }) =>
+    !objetivosDeHoy.some(o => normalizar(o) === normalizar(t.text || '')),
+  ) as { id: string; text?: string; done?: boolean }[]
+
   const cumplidosVivos = objetivosDeHoy.filter(estaHecho).length
-  const pctObjetivos = objetivosDeHoy.length ? Math.round((cumplidosVivos / objetivosDeHoy.length) * 100) : 0
+  // El anillo mide el DÍA entero: los objetivos más lo que se creó por el camino.
+  // Con solo los objetivos decía «0 de 2» en un día con cinco tareas cerradas.
+  const totalDelDia = objetivosDeHoy.length + otrasDelDia.length
+  const hechasDelDia = cumplidosVivos + otrasDelDia.filter(t => t.done).length
+  const pctObjetivos = totalDelDia ? Math.round((hechasDelDia / totalDelDia) * 100) : 0
   const colorNivel = (l: string) => l === 'urgent' ? RED : l === 'high' ? AMBAR : BLU
   const yaCerrado = !!miEntrada?.cierre_at
 
@@ -806,8 +826,12 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
               MI DÍA · {fechaLarga(dia).toUpperCase()}
             </div>
             <div className="font-figtree font-bold text-white leading-tight" style={{ fontSize: isMobile ? '19px' : '23px', letterSpacing: '-0.02em' }}>
-              {objetivosDeHoy.length
-                ? `${cumplidosVivos} de ${plural(objetivosDeHoy.length, 'objetivo', 'objetivos')}`
+              {totalDelDia
+                ? (otrasDelDia.length
+                    // Si hay tareas que no venían de un objetivo, se dice «del día»:
+                    // llamarlas «objetivos» sería mentir sobre de dónde salieron.
+                    ? `${hechasDelDia} de ${totalDelDia} del día`
+                    : `${cumplidosVivos} de ${plural(objetivosDeHoy.length, 'objetivo', 'objetivos')}`)
                 : 'Sin objetivos todavía'}
             </div>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -980,7 +1004,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
             <div className="font-syne text-[9px] font-black tracking-widest" style={{ color: GRN }}>¿LO COMPLETÉ?</div>
           </div>
 
-          {objetivosDeHoy.length > 0 ? (
+          {totalDelDia > 0 ? (
             <div className="px-4 pb-2.5 flex flex-wrap gap-2">
               {objetivosDeHoy.map((o, i) => {
                 const hecho = estaHecho(o)
@@ -1006,6 +1030,33 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
                   </button>
                 )
               })}
+
+              {/* Lo que apareció por el camino, desde Tareas. Etiquetado y detrás:
+                  cuenta para el día, pero no es lo que uno se propuso. */}
+              {otrasDelDia.length > 0 && (
+                <>
+                  <div className="w-full font-syne text-[7px] font-black tracking-widest mt-1 mb-0.5" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                    TAMBIÉN HOY · DESDE TAREAS
+                  </div>
+                  {otrasDelDia.map(t => (
+                    <button key={t.id}
+                      onClick={() => { if (esHoy) data.updateTask(t.id, { done: !t.done }).then(() => cargar()).catch(() => showToast('No se pudo guardar')) }}
+                      disabled={!esHoy}
+                      title={esHoy ? undefined : 'Solo se puede marcar en el día de hoy'}
+                      className="flex items-center gap-2 pl-2 pr-3.5 py-2 rounded-full text-left transition-all active:scale-95 disabled:active:scale-100 disabled:cursor-default"
+                      style={{ background: t.done ? `${GRN}12` : 'rgba(255,255,255,0.03)', border: `1px dashed ${t.done ? GRN + '3A' : BORDER}`, maxWidth: '100%' }}>
+                      <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center flex-shrink-0"
+                        style={{ background: t.done ? GRN : 'transparent', border: `1.5px solid ${t.done ? GRN : 'rgba(255,255,255,0.18)'}` }}>
+                        {t.done && <LucideIcon name="check" size={10} color="#06110A" />}
+                      </span>
+                      <span className="font-figtree text-[12px] truncate"
+                        style={{ color: t.done ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.7)', textDecoration: t.done ? 'line-through' : 'none' }}>
+                        {t.text}
+                      </span>
+                    </button>
+                  ))}
+                </>
+              )}
             </div>
           ) : (
             <div className="px-4 pb-2.5 font-figtree text-[12px]" style={{ color: 'rgba(255,255,255,0.22)' }}>

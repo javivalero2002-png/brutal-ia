@@ -739,3 +739,34 @@ describe('diario · un objetivo escrito después de fichar también es una tarea
       'crea antes de fichar: el botón FICHAR las crea todas de golpe y prometería lo que ya está').toBe(true)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Crear una tarea en Tareas también es marcar tu día.
+//
+// Escribir un objetivo en el Diario y crear una tarea en Tareas son dos formas de
+// decir lo mismo —esto es de mi día—, pero el Diario solo miraba la primera: si
+// te organizabas desde Tareas, tu día salía vacío y el anillo decía «0 de 2»
+// ignorando lo que sí habías cerrado. Dos modalidades que no se hablaban.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('diario · el día cuenta también lo creado desde Tareas', () => {
+  const D = readFileSync('src/components/sections/DiarioSection.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  it('el anillo mide el día entero, no solo los objetivos', () => {
+    expect(/const totalDelDia = objetivosDeHoy\.length \+ otrasDelDia\.length/.test(D),
+      'el anillo vuelve a contar solo objetivos: un día trabajado desde Tareas marcaría 0 %').toBe(true)
+    expect(/const hechasDelDia/.test(D), 'no cuenta las hechas del día entero').toBe(true)
+  })
+
+  it('van aparte y etiquetadas, no mezcladas con los objetivos', () => {
+    // Fundirlas borraría la distancia entre lo que uno se PROPUSO y lo que fue
+    // apareciendo, que es justo lo que el Diario existe para enseñar.
+    const i = D.indexOf('const otrasDelDia')
+    expect(i, 'ya no existe otrasDelDia: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = D.slice(i, D.indexOf('\n\n', i))
+    expect(/!objetivosDeHoy\.some/.test(cuerpo),
+      'no excluye las que ya son objetivo: cada objetivo se contaría dos veces').toBe(true)
+    expect(/TAMBIÉN HOY/.test(D),
+      'las tareas del día se mezclan con los objetivos sin distinguirlas').toBe(true)
+  })
+})
