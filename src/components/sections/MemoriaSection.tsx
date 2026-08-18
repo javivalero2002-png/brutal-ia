@@ -129,14 +129,22 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
     <div className={`${isMobile?'p-4':'p-8'} max-w-[900px] mx-auto`}>
       <div className="flex items-end justify-between mb-6 flex-wrap gap-3">
         <div>
-          <div className="flex items-center gap-2 mb-2">
-            <div className="font-syne text-[9px] font-black tracking-[0.25em]" style={{color:'rgba(255,255,255,0.18)'}}>CEREBRO</div>
-            {data.memoria.length > 0 && <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.2)'}}>{data.memoria.length}</span>}
+          {/* Una sola línea de contexto, legible, en vez de tres apiladas.
+              Antes había: el rótulo CEREBRO con su contador, el título, un recuento
+              de palabras a opacidad 0,15 y los atajos a 0,10. Las dos últimas eran
+              invisibles y aun así ocupaban alto: el resultado era una cabecera
+              apelmazada que no se leía. Lo que dicen cabe en una frase. */}
+          <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.22)'}}>
+            CEREBRO
           </div>
           <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Memoria</h1>
           {data.memoria.length > 0 && (()=>{
-            const wordCount = data.memoria.reduce((s: number, m: any)=>s+(m.content||'').split(/\s+/).filter(Boolean).length,0)
-            return <div className="font-syne text-[8px] font-black tracking-widest mt-1" style={{color:'rgba(255,255,255,0.15)'}}>{wordCount.toLocaleString('es-ES')} PALABRAS</div>
+            const palabras = data.memoria.reduce((s: number, m: any)=>s+(m.content||'').split(/\s+/).filter(Boolean).length,0)
+            return (
+              <div className="font-figtree text-[11.5px] mt-1.5" style={{color:'rgba(255,255,255,0.32)'}}>
+                {plural(data.memoria.length, 'nota', 'notas')} · {palabras.toLocaleString('es-ES')} palabras
+              </div>
+            )
           })()}
           <div className="nx-kbd-hints flex items-center gap-2 mt-1.5">
             {(['N NUEVA','E EDITAR','P ANCLAR','F BUSCAR'] as const).map((hint,i,arr)=>(
