@@ -1846,3 +1846,30 @@ describe('cron y latido dicen la misma hora', () => {
       .toEqual([])
   })
 })
+
+// ───────────────────────────────────────────────────────────────────────────────
+// El nombre de una copia lo dice UN sitio.
+//
+// Lo usan cuatro: el que sube, el que lista, el que firma la descarga y el que
+// poda. Si el que sube cambia la extensión y el que lista no, la pantalla dice
+// «todavía no hay ninguna copia» mientras el bucket se llena — parecería que las
+// copias dejaron de hacerse justo cuando sí se hacen. Silencioso y al revés de lo
+// que pasa: el peor modo de fallo posible en un respaldo.
+// ───────────────────────────────────────────────────────────────────────────────
+describe('las copias se llaman igual en los cuatro sitios', () => {
+  it('nadie escribe la extension a mano', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (ruta === 'src/lib/copiaSeguridad.ts') continue      // donde vive
+      if (ruta.startsWith('src/lib/__tests__/')) continue
+      const C = leerCodigo(ruta)
+      // Un patron o una cadena con `.json` pegada a algo con forma de copia.
+      if (/\.json(\\?\.gz)?['"`$]/.test(C) && /BUCKET_COPIAS|copiaSeguridad/.test(C)) {
+        infractores.push(ruta)
+      }
+    }
+    expect(infractores,
+      'escribe el nombre de una copia a mano: si el que sube y el que lista dejan de coincidir, la pantalla dira que no hay copias mientras el bucket se llena')
+      .toEqual([])
+  })
+})

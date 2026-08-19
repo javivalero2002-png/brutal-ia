@@ -22,6 +22,19 @@ import { gzipSync } from 'node:zlib'
 export const BUCKET_COPIAS = 'copias'
 
 /**
+ * Cómo se llama un fichero de copia, en UN solo sitio.
+ *
+ * Lo escriben cuatro sitios distintos —el que sube, el que lista, el que firma la
+ * descarga y el que poda— y nada los ataba. El modo de fallo es silencioso y
+ * cruel: si el que sube cambia la extensión y el que lista no, la pantalla dice
+ * «todavía no hay ninguna copia» mientras el bucket se va llenando. Parecería que
+ * las copias han dejado de hacerse justo cuando sí se hacen.
+ */
+export const nombreCopia = (dia: string) => `${dia}.json.gz`
+/** Y lo que reconoce a una, para listar, firmar y podar. */
+export const ES_COPIA = /^\d{4}-\d{2}-\d{2}\.json(\.gz)?$/
+
+/**
  * Las tablas que se copian, y el orden IMPORTA: es el orden en que habría que
  * reinsertarlas para que las claves ajenas no rebooten. `profiles` primero
  * porque casi todo cuelga de ella; las hijas después de sus padres.
@@ -164,7 +177,7 @@ export async function hacerCopia(admin: SupabaseClient, dia: string): Promise<Re
   // 200×, que es un espejismo). Eso convierte los tres años en 163 MB.
   const comprimido = gzipSync(Buffer.from(cuerpo, 'utf8'), { level: 6 })
 
-  const fichero = `${dia}.json.gz`
+  const fichero = nombreCopia(dia)
   const { error } = await admin.storage.from(BUCKET_COPIAS).upload(fichero, comprimido, {
     contentType: 'application/gzip',
     // Sobrescribe la del mismo día: si el cron se ejecuta dos veces, no quedan
@@ -207,7 +220,7 @@ export async function podarCopias(admin: SupabaseClient, recientes = 12, meses =
   // Los nombres son 'YYYY-MM-DD.json[.gz]', así que ordenar por nombre es ordenar
   // por fecha — sin depender de la marca de tiempo del Storage, que cambia si un
   // fichero se vuelve a subir.
-  const copias = data.filter(f => /^\d{4}-\d{2}-\d{2}\.json(\.gz)?$/.test(f.name))
+  const copias = data.filter(f => ES_COPIA.test(f.name))
   const mensuales = new Set<string>()
   const sobran: string[] = []
 

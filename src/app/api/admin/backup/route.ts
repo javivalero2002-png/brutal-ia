@@ -1,5 +1,5 @@
 import { getAuthCtx } from '@/lib/authz'
-import { hacerCopia, podarCopias, BUCKET_COPIAS } from '@/lib/copiaSeguridad'
+import { hacerCopia, podarCopias, BUCKET_COPIAS, ES_COPIA } from '@/lib/copiaSeguridad'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { todayKey } from '@/components/shared/helpers'
 import { NextRequest, NextResponse } from 'next/server'
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     // El nombre viaja en la URL, así que se valida en vez de confiar: sin esto,
     // `?descargar=../otro-bucket/algo` es una travesía de rutas. La forma es
     // exactamente 'YYYY-MM-DD.json' y nada más.
-    if (!/^\d{4}-\d{2}-\d{2}\.json(\.gz)?$/.test(pedida)) {
+    if (!ES_COPIA.test(pedida)) {
       return NextResponse.json({ error: 'Nombre de copia no válido' }, { status: 400 })
     }
     const { data, error } = await admin.storage.from(BUCKET_COPIAS).createSignedUrl(pedida, 300)
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
   }
 
   const copias = (data || [])
-    .filter(f => /\.json(\.gz)?$/.test(f.name))
+    .filter(f => ES_COPIA.test(f.name))
     .map(f => ({
       nombre: f.name,
       // Extraído con un patrón y no cortando por posición: aquí es el nombre de
