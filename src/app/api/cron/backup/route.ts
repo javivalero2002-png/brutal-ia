@@ -11,10 +11,14 @@ import { NextRequest, NextResponse } from 'next/server'
 export const maxDuration = 300
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Copia diaria de la base. Se declara en `vercel.json` a las 04:00 UTC.
+// Copia SEMANAL de la base: los miércoles a las 04:00 UTC (`vercel.json`).
 //
 // A esa hora en Madrid son las 05:00 o las 06:00 según la estación: da igual, lo
-// que importa es que nadie esté escribiendo. Y el nombre del fichero SÍ usa el
+// que importa es que nadie esté escribiendo. Miércoles porque a mitad de semana
+// una copia cubre por igual lo de antes y lo de después del fin de semana.
+//
+// Si se cambia la frecuencia, hay que cambiar TAMBIÉN la cadencia esperada en
+// `/api/admin/latido`, o el panel avisa de una avería que no existe. Y el nombre del fichero SÍ usa el
 // día de Madrid (`todayKey()`), no el del servidor, para que la copia de «el 19»
 // sea la del 19 que ve el equipo.
 //

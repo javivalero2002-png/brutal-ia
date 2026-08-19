@@ -56,8 +56,9 @@ normal; nada en absoluto es la trampa de arriba.
 
 ### Dónde están las copias
 
-Se hacen **solas cada noche** (04:00 UTC, `/api/cron/backup`) y se guardan en el
-bucket privado `copias` de Supabase, un JSON por día, treinta días de histórico.
+Se hacen **solas cada miércoles** (04:00 UTC, `/api/cron/backup`) y se guardan en
+el bucket privado `copias` de Supabase, un JSON comprimido por copia. Se conservan
+las 12 últimas —unos tres meses— más una de cada mes durante un año.
 Desde la app: **Operativa → Copias**, donde también se puede forzar una y
 descargarla.
 
@@ -143,10 +144,15 @@ protege.
 | Cuándo | Qué | Si falla |
 |---|---|---|
 | Cada hora | `/api/cron/sync-colabs` — trae el correo del buzón compartido, lo analiza y ejecuta las automatizaciones | Dejan de entrar correos nuevos y no salen avisos |
-| Cada noche (04:00 UTC) | `/api/cron/backup` — copia de la base y poda del histórico de avisos | Se deja de tener red debajo, en silencio |
+| Miércoles (04:00 UTC) | `/api/cron/backup` — copia de la base y poda del histórico de avisos | Se deja de tener red debajo, en silencio |
 
 Los dos se autentican con `CRON_SECRET`, que Vercel manda en la cabecera. Los dos
 usan cerrojo (`job_locks`) para no pisarse consigo mismos.
+
+**Si cambias la frecuencia de un proceso en `vercel.json`, cambia también su
+cadencia esperada en `/api/admin/latido`.** Si no, el panel de Sincronización
+avisa de una avería que no existe — y un aviso que salta sin motivo enseña a
+ignorar los avisos, que es lo contrario de para lo que está.
 
 **El token de Gmail caduca cada siete días** mientras la app de Google esté en
 modo de prueba. Cuando pasa, los correos dejan de entrar sin ruido: quien lo sufra

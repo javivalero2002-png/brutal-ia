@@ -114,20 +114,20 @@ export default function CopiasTab({ showToast }: { showToast: (m: string) => voi
               Última copia {relTime(ultima.creada || `${ultima.dia}T04:00:00Z`)}
             </div>
             <div className="font-figtree text-[12.5px] mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-              {copias!.length} {copias!.length === 1 ? 'copia guardada' : 'copias guardadas'} · se hace sola cada noche
+              {copias!.length} {copias!.length === 1 ? 'copia guardada' : 'copias guardadas'} · se hace sola cada miércoles
               {(() => {
                 // El espacio ocupado, a la vista. Es la pregunta razonable al ver
-                // que algo se guarda solo cada noche, y la respuesta tiene que
+                // que algo se guarda solo cada semana, y la respuesta tiene que
                 // estar aquí y no en un comentario del código: van comprimidas
-                // (~6× menos) y la poda deja los últimos 14 días más el día 1 de
-                // cada mes, así que no crece sin fin.
+                // (~6× menos) y la poda deja las 12 últimas más una por mes, así
+                // que no crece sin fin.
                 const total = copias!.reduce((n, c) => n + (c.bytes || 0), 0)
                 return total > 0 ? ` · ocupan ${tam(total)} en total` : ''
               })()}
             </div>
             <div className="font-figtree text-[11.5px] mt-1.5" style={{ color: 'rgba(255,255,255,0.28)' }}>
-              Comprimidas. Se guardan los últimos 14 días y el día 1 de cada mes durante un año, así que
-              el espacio deja de crecer en vez de acumularse sin fin.
+              Comprimidas. Se guardan las 12 últimas —unos tres meses— y una de cada mes durante un año,
+              así que el espacio deja de crecer en vez de acumularse sin fin.
             </div>
           </>
         ) : (
@@ -137,8 +137,8 @@ export default function CopiasTab({ showToast }: { showToast: (m: string) => voi
             </div>
             <div className="font-figtree text-[12.5px] mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
               {sinEstrenar
-                ? 'La primera se crea sola esta noche. Puedes adelantarla ahora.'
-                : 'Haz la primera y a partir de ahí se repite cada noche.'}
+                ? 'La primera se crea sola el próximo miércoles. Puedes adelantarla ahora.'
+                : 'Haz la primera y a partir de ahí se repite cada miércoles.'}
             </div>
           </>
         )}
