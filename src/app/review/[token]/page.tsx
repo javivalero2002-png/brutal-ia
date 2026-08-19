@@ -123,6 +123,20 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
                 solo se pintaba el primero, así que a un cliente con el vídeo en
                 Drive —lo que la propia app le recomienda— se le pedía opinión
                 sobre algo que no veía. */}
+            {/* Y aquí más aún: el cliente puede tener un bloqueador y nosotros no
+                nos vamos a enterar. Si el incrustado se le tapa, esto es lo único
+                que le queda para ver la pieza sobre la que le pedimos opinión. */}
+            {item.video_url && (
+              <a href={item.video_url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl transition-opacity hover:opacity-80"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+                <span className="text-[12px] font-semibold" style={{ color: 'rgba(255,255,255,0.55)' }}>Ver el original</span>
+              </a>
+            )}
+
             {embed ? (
               // El marco se adapta al vídeo, no al revés. Un reel en un hueco 16:9
               // sale como un sello entre dos franjas negras — y el reel es el
