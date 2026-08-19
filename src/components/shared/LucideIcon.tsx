@@ -59,8 +59,6 @@ const icons: Record<string,string> = {
   'smile':'M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z',
   'meh':'M8 15h8M9 9h.01M15 9h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z',
   'frown':'M16 16s-1.5-2-4-2-4 2-4 2M9 9h.01M15 9h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z',
-  'square':'M3 3h18v18H3z',
-  'list':'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
   'trending-up':'M22 7l-8.5 8.5-5-5L2 17M16 7h6v6',
   'check-square':'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
   film:'M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM2 8h20M2 16h20M6 2v4M18 2v4M6 18v4M18 18v4',
