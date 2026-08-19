@@ -321,7 +321,14 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
 
       {/* ── LEFT: cuentas y carpetas ── */}
       {!isMobile && (
-        <div className="flex-shrink-0 flex flex-col overflow-y-auto py-4 px-3" style={{width:'214px',borderRight:`1px solid ${BORDER}`,background:'rgba(255,255,255,0.012)'}}>
+        /* Con un correo abierto y poca pantalla, esta columna se retira.
+           Había 248 (menú) + 214 (esto) + 360 (lista) = 822 px de columnas FIJAS
+           antes de que el panel de lectura recibiera un solo píxel. En una ventana
+           de ~800 px eso deja el correo sin sitio: se salía y se cortaba por la
+           derecha — «CONTENIDO DEL EMAIL» y «VER EN GMAIL» pegados al borde.
+           Se retira ESTA y no la lista porque es navegación, no contenido: se
+           recupera entera pulsando VOLVER. La lista es lo que estás recorriendo. */
+        <div className={`flex-shrink-0 flex-col overflow-y-auto py-4 px-3 ${selected ? 'hidden xl:flex' : 'flex'}`} style={{width:'214px',borderRight:`1px solid ${BORDER}`,background:'rgba(255,255,255,0.012)'}}>
           {(()=>{
             const wa = allMsgs.some((m:any)=>m.source==='whatsapp')
             const cuentas = [
@@ -370,7 +377,10 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
       {/* ── LIST PANEL ─────────────────────────────────────────── */}
       <div className="flex flex-col overflow-hidden" style={isMobile
         ? {width:'100%',display:selected?'none':'flex'}
-        : selected ? {width:'360px',flexShrink:0,borderRight:`1px solid ${BORDER}`,maxWidth:'360px'} : {flex:1,minWidth:0}}>
+        // `clamp` y no 360 fijos: en una pantalla grande se queda igual que
+        // siempre, y en una pequeña cede ancho en vez de empujar el correo fuera.
+        // El suelo de 248 px es donde el asunto de dos líneas deja de caber.
+        : selected ? {width:'clamp(248px, 26vw, 360px)',flexShrink:0,borderRight:`1px solid ${BORDER}`} : {flex:1,minWidth:0}}>
 
         {/* Header */}
         <div className={`flex-shrink-0 ${isMobile?'px-4':'px-6'} pt-5 pb-4`} style={{borderBottom:`1px solid ${BORDER}`}}>
