@@ -37,6 +37,8 @@ interface Entrada {
   cierre: string | null
   entrada_at: string | null
   cierre_at: string | null
+  /** Cómo fue el día: productivo · normal · bloqueado. `null` = no lo ha dicho, que NO es «normal». */
+  animo?: 'productivo' | 'normal' | 'bloqueado' | null
   autor?: { id: string; name: string; initials?: string; avatar_color?: string } | null
 }
 
@@ -220,6 +222,110 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
   const [abierto, setAbierto] = useState<string | null>(null)
 
   const miEntrada = entradas.find(e => e.user_id === profile?.id) || null
+
+  /**
+   * El reloj de sesión, la racha y el resumen de la semana.
+   *
+   * El reloj NO se guarda en ninguna parte: es `ahora - entrada_at`, calculado al
+   * pintar. Guardar un contador sería inventarse un dato que ya está —y que además
+   * se desincroniza en cuanto alguien cierra la pestaña—.
+   *
+   * Tick de 30 s y no de 1 s: se enseña en horas y minutos, así que un segundero
+   * sería un `setState` por segundo para repintar el mismo texto 59 veces.
+   */
+  const [ahoraMs, setAhoraMs] = useState<number>(() => Date.now())
+  useEffect(() => {
+    if (!miEntrada?.entrada_at || miEntrada?.cierre_at) return
+    const t = setInterval(() => setAhoraMs(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [miEntrada?.entrada_at, miEntrada?.cierre_at])
+
+  /**
+   * Guardar el ánimo. Optimista y con vuelta atrás, como el resto de la app.
+   *
+   * Pulsar el que ya está puesto lo QUITA: «no lo he dicho» tiene que poder
+   * recuperarse, porque no es lo mismo que «normal» — y sin esto el primer clic
+   * sería irreversible.
+   */
+  const marcarAnimo = async (v: 'productivo' | 'normal' | 'bloqueado' | null) => {
+    const antes = miEntrada?.animo ?? null
+    setEntradas(prev => prev.map(e => (e.user_id === profile?.id ? { ...e, animo: v } : e)))
+    try {
+      const res = await fetch('/api/diario', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dia, animo: v, borrador: true }),
+      })
+      if (!res.ok) throw new Error()
+    } catch {
+      setEntradas(prev => prev.map(e => (e.user_id === profile?.id ? { ...e, animo: antes } : e)))
+      showToast('No se pudo guardar cómo fue el día')
+    }
+  }
+
+  const tiempoSesion = (() => {
+    if (!miEntrada?.entrada_at) return null
+    const fin = miEntrada.cierre_at ? new Date(miEntrada.cierre_at).getTime() : ahoraMs
+    const ms = fin - new Date(miEntrada.entrada_at).getTime()
+    if (ms < 0) return null
+    const h = Math.floor(ms / 3_600_000)
+    const m = Math.floor((ms % 3_600_000) / 60_000)
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  })()
+
+  /** Días seguidos fichando, hacia atrás desde hoy. Se corta en el primer hueco. */
+  const [mesFichado, setMesFichado] = useState<Record<string, { personas: { id: string }[] }>>({})
+  useEffect(() => {
+    if (demo) return
+    // Dos meses: una racha que cruza el día 1 no se ve mirando solo el mes actual.
+    const mes = dia.slice(0, 7)
+    const [a, m] = mes.split('-').map(Number)
+    const anterior = m === 1 ? `${a - 1}-12` : `${a}-${String(m - 1).padStart(2, '0')}`
+    Promise.all([mes, anterior].map(x => fetch(`/api/diario/mes?mes=${x}`).then(r => (r.ok ? r.json() : null)).catch(() => null)))
+      .then(partes => {
+        const junto: Record<string, { personas: { id: string }[] }> = {}
+        for (const p of partes) if (p?.dias) Object.assign(junto, p.dias)
+        setMesFichado(junto)
+      })
+  }, [dia, demo])
+
+  /**
+   * La semana, en tres números.
+   *
+   * Sale de los mismos dos meses que ya se descargan para la racha — no hay una
+   * consulta más. `objetivos` es cuántos se propuso el equipo y `cerrados` cuántos
+   * días se cerraron; el porcentaje es de OBJETIVOS, no de días, porque cerrar un
+   * día con la mitad sin hacer no es cumplir.
+   */
+  const semana = (() => {
+    const l = new Date(`${dia}T12:00:00`)
+    l.setDate(l.getDate() - ((l.getDay() + 6) % 7))          // al lunes
+    let totales = 0, hechos = 0
+    for (let i = 0; i < 7; i++) {
+      const k = `${l.getFullYear()}-${String(l.getMonth() + 1).padStart(2, '0')}-${String(l.getDate()).padStart(2, '0')}`
+      const r = mesFichado[k] as { objetivos?: number; cerrados?: number } | undefined
+      totales += r?.objetivos || 0
+      hechos += r?.cerrados || 0
+      l.setDate(l.getDate() + 1)
+    }
+    return { totales, hechos, pct: totales ? Math.round((hechos / totales) * 100) : 0 }
+  })()
+
+  const racha = (() => {
+    if (!profile?.id) return 0
+    let n = 0
+    const d = new Date(`${todayKey()}T12:00:00`)
+    // Desde hoy hacia atrás. Si hoy aún no has fichado NO rompe la racha: el día no
+    // ha terminado, y poner la racha a cero a las nueve de la mañana sería castigar
+    // a alguien por no haber empezado todavía.
+    for (let i = 0; i < 400; i++) {
+      const clave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      const fichado = (mesFichado[clave]?.personas || []).some(p => p.id === profile.id)
+      if (fichado) n++
+      else if (i > 0) break
+      d.setDate(d.getDate() - 1)
+    }
+    return n
+  })()
   const sembrado = useRef(false)
   const guardadoTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const extraerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -970,6 +1076,37 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
             style={{ color: estadoGuardado === 'guardado' ? GRN : 'rgba(255,255,255,0.3)', opacity: estadoGuardado === 'limpio' ? 0 : 1 }}>
             {estadoGuardado === 'guardando' ? 'GUARDANDO' : 'GUARDADO'}
           </div>
+
+          {/* Sesión y racha, a la derecha del saludo.
+              Los dos salen de datos que YA existen: el reloj es `ahora - entrada_at`
+              y la racha son días seguidos con fichaje. No se guarda ningún contador
+              — un contador guardado se desincroniza en cuanto alguien cierra la
+              pestaña, y entonces miente con mucha precisión. */}
+          {!isMobile && miEntrada?.entrada_at && (
+            <div className="flex-shrink-0 flex items-center gap-6 pl-6" style={{ borderLeft: `1px solid ${BORDER}` }}>
+              <div>
+                <div className="font-syne text-[7.5px] font-black tracking-[0.18em] mb-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  TIEMPO DE SESIÓN
+                </div>
+                <div className="font-figtree font-black text-white" style={{ fontSize: '26px', letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+                  {tiempoSesion || '—'}
+                </div>
+                {racha > 1 && (
+                  <div className="font-figtree text-[11px] mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    🔥 {racha} días seguidos
+                  </div>
+                )}
+              </div>
+              {!yaCerrado && (
+                <button onClick={() => fichar('cierre')} disabled={fichando}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-2xl font-syne text-[9px] font-black tracking-widest transition-all hover:opacity-80 disabled:opacity-40"
+                  style={{ background: `${VIO}18`, border: `1px solid ${VIO}42`, color: '#E6DEFF' }}>
+                  <LucideIcon name="square" size={11} color="#E6DEFF" />
+                  FINALIZAR DÍA
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1223,9 +1360,122 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
                 </button>
               )}
             </div>
+
+            {/* ¿Cómo fue el día? Tres botones, al lado del texto y no en su lugar.
+                El texto libre cuenta bien UN día y se agrega fatal: no se suma, no
+                se ordena, y no se sabe si la semana ha ido peor que la anterior sin
+                releerlo todo. Tres botones sí — y no le quitan sitio a escribir.
+                Se guarda al pulsar, sin botón de confirmar: es un dato de un toque,
+                y pedir dos gestos para uno sobra. */}
+            <div className="mt-3">
+              <div className="font-syne text-[7.5px] font-black tracking-[0.18em] mb-2" style={{ color: 'rgba(255,255,255,0.28)' }}>
+                ¿CÓMO CALIFICAS TU DÍA?
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {([
+                  { v: 'productivo', l: 'Productivo', c: GRN, icon: 'smile' },
+                  { v: 'normal', l: 'Normal', c: AMBAR, icon: 'meh' },
+                  { v: 'bloqueado', l: 'Bloqueado', c: RED, icon: 'frown' },
+                ] as const).map(o => {
+                  const puesto = miEntrada?.animo === o.v
+                  return (
+                    <button key={o.v} onClick={() => marcarAnimo(puesto ? null : o.v)} disabled={!esHoy}
+                      title={esHoy ? undefined : 'Solo se califica el día de hoy'}
+                      className="flex items-center gap-2 px-3.5 py-2 rounded-2xl font-figtree text-[12px] transition-all active:scale-95 disabled:opacity-40 disabled:active:scale-100"
+                      style={{ background: puesto ? `${o.c}16` : 'rgba(255,255,255,0.03)',
+                               border: `1px solid ${puesto ? o.c + '4A' : BORDER}`,
+                               color: puesto ? o.c : 'rgba(255,255,255,0.5)' }}>
+                      <LucideIcon name={o.icon} size={13} color={puesto ? o.c : 'rgba(255,255,255,0.35)'} />
+                      {o.l}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* ── PULSO DEL EQUIPO Y LA SEMANA ────────────────────────────────
+          Los dos salen de datos que YA se descargan: `porPersona` viene con el día
+          y el resumen sale de los dos meses que se piden para la racha. Ni una
+          consulta más.
+          Van juntos y al final a propósito: lo tuyo primero —tus objetivos, tu
+          cierre— y el equipo después. Al revés convierte Fichar en un panel de
+          control de los demás, que es otra cosa y no la que se pidió. */}
+      {!demo && porPersona.length > 0 && (
+        <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: isMobile ? '1fr' : 'minmax(0,1.6fr) minmax(0,1fr)' }}>
+
+          <div className="rounded-3xl overflow-hidden" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+            <div className="flex items-baseline gap-2.5 px-5 pt-4 pb-3">
+              <span className="font-figtree text-[14px] font-bold text-white">Pulso del equipo</span>
+              <span className="font-figtree text-[11.5px]" style={{ color: 'rgba(255,255,255,0.3)' }}>Así va el equipo hoy</span>
+            </div>
+            <div className="px-2 pb-2">
+              {porPersona.map(p => {
+                const objetivos = (p.entrada?.entrada || '').split('\n').filter(l => l.trim()).length
+                const hechas = p.tareas.filter(t => (t as { done?: boolean }).done).length
+                const pct = objetivos ? Math.min(100, Math.round((hechas / objetivos) * 100)) : 0
+                const cerrado = !!p.entrada?.cierre_at
+                const estado = cerrado ? { l: 'Todo completado', c: GRN }
+                  : p.entrada?.animo === 'bloqueado' ? { l: 'Bloqueado', c: RED }
+                  : p.entrada?.entrada_at ? { l: 'En progreso', c: AMBAR }
+                  : { l: 'Sin fichar', c: 'rgba(255,255,255,0.25)' }
+                const yo = p.persona.id === profile?.id
+                return (
+                  <div key={p.persona.id} className="flex items-center gap-3 px-3 py-2.5 rounded-2xl"
+                    style={{ background: yo ? 'rgba(255,255,255,0.025)' : 'transparent' }}>
+                    <span className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 font-syne text-[9px] font-black"
+                      style={{ background: (p.persona.avatar_color || VIO) + '22', color: p.persona.avatar_color || VIO }}>
+                      {p.persona.initials || (p.persona.name || '?').slice(0, 2).toUpperCase()}
+                    </span>
+                    <span className="font-figtree text-[12.5px] flex-shrink-0" style={{ color: 'rgba(255,255,255,0.72)', width: isMobile ? 74 : 96 }}>
+                      {yo ? `${p.persona.name || 'Tú'} (Tú)` : p.persona.name || '—'}
+                    </span>
+                    {!isMobile && (
+                      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: cerrado ? GRN : VIO }} />
+                      </div>
+                    )}
+                    <span className="font-syne text-[10px] font-black flex-shrink-0" style={{ color: 'rgba(255,255,255,0.45)', width: 34, textAlign: 'right' }}>{pct}%</span>
+                    <span className="font-figtree text-[11px] flex-shrink-0" style={{ color: 'rgba(255,255,255,0.28)', width: 34, textAlign: 'right' }}>
+                      {hechas}/{objetivos}
+                    </span>
+                    <span className="flex items-center gap-1.5 flex-shrink-0" style={{ width: isMobile ? 96 : 128 }}>
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: estado.c }} />
+                      <span className="font-figtree text-[11px] truncate" style={{ color: estado.c }}>{estado.l}</span>
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-3xl p-5" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+            <div className="font-figtree text-[14px] font-bold text-white mb-4">Resumen semanal</div>
+            {([
+              { icon: 'check-square', n: semana.hechos, l: 'Objetivos completados' },
+              { icon: 'list', n: semana.totales, l: 'Objetivos totales' },
+              { icon: 'trending-up', n: `${semana.pct}%`, l: 'Cumplimiento semanal' },
+            ] as const).map(x => (
+              <div key={x.l} className="flex items-center gap-3 mb-3.5">
+                <span className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}` }}>
+                  <LucideIcon name={x.icon} size={13} color="rgba(255,255,255,0.4)" />
+                </span>
+                <div className="min-w-0">
+                  <div className="font-figtree text-[17px] font-black text-white leading-none">{x.n}</div>
+                  <div className="font-figtree text-[11px] mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>{x.l}</div>
+                </div>
+              </div>
+            ))}
+            <button onClick={() => setRango('semana')}
+              className="font-syne text-[9px] font-black tracking-widest transition-opacity hover:opacity-70" style={{ color: VIO }}>
+              VER ANÁLISIS SEMANAL →
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── TAREAS QUE SALEN SOLAS ─────────────────────────────────────── */}
       {(propuestas.length > 0 || leyendo) && (

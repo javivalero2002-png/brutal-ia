@@ -77,7 +77,15 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json().catch(() => ({}))
-  const campos = pick(body, ['entrada', 'cierre']) as { entrada?: string; cierre?: string }
+  const campos = pick(body, ['entrada', 'cierre', 'animo']) as { entrada?: string; cierre?: string; animo?: string }
+  // `animo` va por `pick`, o sea que puede llegar cualquier cosa. La columna tiene
+  // un CHECK, así que un valor fuera de la lista NO deja un dato raro: hace rebotar
+  // el upsert entero y se pierde el cierre del día. Es el mismo fallo que ya vivió
+  // meses con `tasks.level` — ver CLAUDE.md—, así que se valida aquí y punto.
+  const ANIMOS = ['productivo', 'normal', 'bloqueado']
+  if (campos.animo !== undefined && campos.animo !== null && !ANIMOS.includes(campos.animo)) {
+    return NextResponse.json({ error: 'Ánimo no válido' }, { status: 400 })
+  }
   // `borrador` NO se guarda: solo decide si esto cuenta como fichar. El
   // autoguardado escribe el texto cada pocos segundos mientras se teclea, y sin
   // esto cada pulsación habría puesto la hora de entrada — que debe ser cuándo
