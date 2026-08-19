@@ -1583,3 +1583,31 @@ describe('mejoras del 19 de agosto', () => {
       'la carpeta Archivados solo esta en escritorio: desde el movil se archiva y no hay forma de volver a verlo').toBe(true)
   })
 })
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Lo que no se cerró vuelve, exista la tarea o no.
+//
+// El arrastre del diario («VIENEN DE ANTES») se calculaba mirando TAREAS, así que
+// dependía de que la tarea se hubiera creado: si la creación falló —o el objetivo
+// se escribió antes de que eso funcionara— el objetivo desaparecía al día
+// siguiente sin dejar rastro, y nadie se entera de lo que no se ve. Javi lo pilló
+// con «Prueba top». La fuente honesta es el DIARIO, que es donde está escrito.
+// ───────────────────────────────────────────────────────────────────────────────
+describe('diario · el arrastre no depende de que la tarea exista', () => {
+  const D = leerCodigo('src/components/sections/DiarioSection.tsx')
+
+  it('el diario pregunta por los objetivos huerfanos, no solo por tareas', () => {
+    expect(D.includes('/api/diario/pendientes'),
+      'DiarioSection calcula «vienen de antes» solo desde tareas: un objetivo cuya tarea no se creo se pierde al cambiar de dia')
+      .toBe(true)
+  })
+
+  it('la tarjeta de arrastre se abre tambien con huerfanos', () => {
+    // Acotado al CONDICIONAL que monta la tarjeta: tenerlos en el estado no sirve
+    // de nada si la tarjeta solo se pinta cuando hay tareas.
+    const cond = D.match(/\{\(?vienenDeAntes\.length[^\n]*&&\s*\(/)?.[0] || ''
+    expect(cond.includes('huerfanos'),
+      'la tarjeta solo se pinta si hay TAREAS de antes: con un objetivo huerfano y ninguna tarea, no se pinta nada')
+      .toBe(true)
+  })
+})
