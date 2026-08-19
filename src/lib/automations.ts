@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendPushToAll, sendPushToUser, canSendPush } from '@/lib/push'
-import { todayKey, localDayKey } from '@/components/shared/helpers'
+import { todayKey, localDayKey, rotuloNivel } from '@/components/shared/helpers'
 import { logQueryErrors } from '@/lib/queryLog'
 import { NON_RULE_ROWS_FILTER } from '@/lib/reglaRows'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
@@ -93,7 +93,7 @@ export function describeRule(cfg: RuleConfig, clientName?: string): { cond: stri
     : t.type === 'client_followup'        ? `Sin emails de ${t.clientName || clientName || 'cliente'} en ${t.days ?? 14} días`
     : 'Condición'
   const act =
-    a.type === 'create_task'  ? `Crear tarea${a.level && a.level !== 'normal' ? ` (${a.level === 'urgent' ? 'urgente' : 'alta'})` : ''}`
+    a.type === 'create_task'  ? `Crear tarea${a.level && a.level !== 'normal' ? ` (${rotuloNivel(a.level).toLowerCase()})` : ''}`
     : a.type === 'notify_team'  ? 'Notificar al equipo'
     : a.type === 'notify_owner' ? 'Avisarme a mí'
     : 'Acción'

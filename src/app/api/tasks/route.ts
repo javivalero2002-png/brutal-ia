@@ -75,17 +75,25 @@ export async function POST(request: NextRequest) {
   //
   // La tarea ya está insertada, así que un fallo del push se registra pero no
   // tumba la respuesta. El fichero declara maxDuration = 60 (arriba).
-  if (data?.assigned_to && data.assigned_to !== user.id) {
+  //
+  // A LOS DOS: miraba solo `assigned_to`, así que a quien entraba como
+  // co-responsable no le llegaba nada ni al crear ni al reasignar. Es el mismo
+  // olvido que `/api/notifications` ya había corregido por su cuenta.
+  const destinos = [data?.assigned_to, data?.co_assigned_to]
+    .filter((p): p is string => !!p && p !== user.id)
+  if (destinos.length) {
     const { data: creator } = await admin.from('profiles').select('name').eq('id', user.id).single()
-    try {
-      await sendPushToUser(admin, data.assigned_to, {
-        title: `Nueva tarea de ${creator?.name || 'el equipo'}`,
-        body: data.text?.slice(0, 120) || '',
-        url: '/dashboard',
-        tag: `task-${data.id}`,
-      })
-    } catch (err) {
-      console.error('[tasks] el push de tarea asignada falló:', err)
+    for (const destino of destinos) {
+      try {
+        await sendPushToUser(admin, destino, {
+          title: `Nueva tarea de ${creator?.name || 'el equipo'}`,
+          body: data.text?.slice(0, 120) || '',
+          url: '/dashboard',
+          tag: `task-${data.id}`,
+        })
+      } catch (err) {
+        console.error('[tasks] el push de tarea asignada falló:', err)
+      }
     }
   }
   return NextResponse.json(data)

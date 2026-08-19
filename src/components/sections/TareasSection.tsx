@@ -2,16 +2,19 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { Task, Project, Profile, NexusData} from '@/types'
-import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, todayKey, daysBetweenKeys, estadoDeadline, buscaEnTexto } from '@/components/shared'
+import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, todayKey, daysBetweenKeys, estadoDeadline, buscaEnTexto, NIVEL_TAREA, rotuloNivel } from '@/components/shared'
 import { plural, nivelTarea } from '@/components/shared/helpers'
 import type { IrASeccion } from '@/components/shared/secciones'
 import TableroLunes from '@/components/shared/TableroLunes'
 
 const AMB = '#FFB020'
+// El rótulo y el color salen de `NIVEL_TAREA`: aquí se llamaban ALTA/MEDIA/BAJA
+// mientras el formulario de crear decía Urgente/Alta/Normal, así que pulsabas ALTA
+// y la tarea salía etiquetada MEDIA.
 const PRIMAP: Record<string,{label:string,color:string}> = {
-  urgent: {label:'ALTA',  color: RED},
-  high:   {label:'MEDIA', color: AMB},
-  normal: {label:'BAJA',  color: BLU},
+  urgent: {label: NIVEL_TAREA.urgent.corto, color: NIVEL_TAREA.urgent.color},
+  high:   {label: NIVEL_TAREA.high.corto,   color: NIVEL_TAREA.high.color},
+  normal: {label: NIVEL_TAREA.normal.corto, color: NIVEL_TAREA.normal.color},
 }
 
 function relDate(dateStr: string) {
@@ -506,7 +509,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
     const rows = filteredRef.current
     if (!rows.length) { showToast('No hay tareas para exportar'); return }
     const esc = (v: any) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s }
-    const prLabel = (l:string) => l==='urgent'?'Alta':l==='high'?'Media':'Baja'
+    const prLabel = (l:string) => rotuloNivel(l)
     const header = ['Tarea','Prioridad','Estado','Vencimiento','Responsable','Proyecto','Notas']
     const lines = rows.map((t:Task)=>{
       const proj = t.project_id ? data.projects.find((p:Project)=>p.id===t.project_id) : null
@@ -979,9 +982,9 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                   className="appearance-none pl-3 pr-7 py-2 rounded-xl text-[11.5px] text-white outline-none cursor-pointer"
                   style={{background:priorityFilter!=='all'?BLU+'15':SURF2,border:`1px solid ${priorityFilter!=='all'?BLU+'50':BORDER}`,colorScheme:'dark',color:priorityFilter!=='all'?'rgba(255,255,255,0.9)':'rgba(255,255,255,0.38)'}}>
                   <option value="all">Prioridad</option>
-                  <option value="urgent">Alta</option>
-                  <option value="high">Media</option>
-                  <option value="normal">Baja</option>
+                  <option value="urgent">{NIVEL_TAREA.urgent.label}</option>
+                  <option value="high">{NIVEL_TAREA.high.label}</option>
+                  <option value="normal">{NIVEL_TAREA.normal.label}</option>
                 </select>
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"><LucideIcon name="chevron-down" size={11} color={priorityFilter!=='all'?BLU:'rgba(255,255,255,0.3)'}/></div>
               </div>
@@ -1059,9 +1062,9 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
               <select value={priorityFilter} onChange={e=>setPriorityFilter(e.target.value as any)}
                 className="px-3 py-2 rounded-xl text-[11.5px] text-white outline-none" style={{background:SURF2,border:`1px solid ${priorityFilter!=='all'?BLU+'50':BORDER}`,colorScheme:'dark',flex:'1 1 auto',minWidth:0}}>
                 <option value="all">Prioridad</option>
-                <option value="urgent">Alta</option>
-                <option value="high">Media</option>
-                <option value="normal">Baja</option>
+                <option value="urgent">{NIVEL_TAREA.urgent.label}</option>
+                <option value="high">{NIVEL_TAREA.high.label}</option>
+                <option value="normal">{NIVEL_TAREA.normal.label}</option>
               </select>
               </>)}
             </div>
@@ -1239,7 +1242,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
             <div>
               <label className="block font-syne text-[9px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.25)'}}>PRIORIDAD</label>
               <div className="flex gap-2">
-                {([{v:'urgent',l:'Alta',c:RED},{v:'high',l:'Media',c:AMB},{v:'normal',l:'Baja',c:BLU}] as {v:Task['level'];l:string;c:string}[]).map(p=>(
+                {((['urgent','high','normal'] as Task['level'][]).map(v=>({v,l:NIVEL_TAREA[v].label,c:NIVEL_TAREA[v].color}))).map(p=>(
                   <button key={p.v} onClick={()=>setEditing(x=>({...x,level:p.v}))}
                     className="flex-1 py-3 rounded-2xl font-syne text-[10px] font-black tracking-wide transition-all"
                     style={{background:editing.level===p.v?p.c+'18':SURF2,border:`1.5px solid ${editing.level===p.v?p.c+'70':BORDER}`,color:editing.level===p.v?p.c:'#FFFFFF'}}>
@@ -1482,9 +1485,9 @@ type KanKind = 'priority'|'project'|'none'|'done'
 type KanCol = { key:string; label:string; color:string; kind:KanKind; projId?:string; level?:Task['level']; match:(t:Task)=>boolean }
 
 const PRIORITY_COLS: KanCol[] = [
-  { key:'urgent', label:'ALTA',  color:RED, kind:'priority', level:'urgent', match:(t)=>!t.done && t.level==='urgent' },
-  { key:'high',   label:'MEDIA', color:AMB, kind:'priority', level:'high',   match:(t)=>!t.done && t.level==='high' },
-  { key:'normal', label:'BAJA',  color:BLU, kind:'priority', level:'normal', match:(t)=>!t.done && t.level==='normal' },
+  { key:'urgent', label:NIVEL_TAREA.urgent.corto, color:NIVEL_TAREA.urgent.color, kind:'priority', level:'urgent', match:(t)=>!t.done && t.level==='urgent' },
+  { key:'high',   label:NIVEL_TAREA.high.corto,   color:NIVEL_TAREA.high.color,   kind:'priority', level:'high',   match:(t)=>!t.done && t.level==='high' },
+  { key:'normal', label:NIVEL_TAREA.normal.corto, color:NIVEL_TAREA.normal.color, kind:'priority', level:'normal', match:(t)=>!t.done && t.level==='normal' },
   { key:'done',   label:'HECHO', color:GRN, kind:'done',     match:(t)=>t.done },
 ]
 

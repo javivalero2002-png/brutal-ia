@@ -1,3 +1,5 @@
+import { RED, AMBAR, BLU } from './design-tokens'
+
 const DL_FAR_FUTURE = new Date(8640000000000000)
 const DL_MES: Record<string,number> = {ene:0,feb:1,mar:2,abr:3,may:4,jun:5,jul:6,ago:7,sep:8,oct:9,nov:10,dic:11,jan:0,apr:3,aug:7,dec:11}
 
@@ -78,6 +80,31 @@ export type NivelTarea = (typeof NIVELES_TAREA)[number]
 // clasificar se queda en 'normal' (no inflar la bandeja de todo el equipo).
 // Un segundo normalizador para eso seria justo el gemelo que este proyecto no
 // para de pagar.
+/**
+ * Cómo se LLAMA cada nivel en pantalla. Un solo sitio, y a propósito.
+ *
+ * Estaba escrito de tres maneras: al crear elegías «Urgente / Alta / Normal», la
+ * lista de Tareas lo repintaba «ALTA / MEDIA / BAJA» y el calendario mezclaba las
+ * dos. Pulsabas ALTA y salía etiquetada MEDIA. Y no era solo el rótulo: el filtro
+ * era `<option value="urgent">Alta</option>`, así que filtrar por «Alta» te daba
+ * las Urgentes y escondía las Altas debajo de «Media».
+ *
+ * Se queda el vocabulario del formulario porque es el que ya entiende el resto del
+ * código: `nivelTarea()`, aquí debajo, traduce «alta» a `high`. Llamar «MEDIA» a
+ * `high` contradecía a este helper a diez líneas de distancia.
+ */
+export const NIVEL_TAREA: Record<NivelTarea, { label: string; corto: string; color: string }> = {
+  urgent: { label: 'Urgente', corto: 'URGENTE', color: RED },
+  high:   { label: 'Alta',    corto: 'ALTA',    color: AMBAR },
+  normal: { label: 'Normal',  corto: 'NORMAL',  color: BLU },
+}
+
+/** El rótulo de un nivel que puede venir de cualquier sitio, incluido el modelo. */
+export const rotuloNivel = (crudo?: string | null, corto = false) => {
+  const n = NIVEL_TAREA[nivelTarea(crudo)]
+  return corto ? n.corto : n.label
+}
+
 export const nivelTarea = (crudo?: string | null, porDefecto: NivelTarea = 'high'): NivelTarea => {
   const v = (crudo || '').trim().toLowerCase()
   if (!v) return porDefecto
