@@ -2173,3 +2173,37 @@ describe('la criba del correo', () => {
     }
   })
 })
+
+// ───────────────────────────────────────────────────────────────────────────────
+// El enlace de invitación se canjea en NUESTRA pantalla.
+//
+// `@supabase/ssr` cablea `flowType: 'pkce'` en el cliente del navegador —esta
+// escrito en su codigo, no es una opcion nuestra— y PKCE exige un verificador
+// guardado en el navegador QUE INICIO el proceso. Los enlaces de invitacion los
+// genera el servidor, asi que ese verificador no existe: el canje automatico no
+// puede funcionar NUNCA para ellos.
+//
+// Y era irrecuperable: la pagina de verificacion de Supabase consume el token al
+// abrir el enlace, asi que para cuando la nuestra se rendia ya estaba gastado.
+// Javi lo vio creando la cuenta, copiando el enlace y abriendolo el mismo.
+// ───────────────────────────────────────────────────────────────────────────────
+describe('el enlace de invitacion no se gasta antes de usarse', () => {
+  it('el alta monta el enlace con el token en crudo', () => {
+    const T = leerCodigo('src/app/api/admin/team/route.ts')
+    expect(/hashed_token/.test(T),
+      'vuelve a repartir el action_link de Supabase: su pagina de verificacion consume el token antes que la nuestra y el enlace muere al primer clic')
+      .toBe(true)
+    expect(/\/reset-password\?token_hash=/.test(T),
+      'el enlace no apunta a nuestra pantalla').toBe(true)
+  })
+
+  it('la pantalla canjea el token a mano, sin fiarse de la libreria', () => {
+    const R = leerCodigo('src/app/reset-password/page.tsx')
+    expect(/verifyOtp\(\{ token_hash/.test(R),
+      'no canjea el token: con flowType pkce cableado en @supabase/ssr, el canje automatico no funciona para enlaces generados en el servidor')
+      .toBe(true)
+    // Y las dos formas antiguas, para los enlaces que ya estuvieran repartidos.
+    expect(/setSession\(\{ access_token/.test(R), 'no recoge los tokens del hash').toBe(true)
+    expect(/exchangeCodeForSession\(/.test(R), 'no recoge el codigo del parametro').toBe(true)
+  })
+})

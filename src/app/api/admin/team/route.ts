@@ -260,8 +260,29 @@ async function generarEnlace(admin: Awaited<ReturnType<typeof createAdminClient>
     })
     // supabase-js no lanza: el error viaja en la respuesta.
     if (error) return { link: null, motivo: error.message }
-    const link = (data as { properties?: { action_link?: string } })?.properties?.action_link || null
-    return { link, motivo: link ? null : 'Supabase no devolvió el enlace' }
+    const props = (data as { properties?: { action_link?: string; hashed_token?: string } })?.properties
+
+    // NUESTRO enlace, no el de Supabase, y esto arregla el fallo de raíz.
+    //
+    // El `action_link` que devuelve Supabase pasa primero por su página de
+    // verificación, y ESA página consume el token antes de que la nuestra llegue a
+    // ejecutarse. Después redirige con un `?code=` que solo se puede canjear si el
+    // navegador guarda un verificador PKCE — y el nuestro no lo tiene, porque el
+    // enlace lo generó el servidor. Resultado: el enlace muere al abrirlo, siempre,
+    // ya lo abra la persona o el robot que hace la vista previa de WhatsApp.
+    //
+    // Con el token en crudo montamos un enlace a nuestra propia pantalla, que lo
+    // canjea con `verifyOtp`. El token no se gasta hasta que alguien llega de
+    // verdad al formulario.
+    if (props?.hashed_token) {
+      const propio = `${APP_URL}/reset-password?token_hash=${encodeURIComponent(props.hashed_token)}&type=recovery`
+      return { link: propio, motivo: null }
+    }
+
+    // Sin `hashed_token` se cae al de Supabase: funciona a medias, pero es mejor
+    // que no dar enlace. Y se dice, para que no parezca que va bien.
+    const link = props?.action_link || null
+    return { link, motivo: link ? 'Supabase no devolvió el token en crudo: este enlace se gasta al abrirlo' : 'Supabase no devolvió el enlace' }
   } catch (e) {
     return { link: null, motivo: e instanceof Error ? e.message : 'No se pudo generar el enlace' }
   }
