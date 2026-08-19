@@ -38,7 +38,7 @@ export interface Project {
   progress: number
   deadline: string
   color: string
-  cover_url?: string | null
+  cover_url?: string
   pdf_url?: string | null
   pdf_analysis?: string | null
   created_at: string
@@ -132,6 +132,13 @@ export interface ContentItem {
   notes?: string
   video_url?: string
   cover_url?: string
+  /**
+   * Carpeta donde vive la pieza una vez publicada.
+   *
+   * Texto libre y no una tabla: crear una carpeta es escribir su nombre, y una
+   * carpeta vacía simplemente no existe — que a esta escala es lo correcto.
+   */
+  carpeta?: string | null
   feedback?: string
   client_id?: string
   client?: Client
