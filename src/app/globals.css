@@ -14,6 +14,14 @@
    decir «ya está» mientras sigues esperando. */
 @keyframes indeterminado { 0% { transform: translateX(-120%) } 100% { transform: translateX(320%) } }
 .nx-indeterminado { animation: indeterminado 1.15s ease-in-out infinite }
+
+/* Hueco para los controles flotantes (? y ⌘K), que van `fixed` abajo a la derecha.
+   Al estar fuera del flujo se posaban encima del contenido — se veía en Inbox, con
+   el botón «ABRIR BRUTAL.IA» debajo de ellos. El hueco se reserva una sola vez, en
+   el contenedor que envuelve a todas las secciones.
+   Solo a partir de 768px: por debajo los flotantes no se pintan (`!isMobile`), y
+   reservar sitio para algo que no está sería un margen fantasma. */
+@media (min-width: 768px) { .nx-hueco-flotantes { padding-bottom: 76px } }
 @media (prefers-reduced-motion: reduce) { .nx-indeterminado { animation-duration: 2.4s } }
 @keyframes pls { 0%, 100% { opacity: 1 } 50% { opacity: .15 } }
 @keyframes glowPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(27,95,250,0) } 50% { box-shadow: 0 0 28px 6px rgba(27,95,250,0.22) } }

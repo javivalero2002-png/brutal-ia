@@ -992,7 +992,15 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
             <button onClick={()=>data.reload?.()} className="font-syne text-[8px] font-black tracking-widest px-2 py-0.5 rounded-lg" style={{color:'rgb(255,176,32)',border:'1px solid rgba(255,176,32,0.35)'}}>REINTENTAR</button>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        {/* `nx-hueco-flotantes` reserva abajo el sitio que ocupan el «?» y el «⌘K».
+            Van `fixed`, o sea FUERA del flujo: no empujan nada y se posan encima de
+            lo que haya debajo. En Inbox eso caía justo sobre el botón ABRIR
+            BRUTAL.IA —que va `mt-auto`, pegado al fondo de su columna— y quedaban
+            los tres amontonados.
+            Se arregla reservando el hueco UNA vez aquí y no sección por sección:
+            son doce secciones y la trece nacería rota. En móvil los flotantes no se
+            pintan, así que el hueco tampoco existe. */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden nx-hueco-flotantes">
           {section === 'hoy' && <SectionErrorBoundary section="hoy"><HoySection profile={profile} data={data} urgentCount={urgentCount} unreadCount={unreadCount} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} onNavigate={setSection} /></SectionErrorBoundary>}
           {section === 'inbox' && <SectionErrorBoundary section="inbox"><InboxSection data={data} showToast={showToast} profile={profile} onNavigate={setSection} onSelectClient={setSelectedClient} onAskHarvey={(msg: string)=>{ setHarveyPreload(msg); setSection('harvey') }} /></SectionErrorBoundary>}
           {section === 'tareas' && <SectionErrorBoundary section="tareas"><TareasSection data={data} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} profile={profile} onNavigate={setSection} onSelectProject={setSelectedProject} onSelectClient={setSelectedClient} /></SectionErrorBoundary>}
@@ -1253,16 +1261,28 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
         )
       })()}
 
-      {/* Search shortcut button — solo escritorio */}
-      {!isMobile && <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2">
-        <button onClick={()=>setShowShortcuts(s=>!s)} className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-syne text-[10px] font-bold tracking-widest opacity-50 hover:opacity-100 transition-opacity" style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', color:'rgba(255,255,255,0.25)' }}>
-          <span>?</span>
-        </button>
-        <button onClick={()=>setSearchOpen(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[10px] font-bold tracking-widest opacity-60 hover:opacity-100 transition-opacity" style={{ background:'rgba(27,95,250,0.08)', border:'1px solid rgba(27,95,250,0.15)', color:'rgba(255,255,255,0.3)' }}>
-          <LucideIcon name="search" size={12} color="rgba(27,95,250,0.5)" />
-          <span>⌘K</span>
-        </button>
-      </div>}
+      {/* Un solo control, no dos pastillas sueltas.
+          Iban separadas, con opacidades distintas (50 y 60) y bordes distintos, y
+          se leían como dos cosas que no tienen que ver entre sí. Son las dos lo
+          mismo: las teclas de la app. Agrupadas en una pieza con un separador
+          dentro se leen como un control y ocupan menos ancho. */}
+      {!isMobile && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-stretch rounded-2xl overflow-hidden opacity-55 hover:opacity-100 transition-opacity"
+          style={{ background:'rgba(12,12,24,0.82)', border:'1px solid rgba(255,255,255,0.08)', backdropFilter:'blur(10px)', boxShadow:'0 6px 24px rgba(0,0,0,0.45)' }}>
+          <button onClick={()=>setShowShortcuts(v=>!v)} title="Atajos de teclado"
+            className="flex items-center justify-center px-3.5 font-syne text-[11px] font-bold transition-colors hover:bg-white/5"
+            style={{ color:'rgba(255,255,255,0.4)' }}>
+            ?
+          </button>
+          <div style={{ width:1, background:'rgba(255,255,255,0.08)' }} />
+          <button onClick={()=>setSearchOpen(true)} title="Buscar en todo"
+            className="flex items-center gap-2 px-3.5 py-2.5 font-syne text-[10px] font-bold tracking-widest transition-colors hover:bg-white/5"
+            style={{ color:'rgba(255,255,255,0.4)' }}>
+            <LucideIcon name="search" size={12} color={BLU} />
+            <span>⌘K</span>
+          </button>
+        </div>
+      )}
     </div>
   )
 }
