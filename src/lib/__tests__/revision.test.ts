@@ -147,3 +147,59 @@ describe('el informe imprimible', () => {
       .toBe(true)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Quién firma una opinión que llega por el enlace público.
+//
+// El enlace se pega en un grupo de WhatsApp donde están el cliente Y los jefes,
+// así que firmarlo todo como «CLIENTE» era falso la mitad de las veces. Ahora se
+// elige — pero eso abre dos agujeros que estas reglas cierran.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('quién opina por el enlace', () => {
+  const RUTA = leerCodigo('src/app/api/review/[token]/route.ts')
+  const PAGINA = leerCodigo('src/app/review/[token]/page.tsx')
+
+  it('el equipo que se manda fuera NO lleva correos', () => {
+    // Esto sale a internet sin sesión y acaba en un grupo con el cliente dentro.
+    // Quién trabaja aquí no es un secreto; sus direcciones sí.
+    const i = RUTA.indexOf("from('profiles')")
+    expect(i, 'ya no se lee el equipo: revisa esta regla').toBeGreaterThan(-1)
+    const sel = RUTA.slice(i, i + 200)
+    for (const prohibido of ['email', 'role', 'gmail']) {
+      expect(new RegExp(`\\b${prohibido}`).test(sel),
+        `la pantalla publica manda «${prohibido}» del equipo a internet`).toBe(false)
+    }
+  })
+
+  it('el nombre que llega se VALIDA contra el equipo real', () => {
+    // Sin esto, cualquiera con el enlace firma con el nombre que quiera —el de un
+    // compañero, o uno inventado con un cargo delante— y queda escrito en el hilo
+    // interno como si fuera suyo.
+    expect(/miembros \|\| \[\]\)\.find/.test(RUTA) || /\.find\(p =>[^)]*name\) === autor/.test(RUTA),
+      'acepta el nombre que le manden sin comprobar que exista: se puede firmar como cualquiera')
+      .toBe(true)
+  })
+
+  it('una firma declarada nunca pasa por comprobada', () => {
+    // `origen: 'cliente'` no significa «lo escribió el cliente»: significa «llegó
+    // por el enlace, sin que nadie iniciara sesión». Perder esa marca sería
+    // convertir una firma que cualquiera puede elegir en una verificada.
+    const i = RUTA.indexOf('entradas.push({')
+    expect(i, 'ya no se anexan opiniones asi: revisa esta regla').toBeGreaterThan(-1)
+    expect(/origen: 'cliente'/.test(RUTA.slice(i, i + 400)),
+      'la opinion del enlace deja de marcarse como venida de fuera: se confundiria con una escrita desde dentro con sesion')
+      .toBe(true)
+    // Y la pantalla del equipo tiene que DECIRLO, no solo guardarlo.
+    const C = leerCodigo('src/components/sections/ContenidoSection.tsx')
+    expect(/POR EL ENLACE/.test(C),
+      'el hilo del equipo no distingue una firma declarada de una comprobada').toBe(true)
+  })
+
+  it('por defecto se firma como Cliente, no como alguien del equipo', () => {
+    // Quien abre este enlace es, casi siempre, alguien de fuera. Que el valor por
+    // defecto fuera una persona del equipo haría que un despiste firmara por ella.
+    expect(/useState\(''\)/.test(PAGINA.slice(PAGINA.indexOf('const [autor'), PAGINA.indexOf('const [autor') + 120)),
+      'el selector arranca con alguien del equipo elegido: un despiste firmaria por esa persona')
+      .toBe(true)
+  })
+})

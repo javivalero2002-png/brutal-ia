@@ -15,6 +15,18 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
   const [feedback, setFeedback] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  /**
+   * Quién dice ser quien está opinando.
+   *
+   * El enlace se pega en un grupo de WhatsApp donde están el cliente Y los jefes,
+   * así que firmarlo todo como «CLIENTE» era falso la mitad de las veces. Ahora
+   * se elige, y el servidor comprueba que ese nombre exista de verdad en el equipo
+   * — si no, firma como Cliente.
+   *
+   * Vacío = Cliente, y es el valor por DEFECTO a propósito: quien abre este enlace
+   * es, casi siempre, alguien de fuera. Elegir debe ser el gesto raro.
+   */
+  const [autor, setAutor] = useState('')
 
   useEffect(() => {
     fetch(`/api/review/${token}`)
@@ -37,7 +49,7 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
       const res = await fetch(`/api/review/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feedback: texto, aprobado }),
+        body: JSON.stringify({ feedback: texto, aprobado, autor }),
       })
       if (res.ok) setSent(true)
       else setError('No se pudo enviar. Inténtalo de nuevo en un momento.')
@@ -157,7 +169,38 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
               </div>
             ) : (
               <div className="rounded-2xl p-6" style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                <div className="text-xs font-bold tracking-widest mb-4" style={{ color: 'rgba(255,255,255,0.3)' }}>TU FEEDBACK</div>
+                <div className="text-xs font-bold tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.3)' }}>TU FEEDBACK</div>
+
+                {/* Quién eres. Solo aparece si hay equipo que ofrecer — si la
+                    consulta falló, esto no sale y todo firma como Cliente, que es
+                    como funcionaba antes. Nunca bloquea el poder opinar. */}
+                {item.equipo?.length > 0 && (
+                  <div className="mb-4">
+                    <div className="text-[11px] mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>¿Quién eres?</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button onClick={() => setAutor('')}
+                        className="px-3 py-1.5 rounded-lg text-[12px] transition-all"
+                        style={{
+                          background: autor === '' ? 'rgba(255,176,32,0.14)' : 'rgba(255,255,255,0.04)',
+                          border: `1px solid ${autor === '' ? 'rgba(255,176,32,0.35)' : 'rgba(255,255,255,0.08)'}`,
+                          color: autor === '' ? '#FFB020' : 'rgba(255,255,255,0.5)',
+                        }}>
+                        Cliente
+                      </button>
+                      {item.equipo.map((p: { name: string; initials: string; color: string }) => (
+                        <button key={p.name} onClick={() => setAutor(p.name)}
+                          className="px-3 py-1.5 rounded-lg text-[12px] transition-all"
+                          style={{
+                            background: autor === p.name ? `${p.color}22` : 'rgba(255,255,255,0.04)',
+                            border: `1px solid ${autor === p.name ? p.color + '55' : 'rgba(255,255,255,0.08)'}`,
+                            color: autor === p.name ? p.color : 'rgba(255,255,255,0.5)',
+                          }}>
+                          {p.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <textarea
                   value={feedback}
                   onChange={e => setFeedback(e.target.value)}
