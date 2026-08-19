@@ -81,6 +81,19 @@ describe('la pantalla que ve el cliente', () => {
       .toBe(true)
   })
 
+  it('siempre hay un enlace al original, aunque el incrustado se tape', () => {
+    // Medido el 2026-08-19: el incrustado de Instagram FUNCIONA —carga bien en un
+    // navegador limpio, verificado— pero cualquier bloqueador de contenido lo tapa
+    // con «este contenido esta bloqueado». Y los bloqueadores son de lo mas
+    // instalado que hay: el propio Javi tiene uno, y el cliente al que le mandamos
+    // el enlace puede tener otro sin que nosotros lo sepamos nunca.
+    //
+    // Discutir con el bloqueador no es una opcion. Dar una salida de un clic, si.
+    expect(/item\.video_url && \([\s\S]{0,600}target="_blank"/.test(PAGINA),
+      'sin enlace al original: a quien tenga un bloqueador le pedimos opinion sobre una pieza que no puede ver')
+      .toBe(true)
+  })
+
   it('no se escribe su propia copia de videoEmbed', () => {
     // Había dos, y la de aquí se había quedado atrás: la de `shared` entiende
     // Drive y esta no. Es el patrón de gemelos que domina los fallos de este repo.

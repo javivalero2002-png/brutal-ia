@@ -1274,6 +1274,22 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                       </div>
                     )}
                   </div>
+                  {/* El enlace al original, SIEMPRE visible cuando hay vídeo.
+                      Medido: el incrustado de Instagram funciona —carga bien en un
+                      navegador limpio— pero cualquier bloqueador de contenido lo
+                      tapa con «este contenido está bloqueado», y los bloqueadores
+                      son de lo más instalado que hay. Discutir con el bloqueador no
+                      es una opción; dar una salida de un clic, sí.
+                      Va debajo y no encima porque cuando el incrustado SÍ funciona
+                      —que es lo normal— el vídeo manda y esto es el plan B. */}
+                  {(editVideoUrl||activeItem.video_url) && (
+                    <a href={editVideoUrl||activeItem.video_url} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 py-2 mb-2 rounded-xl transition-opacity hover:opacity-80"
+                      style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`}}>
+                      <LucideIcon name="external-link" size={11} color="rgba(255,255,255,0.45)"/>
+                      <span className="font-syne text-[8.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.45)'}}>VER ORIGINAL</span>
+                    </a>
+                  )}
                   {videoEmbed(editVideoUrl)&&<div className="rounded-2xl overflow-hidden mx-auto" style={{aspectRatio:videoEsVertical(editVideoUrl)?'9/16':'16/9',maxWidth:videoEsVertical(editVideoUrl)?'320px':'none',background:'#000'}}><iframe src={videoEmbed(editVideoUrl)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>}
                   {!videoEmbed(editVideoUrl)&&editVideoUrl&&<div className="rounded-2xl overflow-hidden" style={{background:'#000'}}><video src={editVideoUrl} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/></div>}
                   {!editVideoUrl&&activeItem.video_url&&<div className="rounded-2xl overflow-hidden" style={{background:'#000'}}>{videoEmbed(activeItem.video_url)?<div className="mx-auto" style={{aspectRatio:videoEsVertical(activeItem.video_url)?'9/16':'16/9',maxWidth:videoEsVertical(activeItem.video_url)?'320px':'none'}}><iframe src={videoEmbed(activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>:<video src={activeItem.video_url} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/>}</div>}
