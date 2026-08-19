@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { triar, remitentesConocidos, dominiosPropios } from '@/lib/inboxTriage'
 import { checkAiRateLimit } from '@/lib/rate-limit'
 import { codigoDeFallo } from '@/lib/gmailAuth'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
@@ -69,7 +70,7 @@ export async function POST() {
   let emails: Awaited<ReturnType<typeof getEmailsWithRefreshToken>>
   let gmailAccount = ''
   try {
-    emails = await getEmailsWithRefreshToken(profile.gmail_refresh_token, 20)
+    emails = await getEmailsWithRefreshToken(profile.gmail_refresh_token, 40)
     gmailAccount = await getGmailAccountEmail(profile.gmail_refresh_token)
   } catch (err: unknown) {
     const error = err as Error & { code?: number; response?: { data?: { error?: string } } }
@@ -156,30 +157,50 @@ export async function POST() {
   // con maxDuration 60, Vercel mata la funcion y el usuario ve un error en vez de
   // un "truncado, sigo en la proxima". Ahora sale del cliente de Anthropic.
   let truncado = false
+  let omitidos = 0
 
-  for (const email of emails) {
+  // La criba. Se prepara UNA vez, fuera del bucle: es una consulta.
+  const DOMINIOS = dominiosPropios()
+  const CONOCIDOS = await remitentesConocidos(admin)
+
+  // El índice, para saber por dónde se cortó y guardar lo que queda.
+  let i = 0
+  for (; i < emails.length; i++) {
+    const email = emails[i]
     if (known.has(email.gmail_id)) continue
-    // ¿Cabe la SIGUIENTE, no me he pasado ya. La diferencia importa: la guarda
-    // vieja autorizaba una llamada sin saber lo que iba a costar.
-    const plazo = plazoRestante(T0, 60)
-    if (plazo < MINIMO_UTIL_MS) { truncado = true; break }
 
-    let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
-    try {
-      analysis = await analyzeEmail(
-        email.subject || '',
-        (email.body_preview || '').slice(0, 800),
-        email.from_name,
-        knownClients,
-        plazo,
-      )
-    } catch {
-      // AI analysis failed — save email with basic info anyway
-      aiFailures++
+    // ¿Le pagamos un análisis? Esto NO decide si se guarda: se guarda siempre.
+    const { analizar, motivo } = triar(email, DOMINIOS, CONOCIDOS)
+
+    let analysis: EmailAnalysis | null = null
+    let estado: 'ok' | 'omitido' | 'pendiente' | 'fallo' = 'omitido'
+
+    if (analizar) {
+      // La guarda de tiempo va DESPUÉS de la criba, y es deliberado: un correo
+      // omitido cuesta cero milisegundos, así que no tiene sentido gastarle una
+      // plaza del presupuesto ni dejarlo fuera por falta de tiempo.
+      // ¿Cabe la SIGUIENTE, no me he pasado ya. La diferencia importa: la guarda
+      // vieja autorizaba una llamada sin saber lo que iba a costar.
+      const plazo = plazoRestante(T0, 60)
+      if (plazo < MINIMO_UTIL_MS) { truncado = true; break }
+      try {
+        analysis = await analyzeEmail(
+          email.subject || '',
+          (email.body_preview || '').slice(0, 800),
+          email.from_name,
+          knownClients,
+          plazo,
+        )
+      } catch {
+        aiFailures++
+      }
+      // analyzeEmail captura por dentro y no lanza: la señal real de degradación
+      // es este flag, no el catch de arriba.
+      if (analysis?.degraded) aiFailures++
+      estado = !analysis ? 'fallo' : analysis.degraded ? 'fallo' : 'ok'
+    } else {
+      omitidos++
     }
-    // analyzeEmail captura por dentro y no lanza: la señal real de degradación
-    // es este flag, no el catch de arriba.
-    if (analysis.degraded) aiFailures++
 
     const { error: insertErr } = await admin.from('inbox_messages').insert({
       user_id: user.id,
@@ -189,10 +210,17 @@ export async function POST() {
       from_email: email.from_email,
       subject: email.subject,
       body_preview: email.body_preview,
-      ai_summary: analysis.summary,
-      ai_action: analysis.action,
-      ai_client: analysis.client,
-      ai_urgency: analysis.urgency,
+      // NULL, no un resumen inventado. El fallback de antes («Revisar email»,
+      // cliente «Desconocido») no era neutro: sacaba el correo del filtro de
+      // Clientes y del contador de Prioridad, Y hacía que la pantalla pintara el
+      // panel «BRUTAL.IA — ANÁLISIS» encima. Un boletín sin analizar enseñaba un
+      // análisis de IA falso. Con NULL, la lista cae al texto del correo y ya.
+      ai_summary: analysis?.summary ?? null,
+      ai_action: analysis?.action ?? null,
+      ai_client: analysis?.client ?? null,
+      ai_urgency: analysis?.urgency ?? null,
+      ai_estado: estado,
+      ai_motivo: analizar ? null : motivo,
       is_read: !email.is_unread,
       is_unread: email.is_unread,
       received_at: email.received_at,
@@ -214,7 +242,10 @@ export async function POST() {
     }
 
     // Solo el correo de colaboraciones genera tareas — cuentas personales no
-    if (isCompanyAccount && analysis.suggestedTask && analysis.urgency !== 'normal' && gmailTasksCreated < GMAIL_TASK_LIMIT) {
+    // Sin análisis no hay tarea, obviamente. Y va con `analysis &&` explícito y
+    // no con `?.`: aquí se crea trabajo para una persona, y eso no puede depender
+    // de un encadenamiento opcional que un día devuelva undefined y nadie note.
+    if (analysis && isCompanyAccount && analysis.suggestedTask && analysis.urgency !== 'normal' && gmailTasksCreated < GMAIL_TASK_LIMIT) {
       const { error: taskErr } = await admin.from('tasks').insert({
         created_by: user.id,
         text: analysis.suggestedTask,
@@ -247,11 +278,34 @@ export async function POST() {
       if (reunionErr) console.error('[sync] no se pudo crear la tarea de reunión:', reunionErr.message)
     }
 
-    if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgency: analysis.urgency })
+    if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgency: analysis?.urgency ?? 'normal' })
     newCount++
   }
 
-  if (truncado) console.warn('[sync] presupuesto de tiempo agotado: el resto de emails se procesará en la siguiente ejecución')
+  // Lo que quedó detrás del corte SE GUARDA, marcado como pendiente.
+  //
+  // Antes el `break` estaba antes del insert, así que esos correos no se
+  // guardaban — y como la ventana de Gmail no pagina ni hay backfill, en la
+  // siguiente pasada ya no estaban entre los más recientes. Se perdían, en
+  // silencio. Quedarse sin tiempo pasa de perder correo a aplazarlo.
+  if (truncado) {
+    const cola = emails.slice(i).filter(e => !known.has(e.gmail_id)).map(e => ({
+      user_id: user.id, source: 'gmail', gmail_id: e.gmail_id,
+      from_name: e.from_name, from_email: e.from_email, subject: e.subject,
+      body_preview: e.body_preview, is_read: !e.is_unread, is_unread: e.is_unread,
+      received_at: e.received_at, shared: isCompanyAccount,
+      attachments: e.attachments?.length ? e.attachments : [],
+      ai_estado: 'pendiente',
+    }))
+    if (cola.length) {
+      // `gmail_id` es UNIQUE, así que esto es idempotente: si la siguiente pasada
+      // los vuelve a traer, el insert rebota y no duplica.
+      const { error } = await admin.from('inbox_messages').insert(cola)
+      if (error) console.error('[sync] no se pudo aplazar el resto de correos:', error.message)
+    }
+    console.warn(`[sync] presupuesto agotado: ${cola.length} correos guardados como pendientes de analizar`)
+  }
+  if (omitidos) console.log(`[sync] ${omitidos} correos guardados sin analizar (promoción o red social)`)
 
   // Notificación push por los emails nuevos sin leer (con rate-limit de 90s para evitar duplicados)
   if (newUnread.length > 0) {

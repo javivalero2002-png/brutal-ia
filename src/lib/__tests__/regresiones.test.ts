@@ -43,6 +43,23 @@ const leer = (f: string) => readFileSync(f, 'utf8')
 // que una regla que busca ese patrón lo encuentre y falle. Pasó al escribir la
 // regla de abajo. El fallo grave es el simétrico: una regla que un comentario
 // puede SATISFACER no comprueba código, comprueba prosa.
+/**
+ * Los ficheros que sincronizan correo EN BUCLE.
+ *
+ * `api/inbox/reanalizar` tambien llama a `analyzeEmail`, pero queda fuera a
+ * proposito y por tres motivos, cada uno suficiente:
+ *   · es UNA llamada pedida a mano, con alguien mirando la pantalla — no un bucle
+ *     que pueda solaparse consigo mismo, asi que no necesita cerrojo ni
+ *     presupuesto de tiempo;
+ *   · se salta la criba A PROPOSITO: existe justo para analizar lo que la criba
+ *     omitio, o seria imposible deshacer una omision;
+ *   · y no inserta, actualiza una fila que ya existe.
+ * Si algun dia esa ruta pasa a iterar, hay que sacarla de esta exencion.
+ */
+const REANALISIS = 'src/app/api/inbox/reanalizar/route.ts'
+const buclesDeSync = (todos: string[]) =>
+  todos.filter(f => f !== REANALISIS && /await analyzeEmail\(/.test(leerCodigo(f)))
+
 const leerCodigo = (f: string) =>
   leer(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
 
@@ -512,7 +529,14 @@ describe('calendario · escribir donde de verdad está el evento', () => {
 describe('sincronizar un buzón · nunca dos a la vez', () => {
   // Vale para el codigo que se escriba manana: quien analice correo con Claude
   // tiene que pedir cerrojo, sea una copia nueva o una que ya existe.
-  const ANALIZAN = TS.filter(f => /\banalyzeEmail\s*\(/.test(leer(f)) && !f.endsWith('src/lib/ai.ts'))
+  // Fuera `ai.ts` (es quien lo define) y fuera la ruta de reanálisis: esa es UNA
+  // llamada pedida a mano, no un bucle que pueda solaparse consigo mismo, así que
+  // el cerrojo no la protege de nada — y sí la haría fallar si el cron está
+  // sincronizando en ese momento, que es justo cuando alguien mira la bandeja.
+  const ANALIZAN = TS.filter(f =>
+    /\banalyzeEmail\s*\(/.test(leer(f))
+    && !f.endsWith('src/lib/ai.ts')
+    && f !== 'src/app/api/inbox/reanalizar/route.ts')
 
   it('hay ficheros que revisar', () => {
     expect(ANALIZAN.length).toBeGreaterThan(1)
@@ -720,7 +744,11 @@ describe('lo que se lee de una API se lee entero', () => {
   // La regla persigue la forma correcta: preguntar si CABE la siguiente, no si ya
   // me he pasado — y pasarle ese plazo a la llamada, para que no pueda excederlo.
   it('los bucles de analyzeEmail preguntan si cabe la siguiente', () => {
-    const EN_BUCLE = TS.filter(f => /for \(const email of emails\)/.test(leerCodigo(f)))
+    // Anclado a lo que el bucle HACE —llamar al modelo— y no a la forma del
+    // `for`: la regla buscaba literalmente `for (const email of emails)` y se
+    // quedo ciega en cuanto uno de los tres bucles paso a llevar indice. Una
+    // regla que depende de la sintaxis vigila el estilo, no el invariante.
+    const EN_BUCLE = buclesDeSync(TS)
     expect(EN_BUCLE.length, 'no se encontro ningun bucle de emails').toBeGreaterThan(1)
     for (const f of EN_BUCLE) {
       const src = leerCodigo(f)
@@ -768,10 +796,29 @@ describe('lo que se lee de una API se lee entero', () => {
   // palanca y CUATRO comentarios se quedaron describiendo un reparto que ya no
   // pasaba: con ~51 s por buzon en vez de 25, en un lunes con atraso arrancan 4 de
   // 7 y los otros 3 esperan una hora.
-  it('los topes por buzón siguen ahí, y acotan de verdad', () => {
+  it('los topes por buzón siguen ahí, y el reparto CABE', () => {
     const CS = leerCodigo('src/lib/colabsSync.ts')
-    expect(/TOPE_COLABS_MS\s*=\s*25_000/.test(CS), 'falta el tope del buzón compartido').toBe(true)
-    expect(/TOPE_PERSONAL_MS\s*=\s*12_000/.test(CS), 'falta el tope de los buzones personales').toBe(true)
+    const CRON = leerCodigo('src/app/api/cron/sync-colabs/route.ts')
+    const num = (re: RegExp, donde: string, que: string) => {
+      const m = re.exec(donde)
+      expect(m, `no se encuentra ${que}`).not.toBeNull()
+      return Number(m![1].replace(/_/g, ''))
+    }
+    const colabs = num(/TOPE_COLABS_MS\s*=\s*([\d_]+)/, CS, 'el tope del buzón compartido')
+    const personal = num(/TOPE_PERSONAL_MS\s*=\s*([\d_]+)/, CS, 'el tope de los buzones personales')
+    const presupuesto = num(/PARA_BUZONES_MS\s*=\s*([\d_]+)/, CRON, 'el presupuesto del cron')
+
+    // La ARITMÉTICA, no los números. Antes se fijaban los literales (25_000 y
+    // 12_000), así que subir uno ponía la suite en rojo aunque el reparto siguiera
+    // cabiendo, y —peor— dos cambios compensados podían dejarlo sin caber sin que
+    // nadie se enterara. Lo que hay que proteger es que quepan los ocho buzones:
+    // si no caben, los últimos de la lista se sincronizan una vez cada varias
+    // horas y su dueño cree que la app está rota.
+    const BUZONES_PERSONALES = 7
+    const peorCaso = colabs + BUZONES_PERSONALES * personal
+    expect(peorCaso,
+      `el reparto no cabe: ${colabs / 1000}s + ${BUZONES_PERSONALES}×${personal / 1000}s = ${peorCaso / 1000}s contra ${presupuesto / 1000}s de presupuesto. Los últimos buzones se quedarían sin sincronizar`)
+      .toBeLessThanOrEqual(presupuesto)
     // Declararlos no basta: tienen que entrar en el calculo del plazo.
     const usos = (CS.match(/Math\.min\(plazoRestante\([^)]*\),\s*TOPE_/g) || []).length
     expect(usos, 'los topes están declarados pero no acotan el plazo').toBe(2)
@@ -2059,5 +2106,70 @@ describe('el despliegue de produccion no se puede apagar sin querer', () => {
     if (conf === undefined) return                    // sin configurar = todo activo
     expect(conf, 'apaga TODOS los despliegues, produccion incluida: los merges a main dejaran de publicar y el check saldra limpio').not.toBe(false)
     expect(conf.main, 'main no esta explicitamente habilitado: si un patron lo apaga, produccion deja de desplegarse en silencio').toBe(true)
+  })
+})
+
+// ───────────────────────────────────────────────────────────────────────────────
+// La criba del correo: una sola, y nunca decide si se guarda.
+//
+// El bucle que analiza correo esta escrito TRES veces —el sync personal, el del
+// buzon compartido y el personal del cron— y ese es el patron de gemelos que
+// CLAUDE.md documenta como mas de la mitad de los fallos graves de la auditoria.
+// Si la criba se pone en dos de los tres, el tercero sigue pagando analisis de
+// boletines para siempre y nadie lo nota.
+//
+// Y la segunda regla es la que de verdad importa: la criba decide a QUE correo se
+// le paga un analisis, JAMAS si entra en la base. La primera version del plan
+// borraba esa distincion sin darse cuenta y habria hecho desaparecer correo de
+// clientes sin rastro y sin vuelta atras.
+// ───────────────────────────────────────────────────────────────────────────────
+describe('la criba del correo', () => {
+  const CON_ANALISIS = buclesDeSync(TS)
+
+  it('los TRES bucles criban, no dos', () => {
+    expect(CON_ANALISIS.length, 'ya no son los mismos ficheros los que sincronizan: revisa esta regla').toBe(2)
+    const sinCriba = CON_ANALISIS.filter(f => !/triar\(/.test(leerCodigo(f)))
+    expect(sinCriba,
+      'analiza correo sin cribar: ese buzon seguira pagando el analisis de cada boletin, y nadie lo notara porque los otros si criban')
+      .toEqual([])
+  })
+
+  it('cada llamada al modelo va DENTRO de su criba', () => {
+    // Acotado al sitio: que el fichero mencione `triar(` no dice nada si la
+    // llamada esta fuera del `if`. Se comprueba que entre la criba y la llamada
+    // no haya otra criba — o sea, que sean el mismo bloque.
+    for (const f of CON_ANALISIS) {
+      const C = leerCodigo(f)
+      for (const m of C.matchAll(/await analyzeEmail\(/g)) {
+        const antes = C.slice(Math.max(0, m.index! - 900), m.index!)
+        expect(/const \{ analizar[\s\S]*if \(analizar\)/.test(antes),
+          `${f}: hay una llamada al modelo que no esta dentro de su criba`).toBe(true)
+      }
+    }
+  })
+
+  it('la criba NUNCA decide si un correo se guarda', () => {
+    // El invariante que mas importa de todo esto. Si `analizar` aparece como
+    // condicion de un `continue` o rodeando un `insert`, el correo desaparece —
+    // y como la ventana de Gmail no pagina, desaparece PARA SIEMPRE.
+    for (const f of CON_ANALISIS) {
+      const C = leerCodigo(f)
+      expect(/if \(!analizar\)\s*continue/.test(C),
+        `${f}: se salta el correo entero cuando no merece analisis. No se guardaria, y no hay forma de recuperarlo despues`)
+        .toBe(false)
+    }
+  })
+
+  it('lo que no se analiza se guarda con los campos de IA en NULL', () => {
+    // Y no con el fallback inventado: ese sacaba el correo del filtro de Clientes
+    // y del contador de Prioridad, Y hacia que la pantalla pintara un panel
+    // «BRUTAL.IA — ANALISIS» sobre algo que la IA no habia visto nunca.
+    for (const f of CON_ANALISIS) {
+      const C = leerCodigo(f)
+      expect(/ai_summary: analysis\?\.summary \?\? null/.test(C),
+        `${f}: guarda un resumen inventado cuando no hubo analisis`).toBe(true)
+      expect(/ai_estado:/.test(C),
+        `${f}: no deja constancia de si el correo se analizo. Sin eso la criba no se puede auditar ni deshacer`).toBe(true)
+    }
   })
 })

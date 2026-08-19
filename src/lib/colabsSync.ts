@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { triar, remitentesConocidos, dominiosPropios } from '@/lib/inboxTriage'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { esTokenMuerto, esConexionRota, avisarConexionCaida } from '@/lib/gmailAuth'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
@@ -49,7 +50,7 @@ const TTL_CERROJO_MS = 90_000
 // al cambiar de palanca y el reparto del cron se quedo describiendo algo que ya no
 // pasaba — ver el comentario de src/app/api/cron/sync-colabs/route.ts.
 const TOPE_COLABS_MS = 25_000
-const TOPE_PERSONAL_MS = 12_000
+const TOPE_PERSONAL_MS = 20_000
 
 /**
  * Sincroniza el buzón COMPARTIDO de colaboraciones.
@@ -106,7 +107,7 @@ async function syncColabsInboxSinCerrojo(
   let emails: Awaited<ReturnType<typeof getEmailsWithRefreshToken>>
   let gmailAccount = ''
   try {
-    emails = await getEmailsWithRefreshToken(token, opts.max ?? 20)
+    emails = await getEmailsWithRefreshToken(token, opts.max ?? 40)
     gmailAccount = await getGmailAccountEmail(token)
   } catch (err: unknown) {
     const error = err as Error & { code?: number; response?: { data?: { error?: string } } }
@@ -132,6 +133,11 @@ async function syncColabsInboxSinCerrojo(
   let newCount = 0
   let aiFailures = 0
   let insertFailures = 0
+  let omitidos = 0
+
+  // La criba, preparada una vez fuera del bucle: es una consulta.
+  const DOMINIOS = dominiosPropios()
+  const CONOCIDOS = await remitentesConocidos(admin)
   const newUnread: { from_name: string; subject: string; urgent?: boolean }[] = []
 
   // Una sola consulta para saber cuáles ya existen (antes: un SELECT por email).
@@ -185,18 +191,30 @@ async function syncColabsInboxSinCerrojo(
     // El Math.min existia y lo borre yo al cambiar de palanca, dejando estos
     // comentarios describiendo un tope que ya no estaba. Sin el, el reparto del
     // cron se queda sin base: 51 s por buzon en vez de 25 no caben siete veces.
-    const plazo = Math.min(plazoRestante(T0, 60), TOPE_COLABS_MS - (Date.now() - T0))
-    if (plazo < MINIMO_UTIL_MS) { truncado = true; break }
+    // ¿Le pagamos un análisis? NO decide si se guarda: se guarda siempre.
+    const { analizar, motivo } = triar(email, DOMINIOS, CONOCIDOS)
 
-    let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
-    try {
-      analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients, plazo)
-    } catch { aiFailures++ }
+    let analysis: EmailAnalysis | null = null
+    let estado: 'ok' | 'omitido' | 'pendiente' | 'fallo' = 'omitido'
+
+    if (analizar) {
+      // La guarda de tiempo va DESPUÉS de la criba: un correo omitido cuesta cero
+      // milisegundos, así que no debe gastar plaza del presupuesto ni quedarse
+      // fuera por falta de tiempo.
+      const plazo = Math.min(plazoRestante(T0, 60), TOPE_COLABS_MS - (Date.now() - T0))
+      if (plazo < MINIMO_UTIL_MS) { truncado = true; break }
+      try {
+        analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients, plazo)
+      } catch { aiFailures++ }
+      estado = !analysis || analysis.degraded ? 'fallo' : 'ok'
+    } else {
+      omitidos++
+    }
     // analyzeEmail NO lanza: captura por dentro y devuelve el fallback básico,
     // así que el catch de arriba era código muerto y aiFailures siempre 0.
     // La señal real es `degraded`. No se puede loguear por email (~3.400
     // iteraciones al día, retención corta en Hobby): se agrega al final.
-    if (analysis.degraded) aiFailures++
+    if (analysis?.degraded) aiFailures++
 
     const { error: insertError } = await admin.from('inbox_messages').insert({
       user_id: ownerId,
@@ -206,10 +224,15 @@ async function syncColabsInboxSinCerrojo(
       from_email: email.from_email,
       subject: email.subject,
       body_preview: email.body_preview,
-      ai_summary: analysis.summary,
-      ai_action: analysis.action,
-      ai_client: analysis.client,
-      ai_urgency: analysis.urgency,
+      // NULL, no un resumen inventado: el fallback sacaba el correo del filtro
+      // de Clientes y del contador de Prioridad, y encima hacía que la pantalla
+      // pintara un panel «BRUTAL.IA — ANÁLISIS» sobre algo que la IA no vio.
+      ai_summary: analysis?.summary ?? null,
+      ai_action: analysis?.action ?? null,
+      ai_client: analysis?.client ?? null,
+      ai_urgency: analysis?.urgency ?? null,
+      ai_estado: estado,
+      ai_motivo: analizar ? null : motivo,
       is_read: !email.is_unread,
       is_unread: email.is_unread,
       received_at: email.received_at,
@@ -228,7 +251,10 @@ async function syncColabsInboxSinCerrojo(
       newCount++
       // Email con enlace de reunión → tarea con fecha (aparece en el Calendario)
       const meetingText = `${email.subject || ''} ${email.body_preview || ''}`
-      if (MEETING_RE.test(meetingText)) {
+      // Solo si el correo mereció análisis. Un webinar promocional con enlace de
+      // Zoom casa este patrón igual que la reunión de un cliente, y crearía una
+      // tarea con fecha en el calendario de todo el equipo.
+      if (analizar && MEETING_RE.test(meetingText)) {
         // localDayKey, no slice: `received_at` viene en UTC y cortarlo da el día
       // UTC. Un email recibido a las 00:30 de Madrid generaba la tarea con la
       // fecha de AYER, o sea vencida en el momento de crearse.
@@ -247,7 +273,7 @@ async function syncColabsInboxSinCerrojo(
         })
         if (reunionErr) console.error('[colabs] no se pudo crear la tarea de reunión:', reunionErr.message)
       }
-      if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgent: analysis.urgency === 'urgent' })
+      if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgent: analysis?.urgency === 'urgent' })
     }
   }
 
@@ -327,7 +353,7 @@ async function syncPersonalInboxSinCerrojo(
   let emails: Awaited<ReturnType<typeof getEmailsWithRefreshToken>>
   let gmailAccount = ''
   try {
-    emails = await getEmailsWithRefreshToken(token, 15)
+    emails = await getEmailsWithRefreshToken(token, 40)
     gmailAccount = await getGmailAccountEmail(token)
   } catch (err: unknown) {
     const error = err as Error & { code?: number; response?: { data?: { error?: string } } }
@@ -350,6 +376,11 @@ async function syncPersonalInboxSinCerrojo(
   let newCount = 0
   let aiFailures = 0
   let insertFailures = 0
+  let omitidos = 0
+
+  // La criba, preparada una vez fuera del bucle: es una consulta.
+  const DOMINIOS = dominiosPropios()
+  const CONOCIDOS = await remitentesConocidos(admin)
   const newUnread: { from_name: string; subject: string; urgent?: boolean }[] = []
 
   // Una sola consulta para saber cuáles ya existen (antes: un SELECT por email).
@@ -384,14 +415,26 @@ async function syncPersonalInboxSinCerrojo(
     if (personalKnown.has(email.gmail_id)) continue
     // Igual que el del buzon compartido, con el tope personal: son SIETE dentro
     // de la misma ejecucion del cron.
-    const plazo = Math.min(plazoRestante(T0, 60), TOPE_PERSONAL_MS - (Date.now() - T0))
-    if (plazo < MINIMO_UTIL_MS) { truncado = true; break }
+    // ¿Le pagamos un análisis? NO decide si se guarda: se guarda siempre.
+    const { analizar, motivo } = triar(email, DOMINIOS, CONOCIDOS)
 
-    let analysis: EmailAnalysis = { summary: email.subject || '(sin asunto)', action: 'Revisar email', client: 'Desconocido', urgency: 'normal' }
-    try {
-      analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients, plazo)
-    } catch { aiFailures++ }
-    if (analysis.degraded) aiFailures++
+    let analysis: EmailAnalysis | null = null
+    let estado: 'ok' | 'omitido' | 'pendiente' | 'fallo' = 'omitido'
+
+    if (analizar) {
+      // La guarda de tiempo va DESPUÉS de la criba: un correo omitido cuesta cero
+      // milisegundos, así que no debe gastar plaza del presupuesto ni quedarse
+      // fuera por falta de tiempo.
+      const plazo = Math.min(plazoRestante(T0, 60), TOPE_PERSONAL_MS - (Date.now() - T0))
+      if (plazo < MINIMO_UTIL_MS) { truncado = true; break }
+      try {
+        analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients, plazo)
+      } catch { aiFailures++ }
+      estado = !analysis || analysis.degraded ? 'fallo' : 'ok'
+    } else {
+      omitidos++
+    }
+    if (analysis?.degraded) aiFailures++
 
     const { error: insertError } = await admin.from('inbox_messages').insert({
       user_id: profile.id,
@@ -401,10 +444,15 @@ async function syncPersonalInboxSinCerrojo(
       from_email: email.from_email,
       subject: email.subject,
       body_preview: email.body_preview,
-      ai_summary: analysis.summary,
-      ai_action: analysis.action,
-      ai_client: analysis.client,
-      ai_urgency: analysis.urgency,
+      // NULL, no un resumen inventado: el fallback sacaba el correo del filtro
+      // de Clientes y del contador de Prioridad, y encima hacía que la pantalla
+      // pintara un panel «BRUTAL.IA — ANÁLISIS» sobre algo que la IA no vio.
+      ai_summary: analysis?.summary ?? null,
+      ai_action: analysis?.action ?? null,
+      ai_client: analysis?.client ?? null,
+      ai_urgency: analysis?.urgency ?? null,
+      ai_estado: estado,
+      ai_motivo: analizar ? null : motivo,
       is_read: !email.is_unread,
       is_unread: email.is_unread,
       received_at: email.received_at,
@@ -421,7 +469,7 @@ async function syncPersonalInboxSinCerrojo(
       insertFailures++
     } else {
       newCount++
-      if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgent: analysis.urgency === 'urgent' })
+      if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgent: analysis?.urgency === 'urgent' })
     }
   }
 
