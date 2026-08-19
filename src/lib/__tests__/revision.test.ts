@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { videoEmbed } from '@/components/shared/helpers'
+import { videoEmbed, videoEsVertical } from '@/components/shared/helpers'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // La pantalla de revisión es la ÚNICA que ve gente de fuera del estudio.
@@ -35,6 +35,27 @@ describe('videoEmbed · lo que se le enseña al cliente', () => {
       .toBe('https://drive.google.com/file/d/1AbC_xyz/preview')
   })
 
+  // Instagram es lo que MÁS se va a pegar —el estudio publica ahí— y hasta ahora
+  // no se entendía, aunque el propio texto de la pantalla lo prometía: pegabas el
+  // enlace y no se veía nada.
+  it('entiende Instagram, que es lo que más se publica', () => {
+    for (const [url, id] of [
+      ['https://www.instagram.com/reel/CxYz123/', 'CxYz123'],
+      ['https://instagram.com/p/AbC456/?igsh=xxx', 'AbC456'],
+      ['https://www.instagram.com/tv/DeF789/', 'DeF789'],
+    ]) {
+      expect(videoEmbed(url), url).toBe(`https://www.instagram.com/p/${id}/embed`)
+    }
+  })
+
+  it('sabe cuáles son verticales, para no pintarlos como un sello', () => {
+    // Un reel en un marco 16:9 sale diminuto entre dos franjas negras, y el reel
+    // es el formato que más se manda a revisar a un cliente.
+    expect(videoEsVertical('https://www.instagram.com/reel/CxYz123/')).toBe(true)
+    expect(videoEsVertical('https://www.instagram.com/p/AbC456/')).toBe(false)
+    expect(videoEsVertical('https://www.youtube.com/watch?v=abc')).toBe(false)
+  })
+
   it('devuelve null para lo que no sabe incrustar, no una URL rota', () => {
     // Es un contrato: quien llame tiene que poder distinguir «esto va en un
     // iframe» de «esto hay que abrirlo aparte». Devolver la URL a secas metería
@@ -51,7 +72,11 @@ describe('la pantalla que ve el cliente', () => {
   it('nunca deja un hueco mudo: si no se puede incrustar, hay enlace', () => {
     // El fallo era pintar SOLO la rama del incrustado, así que cualquier otro
     // material dejaba al cliente con el título y una caja de texto.
-    expect(/embed \?[\s\S]{0,400}: item\.video_url \?/.test(PAGINA),
+    // Ventana holgada: la rama del incrustado creció al adaptar el marco a los
+    // vídeos verticales, y con 400 letras la regla se puso roja sin que nada se
+    // hubiera roto. Lo que se comprueba es la CADENA de ternarios, no que estén
+    // pegados — el formato no es el invariante.
+    expect(/embed \?[\s\S]{0,900}: item\.video_url \?/.test(PAGINA),
       'solo pinta el material cuando se puede incrustar: con un enlace de Drive o una story el cliente no ve nada')
       .toBe(true)
   })
