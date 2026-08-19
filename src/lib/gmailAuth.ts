@@ -98,6 +98,7 @@ export async function avisarConexionCaida(
       body: `Han dejado de entrar correos de ${nombre}. Vuelve a conectarlo en Operativa → Sincronización.`,
       url: '/dashboard?s=ajustes',
       tag: `gmail-caido-${cual}`,
+      categoria: 'averia',
       urgent: true,
     })
   } catch (err) {

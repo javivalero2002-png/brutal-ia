@@ -66,12 +66,18 @@ export default function CopiasTab({ showToast }: { showToast: (m: string) => voi
    * ruido, y el ruido es lo que hace que se dejen de mirar los avisos.
    */
   const [enlaces, setEnlaces] = useState<{ total: number; afectadas: { id: string; title: string; enlaces: number }[] } | null>(null)
+  const [enlacesRoto, setEnlacesRoto] = useState(false)
   const [arreglando, setArreglando] = useState(false)
   const revisarEnlaces = useCallback(async () => {
     try {
       const r = await fetch('/api/admin/memoria-enlaces')
-      if (r.ok) setEnlaces(await r.json())
-    } catch { /* silencioso: es información secundaria y las copias mandan */ }
+      if (!r.ok) { setEnlacesRoto(true); return }
+      setEnlaces(await r.json()); setEnlacesRoto(false)
+      // «No quedan» y «no pude comprobarlo» NO pueden verse igual: si el panel
+      // no sale, se da por hecho que está limpio y se cierra el bucket sin
+      // haberlo mirado. Es el mismo fallo silencioso que este panel destapa, y
+      // lo cometí yo aquí mismo — Javi lo vio antes que la suite.
+    } catch { setEnlacesRoto(true) }
   }, [])
   useEffect(() => { revisarEnlaces() }, [revisarEnlaces])
 
@@ -179,7 +185,26 @@ export default function CopiasTab({ showToast }: { showToast: (m: string) => voi
         </div>
       </div>
 
+      {/* No se pudo comprobar. Se dice, en vez de callarlo. */}
+      {enlacesRoto && (
+        <div className="rounded-2xl p-4" style={{ background: SURF2, border: `1px solid ${BORDER}` }}>
+          <div className="font-figtree text-[12.5px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            No se ha podido comprobar si quedan enlaces antiguos en Memoria. No significa que estén
+            bien — significa que no lo sabemos.
+          </div>
+        </div>
+      )}
+
       {/* Enlaces antiguos de Memoria. Solo si quedan. */}
+      {enlaces && enlaces.total === 0 && (
+        <div className="rounded-2xl p-4" style={{ background: SURF2, border: `1px solid ${GRN}25` }}>
+          <div className="font-figtree text-[12.5px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            <span style={{ color: GRN }}>✓</span> Ninguna nota de Memoria guarda la dirección de un fichero
+            al descubierto. Ya se puede cerrar el bucket de vídeos en Supabase.
+          </div>
+        </div>
+      )}
+
       {enlaces && enlaces.total > 0 && (
         <div className="rounded-2xl p-5" style={{ background: SURFACE, border: `1px solid ${AMBAR}35` }}>
           <div className="font-syne text-[8.5px] font-black tracking-[0.2em] mb-2" style={{ color: AMBAR }}>

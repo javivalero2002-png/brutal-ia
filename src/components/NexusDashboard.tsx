@@ -847,7 +847,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
 
           {navLabel('GESTIÓN')}
           {navItem('tareas','Tareas','check-square',data.tasks.filter((t:Task)=>!t.done&&t.level==='urgent').length||undefined)}
-          {navItem('diario','Diario','pen-line')}
+          {navItem('diario','Fichar','pen-line')}
           {navItem('clientes','Clientes','users')}
           {/* La cuenta del badge estaba escrita otra vez aquí, con la misma resta
               de timestamps: la campana y el menú podían discrepar. Es la misma
@@ -935,7 +935,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
             )}
             {/* Título de sección */}
             <span className="font-syne text-[10px] font-black tracking-[0.25em] truncate flex-1" style={{color:'rgba(255,255,255,0.55)'}}>
-              {({hoy:'HOY',inbox:'INBOX',calendario:'CALENDARIO',tareas:'TAREAS',diario:'DIARIO',clientes:'CLIENTES',proyectos:'PROYECTOS',contenido:'CONTENIDO',chat:'BRUTAL.IA',harvey:'HARVEY',ajustes:'OPERATIVA',memoria:'MEMORIA',equipo:'EQUIPO',reportes:'REPORTES',automatizaciones:'AUTOMATIZACIONES'} as Record<string,string>)[section] || 'BRUTAL.IA'}
+              {({hoy:'HOY',inbox:'INBOX',calendario:'CALENDARIO',tareas:'TAREAS',diario:'FICHAR',clientes:'CLIENTES',proyectos:'PROYECTOS',contenido:'CONTENIDO',chat:'BRUTAL.IA',harvey:'HARVEY',ajustes:'OPERATIVA',memoria:'MEMORIA',equipo:'EQUIPO',reportes:'REPORTES',automatizaciones:'AUTOMATIZACIONES'} as Record<string,string>)[section] || 'BRUTAL.IA'}
             </span>
             {/* Sin gate de owner en el menú: tarea, cliente, proyecto y pieza los
                 puede crear cualquiera —sus rutas no miran el rol— y ocultar el
@@ -1071,7 +1071,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
                   // Memoria, Automatizaciones y Reportes no: se llega por
                   // Operativa, que ya está aquí arriba. Este panel es para lo que
                   // se abre a menudo, no para inventariar la app.
-                  {id:'diario' as Section, icon:'pen-line', label:'Diario'},
+                  {id:'diario' as Section, icon:'pen-line', label:'Fichar'},
                 ] as {id:Section,icon:string,label:string}[]).map(item=>(
                   <button key={item.id} onClick={()=>{setSection(item.id);setMasOpen(false)}}
                     className="flex flex-col items-center gap-2 py-4 rounded-2xl transition-all active:scale-95"
@@ -1192,7 +1192,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
           automatizaciones: [{key:'J / K',label:'Navegar reglas'},{key:'E',label:'Activar/pausar'},{key:'N',label:'Nueva regla'}],
         }
         const sectionHints = SECTION_HINTS[section] || []
-        const sectionLabels: Record<Section,string> = {hoy:'Hoy',diario:'Diario',tareas:'Tareas',inbox:'Inbox',clientes:'Clientes',proyectos:'Proyectos',contenido:'Contenido',calendario:'Calendario',memoria:'Memoria',equipo:'Equipo',chat:'Chat IA',automatizaciones:'Automatizaciones',reportes:'Reportes',ajustes:'Operativa',harvey:'Harvey'}
+        const sectionLabels: Record<Section,string> = {hoy:'Hoy',diario:'Fichar',tareas:'Tareas',inbox:'Inbox',clientes:'Clientes',proyectos:'Proyectos',contenido:'Contenido',calendario:'Calendario',memoria:'Memoria',equipo:'Equipo',chat:'Chat IA',automatizaciones:'Automatizaciones',reportes:'Reportes',ajustes:'Operativa',harvey:'Harvey'}
         return (
           <div onClick={()=>setShowShortcuts(false)} className="fixed inset-0 z-[120] flex items-center justify-center" style={{background:'rgba(2,2,8,0.75)',backdropFilter:'blur(6px)'}}>
             <div onClick={e=>e.stopPropagation()} className="w-[560px] max-w-[94vw] rounded-3xl" style={{background:'linear-gradient(180deg,#0D0D1E 0%,#080810 100%)',border:`1px solid rgba(27,95,250,0.2)`,boxShadow:'0 40px 100px rgba(0,0,0,0.85),0 0 0 1px rgba(27,95,250,0.04)',maxHeight:'94dvh',overflowY:'auto'}}>

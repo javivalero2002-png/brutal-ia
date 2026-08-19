@@ -270,6 +270,7 @@ async function syncColabsInboxSinCerrojo(
           body: newUnread.length === 1 ? first.subject : `${first.from_name}: ${first.subject} y ${newUnread.length - 1} más`,
           url: '/dashboard',
           tag: 'colabs-sync',
+          categoria: 'correo',
           urgent: anyUrgent,
         })
       } catch (err) {
@@ -437,6 +438,7 @@ async function syncPersonalInboxSinCerrojo(
           body: newUnread.length === 1 ? first.subject : `${first.from_name}: ${first.subject} y ${newUnread.length - 1} más`,
           url: '/dashboard',
           tag: 'gmail-personal',
+          categoria: 'correo',
           urgent: anyUrgent,
         })
       } catch (err) {

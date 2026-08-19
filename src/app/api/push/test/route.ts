@@ -25,6 +25,7 @@ export async function POST() {
       body: 'Las notificaciones funcionan en este dispositivo ✓',
       url: '/dashboard',
       tag: 'test',
+      categoria: 'prueba',
     })
     if (sent === 0) {
       return NextResponse.json(

@@ -80,6 +80,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           body: (data?.text || antes?.text || '').slice(0, 120),
           url: '/dashboard',
           tag: `task-${id}`,
+          categoria: 'tarea',
         })
       } catch (err) {
         console.error('[tasks] el push de reasignación falló:', err)

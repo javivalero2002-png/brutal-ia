@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
       body: (subject && subject !== '(sin asunto)' ? subject + ' — ' : '') + body.slice(0, 100),
       url: '/dashboard',
       tag: `dm-${data?.id || ''}`,
+      categoria: 'mensaje',
     })
   } catch (err) {
     console.error('[inbox] el push del mensaje interno fallo:', err)

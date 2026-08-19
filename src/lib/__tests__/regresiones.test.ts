@@ -1884,3 +1884,72 @@ describe('las copias se llaman igual en los cuatro sitios', () => {
       .toEqual([])
   })
 })
+
+// ───────────────────────────────────────────────────────────────────────────────
+// La pantalla de Notificaciones no puede describir una app que no existe.
+//
+// Tenía una lista escrita a mano de TRES avisos mientras la app mandaba OCHO —
+// tres de ellos añadidos el mismo día. Prometer de menos es peor que no prometer:
+// quien lee «solo me avisa de tareas y correos» apaga los avisos sin saber que se
+// pierde que un cliente respondió o que su Gmail lleva una semana caído.
+// ───────────────────────────────────────────────────────────────────────────────
+describe('los avisos que se mandan son los que se anuncian', () => {
+  it('ningun aviso se manda sin declarar de que es', () => {
+    // La firma de `PushPayload` ya lo exige y TypeScript lo comprueba, pero eso
+    // solo vale mientras nadie escriba `as any` — que en este repo ya ha pasado.
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (ruta === 'src/lib/push.ts' || ruta.startsWith('src/lib/__tests__/')) continue
+      const C = leerCodigo(ruta)
+      for (const m of C.matchAll(/sendPushTo(?:User|All)\(/g)) {
+        // La llamada ENTERA, contando parentesis. Una ventana de N letras no vale:
+        // con 400 se quedaba fuera la categoria de los payloads largos, y con mas
+        // se colaba la de la llamada siguiente y daba verde con el fallo dentro.
+        let prof = 1, i = m.index! + m[0].length
+        while (i < C.length && prof > 0) {
+          if (C[i] === '(') prof++
+          else if (C[i] === ')') prof--
+          i++
+        }
+        const llamada = C.slice(m.index!, i)
+        // Y si el payload se arma en una variable, se mira tambien lo de encima.
+        const arriba = C.slice(Math.max(0, m.index! - 700), m.index!)
+        if (!/categoria:/.test(llamada) && !/categoria:/.test(arriba)) {
+          infractores.push(`${ruta}:${m.index}`)
+        }
+      }
+    }
+    expect(infractores,
+      'manda un aviso sin categoria: no se puede saber si quien lo recibe lo ha silenciado, y la pantalla de Notificaciones se queda describiendo una lista que ya no es la de verdad')
+      .toEqual([])
+  })
+
+  it('la pantalla saca la lista del catalogo, no la escribe a mano', () => {
+    const N = leerCodigo('src/components/sections/NotificacionesTab.tsx')
+    expect(/ORDEN_AVISOS\.map/.test(N),
+      'la pantalla vuelve a escribir a mano de que avisa la app: se quedara atras a la primera que se anada, y prometer de menos hace que la gente apague avisos que necesita')
+      .toBe(true)
+    expect(/Cuando te asignan una tarea'/.test(N),
+      'quedan restos de la lista escrita a mano').toBe(false)
+  })
+
+  it('la averia no se puede silenciar', () => {
+    // Es el aviso de que los correos han dejado de entrar. Poder apagarlo seria
+    // poder apagar la unica senal de una averia silenciosa — y esa averia pasa de
+    // verdad cada siete dias mientras Google este en modo de prueba.
+    const A = leerCodigo('src/lib/avisos.ts')
+    const i = A.indexOf('averia: {')
+    expect(i, 'ya no existe la categoria averia: revisa esta regla').toBeGreaterThan(-1)
+    // Acotado a SU entrada, hasta la llave que la cierra. Con una ventana de N
+    // letras se colaba en la siguiente —`prueba` tambien es `silenciable: false`—
+    // y la regla daba verde con la averia silenciable. Verificado poniendola en
+    // true: sin este corte, no se enteraba.
+    const entrada = A.slice(i, i + A.slice(i).indexOf('\n  },'))
+    expect(/silenciable: false/.test(entrada),
+      'la averia se puede silenciar: se podria apagar la unica senal de que el correo ha dejado de entrar').toBe(true)
+    // Y el servidor no puede fiarse de que la pantalla no lo mande.
+    const R = leerCodigo('src/app/api/push/prefs/route.ts')
+    expect(/ficha\?\.silenciable/.test(R),
+      'la ruta guarda cualquier categoria que le manden: un cliente podria silenciar la averia saltandose la pantalla').toBe(true)
+  })
+})

@@ -20,9 +20,11 @@ export const LOGO_ROW = '__account_logo__'
  * fallo que este módulo existe para evitar.
  */
 export const LATIDO_ROW = '__latido_cron__'
+/** Qué avisos ha silenciado cada uno. Una fila por persona (`created_by`). */
+export const PREFS_ROW = '__avisos_prefs__'
 
 /** Nombres de filas de la tabla `reglas` que no son automatizaciones. */
-export const NON_RULE_ROWS = [PUSH_ROW, LOGO_ROW, LATIDO_ROW] as const
+export const NON_RULE_ROWS = [PUSH_ROW, LOGO_ROW, LATIDO_ROW, PREFS_ROW] as const
 
 /** Filtro PostgREST para excluirlas: `.not('name', 'in', NON_RULE_ROWS_FILTER)`. */
 export const NON_RULE_ROWS_FILTER = `(${NON_RULE_ROWS.map(n => `"${n}"`).join(',')})`
