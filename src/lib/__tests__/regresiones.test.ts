@@ -1351,8 +1351,110 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
       'busca con includes() sin normalizar: «diseno» no encontraria «diseño» ni dos palabras sueltas encontrarian la frase')
       .toEqual([])
   })
-
 })
+
+// ───────────────────────────────────────────────────────────────────────────────
+// La tanda de la auditoría del 2026-08-19. Las cuatro se verificaron poniendo el
+// fallo de vuelta y viendo la suite en rojo.
+// ───────────────────────────────────────────────────────────────────────────────
+describe('diario · auditoria del 19 de agosto', () => {
+
+  // El gemelo puro: CalendarioDiario hacía `setDias(j.dias || {})` y SemanaDiario,
+  // escrita después contra el MISMO endpoint, fusionaba la respuesta entera. La
+  // tira salía muda en producción —sin iniciales, sin contador, la racha clavada
+  // en 0— y en /preview se veía bien porque la rama demo se salta el fetch.
+  it('todo el que lee /api/diario/mes saca su campo .dias', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (ruta.startsWith('src/app/api/')) continue        // la ruta que lo SIRVE
+      const C = leerCodigo(ruta)
+      if (!C.includes('/api/diario/mes')) continue
+      if (!/\.dias\b/.test(C)) infractores.push(ruta)
+    }
+    expect(infractores,
+      'lee /api/diario/mes sin sacar `.dias`: la ruta responde { mes, dias }, asi que el objeto entero no tiene NINGUNA clave de dia y todo sale vacio sin un solo error')
+      .toEqual([])
+  })
+
+  // El día del borrador no puede cambiar mientras el texto sigue sin mandar: al
+  // pulsar la flecha, React renderiza ANTES de correr el efecto de [dia], así que
+  // lo tecleado en el día que dejabas se guardaba en el que abrías —pisando por
+  // upsert un día que la propia UI declara de solo lectura—.
+  it('el borrador pendiente del diario no cambia de dia conservando el texto', () => {
+    const C = leerCodigo('src/components/sections/DiarioSection.tsx')
+    expect(/pendiente\.current\s*=\s*\{\s*\.\.\.pendiente\.current\s*,\s*dia\s*\}/.test(C),
+      'reescribe el dia del borrador CONSERVANDO el texto pendiente: lo escrito en un dia acaba guardado en otro')
+      .toBe(false)
+  })
+
+  // Acotado al CUERPO del efecto de cambio de día: que exista `setPropuestas([])`
+  // en el fichero no dice nada —hay uno en el botón de descartar—.
+  it('cambiar de dia limpia las propuestas del dia anterior', () => {
+    const C = leerCodigo('src/components/sections/DiarioSection.tsx')
+    const cuerpo = C.split('vaciarPendiente()')[1]?.split('}, [dia])')[0] || ''
+    expect(cuerpo.includes('setPropuestas([])'),
+      'el efecto de [dia] no limpia `propuestas`: el panel sigue enseñando las del dia anterior y ACEPTAR las crea en el dia equivocado')
+      .toBe(true)
+  })
+
+  // El texto que llega de la base de datos no es texto tecleado: pagar una llamada
+  // al modelo por releerlo era una llamada por visita y por dia navegado.
+  it('el texto sembrado desde la BD cuenta como ya extraido', () => {
+    const C = leerCodigo('src/components/sections/DiarioSection.tsx')
+    const cuerpo = C.split('if (sembrado.current || !miEntrada) return')[1]?.split('}, [miEntrada])')[0] || ''
+    expect(cuerpo.includes('ultimoExtraido.current'),
+      'la siembra no marca el texto como ya extraido: abrir el diario a MIRAR dispara una llamada al modelo con lo que ya estaba guardado')
+      .toBe(true)
+  })
+
+  // Corregir el texto de una fila ya fichada creaba una tarea NUEVA y dejaba la
+  // vieja huerfana y abierta: dos tareas para un solo trabajo, el anillo contando
+  // dos, y la huerfana volviendo al dia siguiente. Y no hacia falta una errata:
+  // bastaba con salir de la fila a medio escribir.
+  it('corregir el texto de una fila renombra su tarea, no crea otra', () => {
+    const C = leerCodigo('src/components/sections/DiarioSection.tsx')
+    const i = C.indexOf('const alSalirDeFila')
+    expect(i, 'ya no existe alSalirDeFila: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = C.slice(i, C.indexOf('\n  }', i))
+    expect(/updateTask\(/.test(cuerpo),
+      'salir de la fila solo sabe CREAR: corregir el texto deja la tarea vieja huerfana y abierta, y nace otra al lado')
+      .toBe(true)
+    // Y la comparacion va normalizada, o un acento o una mayuscula de mas cuentan
+    // como objetivo distinto y vuelve a duplicar.
+    expect(/normalizar\(antes\)\s*!==\s*normalizar\(nuevo\)/.test(cuerpo),
+      'compara los textos en crudo: cambiar una tilde o una mayuscula creara una tarea duplicada')
+      .toBe(true)
+  })
+
+  // Y la tarea renombrada tiene que seguir emparejando con su fila: el PATCH no
+  // deja mover `diario_objetivo` (otra regla lo fija, y con motivo), asi que la
+  // busqueda por texto no puede exigir que la tarea NO tenga vinculo.
+  it('una tarea renombrada sigue emparejando con su objetivo', () => {
+    const C = leerCodigo('src/components/sections/DiarioSection.tsx')
+    const i = C.indexOf('const tareaDe')
+    expect(i, 'ya no existe tareaDe: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = C.slice(i, C.indexOf('\n  }', i))
+    expect(/!t\.diario_objetivo && normalizar\(t\.text/.test(cuerpo),
+      'la busqueda por texto exige que la tarea no tenga vinculo: una tarea renombrada queda invisible para el diario y se crea otra')
+      .toBe(false)
+  })
+
+  // El tramo del briefing es un ARRAY de claves de dia. Tratarlo como un numero no
+  // lo caza TypeScript (res.json() es any) y sale impreso en el PDF de gestion.
+  it('nadie trata el `dias` del briefing como si fuera un numero', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (ruta.startsWith('src/app/api/')) continue
+      const C = leerCodigo(ruta)
+      if (!C.includes('/api/diario/briefing')) continue
+      if (/\bj\.dias\b/.test(C) && !/Array\.isArray\(j\.dias\)/.test(C)) infractores.push(ruta)
+    }
+    expect(infractores,
+      'usa `j.dias` del briefing sin normalizarlo: es el array de claves de dia, y el `?? 7` no salta porque un array no es nullish')
+      .toEqual([])
+  })
+})
+
 
 // ───────────────────────────────────────────────────────────────────────────────
 // Lo que no se cerró vuelve, exista la tarea o no.

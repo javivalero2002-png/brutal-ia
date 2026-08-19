@@ -42,7 +42,10 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
         // distintas y confundirlas es como un error vive semanas en este repo.
         if (!r.ok) { setBriefEstado('error'); return }
         const j = await r.json()
-        setBrief({ equipo: j.equipo || [], sinActividad: j.sinActividad || [], dias: j.dias ?? 7 })
+        // `j.dias` es el ARRAY de claves de día del tramo, no un recuento: el `?? 7` no
+        // saltaba (un array no es nullish) y el titular imprimía las siete fechas
+        // pegadas donde debía ir un número — también en el PDF que se lleva a la reunión.
+        setBrief({ equipo: j.equipo || [], sinActividad: j.sinActividad || [], dias: Array.isArray(j.dias) ? j.dias.length : (typeof j.dias === 'number' ? j.dias : 7) })
         setBriefEstado('ok')
       })
       .catch(() => { if (vivo) setBriefEstado('error') })
