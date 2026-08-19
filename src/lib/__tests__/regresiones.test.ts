@@ -1731,3 +1731,65 @@ describe('lo que se cae, se dice', () => {
       .toEqual([])
   })
 })
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Lo que se anade no puede cobrarse en la accion mas frecuente.
+//
+// Avisar al reasignar exige saber quien tenia la tarea ANTES, y eso es una
+// consulta mas. Pero la peticion mas repetida de toda la app es marcar una tarea
+// hecha, y esa NO toca el reparto: cobrarle una consulta a cada clic para un
+// aviso que nunca va a mandar es pagar por nada, todos los dias.
+// ───────────────────────────────────────────────────────────────────────────────
+describe('lo que se anadio no ralentiza lo de siempre', () => {
+  it('marcar una tarea hecha no paga la consulta del reparto', () => {
+    const C = leerCodigo('src/app/api/tasks/[id]/route.ts')
+    const i = C.indexOf("select('assigned_to,co_assigned_to,text')")
+    expect(i, 'ya no se lee el estado anterior: revisa esta regla').toBeGreaterThan(-1)
+    // Acotado a las 300 letras ANTERIORES a la consulta: es donde tiene que estar
+    // su condicion. Que la palabra aparezca en el fichero no dice nada.
+    expect(/tocaElReparto[\s\S]{0,120}\?/.test(C.slice(Math.max(0, i - 300), i)),
+      'lee quien tenia la tarea antes en TODA peticion: marcar hecha —lo mas frecuente de la app— paga una consulta para un aviso que nunca manda')
+      .toBe(true)
+  })
+
+  it('el push de reasignacion no se arma cuando no hay reparto', () => {
+    const C = leerCodigo('src/app/api/tasks/[id]/route.ts')
+    const i = C.indexOf('const reciennllegados')
+    expect(i, 'ya no existe: revisa esta regla').toBeGreaterThan(-1)
+    expect(/!tocaElReparto \? \[\]/.test(C.slice(i, i + 200)),
+      'calcula los destinatarios aunque nadie haya cambiado de manos').toBe(true)
+  })
+
+  // El plan gratuito de Supabase da 1 GB de Storage compartido con TODO lo que
+  // sube la app. Medido con datos variados: sin comprimir, 30 copias son 336 MB a
+  // un ano y 1.008 MB a tres — el plan entero. Y cuando el Storage se llena no
+  // fallan solo las copias: dejan de subirse adjuntos, portadas y documentos.
+  it('las copias van comprimidas y su espacio esta acotado', () => {
+    const C = leerCodigo('src/lib/copiaSeguridad.ts')
+    expect(/gzipSync\(/.test(C),
+      'la copia se sube sin comprimir: a tres anos las copias solas llenan el plan gratuito, y con el Storage lleno dejan de subirse adjuntos')
+      .toBe(true)
+    // Y la poda no puede ser «las ultimas N seguidas»: treinta dias consecutivos
+    // no cubren «que decia el brief de aquel cliente en septiembre».
+    const i = C.indexOf('export async function podarCopias')
+    expect(i, 'ya no existe podarCopias: revisa esta regla').toBeGreaterThan(-1)
+    expect(/mensuales/.test(C.slice(i)),
+      'la poda solo guarda dias seguidos: no cubre volver meses atras, y guardar 30 consecutivos de hace un mes ocupa sin servir')
+      .toBe(true)
+  })
+
+  it('arreglar los enlaces de Memoria es idempotente y no reescribe la nota', () => {
+    const R = leerCodigo('src/app/api/admin/memoria-enlaces/route.ts')
+    // Reemplazo puntual, no regeneracion: el texto de la nota lo escribio una
+    // persona y el arreglo solo cambia las direcciones.
+    expect(/\.replace\(CRUDA/.test(R),
+      'regenera la nota en vez de sustituir solo las direcciones: es texto escrito por una persona').toBe(true)
+    // Y no envuelve dos veces, que dejaria un enlace roto y silencioso.
+    expect(/includes\(`u=\$\{encodeURIComponent/.test(R),
+      'puede envolver dos veces la misma direccion: el enlace quedaria roto sin dar ningun error').toBe(true)
+    // El error del update se mira: contar como arreglada una que no se guardo
+    // diria que el bucket ya se puede cerrar cuando todavia no.
+    expect(/if \(error\) fallos\.push/.test(R),
+      'cuenta como arreglada una nota que no se guardo: diria que el bucket se puede cerrar cuando no').toBe(true)
+  })
+})

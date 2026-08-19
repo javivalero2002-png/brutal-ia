@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     // El nombre viaja en la URL, así que se valida en vez de confiar: sin esto,
     // `?descargar=../otro-bucket/algo` es una travesía de rutas. La forma es
     // exactamente 'YYYY-MM-DD.json' y nada más.
-    if (!/^\d{4}-\d{2}-\d{2}\.json$/.test(pedida)) {
+    if (!/^\d{4}-\d{2}-\d{2}\.json(\.gz)?$/.test(pedida)) {
       return NextResponse.json({ error: 'Nombre de copia no válido' }, { status: 400 })
     }
     const { data, error } = await admin.storage.from(BUCKET_COPIAS).createSignedUrl(pedida, 300)
@@ -66,10 +66,14 @@ export async function GET(request: NextRequest) {
   }
 
   const copias = (data || [])
-    .filter(f => f.name.endsWith('.json'))
+    .filter(f => /\.json(\.gz)?$/.test(f.name))
     .map(f => ({
       nombre: f.name,
-      dia: f.name.replace('.json', ''),
+      // Extraído con un patrón y no cortando por posición: aquí es el nombre de
+      // un fichero y no un ISO, pero `.slice(0,10)` sobre algo con forma de fecha
+      // es justo el gesto que en esta app da el día en UTC — la regla que lo
+      // prohíbe hizo bien en pararme, y así se lee lo que de verdad hace.
+      dia: /^\d{4}-\d{2}-\d{2}/.exec(f.name)?.[0] ?? f.name,
       bytes: (f.metadata as { size?: number } | null)?.size ?? null,
       creada: f.created_at ?? null,
     }))
