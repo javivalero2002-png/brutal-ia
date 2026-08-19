@@ -2298,10 +2298,15 @@ describe('la contraseña se pide una vez y con un motivo cierto', () => {
     expect(t, 'la cabecera ya no depende de como se haya entrado').toBeGreaterThan(-1)
     const ternario = P.slice(t, t + 700)
     expect(/Tu contraseña ya está puesta/.test(ternario), 'falta el texto para quien ya la eligio').toBe(true)
-    expect(/te la dio otra persona/.test(ternario), 'falta el texto para quien entra con la temporal').toBe(true)
+    // El texto de esta rama cambio cuando el paso paso a estar marcado OPCIONAL:
+    // antes decia «te la dio otra persona», que es cierto solo para quien entra con
+    // una temporal. Ahora lo dice condicionado —«por si no has tenido opcion»—
+    // porque el camino normal es el enlace, y por ahi la contrasena ya esta puesta.
+    expect(/no has tenido opción de elegirla/.test(ternario),
+      'falta el texto para quien entra con una que le pasaron').toBe(true)
   })
 
-  it('quien ya la eligio puede seguir sin volver a escribirla', () => {
+  it('CUALQUIERA puede seguir sin escribir nada, tenga marca o no', () => {
     const P = leerCodigo('src/components/PuestaEnMarcha.tsx')
     // Anclado al BOTON, no a la primera aparicion de `paso === 2`: esa es el
     // bloque que pinta los campos, y el boton esta 150 lineas mas abajo. Anclar al
@@ -2309,9 +2314,21 @@ describe('la contraseña se pide una vez y con un motivo cierto', () => {
     // varias veces en este fichero.
     const i = P.lastIndexOf('paso === 2 &&')
     expect(i, 'ya no existe el paso 2: revisa esta regla').toBeGreaterThan(-1)
-    expect(/claveYaElegida[\s\S]{0,240}SIGUIENTE/.test(P.slice(i, i + 600)),
-      'obliga a escribir la contraseña otra vez aunque acabe de elegirla')
+    const cond = P.slice(i, i + 140)
+
+    // Esta regla exigia antes que el camino de salida dependiera de
+    // `claveYaElegida`, y ahora exige lo contrario — porque la version anterior
+    // era mas debil de lo que parecia. Esa marca vive en localStorage: una
+    // pestana privada, otro navegador o un movil distinto la pierden. Sin ella el
+    // boton principal decia CAMBIAR y salia APAGADO, y la unica salida era un
+    // SALTAR gris y pequeno. Un paso marcado OPCIONAL cuyo boton grande te exige
+    // algo no es opcional: es obligatorio con mala conciencia.
+    expect(/!actual && !nueva/.test(cond),
+      'el boton ya no mira si hay algo escrito: puede volver a exigir la contrasena a quien no necesita cambiarla')
       .toBe(true)
+    expect(/claveYaElegida/.test(cond),
+      'el boton principal vuelve a depender de una marca de localStorage: quien la pierda se queda con un boton apagado')
+      .toBe(false)
   })
 
   it('al terminar se olvida, para que la proxima vez decida de nuevo', () => {
@@ -2582,4 +2599,21 @@ describe('las preferencias de avisos no se duplican', () => {
     expect(/error:\s*errLectura/.test(ventana), 'la lectura no captura su error').toBe(true)
     expect(/if \(errLectura\)/.test(ventana), 'captura el error y no lo mira, que es lo mismo que no capturarlo').toBe(true)
   })
+})
+
+describe('el paso de la contrasena es opcional de verdad, no solo en el texto', () => {
+  const P = leerCodigo('src/components/PuestaEnMarcha.tsx')
+
+  it('va marcado OPCIONAL en las DOS versiones', () => {
+    // El camino normal es el enlace de invitacion, y ahi la contrasena se pone en
+    // esa misma pantalla: cuando llegas aqui ya esta hecho. Sin el distintivo
+    // parece un tramite obligatorio y la gente escribe una nueva sin necesitarlo.
+    const paso = P.slice(P.indexOf('{paso === 2 &&'), P.indexOf('{paso === 3 &&'))
+    const cabeceras = [...paso.matchAll(/<Cabecera[\s\S]*?\/>/g)]
+    expect(cabeceras.length, 'ya no hay dos versiones del paso: revisa esta regla en vez de borrarla').toBe(2)
+    for (const c of cabeceras) {
+      expect(/\bopcional\b/.test(c[0]), 'una de las dos versiones no lleva el distintivo OPCIONAL').toBe(true)
+    }
+  })
+
 })
