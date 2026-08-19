@@ -270,12 +270,27 @@ export const relTime = (iso: string) => {
   return new Date(iso).toLocaleDateString('es-ES',{day:'numeric',month:'short'})
 }
 
+/**
+ * La dirección incrustable de un vídeo, o `null` si no se puede incrustar.
+ *
+ * Drive está aquí porque la propia app le dice al usuario «sube el vídeo a
+ * YouTube, Vimeo o Drive» y luego no sabía enseñar los de Drive: el cliente
+ * abría el enlace de revisión y veía el título y una caja de texto vacía. Le
+ * pedíamos opinión sobre algo que no le enseñábamos.
+ *
+ * Quien no case aquí NO es un fallo: es material que hay que abrir aparte, y
+ * quien llame debe ofrecer el enlace en vez de no pintar nada.
+ */
 export const videoEmbed = (url: string) => {
   if (!url) return null
   const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/)
   if (yt) return `https://www.youtube.com/embed/${yt[1]}`
   const vm = url.match(/vimeo\.com\/(\d+)/)
   if (vm) return `https://player.vimeo.com/video/${vm[1]}`
+  // Drive: /file/d/ID/view — y también los enlaces con ?id=ID.
+  const dr = url.match(/drive\.google\.com\/file\/d\/([^/?&\s]+)/)
+    || url.match(/drive\.google\.com\/[^\s]*[?&]id=([^&\s]+)/)
+  if (dr) return `https://drive.google.com/file/d/${dr[1]}/preview`
   return null
 }
 

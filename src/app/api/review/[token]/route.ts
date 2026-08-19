@@ -1,6 +1,11 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { firmarCampos } from '@/lib/storageFirmado'
+import { sendPushToUser, sendPushToAll } from '@/lib/push'
 import { NextRequest, NextResponse } from 'next/server'
+
+// El POST espera un push (ver abajo), así que la ruta declara su tope: sin él un
+// cuelgue de FCM/APNs no se distingue de un fallo y no deja mensaje.
+export const maxDuration = 60
 
 // Public endpoint — no auth required (token = agenda item ID)
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
@@ -10,7 +15,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   // Endpoint PÚBLICO: no exponer `notes` (uso interno) ni `client_id`.
   const { data, error } = await admin
     .from('content_agenda')
-    .select('id, title, platform, status, video_url, publish_date')
+    // `cover_url` SÍ, `notes` y `client_id` NO. La portada estaba en `firmarCampos`
+    // de abajo pero no aquí, así que se firmaba una columna que nunca llegaba: el
+    // cliente veía el título y una caja de texto, sin la pieza.
+    .select('id, title, platform, status, video_url, cover_url, publish_date')
     .eq('id', token)
     .single()
 
@@ -24,9 +32,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params
   let feedback: string
+  let aprobado = false
   try {
     const body = await req.json()
     feedback = body.feedback || ''
+    // Bandera y no texto: «el cliente ha aprobado» tiene que poder distinguirse de
+    // «el cliente ha escrito algo que parece un sí», y eso no se deduce leyendo.
+    aprobado = body.aprobado === true
   } catch {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
   }
@@ -37,7 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
   const { data: existing } = await admin
     .from('content_agenda')
-    .select('feedback')
+    .select('feedback, title, created_by')
     .eq('id', token)
     .single()
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -76,8 +88,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     origen: 'cliente',
     name: 'Cliente',
     initials: 'CL',
-    color: '#FFB020',
+    // Verde cuando aprueba: en el hilo del equipo se distingue de un golpe de
+    // vista un visto bueno de una petición de cambios.
+    color: aprobado ? '#3ECF8E' : '#FFB020',
     note: feedback.trim(),
+    aprobado,
     at: new Date().toISOString(),
   })
 
@@ -95,5 +110,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     .eq('id', token)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Y se AVISA al equipo.
+  //
+  // La página promete «el equipo recibirá tu respuesta» y la única señal era un
+  // punto ámbar de píxel y medio en una tarjeta del tablero que nadie patrulla.
+  // Con siete personas no hay nadie mirando: el cliente pedía un cambio y se
+  // descubría días después. Esta función ya murió una vez por invisible.
+  //
+  // Al autor de la pieza si se sabe quién es; si no —las piezas viejas no tienen
+  // autor—, a todo el equipo. Con `await`, como el resto de los push del repo: en
+  // serverless la instancia se congela al devolver y un envío suelto se pierde.
+  const titulo = (existing as { title?: string }).title || 'una pieza'
+  const autor = (existing as { created_by?: string | null }).created_by
+  const aviso = {
+    title: aprobado ? 'Un cliente ha aprobado' : 'Un cliente pide cambios',
+    body: aprobado ? `«${titulo}» — aprobado sin cambios.` : `«${titulo}» — ${feedback.trim().slice(0, 90)}`,
+    url: '/dashboard?s=contenido',
+    tag: `review-${token}`,
+    urgent: !aprobado,
+  }
+  try {
+    if (autor) await sendPushToUser(admin, autor, aviso)
+    else await sendPushToAll(admin, aviso)
+  } catch (err) {
+    // La opinión YA está guardada: un fallo del aviso no puede devolverle un
+    // error al cliente, que ha hecho su parte bien.
+    console.error('[review] no se pudo avisar del feedback:', err)
+  }
+
   return NextResponse.json({ ok: true })
 }
