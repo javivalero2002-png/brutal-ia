@@ -2813,3 +2813,35 @@ describe('ocultar el buzon del equipo lo oculta ENTERO', () => {
     }
   })
 })
+
+describe('lo que flota no se posa encima del contenido', () => {
+  const D = leerCodigo('src/components/NexusDashboard.tsx')
+  const CSS = readFileSync('src/app/globals.css', 'utf8')
+
+  it('el contenedor de las secciones reserva el hueco de los flotantes', () => {
+    // Los controles «?» y «⌘K» van `fixed`, o sea FUERA del flujo: no empujan nada
+    // y se posan encima de lo que haya debajo. En Inbox caian justo sobre el boton
+    // ABRIR BRUTAL.IA, que va `mt-auto` pegado al fondo de su columna.
+    //
+    // El hueco se reserva UNA vez, en el contenedor que envuelve a las doce
+    // secciones — no seccion por seccion, porque la trece nacería rota.
+    const i = D.indexOf("flex-1 overflow-y-auto overflow-x-hidden")
+    expect(i, 'ya no existe ese contenedor: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    expect(/nx-hueco-flotantes/.test(D.slice(i, i + 90)),
+      'el contenedor de las secciones no reserva sitio: lo que flota volvera a taparle el fondo a alguna')
+      .toBe(true)
+    expect(/\.nx-hueco-flotantes\s*\{[^}]*padding-bottom/.test(CSS),
+      'la clase existe en el JSX pero no reserva nada en el CSS')
+      .toBe(true)
+  })
+
+  it('el hueco solo existe donde existen los flotantes', () => {
+    // En movil no se pintan (`!isMobile`), asi que reservar sitio para algo que no
+    // esta seria un margen fantasma al final de cada pantalla.
+    const i = CSS.indexOf('.nx-hueco-flotantes')
+    const contexto = CSS.slice(Math.max(0, i - 160), i)
+    expect(/@media\s*\(min-width:\s*768px\)/.test(contexto),
+      'el hueco se reserva tambien en movil, donde no hay flotantes: margen fantasma')
+      .toBe(true)
+  })
+})
