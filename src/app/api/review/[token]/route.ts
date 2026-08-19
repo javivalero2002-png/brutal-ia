@@ -33,12 +33,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   const { token } = await params
   let feedback: string
   let aprobado = false
+  let autor = ''
   try {
     const body = await req.json()
     feedback = body.feedback || ''
     // Bandera y no texto: «el cliente ha aprobado» tiene que poder distinguirse de
     // «el cliente ha escrito algo que parece un sí», y eso no se deduce leyendo.
     aprobado = body.aprobado === true
+    autor = typeof body.autor === 'string' ? body.autor.trim() : ''
   } catch {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
   }
@@ -84,13 +86,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     return [{ origen: 'cliente', name: 'Cliente', initials: 'CL', color: '#FFB020', note: bruto, at: null }]
   })()
 
+  // Quién firma. Se VALIDA contra el equipo real: sin esto, cualquiera con el
+  // enlace podría poner el nombre que quisiera —el de un compañero, o uno
+  // inventado con un cargo delante— y quedaría escrito en el hilo del equipo.
+  // Solo se aceptan nombres que existen; cualquier otra cosa firma como Cliente.
+  let firma = { name: 'Cliente', initials: 'CL', color: '#FFB020' }
+  if (autor) {
+    const { data: miembros } = await admin.from('profiles').select('name, initials, avatar_color')
+    const m = (miembros || []).find(p => (p as { name?: string }).name === autor)
+    if (m) {
+      firma = {
+        name: (m as { name: string }).name,
+        initials: (m as { initials?: string }).initials || autor.slice(0, 2).toUpperCase(),
+        color: (m as { avatar_color?: string }).avatar_color || '#FFB020',
+      }
+    }
+  }
+
   entradas.push({
+    // `origen: 'cliente'` se queda SIEMPRE, diga quien diga que es. No significa
+    // «lo escribió el cliente»: significa «llegó por el enlace público, sin que
+    // nadie iniciara sesión». Esa distinción no se puede perder — es la diferencia
+    // entre una firma comprobada y una declarada.
     origen: 'cliente',
-    name: 'Cliente',
-    initials: 'CL',
+    name: firma.name,
+    initials: firma.initials,
     // Verde cuando aprueba: en el hilo del equipo se distingue de un golpe de
     // vista un visto bueno de una petición de cambios.
-    color: aprobado ? '#3ECF8E' : '#FFB020',
+    color: aprobado ? '#3ECF8E' : firma.color,
     note: feedback.trim(),
     aprobado,
     at: new Date().toISOString(),
@@ -122,9 +145,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   // autor—, a todo el equipo. Con `await`, como el resto de los push del repo: en
   // serverless la instancia se congela al devolver y un envío suelto se pierde.
   const titulo = (existing as { title?: string }).title || 'una pieza'
-  const autor = (existing as { created_by?: string | null }).created_by
+  const creador = (existing as { created_by?: string | null }).created_by
   const aviso: PushPayload = {
-    title: aprobado ? 'Un cliente ha aprobado' : 'Un cliente pide cambios',
+    title: aprobado ? `${firma.name} ha aprobado` : `${firma.name} pide cambios`,
     body: aprobado ? `«${titulo}» — aprobado sin cambios.` : `«${titulo}» — ${feedback.trim().slice(0, 90)}`,
     url: '/dashboard?s=contenido',
     tag: `review-${token}`,
@@ -132,7 +155,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     urgent: !aprobado,
   }
   try {
-    if (autor) await sendPushToUser(admin, autor, aviso)
+    if (creador) await sendPushToUser(admin, creador, aviso)
     else await sendPushToAll(admin, aviso)
   } catch (err) {
     // La opinión YA está guardada: un fallo del aviso no puede devolverle un
