@@ -1793,3 +1793,56 @@ describe('lo que se anadio no ralentiza lo de siempre', () => {
       'cuenta como arreglada una nota que no se guardo: diria que el bucket se puede cerrar cuando no').toBe(true)
   })
 })
+
+// ───────────────────────────────────────────────────────────────────────────────
+// El reloj del cron y el reloj del panel tienen que ser el MISMO.
+//
+// Al pasar la copia de diaria a semanal, el cron cambió y la cadencia esperada en
+// `/api/admin/latido` se quedó en 24 h. Con eso, desde el jueves hasta el
+// miércoles siguiente el panel avisaría de una avería que no existe — y un aviso
+// que salta sin motivo enseña a ignorar los avisos, que es exactamente lo
+// contrario de para lo que ese panel se construyó.
+//
+// Son dos ficheros que no se miran entre sí y solo un humano ata: justo lo que un
+// test hace mejor.
+// ───────────────────────────────────────────────────────────────────────────────
+describe('cron y latido dicen la misma hora', () => {
+  it('lo que el panel espera cuadra con lo que vercel.json programa', () => {
+    const vercel = JSON.parse(readFileSync('vercel.json', 'utf8'))
+    const L = leerCodigo('src/app/api/admin/latido/route.ts')
+
+    // Cada ruta de cron declara su nombre de latido al llamar a `marcarLatido`.
+    // Eso es lo que ata el fichero de configuración con el panel.
+    const nombreDe = (ruta: string) => {
+      const C = leerCodigo(`src/app${ruta}/route.ts`)
+      return /marcarLatido\(\s*\w+\s*,\s*'([^']+)'/.exec(C)?.[1] || null
+    }
+
+    // Solo hacen falta los tres casos que se usan; con que el dia de la semana o
+    // la hora no sean `*`, la cadencia queda determinada.
+    const minutosDe = (expr: string) => {
+      const [, hora, , , diaSemana] = expr.trim().split(/\s+/)
+      if (diaSemana !== '*') return 7 * 24 * 60
+      if (hora !== '*') return 24 * 60
+      return 60
+    }
+
+    const desajustes: string[] = []
+    for (const cron of vercel.crons || []) {
+      const tarea = nombreDe(cron.path)
+      if (!tarea) continue                       // no deja latido: otra regla lo cubre
+      const esperado = minutosDe(cron.schedule)
+      // La cadencia esta escrita como producto (`7 * 24 * 60`), asi que se evalua.
+      const m = new RegExp(`['\"]?${tarea}['\"]?\\s*:\\s*([0-9*\\s]+),`).exec(L)
+      if (!m) { desajustes.push(`${tarea}: el panel no sabe cada cuanto deberia correr`); continue }
+      const declarado = m[1].split('*').reduce((a, b) => a * Number(b.trim()), 1)
+      if (declarado !== esperado) {
+        desajustes.push(`${tarea}: vercel.json dice ${esperado} min y el panel espera ${declarado}`)
+      }
+    }
+
+    expect(desajustes,
+      'el cron y el panel de latido no dicen la misma frecuencia: el panel avisara de una averia que no existe, y un aviso que salta sin motivo ensena a ignorar los avisos')
+      .toEqual([])
+  })
+})

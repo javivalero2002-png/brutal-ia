@@ -156,10 +156,9 @@ export async function hacerCopia(admin: SupabaseClient, dia: string): Promise<Re
   // COMPRIMIDO, y no es una optimización prematura: está medido.
   //
   // El plan gratuito de Supabase da 1 GB de Storage, compartido con TODO lo que
-  // sube la app. Con las tablas de hoy una copia son ~2,8 MB, y treinta son 85 MB
-  // —asumible—; pero al ritmo actual, a un año son 336 MB (un tercio del plan) y
-  // a tres años 1.008 MB: el plan entero. Y cuando el Storage se llena no fallan
-  // solo las copias — dejan de poder subirse adjuntos, portadas y documentos.
+  // sube la app, y cuando se llena no fallan solo las copias: dejan de poder
+  // subirse adjuntos, portadas y documentos. Sin comprimir, a tres años treinta
+  // copias eran 1.008 MB — el plan entero.
   //
   // gzip sobre JSON da 6,2× medido con datos variados (con filas repetidas da
   // 200×, que es un espejismo). Eso convierte los tres años en 163 MB.
@@ -192,10 +191,13 @@ export async function hacerCopia(admin: SupabaseClient, dia: string): Promise<Re
  * cliente en septiembre?» necesita meses atrás — y para eso treinta copias
  * consecutivas de hace un mes no valen de nada, solo ocupan.
  *
- * Se queda: los últimos 14 días, y el día 1 de cada mes durante un año. Son ~26
- * ficheros en vez de 30, cubren un año en vez de un mes, y ocupan menos.
+ * Se queda: las 12 más recientes —con la copia semanal, unos tres meses— y la
+ * última de cada mes durante un año. Son ~24 ficheros que cubren un año.
+ *
+ * `recientes` cuenta COPIAS, no días, a propósito: así la poda no depende de cada
+ * cuánto se haga la copia. Si mañana se vuelve a diaria, esto sigue valiendo.
  */
-export async function podarCopias(admin: SupabaseClient, diasSeguidos = 14, meses = 12): Promise<number> {
+export async function podarCopias(admin: SupabaseClient, recientes = 12, meses = 12): Promise<number> {
   const { data, error } = await admin.storage.from(BUCKET_COPIAS).list('', {
     limit: 500,
     sortBy: { column: 'name', order: 'desc' },
@@ -211,7 +213,7 @@ export async function podarCopias(admin: SupabaseClient, diasSeguidos = 14, mese
 
   copias.forEach((f, i) => {
     const dia = /^\d{4}-\d{2}-\d{2}/.exec(f.name)?.[0] ?? ''
-    if (i < diasSeguidos) return                       // las recientes, todas
+    if (i < recientes) return                          // las recientes, todas
     const mes = dia.slice(0, 7)
     // Del resto, solo la PRIMERA de cada mes que aparezca (van de nueva a vieja,
     // así que es la más reciente del mes: la que más cerca está de su cierre).

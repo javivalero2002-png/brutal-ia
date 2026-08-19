@@ -15,10 +15,18 @@ import { NextResponse } from 'next/server'
 // primero es quien está esperando un correo — no necesariamente el jefe.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Cada cuánto DEBERÍA correr cada proceso, en minutos. De aquí sale el «lleva demasiado». */
+/**
+ * Cada cuánto DEBERÍA correr cada proceso, en minutos. De aquí sale el «lleva
+ * demasiado».
+ *
+ * TIENE QUE CUADRAR CON `vercel.json`. Si aquí pone un día y el cron corre los
+ * miércoles, el panel avisa de una avería que no existe desde el jueves hasta el
+ * miércoles siguiente — y un aviso que salta sin motivo enseña a ignorar los
+ * avisos, que es justo lo contrario de para lo que existe este panel.
+ */
 const CADENCIA: Record<string, number> = {
   'sync-colabs': 60,
-  copia: 24 * 60,
+  copia: 7 * 24 * 60,
 }
 
 export async function GET() {
