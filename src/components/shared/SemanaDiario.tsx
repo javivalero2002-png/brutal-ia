@@ -78,7 +78,12 @@ export default function SemanaDiario({
     try {
       const partes = await Promise.all(meses.map(m => fetch(`/api/diario/mes?mes=${m}`).then(r => (r.ok ? r.json() : null))))
       const junto: Record<string, DiaResumen> = {}
-      for (const p of partes) if (p && typeof p === 'object') Object.assign(junto, p)
+      // `.dias`, no `p`: la ruta responde { mes, dias }, así que fusionar el objeto
+      // entero dejaba `junto` con las claves «mes» y «dias» y NINGUNA clave de día.
+      // La tira salía muda —sin iniciales, sin contador, con la racha clavada en 0—
+      // y solo en producción: en /preview la rama demo se salta este fetch. El
+      // gemelo bueno estaba a diez ficheros (CalendarioDiario: `setDias(j.dias || {})`).
+      for (const p of partes) if (p && typeof p === 'object') Object.assign(junto, p.dias || {})
       setDias(junto)
     } catch { /* silencioso: la tira sigue navegable sin los resúmenes */ }
   }, [fechas, demo])

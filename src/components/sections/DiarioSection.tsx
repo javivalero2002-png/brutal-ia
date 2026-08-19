@@ -244,6 +244,11 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
     vaciarPendiente()
     sembrado.current = false; setObjetivos(''); setBalance(''); setFilas([''])
     setEstadoGuardado('limpio')
+    // Las propuestas también: son de lo que se escribió en el día que dejas, y si
+    // el día que abres está vacío el extractor no se dispara (corta por debajo de
+    // 15 caracteres), así que el panel se quedaba enseñándolas y «ACEPTAR» las
+    // creaba en el día equivocado — el trabajo de hoy apareciendo mañana.
+    setPropuestas([]); setLeyendo(false); ultimoExtraido.current = ''
     pendiente.current = { dia }
   }, [dia])
 
@@ -253,6 +258,12 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
     setObjetivos(miEntrada.entrada || '')
     setFilas(lineas(miEntrada.entrada).length ? lineas(miEntrada.entrada) : [''])
     setBalance(miEntrada.cierre || '')
+    // Lo sembrado cuenta como YA leído. Sin esto, abrir el Diario a mirar movía
+    // `objetivos`/`balance` y disparaba el extractor con el texto de la base de
+    // datos: una llamada al modelo por cada visita y por cada día que navegabas,
+    // pagada para releer lo que ya era tarea. El extractor existe para lo que se
+    // teclea, no para lo que se carga.
+    ultimoExtraido.current = [miEntrada.entrada, miEntrada.cierre].filter(Boolean).join('\n').trim()
   }, [miEntrada])
 
   // ── Autoguardado ──────────────────────────────────────────────────────────
@@ -355,8 +366,15 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
   //    tocado no viaja en el guardado.
   // 3. El temporizador no se limpiaba al dispararse, así que quedaba «pendiente»
   //    para siempre y este guardado salía aunque ya estuviera todo escrito.
+  //
+  // 4. Y esta línea, que refrescaba el día en CADA render, era la que rompía las
+  //    tres anteriores: al pulsar la flecha, React renderiza ANTES de correr el
+  //    efecto de [dia], así que el día ya valía el NUEVO cuando `vaciarPendiente`
+  //    leía el ref. Lo tecleado en el día que dejabas se guardaba en el que
+  //    abrías —pisando por upsert un día que la propia UI declara de solo
+  //    lectura—. No hace falta: `alEscribir` guarda el día JUNTO al texto, y el
+  //    efecto de [dia] lo repone después de vaciar.
   const pendiente = useRef<{ entrada?: string; cierre?: string; dia: string }>({ dia })
-  pendiente.current = { ...pendiente.current, dia }
   // Al salir de la sección, lo mismo: un solo camino para vaciar.
   useEffect(() => () => { vaciarPendienteRef.current?.({ keepalive: true }) }, [])
 
@@ -364,6 +382,9 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
   useEffect(() => {
     const texto = [objetivos, balance].filter(Boolean).join('\n').trim()
     if (demo || sesionCaida.current) return
+    // Un día pasado es de solo lectura: `crearTodas` lo rechaza. Llamar al modelo
+    // ahí paga por un panel cuyo botón no puede funcionar.
+    if (esPasado) return
     if (texto.length < 15 || texto === ultimoExtraido.current) return
     if (extraerTimer.current) clearTimeout(extraerTimer.current)
     // 2,5 s tras dejar de escribir: bastante para no llamar a mitad de frase, poco
@@ -538,8 +559,13 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
     return (
       misTareasDelDia.find((t: { diario_objetivo?: string | null }) =>
         !!t.diario_objetivo && normalizar(t.diario_objetivo) === clave) ||
-      misTareasDelDia.find((t: { text?: string; diario_objetivo?: string | null }) =>
-        !t.diario_objetivo && normalizar(t.text || '') === clave)
+      // Sin exigir `!t.diario_objetivo`: al corregir el texto de una fila, la tarea
+      // conserva el vínculo VIEJO (el PATCH no lo deja mover, ver `alSalirDeFila`),
+      // así que la primera rama ya no la encuentra. Si además se le pedía no tener
+      // vínculo, quedaba invisible para el diario y se creaba otra tarea al lado.
+      // La rama del vínculo va primero, así que un enlace explícito sigue mandando.
+      misTareasDelDia.find((t: { text?: string }) =>
+        normalizar(t.text || '') === clave)
     ) as { id: string; text?: string; done?: boolean } | undefined
   }
   const estaHecho = (o: string) => !!tareaDe(o)?.done
@@ -683,6 +709,43 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
     try {
       await data.createTask({ text: o, level: 'high', done: false, assigned_to: profile?.id, source: 'ai', diario_dia: dia, diario_objetivo: o })
     } catch { /* silencioso: el objetivo ya está guardado en el diario */ }
+  }
+
+  /**
+   * El texto que tenía la fila al enfocarla. Es lo que distingue «objetivo nuevo»
+   * de «el mismo objetivo, mejor escrito».
+   */
+  const textoAlEnfocar = useRef('')
+
+  /**
+   * Al salir de una fila: si el texto CAMBIÓ y lo de antes ya era tarea, se
+   * renombra esa tarea. Antes se creaba otra.
+   *
+   * Y no hacía falta una errata para caer: bastaba con salir de la fila a medio
+   * escribir. «Cerrar presu» se hacía tarea, volvías, terminabas la frase, y al
+   * salir nacía «Cerrar presupuesto de Nike» al lado. Un solo trabajo, dos tareas:
+   * el anillo contaba dos, Reportes contaba dos, y la vieja volvía al día
+   * siguiente en «VIENEN DE ANTES» porque seguía abierta. Contra la
+   * especificación —si el jefe pregunta qué hizo Javi, ve trabajo que nadie hizo.
+   */
+  const alSalirDeFila = async (valor: string) => {
+    const nuevo = valor.trim()
+    const antes = textoAlEnfocar.current.trim()
+    textoAlEnfocar.current = ''
+    if (!nuevo || demo || esPasado) return
+    if (antes && normalizar(antes) !== normalizar(nuevo)) {
+      const vieja = tareaDe(antes)
+      if (vieja) {
+        // Solo `text`: `diario_objetivo` NO viaja, y a propósito. El PATCH no deja
+        // escribir el vínculo —y una regla lo fija— porque `diario_dia` movería una
+        // tarea al día de otro; dejar pasar solo la mitad fabricaría el «vínculo a
+        // medias» que el POST ya prohíbe. Emparejar por `text` basta: es lo que hace
+        // la segunda rama de `tareaDe`.
+        try { await data.updateTask(vieja.id, { text: nuevo }) } catch { /* el diario ya guardó el texto bueno */ }
+        return
+      }
+    }
+    await crearTareaDe(nuevo)
   }
 
   /** Los objetivos que todavía no son tarea mía de este día. */
@@ -942,7 +1005,8 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
                       ref={el => { refsFilas.current[i] = el }}
                       value={fila}
                       onChange={e => cambiarFilas(filas.map((f, k) => (k === i ? e.target.value : f)))}
-                      onBlur={() => crearTareaDe(fila)}
+                      onFocus={() => { textoAlEnfocar.current = fila }}
+                      onBlur={() => alSalirDeFila(fila)}
                       onKeyDown={e => {
                         if (e.key === 'Enter') {
                           e.preventDefault()

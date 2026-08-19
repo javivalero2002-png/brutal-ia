@@ -726,8 +726,19 @@ describe('diario · un objetivo escrito después de fichar también es una tarea
     // se crearía una tarea «Prue» a mitad de escribir y el vínculo se quedaría así.
     const iF = D.indexOf('value={fila}')
     expect(iF, 'ya no existe la fila de objetivo: revisa esta regla').toBeGreaterThan(-1)
-    expect(/onBlur=\{\(\) => crearTareaDe\(fila\)\}/.test(D.slice(iF, D.indexOf('/>', iF))),
-      'la fila no crea su tarea al salir: un objetivo escrito tras fichar no llegaría nunca a Tareas').toBe(true)
+    // Atada a la CONDUCTA, no al nombre: antes exigía literalmente
+    // `crearTareaDe(fila)`, así que meter un manejador por en medio —el que
+    // distingue renombrar de crear— la ponía roja sin que nada se hubiera roto.
+    // Ahora se sigue el camino: salga por donde salga, tiene que acabar creando.
+    const enBlur = /onBlur=\{\(\) => (\w+)\(fila\)\}/.exec(D.slice(iF, D.indexOf('/>', iF)))
+    expect(enBlur, 'la fila no hace nada al salir: un objetivo escrito tras fichar no llegaría nunca a Tareas').not.toBeNull()
+    const manejador = enBlur![1]
+    const creaAlSalir = manejador === 'crearTareaDe' || (() => {
+      const j = D.indexOf(`const ${manejador} =`)
+      return j > -1 && D.slice(j, D.indexOf('\n  }', j)).includes('crearTareaDe(')
+    })()
+    expect(creaAlSalir,
+      `«${manejador}» no acaba llamando a crearTareaDe: un objetivo escrito tras fichar no llegaría nunca a Tareas`).toBe(true)
   })
 
   it('no crea nada en un día pasado ni antes de fichar', () => {
