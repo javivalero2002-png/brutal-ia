@@ -1290,7 +1290,30 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                       <span className="font-syne text-[8.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.45)'}}>VER ORIGINAL</span>
                     </a>
                   )}
-                  {videoEmbed(editVideoUrl)&&<div className="rounded-2xl overflow-hidden mx-auto" style={{aspectRatio:videoEsVertical(editVideoUrl)?'9/16':'16/9',maxWidth:videoEsVertical(editVideoUrl)?'320px':'none',background:'#000'}}><iframe src={videoEmbed(editVideoUrl)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>}
+                  {/* Si hay PORTADA, esa es la vista. Y el incrustado sobra.
+                      Medido: el incrustado de Instagram funciona, pero cualquier
+                      bloqueador de contenido lo tapa con un recuadro gris de
+                      setecientos píxeles que no se puede ni detectar desde aquí. La
+                      portada, en cambio, vive en NUESTRO Storage —por eso el boceto
+                      de al lado sí se veía mientras el incrustado no—, así que no
+                      hay bloqueador que la toque.
+                      O sea que ya teníamos una imagen fiable al lado de un hueco
+                      roto. Ahora manda la fiable, con un play que abre el original:
+                      se ve siempre, y verlo de verdad es un clic. */}
+                  {(editCoverUrl||activeItem.cover_url) ? (
+                    <a href={editVideoUrl||activeItem.video_url} target="_blank" rel="noopener noreferrer"
+                      className="group relative block rounded-2xl overflow-hidden mx-auto"
+                      style={{aspectRatio:videoEsVertical(editVideoUrl||activeItem.video_url)?'9/16':'16/9',maxWidth:videoEsVertical(editVideoUrl||activeItem.video_url)?'320px':'none',background:'#000'}}>
+                      <SafeImg src={editCoverUrl||activeItem.cover_url} className="w-full h-full object-cover"/>
+                      <div className="absolute inset-0 flex items-center justify-center transition-opacity" style={{background:'rgba(0,0,0,0.28)'}}>
+                        <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.92)'}}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="#111"><path d="M8 5v14l11-7z"/></svg>
+                        </div>
+                      </div>
+                    </a>
+                  ) : videoEmbed(editVideoUrl) ? (
+                    <div className="rounded-2xl overflow-hidden mx-auto" style={{aspectRatio:videoEsVertical(editVideoUrl)?'9/16':'16/9',maxWidth:videoEsVertical(editVideoUrl)?'320px':'none',background:'#000'}}><iframe src={videoEmbed(editVideoUrl)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>
+                  ) : null}
                   {!videoEmbed(editVideoUrl)&&editVideoUrl&&<div className="rounded-2xl overflow-hidden" style={{background:'#000'}}><video src={editVideoUrl} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/></div>}
                   {!editVideoUrl&&activeItem.video_url&&<div className="rounded-2xl overflow-hidden" style={{background:'#000'}}>{videoEmbed(activeItem.video_url)?<div className="mx-auto" style={{aspectRatio:videoEsVertical(activeItem.video_url)?'9/16':'16/9',maxWidth:videoEsVertical(activeItem.video_url)?'320px':'none'}}><iframe src={videoEmbed(activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>:<video src={activeItem.video_url} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/>}</div>}
                   {!editVideoUrl&&!activeItem.video_url&&<div className="flex items-center gap-2 rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px dashed rgba(255,255,255,0.07)`}}><LucideIcon name="film" size={14} color="rgba(255,255,255,0.12)"/><span className="font-syne text-[9px]" style={{color:'rgba(255,255,255,0.18)'}}>Pega un enlace de YouTube, Vimeo, Instagram o Drive</span></div>}

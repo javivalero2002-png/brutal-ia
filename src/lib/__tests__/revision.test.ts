@@ -81,6 +81,23 @@ describe('la pantalla que ve el cliente', () => {
       .toBe(true)
   })
 
+  it('la portada manda sobre el incrustado', () => {
+    // Medido: el incrustado de Instagram funciona, pero cualquier bloqueador de
+    // contenido lo tapa con un recuadro gris — y desde aqui NO se puede detectar
+    // que un iframe ajeno ha sido bloqueado. La portada, en cambio, vive en
+    // nuestro Storage y ningun bloqueador la toca: es la unica imagen de la que
+    // podemos responder.
+    //
+    // Aqui pesa mas que dentro de la app: quien abre esto es un cliente, y si no
+    // ve la pieza no opina — que es lo unico que esta pantalla tiene que conseguir.
+    // Ventana holgada a propósito: lo que se comprueba es el ORDEN de las ramas,
+    // no que estén pegadas. Con 700 letras la regla se ponía roja por el tamaño
+    // del bloque de la portada, sin que nada estuviera mal.
+    expect(/item\.cover_url && item\.video_url \?[\s\S]{0,1400}: embed \?/.test(PAGINA),
+      'el incrustado va por delante de la portada: a quien tenga un bloqueador le queda un recuadro gris donde deberia estar la pieza')
+      .toBe(true)
+  })
+
   it('siempre hay un enlace al original, aunque el incrustado se tape', () => {
     // Medido el 2026-08-19: el incrustado de Instagram FUNCIONA —carga bien en un
     // navegador limpio, verificado— pero cualquier bloqueador de contenido lo tapa
