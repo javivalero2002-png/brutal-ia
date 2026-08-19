@@ -41,6 +41,8 @@ export interface Project {
   cover_url?: string
   pdf_url?: string | null
   pdf_analysis?: string | null
+  /** Carpeta donde se archiva. Texto libre — ver migrations/20260819_carpetas_proyectos.sql */
+  carpeta?: string | null
   created_at: string
   client?: Client
 }

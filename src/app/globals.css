@@ -9,6 +9,12 @@
 @keyframes scanLoop { 0% { transform:translateX(-100%) } 100% { transform:translateX(500%) } }
 @keyframes logoPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(27,95,250,0), 0 8px 40px rgba(27,95,250,0.18) } 50% { box-shadow: 0 0 40px 10px rgba(27,95,250,0.1), 0 8px 40px rgba(27,95,250,0.32) } }
 @keyframes ticker { from { transform: translateX(0) } to { transform: translateX(-50%) } }
+/* Progreso SIN FIN: para lo que se está haciendo pero no se puede medir (leer un
+   PDF con el modelo). Antes se dejaba la barra al 100% durante esa espera, que es
+   decir «ya está» mientras sigues esperando. */
+@keyframes indeterminado { 0% { transform: translateX(-120%) } 100% { transform: translateX(320%) } }
+.nx-indeterminado { animation: indeterminado 1.15s ease-in-out infinite }
+@media (prefers-reduced-motion: reduce) { .nx-indeterminado { animation-duration: 2.4s } }
 @keyframes pls { 0%, 100% { opacity: 1 } 50% { opacity: .15 } }
 @keyframes glowPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(27,95,250,0) } 50% { box-shadow: 0 0 28px 6px rgba(27,95,250,0.22) } }
 @keyframes dot1 { 0%,60%,100% { transform:scale(.6);opacity:.3 } 30% { transform:scale(1);opacity:1 } }

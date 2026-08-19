@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { rutaApp } from '@/lib/appUrl'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
-import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, dlLabel, todayKey, estadoDeadline, AMBAR, buscaEnTexto } from '@/components/shared'
+import { Abanico, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, dlLabel, todayKey, estadoDeadline, AMBAR, buscaEnTexto } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
 import type { Project, Task, Profile, NexusData} from '@/types'
 import type { IrASeccion } from '@/components/shared/secciones'
@@ -133,7 +133,21 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
 
   const [pdfAnalysis, setPdfAnalysis] = useState<any>(null)
   const [pdfBusy, setPdfBusy] = useState(false)
+  const [carpetasAbiertas, setCarpetasAbiertas] = useState<Set<string>>(new Set())
   const [pdfUploadPct, setPdfUploadPct] = useState<number|null>(null)
+  /**
+   * En qué va el proceso, que NO es solo subir.
+   *
+   * La barra llegaba al 100% y ahí seguías esperando: después de la subida vienen
+   * extraer la portada y, sobre todo, LEER EL PDF con Claude, que son varios
+   * segundos. Un indicador que dice «hecho» cuando no lo está es peor que no
+   * tenerlo — te hace pensar que la app se ha colgado.
+   *
+   * La segunda fase va SIN porcentaje, a propósito: no sabemos cuánto va a tardar
+   * el modelo, y ponerle un número inventado sería volver a mentir con más
+   * decimales. Una animación sin fin dice «trabajando» sin prometer cuándo.
+   */
+  const [pdfFase, setPdfFase] = useState<'subiendo'|'leyendo'|null>(null)
   const [pdfChat, setPdfChat] = useState<{role:'user'|'ai'; content:string}[]>([])
   // El chat del PDF tampoco bajaba a la ultima respuesta. Mismo gemelo del scroll
   // de ChatSection. Nombre propio: `pdfChatRef` ya existe y apunta a los DATOS del
@@ -363,12 +377,12 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
     // proyecto que estuvieras mirando en ese momento — sin ningun aviso.
     const proyectoId = selectedProjectRef.current?.id
     if (!proyectoId) { showToast('Abre un proyecto antes de subir el PDF'); return }
-    setPdfDoc(null); setPdfAnalysis(null); setPdfChat([]); setPdfUploadPct(0)
+    setPdfDoc(null); setPdfAnalysis(null); setPdfChat([]); setPdfUploadPct(0); setPdfFase('subiendo')
     try {
       // 1. Pedir signed upload URL al servidor
       const urlRes = await fetch('/api/pdf-upload-url',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({filename:file.name,size:file.size,prefix:'pdfs'})})
       const urlJ = await urlRes.json().catch(()=>({}))
-      if (!urlRes.ok) { showToast(urlJ.error||'Error preparando subida'); setPdfUploadPct(null); return }
+      if (!urlRes.ok) { showToast(urlJ.error||'Error preparando subida'); setPdfUploadPct(null); setPdfFase(null); return }
       // 2. Subir el archivo directamente a Supabase con XMLHttpRequest para el progreso
       // Supabase signed upload URL espera FormData con cacheControl + el archivo en key ''
       const fd = new FormData()
@@ -383,6 +397,8 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
         xhr.send(fd)
       })
       setPdfUploadPct(100)
+      // La subida acabó; lo que viene ahora es leerlo.
+      setPdfFase('leyendo')
       // Los setters de aqui pintan el panel que se este viendo: si ya no es el
       // proyecto de la subida, no se tocan.
       // `urlJ.publicUrl` es el IDENTIFICADOR que se guarda en la columna, no una
@@ -423,7 +439,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
           .catch(() => showToast('El PDF se subió pero no se pudo guardar en el proyecto'))
       }
     } catch { showToast('Error subiendo el PDF') }
-    finally { setPdfUploadPct(null) }
+    finally { setPdfUploadPct(null); setPdfFase(null) }
   }
 
   // El proyecto se fija AQUI, al empezar, igual que en analyzePdf y onPickPdf. La
@@ -709,7 +725,13 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 <span className="font-syne text-[11px] font-black px-2 py-0.5 rounded-full" style={{background:col.color+'15',color:col.color+'99'}}>{projSearch.trim()?col.items.filter(casaBusqueda).length:col.items.length}</span>
               </div>
               <div className="p-3 space-y-2">
-                {col.items.filter(casaBusqueda).map((p: Project)=>(
+                {(()=>{
+                  // ── Carpetas ──────────────────────────────────────────────
+                  // Lo terminado se archiva; lo vivo no. Agrupar una columna en la
+                  // que se trabaja escondería trabajo detrás de un clic, así que
+                  // esto solo pasa donde la lista crece para siempre y se consulta
+                  // en vez de tocarse.
+                  const tarjeta = (p: Project) => (
                   <div key={p.id} draggable onDragStart={()=>dragRef.current=p.id} onClick={()=>onSelect(selectedId===p.id?null:p.id)} className="rounded-xl cursor-pointer transition-all overflow-hidden" style={{background:selectedId===p.id?`rgba(27,95,250,0.06)`:SURF2,border:`1px solid ${selectedId===p.id?'rgba(27,95,250,0.35)':BORDER}`,boxShadow:selectedId===p.id?`0 0 16px ${p.color||BLU}1A`:'none'}}>
                     {p.cover_url && !brokenCovers.has(p.cover_url) ? (
                       <div className="relative w-full overflow-hidden" style={{height:'88px'}}>
@@ -752,7 +774,53 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                       </div>
                     </div>
                   </div>
-                ))}
+                  )
+                  const items = col.items.filter(casaBusqueda) as Project[]
+                  // Buscando NO se agrupa: quien escribe quiere ver resultados, no
+                  // carpetas que abrir. Es el mismo criterio del resto de la app.
+                  const agrupa = col.status === 'completado' && !projSearch.trim()
+                  if (!agrupa) return items.map(tarjeta)
+
+                  const carpetas = new Map<string, Project[]>()
+                  const sueltos: Project[] = []
+                  for (const p of items) {
+                    const c = (p.carpeta || '').trim()
+                    if (!c) { sueltos.push(p); continue }
+                    if (!carpetas.has(c)) carpetas.set(c, [])
+                    carpetas.get(c)!.push(p)
+                  }
+                  const nombres = [...carpetas.keys()].sort((a,b)=>a.localeCompare(b,'es'))
+                  return (<>
+                    {nombres.map(nombre => {
+                      const dentro = carpetas.get(nombre)!
+                      const abierta = carpetasAbiertas.has(nombre)
+                      return (
+                        <div key={'c:'+nombre}>
+                          <div onClick={()=>setCarpetasAbiertas(prev=>{ const s=new Set(prev); s.has(nombre)?s.delete(nombre):s.add(nombre); return s })}
+                            onDragOver={e=>e.preventDefault()}
+                            onDrop={e=>{ e.stopPropagation(); const id=dragRef.current; if(!id) return; dragRef.current=null
+                              // Arrastrar a la carpeta archiva Y completa: soltar algo
+                              // en «lo terminado de la campaña X» solo puede querer
+                              // decir eso, y pedir dos gestos para una intención sobra.
+                              data.updateProject(id,{status:'completado',carpeta:nombre}).then(()=>showToast(`Archivado en ${nombre}`)).catch(()=>showToast('Error al archivar')) }}
+                            className="rounded-xl cursor-pointer transition-all flex items-center gap-3 px-3 py-2.5"
+                            style={{background:SURF2,border:`1px solid ${abierta?'rgba(27,95,250,0.28)':BORDER}`}}>
+                            <Abanico
+                              portadas={dentro.map(p=>({url:p.cover_url&&!brokenCovers.has(p.cover_url)?p.cover_url:null,color:p.color||BLU}))}
+                              alRoto={markCoverBroken}/>
+                            <div className="min-w-0 flex-1">
+                              <div className="font-syne text-[10px] font-black truncate" style={{color:'rgba(255,255,255,0.72)'}}>{nombre}</div>
+                              <div className="font-figtree text-[9px]" style={{color:'rgba(255,255,255,0.3)'}}>{dentro.length} {dentro.length===1?'proyecto':'proyectos'}</div>
+                            </div>
+                            <LucideIcon name={abierta?'chevron-down':'chevron-right'} size={13} color="rgba(255,255,255,0.25)"/>
+                          </div>
+                          {abierta && <div className="mt-2 space-y-2 pl-2" style={{borderLeft:`1px solid ${BORDER}`}}>{dentro.map(tarjeta)}</div>}
+                        </div>
+                      )
+                    })}
+                    {sueltos.map(tarjeta)}
+                  </>)
+                })()}
                 {col.items.length===0&&<div className="py-8 text-center text-[11px]" style={{color:'rgba(255,255,255,0.22)'}}>Arrastra aquí</div>}
               </div>
             </div>
@@ -911,6 +979,26 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 <button key={opt.s} onClick={async()=>{ try{await data.updateProject(selectedProject.id,{status:opt.s});showToast(`Estado: ${opt.l}`)}catch{showToast('Error al actualizar')} }} className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:selectedProject.status===opt.s?opt.c+'18':SURF2,border:`1px solid ${selectedProject.status===opt.s?opt.c+'50':BORDER}`,color:selectedProject.status===opt.s?opt.c:'#FFFFFF'}}>{opt.l.toUpperCase()}</button>
               ))}
             </div>
+            {/* La carpeta donde se archiva, con las que ya existen sugeridas.
+                Crear una carpeta es escribir su nombre — no hay pantalla que
+                mantener, y una carpeta vacía no llega a existir. Se guarda al
+                salir del campo y solo si cambió: un PATCH por tecla pulsada
+                pelearía con Realtime. */}
+            <div className="mt-3">
+              <label className="font-syne text-[7.5px] font-black tracking-widest block mb-1.5" style={{color:'rgba(255,255,255,0.2)'}}>CARPETA · OPCIONAL</label>
+              <input list="nx-carpetas-proyectos" defaultValue={selectedProject.carpeta || ''} key={'carp:'+selectedProject.id}
+                placeholder="Sin carpeta"
+                onBlur={e=>{ const v = e.target.value.trim() || null
+                  if (v === (selectedProject.carpeta || null)) return
+                  data.updateProject(selectedProject.id, { carpeta: v } as Partial<Project>)
+                    .then(()=>showToast(v ? `Archivado en ${v}` : 'Fuera de la carpeta'))
+                    .catch(()=>showToast('Error guardando la carpeta')) }}
+                className="w-full px-3 py-2 rounded-xl font-figtree text-[11px] outline-none"
+                style={{background:SURF2,border:`1px solid ${BORDER}`,color:'#FFFFFF'}}/>
+              <datalist id="nx-carpetas-proyectos">
+                {[...new Set(data.projects.map((p:Project)=>(p.carpeta||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')).map(c=><option key={c} value={c}/>)}
+              </datalist>
+            </div>
           </div>
           <div className="grid grid-cols-[1fr_auto] gap-6 items-end">
             <div>
@@ -1045,14 +1133,26 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               <div className="w-full flex flex-col items-center gap-3 py-6 rounded-2xl" style={{background:'rgba(255,255,255,0.02)',border:`1px dashed ${BORDER}`}}>
                 <div className="w-full px-4">
                   <div className="flex justify-between mb-1.5">
-                    <span className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.35)'}}>SUBIENDO PDF…</span>
-                    <span className="font-syne text-[8px] font-black" style={{color:BLU}}>{pdfUploadPct}%</span>
+                    <span className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.35)'}}>
+                      {pdfFase === 'leyendo' ? 'LEYENDO EL DOCUMENTO…' : 'SUBIENDO PDF…'}
+                    </span>
+                    {/* El porcentaje SOLO mientras se sube, que es lo único medible. */}
+                    {pdfFase !== 'leyendo' && <span className="font-syne text-[8px] font-black" style={{color:BLU}}>{pdfUploadPct}%</span>}
                   </div>
                   <div className="h-1 rounded-full overflow-hidden" style={{background:'rgba(255,255,255,0.06)'}}>
-                    <div className="h-full rounded-full transition-all duration-200" style={{width:`${pdfUploadPct}%`,background:`linear-gradient(90deg,${BLU},#4f8fff)`}}/>
+                    {pdfFase === 'leyendo' ? (
+                      // Sin fin y sin número: no sabemos cuánto tardará el modelo.
+                      <div className="h-full rounded-full nx-indeterminado" style={{background:`linear-gradient(90deg,transparent,${BLU},#4f8fff,transparent)`,width:'40%'}}/>
+                    ) : (
+                      <div className="h-full rounded-full transition-all duration-200" style={{width:`${pdfUploadPct}%`,background:`linear-gradient(90deg,${BLU},#4f8fff)`}}/>
+                    )}
                   </div>
                 </div>
-                <span className="font-figtree text-[11px]" style={{color:'rgba(255,255,255,0.25)'}}>Subida directa a Supabase — sin límite de tamaño</span>
+                <span className="font-figtree text-[11px]" style={{color:'rgba(255,255,255,0.25)'}}>
+                  {pdfFase === 'leyendo'
+                    ? 'Sacando el resumen y la portada. Tarda unos segundos.'
+                    : 'Subida directa a Supabase — sin límite de tamaño'}
+                </span>
               </div>
             ) : !pdfDoc ? (
               <label htmlFor={`pdf-input-${selectedProject?.id||'new'}`} className="w-full flex flex-col items-center gap-2 py-6 rounded-2xl cursor-pointer transition-all active:opacity-70" style={{background:'rgba(255,255,255,0.02)',border:`1px dashed ${BORDER}`,display:'flex',flexDirection:'column',alignItems:'center'}}>
