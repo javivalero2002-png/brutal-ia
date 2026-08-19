@@ -106,4 +106,16 @@ begin
 end;
 $$;
 
+-- Nadie desde el navegador: es un borrado en lote y no tiene por qué estar al
+-- alcance de una clave de cliente.
 revoke all on function public.podar_notificaciones(int) from public, anon, authenticated;
+
+-- Y EXPLÍCITAMENTE al service role, que es quien la llama desde el cron.
+--
+-- Sin esta línea el permiso dependía de los privilegios por defecto de Supabase
+-- —que sí conceden a `service_role`, pero eso es una suposición sobre cómo está
+-- montado el proyecto, no algo escrito aquí—. En una instancia nueva montada de
+-- otra forma, la poda fallaría una vez al día en silencio: el cron la registra y
+-- sigue con la copia, así que nadie lo vería hasta mirar los registros.
+-- Escribirlo cuesta una línea y quita la duda entera.
+grant execute on function public.podar_notificaciones(int) to service_role;
