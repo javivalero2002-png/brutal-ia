@@ -176,6 +176,18 @@ export default function ResetPasswordPage() {
     const { error: err } = await supabase.auth.updateUser({ password: pwd })
     if (err) { console.error('[reset]', err.message); setError(mensajeDeContrasena(err.message)); setLoading(false); return }
     setOk(true)
+    // Se deja dicho que la contraseña YA la ha elegido esta persona.
+    //
+    // La puesta en marcha trae un paso «pon tu propia contraseña» cuyo texto dice
+    // «la que usas ahora te la dio otra persona» — cierto si entras con la
+    // temporal que te da el propietario, y FALSO si vienes de aquí: te la acabas
+    // de poner tú hace treinta segundos y no la sabe nadie más. Pedírtela otra vez
+    // no es solo repetir: es explicarte un motivo que no existe.
+    //
+    // Se guarda en el navegador porque es donde ocurre la secuencia —enlace,
+    // contraseña, entrar— y así no hace falta ninguna columna nueva. Si se pierde,
+    // se vuelve al comportamiento de antes: pedirla. Fallar hacia lo de siempre.
+    try { localStorage.setItem('nx_clave_elegida', '1') } catch { /* sin localStorage, se pide como antes */ }
     setTimeout(() => router.push('/dashboard'), 1200)
   }
 
