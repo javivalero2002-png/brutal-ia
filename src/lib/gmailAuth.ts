@@ -1,3 +1,6 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { sendPushToUser, canSendPush } from '@/lib/push'
+
 // Cuándo una conexión de Gmail está rota, en un solo sitio.
 //
 // Esto estaba escrito CUATRO veces —gmail/sync, gmail/status, colabsSync (×2)—
@@ -58,3 +61,48 @@ export const ERRORES_ACCIONABLES = new Set(['token_expired', 'auth_rota'])
 /** El código que se devuelve al cliente según lo que haya pasado. */
 export const codigoDeFallo = (err: unknown): 'token_expired' | 'auth_rota' | null =>
   esTokenMuerto(err) ? 'token_expired' : esConexionRota(err) ? 'auth_rota' : null
+
+/**
+ * Avisa por push a quien se le ha caído la conexión de Gmail.
+ *
+ * Por qué hace falta: las cuatro ramas que detectan un token muerto borraban la
+ * conexión y devolvían un error que NADIE proactivo lee. El sync automático del
+ * cliente lo llama con `.catch(()=>{})`, y el cron solo lo deja escrito en su
+ * respuesta JSON, que lee Vercel y nadie más. Resultado: los correos dejan de
+ * entrar y te enteras cuando un cliente pregunta por qué no le contestas.
+ *
+ * Y no es un caso raro: mientras la app de Google esté en modo de prueba, el
+ * token muere CADA SIETE DÍAS. Una herramienta cuya razón de ser es avisar de
+ * correos nuevos tiene que avisar del fallo que corta los correos.
+ *
+ * Con `await` a propósito, como el resto de los push del repo: en serverless la
+ * instancia se congela al devolver y un envío suelto se pierde.
+ */
+export async function avisarConexionCaida(
+  admin: SupabaseClient,
+  userId: string,
+  cual: 'personal' | 'colabs',
+) {
+  // Como mucho uno cada seis horas por buzón. El cron corre cada hora y el token
+  // sigue muerto hasta que alguien lo reconecta: sin freno serían 24 avisos al
+  // día de lo mismo, y eso no es avisar, es enseñar a ignorar los avisos.
+  const puede = await canSendPush(admin, `gmail-caido:${cual}:${userId}`, 6 * 60 * 60 * 1000)
+  if (!puede) return
+
+  const nombre = cual === 'colabs' ? 'el buzón de colaboraciones' : 'tu Gmail'
+  try {
+    await sendPushToUser(admin, userId, {
+      title: 'Se ha desconectado el correo',
+      // Dice qué pasa Y qué hacer: un aviso que no lleva a una acción concreta
+      // solo produce inquietud.
+      body: `Han dejado de entrar correos de ${nombre}. Vuelve a conectarlo en Operativa → Sincronización.`,
+      url: '/dashboard?s=ajustes',
+      tag: `gmail-caido-${cual}`,
+      urgent: true,
+    })
+  } catch (err) {
+    // No puede tumbar el sync: la conexión ya está caída, y fallar aquí además
+    // dejaría el error original sin devolver.
+    console.error('[gmailAuth] no se pudo avisar de la conexión caída:', err)
+  }
+}

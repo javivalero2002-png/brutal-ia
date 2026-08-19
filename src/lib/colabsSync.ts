@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
-import { esTokenMuerto, esConexionRota } from '@/lib/gmailAuth'
+import { esTokenMuerto, esConexionRota, avisarConexionCaida } from '@/lib/gmailAuth'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
 import { analyzeEmail, EmailAnalysis, plazoRestante, MINIMO_UTIL_MS } from '@/lib/ai'
 import { sendPushToAll, sendPushToUser, canSendPush } from '@/lib/push'
@@ -119,6 +119,10 @@ async function syncColabsInboxSinCerrojo(
     }
     if (isTokenExpired) {
       await admin.from('profiles').update({ gmail_colabs_connected: false, gmail_colabs_refresh_token: null }).eq('id', owner!.id)
+      // Y se AVISA. Hasta ahora se borraba la conexión y se devolvía un error que
+      // nadie proactivo leía: el correo del buzón compartido dejaba de entrar en
+      // silencio, y con el modo de prueba de Google eso pasa cada siete días.
+      await avisarConexionCaida(admin, owner!.id, 'colabs')
       return { ok: false, error: 'token_expired' }
     }
 
@@ -335,6 +339,7 @@ async function syncPersonalInboxSinCerrojo(
     }
     if (isTokenExpired) {
       await admin.from('profiles').update({ gmail_connected: false, gmail_refresh_token: null }).eq('id', profile.id)
+      await avisarConexionCaida(admin, profile.id, 'personal')
       return { ok: false, error: 'token_expired' }
     }
 

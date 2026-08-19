@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { checkAiRateLimit } from '@/lib/rate-limit'
 import { extraerTareasDelDiario } from '@/lib/ai'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -27,6 +28,13 @@ export async function POST(request: NextRequest) {
   // El nombre sale de la sesión, no del cuerpo: solo sirve para dar contexto al
   // modelo, pero un nombre que llega del cliente es un nombre que se puede falsear.
   const admin = await createAdminClient()
+  // Tope, como el resto de rutas que llaman al modelo. El cliente ya espera 2,5 s
+  // tras dejar de escribir, pero eso es cortesía del cliente: la ruta no puede
+  // fiarse de que quien la llama sea la pantalla que escribimos nosotros.
+  if (await checkAiRateLimit(admin, user.id, 'diario')) {
+    return NextResponse.json({ error: 'Demasiadas solicitudes. Espera un momento.' }, { status: 429 })
+  }
+
   const { data: perfil } = await admin
     .from('profiles').select('name').eq('id', user.id).maybeSingle()
 
