@@ -281,6 +281,23 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
   const matchedClient = matchClientByName(data.clients, selected?.ai_client)
   const relatedTasks = matchedClient ? data.tasks.filter((t: any) => !t.done && t.client_id===matchedClient.id).slice(0, 4) : []
 
+  const [reanalizando, setReanalizando] = useState(false)
+  /** Pedir que la IA mire un correo que la criba se saltó. */
+  const reanalizar = async (id: string) => {
+    setReanalizando(true)
+    try {
+      const r = await fetch('/api/inbox/reanalizar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { showToast(j.error || 'No se pudo analizar'); return }
+      showToast('Analizado')
+      // Recarga para que el panel de análisis aparezca con lo recién guardado.
+      await data.reloadInbox?.()
+    } catch { showToast('No se pudo analizar') }
+    finally { setReanalizando(false) }
+  }
+
   const uc = (u: string) => u==='urgent'?RED:u==='high'?AMBAR:BLU
   const ul = (u: string) => rotuloNivel(u, true)
 
@@ -909,6 +926,35 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                 <span className="ml-auto text-[11px]" style={{color:'rgba(255,255,255,0.22)'}}>{new Date(selected.received_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
               </div>
             </div>
+
+            {/* ── SIN ANALIZAR: se dice, y se puede deshacer ─────────────────
+                La criba se salta las promociones y las redes sociales, pero el
+                correo SE GUARDA igual. Aquí se ve por qué no se miró y se puede
+                pedir que se mire — sin esto, un correo omitido por error se
+                queda gris para siempre, y la criba sería una amputación. */}
+            {selected.ai_estado && selected.ai_estado !== 'ok' && (
+              <div className="rounded-2xl p-4 flex items-center gap-3 flex-wrap" style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${BORDER}`}}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12.5px] font-semibold" style={{color:'rgba(255,255,255,0.7)'}}>
+                    {selected.ai_estado==='omitido' ? 'Este correo no se ha analizado'
+                      : selected.ai_estado==='pendiente' ? 'Pendiente de analizar'
+                      : 'La IA no pudo analizarlo'}
+                  </div>
+                  <div className="text-[11.5px] mt-0.5" style={{color:'rgba(255,255,255,0.35)'}}>
+                    {selected.ai_estado==='omitido'
+                      ? (selected.ai_motivo==='categoria' ? 'Gmail lo clasificó como promoción o red social.' : 'No cumplía los criterios para analizarlo.')
+                      : selected.ai_estado==='pendiente' ? 'No dio tiempo en la última sincronización.'
+                      : 'Falló al intentarlo.'}
+                  </div>
+                </div>
+                <button onClick={()=>reanalizar(selected.id)} disabled={reanalizando}
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest transition-all active:scale-95 disabled:opacity-40 flex-shrink-0"
+                  style={{background:`${BLU}18`,border:`1px solid ${BLU}3A`,color:BLU}}>
+                  <LucideIcon name="sparkles" size={11} color={BLU}/>
+                  {reanalizando?'ANALIZANDO…':'ANALIZAR CON IA'}
+                </button>
+              </div>
+            )}
 
             {/* ── AI ANALYSIS BLOCK ── */}
             {(selected.ai_summary||selected.ai_action||selected.ai_urgency) && (

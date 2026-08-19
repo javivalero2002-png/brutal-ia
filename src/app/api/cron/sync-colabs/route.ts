@@ -57,9 +57,14 @@ export async function GET(request: NextRequest) {
   // tareas y avisa al equipo. Y sin ninguna señal: la ejecución moría y ya.
   //
   // El reparto, con `maxDuration = 300`: hasta 25s el buzón compartido y hasta
-  // 12s cada personal, o sea 25 + 7×12 = 109s en el peor caso real. Con 200s de
-  // presupuesto caben todos con holgura y aún sobran 100s para el motor y la
-  // purga. Antes eran 38s, en los que solo cabía el compartido y UNO personal:
+  // 20s cada personal, o sea 25 + 7×20 = 165s en el peor caso real. Con 200s de
+  // presupuesto caben todos y sobran 35s para el motor y la purga.
+  //
+  // Subió de 12s a 20s cuando la criba dejó de gastar plazas en analizar
+  // boletines: el tiempo que antes se iba en promociones ahora rinde en correo
+  // real. La regla que lo vigila comprueba la ARITMÉTICA —que quepan los ocho
+  // buzones— y no los números, para que ajustarlos no la ponga roja en falso
+  // pero dos cambios compensados tampoco puedan dejarla sin caber. Antes eran 38s, en los que solo cabía el compartido y UNO personal:
   // con 7 personas, a cada una le tocaba una vez cada ~7 horas.
   //
   // Esos dos topes son `TOPE_COLABS_MS` y `TOPE_PERSONAL_MS` de

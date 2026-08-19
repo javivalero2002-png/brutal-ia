@@ -42,7 +42,21 @@ export async function getGmailAccountEmail(refreshToken: string): Promise<string
   return data.email || ''
 }
 
-export async function getEmailsWithRefreshToken(refreshToken: string, maxResults = 15) {
+/**
+ * Los correos más recientes de la bandeja.
+ *
+ * OJO CON EL TOPE, que es lo único que separa a Nexus de un buzón: esta llamada
+ * NO pagina. Lo que no entre en esta ventana no existe para la app, y no hay
+ * ningún proceso que lo vaya a buscar después. En un buzón con veinte mil
+ * promociones, una ventana estrecha significa que el correo de un cliente se cae
+ * fuera y no entra jamás — que era el problema de verdad, no el coste del modelo.
+ *
+ * El tope está en 40 y no más alto: cada `messages.get` son 5 unidades de cuota y
+ * Gmail permite 250 por usuario y segundo, así que 40 en paralelo son 200 y queda
+ * margen. A 50 se roza el 429, y los mensajes rechazados se pierden en esa pasada
+ * (se registran arriba, pero se pierden).
+ */
+export async function getEmailsWithRefreshToken(refreshToken: string, maxResults = 40) {
   const oauth2Client = getOAuthClient()
   oauth2Client.setCredentials({ refresh_token: refreshToken })
 
@@ -87,11 +101,25 @@ export async function getEmailsWithRefreshToken(refreshToken: string, maxResults
         body_preview: body.slice(0, 500),
         received_at: (date && !isNaN(new Date(date).getTime()) ? new Date(date) : new Date()).toISOString(),
         is_unread: (full.data.labelIds || []).includes('UNREAD'),
+        // Las etiquetas ENTERAS, no solo si está sin leer.
+        //
+        // Ya venían en la respuesta y se tiraban. Dentro está `CATEGORY_PROMOTIONS`
+        // y `CATEGORY_SOCIAL`, que es la clasificación que Gmail ya ha hecho —y
+        // pagado— por nosotros: la mejor señal disponible para decidir a qué correo
+        // merece la pena pagarle un análisis con el modelo, y gratis.
+        labelIds: full.data.labelIds || [],
         attachments,
       }
     })
   )
 
+  // Los que fallan se descartaban en SILENCIO. Con la ventana estrecha casi nunca
+  // pasaba; al ensancharla, un 429 de Gmail puede hacer desaparecer correos de una
+  // pasada sin dejar rastro — y un correo que no llega no se echa de menos.
+  const fallidos = results.filter(r => r.status === 'rejected').length
+  if (fallidos) {
+    console.error(`[gmail] ${fallidos} de ${results.length} mensajes no se pudieron leer y se han perdido en esta pasada`)
+  }
   return results.filter(r => r.status === 'fulfilled').map(r => (r as PromiseFulfilledResult<any>).value)
 }
 
