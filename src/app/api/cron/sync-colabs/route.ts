@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
   // Buzones personales de todos los perfiles con Gmail conectado
   const { data: profiles, error: profilesError } = await admin
     .from('profiles')
-    .select('id, gmail_refresh_token')
+    .select('id, gmail_refresh_token, analizar_correo')
     .eq('gmail_connected', true)
     .not('gmail_refresh_token', 'is', null)
 

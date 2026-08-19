@@ -53,7 +53,7 @@ export type CorreoParaTriaje = {
   attachments?: unknown[] | null
 }
 
-export type MotivoTriaje = 'adjunto' | 'dominio-propio' | 'remitente-conocido' | 'asunto' | 'categoria' | 'sin-etiquetas'
+export type MotivoTriaje = 'adjunto' | 'dominio-propio' | 'remitente-conocido' | 'asunto' | 'categoria' | 'sin-etiquetas' | 'preferencia'
 
 /**
  * ¿Se le paga un análisis a este correo? Y por qué — el motivo se registra, para
@@ -69,7 +69,23 @@ export function triar(
   correo: CorreoParaTriaje,
   dominiosPropios: string[],
   remitentesConocidos: Set<string>,
+  /**
+   * ¿Esta persona quiere que su correo pase por el modelo?
+   *
+   * Solo se le pasa `false` en los buzones PERSONALES. El buzón compartido del
+   * estudio no consulta esto nunca: es correo de trabajo de los siete, y que la
+   * preferencia de uno lo apagara para todos sería un fallo, no una opción.
+   *
+   * Por defecto `true` para que ningún sitio que aún no lo pase cambie de
+   * comportamiento por accidente al añadir este parámetro.
+   */
+  analizarPermitido = true,
 ): { analizar: boolean; motivo: MotivoTriaje } {
+  // Lo primero de todo, y por encima de las exenciones de abajo: si alguien ha
+  // dicho que no quiere que se lea su correo personal, no hay adjunto ni palabra
+  // en el asunto que valga. Es su decisión, no una heurística que se pueda ganar.
+  if (!analizarPermitido) return { analizar: false, motivo: 'preferencia' }
+
   // ── Exenciones. Ganan a la etiqueta, siempre ────────────────────────────────
 
   // Un adjunto es la señal más fuerte y más barata que existe: ya está calculada

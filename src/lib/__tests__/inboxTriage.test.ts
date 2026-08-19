@@ -109,3 +109,39 @@ describe('triaje · lo único que NO se analiza', () => {
     expect(typeof triar).toBe('function')
   })
 })
+
+describe('el interruptor de «que la IA lea mi correo»', () => {
+  it('apagado, no se analiza NADA — ni con adjunto ni con factura en el asunto', () => {
+    // Las exenciones son heuristicas nuestras; esto es una decision de la persona.
+    // Una decision no se gana con una heuristica: si alguien dice que no quiere que
+    // se lea su correo personal, no hay adjunto ni palabra que valga.
+    const casos = [
+      { attachments: [{ n: 'contrato.pdf' }] },
+      { subject: 'Tu factura de agosto' },
+      { from_email: 'pablo@brutalstudios.es' },
+      { labelIds: [] },
+    ]
+    for (const c of casos) {
+      const r = triar(correo(c), PROPIOS, new Set(['pablo@brutalstudios.es']), false)
+      expect(r.analizar, JSON.stringify(c)).toBe(false)
+      expect(r.motivo).toBe('preferencia')
+    }
+  })
+
+  it('encendido se comporta igual que antes', () => {
+    expect(triar(correo({}), PROPIOS, NADIE, true).analizar).toBe(true)
+    expect(triar(correo({ labelIds: ['CATEGORY_PROMOTIONS'] }), PROPIOS, NADIE, true).analizar).toBe(false)
+  })
+
+  it('sin decir nada se analiza: quien no toque el interruptor sigue igual', () => {
+    // El defecto NO puede ser «no analizar»: cambiar el comportamiento de todo el
+    // mundo en silencio al desplegar seria peor que no tener el interruptor.
+    expect(triar(correo({}), PROPIOS, NADIE).analizar).toBe(true)
+  })
+
+  it('apagarlo NO esconde el correo: sigue guardandose', () => {
+    // No se puede comprobar aqui —lo decide quien llama—, asi que queda escrito
+    // donde se lee. `triar` responde «¿le pago un analisis?», nunca «¿lo guardo?».
+    expect(triar(correo({}), PROPIOS, NADIE, false).analizar).toBe(false)
+  })
+})

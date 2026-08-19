@@ -12,7 +12,9 @@ export interface Profile {
   gmail_colabs_refresh_token?: string
   gmail_colabs_account?: string
   /** Cuándo pasó por la puesta en marcha. Sin valor = todavía no la ha visto. */
-  onboarding_at?: string | null
+  onboarding_at?: string | null  /** Si su correo PERSONAL pasa por el modelo. El buzón compartido nunca lo consulta. */
+  analizar_correo?: boolean | null
+
 }
 
 export interface Client {

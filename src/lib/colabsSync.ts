@@ -337,7 +337,12 @@ async function syncColabsInboxSinCerrojo(
  */
 export async function syncPersonalInbox(
   admin: SupabaseClient,
-  profile: { id: string; gmail_refresh_token: string | null }
+  /**
+   * `analizar_correo`: si esta persona quiere que su correo PERSONAL pase por el
+   * modelo. Opcional para no romper a quien llame sin él, y con `!== false` abajo
+   * para que la ausencia signifique «sí» — que es como estaba antes.
+   */
+  profile: { id: string; gmail_refresh_token: string | null; analizar_correo?: boolean | null }
 ): Promise<SyncResult> {
   // Por usuario y no global: son buzones distintos y no compiten entre sí. Lo que
   // sí compite es la MISMA persona en el portátil y en el móvil —dos localStorage,
@@ -354,7 +359,7 @@ export async function syncPersonalInbox(
 
 async function syncPersonalInboxSinCerrojo(
   admin: SupabaseClient,
-  profile: { id: string; gmail_refresh_token: string | null }
+  profile: { id: string; gmail_refresh_token: string | null; analizar_correo?: boolean | null }
 ): Promise<SyncResult> {
   const token = profile.gmail_refresh_token
   if (!token) return { ok: false, error: 'not connected' }
@@ -438,7 +443,7 @@ async function syncPersonalInboxSinCerrojo(
     // Igual que el del buzon compartido, con el tope personal: son SIETE dentro
     // de la misma ejecucion del cron.
     // ¿Le pagamos un análisis? NO decide si se guarda: se guarda siempre.
-    const { analizar, motivo } = triar(email, DOMINIOS, CONOCIDOS)
+    const { analizar, motivo } = triar(email, DOMINIOS, CONOCIDOS, profile.analizar_correo !== false)
 
     let analysis: EmailAnalysis | null = null
     let estado: 'ok' | 'omitido' | 'pendiente' | 'fallo' = 'omitido'
