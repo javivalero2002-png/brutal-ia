@@ -44,11 +44,88 @@ export default function ResetPasswordPage() {
     // dos errores posibles.
     const supabase = createClient()
     let vivo = true
+
+    /**
+     * Canjear el enlace A MANO, sin depender de que la librería lo haga sola.
+     *
+     * Esto es la raíz del fallo que veía Javi: creaba la cuenta, copiaba el
+     * enlace, lo abría él mismo en el navegador y ya salía «caducado».
+     *
+     * `@supabase/ssr` (v0.5.2) cablea `flowType: 'pkce'` en el cliente del
+     * navegador — está escrito en su código, no es una opción nuestra. Y PKCE
+     * exige un verificador guardado en el navegador QUE INICIÓ el proceso. Los
+     * enlaces de invitación los genera el SERVIDOR con `admin.generateLink()`, así
+     * que en el navegador de quien lo abre no hay verificador ninguno: el canje
+     * automático no puede funcionar nunca.
+     *
+     * Y lo hace irrecuperable: el paso de verificación de Supabase CONSUME el
+     * token al abrir el enlace, así que para cuando la página se rinde el enlace
+     * ya está gastado. Volver a intentarlo no sirve de nada.
+     *
+     * Los enlaces que se pide uno mismo con «mándame otro» sí funcionaban, porque
+     * esos empiezan en este navegador y dejan su verificador. Por eso el fallo
+     * parecía intermitente.
+     *
+     * Aquí se cogen los tokens de donde vengan —del hash o del parámetro— y se
+     * establece la sesión sin intermediarios. Cubre las dos formas y deja de
+     * depender de lo que decida la librería en su próxima versión.
+     */
+    const canjear = async () => {
+      try {
+        // La vía buena y la que usan los enlaces nuevos: el token en crudo, que
+        // NO se ha gastado todavía porque no ha pasado por la página de
+        // verificación de Supabase. Se canjea aquí, en el último momento.
+        const q = new URLSearchParams(window.location.search)
+        const token_hash = q.get('token_hash')
+        if (token_hash) {
+          const { error } = await supabase.auth.verifyOtp({ token_hash, type: 'recovery' })
+          if (!error) return true
+          console.error('[reset] el token no se pudo canjear:', error.message)
+          return false
+        }
+
+        const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+        const access_token = hash.get('access_token')
+        const refresh_token = hash.get('refresh_token')
+        if (access_token && refresh_token) {
+          const { error } = await supabase.auth.setSession({ access_token, refresh_token })
+          if (!error) return true
+          console.error('[reset] no se pudo abrir la sesión del enlace:', error.message)
+          return false
+        }
+
+        // La otra forma: Supabase manda `?code=` cuando el proyecto va por PKCE.
+        // Se intenta igualmente — si hay verificador funciona, y si no, el error
+        // sale por consola en vez de convertirse en un «caducado» genérico.
+        const code = new URLSearchParams(window.location.search).get('code')
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code)
+          if (!error) return true
+          console.error('[reset] el canje del código falló:', error.message)
+          return false
+        }
+      } catch (e) {
+        console.error('[reset] error inesperado al canjear el enlace:', e)
+      }
+      return false
+    }
+
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       if (vivo && session) setSesion('si')
     })
-    supabase.auth.getSession().then(({ data }) => { if (vivo && data.session) setSesion('si') })
-    const plazo = setTimeout(() => { if (vivo) setSesion(a => (a === 'si' ? 'si' : 'no')) }, 2500)
+
+    ;(async () => {
+      // Primero lo de siempre: si ya hay sesión —porque la librería lo resolvió,
+      // o porque la persona ya estaba dentro— no hay nada que canjear.
+      const { data } = await supabase.auth.getSession()
+      if (!vivo) return
+      if (data.session) { setSesion('si'); return }
+      if (await canjear()) { if (vivo) setSesion('si') }
+    })()
+
+    // El plazo de gracia se queda: cubre el canje automático de la librería
+    // cuando SÍ funciona, que es asíncrono y puede llegar después.
+    const plazo = setTimeout(() => { if (vivo) setSesion(a => (a === 'si' ? 'si' : 'no')) }, 3500)
     return () => { vivo = false; clearTimeout(plazo); sub.subscription.unsubscribe() }
   }, [])
 

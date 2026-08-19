@@ -88,7 +88,13 @@ const admin = {
       deleteUser: async (id: string) => { AUTH = AUTH.filter(u => u.id !== id); return { error: null } },
       generateLink: async ({ email }: { email: string }) => {
         ULTIMO_ENLACE_PARA = email
-        return { data: { properties: { action_link: `https://brutalia.tech/reset-password#t=${email}` } }, error: null }
+        return {
+          data: { properties: {
+            action_link: `https://xxx.supabase.co/auth/v1/verify?token=abc&type=recovery`,
+            hashed_token: `tok-${email}`,
+          } },
+          error: null,
+        }
       },
     },
   },
@@ -198,6 +204,18 @@ describe('alta de un miembro · lo que vive quien entra en el equipo', () => {
     const { status } = await pedir({ email: 'x@brutalstudios.es', name: 'X' })
     expect(status).toBe(403)
     expect(PERFILES).toHaveLength(1)
+  })
+
+  it('el enlace apunta a NUESTRA pantalla, no a la verificación de Supabase', async () => {
+    // La raíz del «este enlace ya se ha usado» que veía Javi al abrirlo él mismo:
+    // el `action_link` de Supabase pasa por su página de verificación, y esa
+    // CONSUME el token antes de que la nuestra se ejecute. Después redirige con un
+    // `?code=` que solo se canjea con un verificador PKCE que nuestro navegador no
+    // tiene, porque el enlace lo generó el servidor. Moría siempre, al primer clic.
+    const { json } = await pedir({ email: 'laura@brutalstudios.es', name: 'Laura' })
+    expect(json.inviteLink).toContain('/reset-password?token_hash=')
+    expect(json.inviteLink, 'vuelve a mandar por la verificación de Supabase: el enlace se gastará al abrirlo')
+      .not.toContain('/auth/v1/verify')
   })
 
   it('el enlace se pide para el correo NORMALIZADO', async () => {
