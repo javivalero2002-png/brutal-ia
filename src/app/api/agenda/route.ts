@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await request.json()
   const admin = await createAdminClient()
-  const payload: any = { ...pick(body, ['title','platform','content_type','status','publish_date','publish_time','notes','client_id','account_name','video_url']), created_by: user.id }
+  const payload: any = { ...pick(body, ['title','platform','content_type','status','publish_date','publish_time','notes','client_id','account_name','video_url','carpeta']), created_by: user.id }
   let { data, error } = await admin.from('content_agenda').insert(payload).select('*, client:clients(id,name,initials,color)').single()
   // Si la BD aún no tiene las columnas nuevas (migración pendiente), reintentar sin ellas
   if (error && /account_name|video_url/.test(error.message)) {

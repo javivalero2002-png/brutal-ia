@@ -24,16 +24,20 @@ function fields(type: string, team: Profile[]) {
     ],
     proyecto: [
       f('Nombre del proyecto', 'nombre', 'Ej: Campaña Higgsfield — verano'),
-      f('Cliente', 'cliente', 'Ej: Nike España'),
+      // El cliente, en pequeño y al final. Casi todo lo que hace el estudio es
+      // suyo —de Brutal Studios o de los perfiles personales—, así que pedirlo en
+      // segundo lugar y con el mismo peso que el nombre invita a rellenarlo mal
+      // solo por no dejarlo en blanco.
       { label:'Estado inicial', key:'estado', type:'proj-status', placeholder:'' },
       { label:'Deadline', key:'deadline', type:'date-input', placeholder:'' },
+      { label:'Cliente', key:'cliente', placeholder:'Déjalo vacío si es del estudio', secundario:true },
     ],
     tarea: [
       f('Descripción de la tarea', 'text', 'Ej: Crear el guion del vídeo de Instagram'),
       { label:'Prioridad', key:'priority', type:'priority' },
       { label:'Asignar a', key:'asignado', type:'assignee' },
-      f('Cliente (opcional)', 'cliente', 'Ej: Nike España'),
-      f('Proyecto (opcional)', 'proyecto', 'Ej: Campaign Summer 2026'),
+      { label:'Cliente', key:'cliente', placeholder:'Déjalo vacío si es del estudio', secundario:true },
+      { label:'Proyecto', key:'proyecto', placeholder:'Ej: Campaña Higgsfield — verano', secundario:true },
       { label:'Fecha límite', key:'due_date', type:'date-input', placeholder:'' },
     ],
     memoria: [
@@ -48,14 +52,20 @@ function fields(type: string, team: Profile[]) {
     ],
     contenido: [
       f('Título de la pieza', 'titulo', 'Ej: Reel de lanzamiento — Higgsfield'),
-      f('Cliente', 'cliente', 'Ej: Nike España'),
+      // La CUENTA va antes que el cliente, y el cliente pasa al final.
+      //
+      // Casi todo lo que publica el estudio va en sus propios perfiles —Brutal
+      // Studios, Pablo, Julio—, no en el de un cliente. Tenerlo al revés hacía que
+      // el primer campo después del título pidiera algo que casi nunca aplica, y
+      // eso invita a rellenarlo mal solo por no dejarlo en blanco.
       { label:'Plataforma', key:'plataforma', type:'platform' },
       { label:'Cuenta / Perfil', key:'cuenta', type:'account', placeholder:'' },
+      { label:'Cliente', key:'cliente', placeholder:'Déjalo vacío si es del estudio', secundario:true },
       { label:'Fecha de publicación', key:'fecha', type:'date-input', placeholder:'' },
       { label:'Estado', key:'estado', type:'status' },
     ],
   }
-  return (maps[type] || []) as Array<{ label: string; key: string; placeholder: string; type?: string }>
+  return (maps[type] || []) as Array<{ label: string; key: string; placeholder: string; type?: string; secundario?: boolean }>
 }
 
 interface CreateModalProps {
@@ -178,7 +188,15 @@ export default function CreateModal({ modal, onClose, onDismiss, mf, setMf, savi
             <RuleBuilder mf={mf} setMf={setMf} team={team} clients={clients} />
           ) : fields(modal, team).map(f => (
             <div key={f.key}>
-              <label className={isMobile ? 'block font-syne text-[9px] font-black tracking-widest mb-2' : 'block font-syne text-[9px] font-black tracking-widest mb-3'} style={{color:'rgba(255,255,255,0.28)'}}>{f.label.toUpperCase()}</label>
+              {/* Los campos secundarios se ven secundarios: rótulo más pequeño,
+                  más apagado y con «opcional» dicho al lado. Lo que se pide con el
+                  mismo peso que lo obligatorio se rellena por inercia, y un campo
+                  mal rellenado es peor que uno vacío — sobre todo el cliente, que
+                  luego filtra y agrupa medio tablero. */}
+              <label className={`block font-syne font-black tracking-widest ${f.secundario ? 'text-[8px] mb-1.5' : isMobile ? 'text-[9px] mb-2' : 'text-[9px] mb-3'}`} style={{color:f.secundario?'rgba(255,255,255,0.16)':'rgba(255,255,255,0.28)'}}>
+                {f.label.toUpperCase()}
+                {f.secundario && <span className="ml-1.5" style={{color:'rgba(255,255,255,0.12)'}}>· OPCIONAL</span>}
+              </label>
 
               {f.type === 'priority' ? (
                 <div className="flex gap-2">

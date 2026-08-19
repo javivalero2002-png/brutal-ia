@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, Fragment } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { rutaApp } from '@/lib/appUrl'
 import type { NexusData, ContentItem } from '@/types'
@@ -49,6 +49,16 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
   useBackClosable(!!activeItem, () => setActiveItem(null))
   const [editNotes, setEditNotes] = useState('')
   const [editVideoUrl, setEditVideoUrl] = useState('')
+  /**
+   * La carpeta donde vive esta pieza una vez publicada.
+   *
+   * Texto libre: crear una carpeta es escribir su nombre. A esta escala montar una
+   * pantalla de gestión de carpetas sería un mueble para dos camisas — y una
+   * carpeta vacía no existiría de todas formas, que es lo correcto: solo es sitio
+   * donde no mirar.
+   */
+  const [editCarpeta, setEditCarpeta] = useState('')
+  const carpetaTocada = useRef(false)
   const [editAccountName, setEditAccountName] = useState('')
   const [editPublishDate, setEditPublishDate] = useState('')
   const [editPublishTime, setEditPublishTime] = useState('')
@@ -379,6 +389,9 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
       // perdida no se veia hasta recargar.
       if (coverTocada.current) updates.cover_url = editCoverUrl || null
       if (videoTocado.current) updates.video_url = editVideoUrl || null
+      // Igual que el vídeo: solo viaja si se ha tocado. Un campo que el usuario no
+      // ha mirado no puede pisar lo que había — es la regla de la casa.
+      if (carpetaTocada.current) updates.carpeta = editCarpeta.trim() || null
       const descartadas: string[] = (await data.updateAgenda(idPieza, updates)) || []
       showToast(descartadas.length ? 'Guardado parcial — no se guardó ' + listaCampos(descartadas) : 'Guardado')
       if (activeItemRef.current?.id !== idPieza) return
@@ -613,7 +626,24 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
           <div className="flex-1 overflow-x-auto overflow-y-hidden">
             <div className="flex h-full gap-4 p-6" style={{minWidth:'920px'}}>
               {cols.map(col=>{
-                const items = filteredAgenda.filter((a: any)=>a.status===col.key)
+                const crudos = filteredAgenda.filter((a: any)=>a.status===col.key)
+                // En «Publicado» se agrupa por carpeta. Es la única columna que
+                // crece sin parar: las demás se vacían solas al avanzar la pieza,
+                // y esta acumula todo lo que se ha hecho nunca. A los tres meses
+                // son cien tarjetas en una lista donde buscar es bajar hasta verlo.
+                //
+                // Se ORDENA y se mete una cabecera cuando cambia la carpeta, en vez
+                // de anidar listas: así el arrastre entre columnas sigue funcionando
+                // igual y las tarjetas son las mismas de siempre.
+                const items = col.key === 'publicado'
+                  ? [...crudos].sort((a: any, b: any) =>
+                      // Sin carpeta al final: lo ordenado primero y lo suelto
+                      // debajo, que es donde uno espera encontrar lo que aún no ha
+                      // colocado.
+                      (a.carpeta ? 0 : 1) - (b.carpeta ? 0 : 1)
+                      || String(a.carpeta || '').localeCompare(String(b.carpeta || ''), 'es')
+                      || String(b.publish_date || '').localeCompare(String(a.publish_date || '')))
+                  : crudos
                 return (
                   <div key={col.key} className="flex flex-col flex-1 min-w-[218px] rounded-2xl overflow-hidden"
                     style={{background:'rgba(255,255,255,0.02)',border:`1px solid rgba(255,255,255,0.055)`}}>
@@ -634,11 +664,28 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                         const item = data.agenda.find((a: any)=>a.id===id)
                         if (item && item.status!==col.key) changeStatus(item, col.key)
                       }}>
-                      {items.map((item: any)=>{
+                      {items.map((item: any, idx: number)=>{
                         const ipc = platColor[item.platform]||BLU
                         const isActive = activeItem?.id===item.id
+                        // Cabecera cuando arranca una carpeta nueva.
+                        const carpeta = item.carpeta || null
+                        const anterior = idx > 0 ? (items[idx-1].carpeta || null) : Symbol('inicio')
+                        const abreCarpeta = col.key === 'publicado' && carpeta !== anterior
+                        const cuantas = carpeta
+                          ? items.filter((x: any)=>(x.carpeta||null)===carpeta).length
+                          : items.filter((x: any)=>!x.carpeta).length
                         return (
-                          <div key={item.id}
+                          <Fragment key={item.id}>
+                          {abreCarpeta && (
+                            <div className="flex items-center gap-2 px-1 pt-1.5 pb-0.5">
+                              <LucideIcon name={carpeta ? 'folder-open' : 'layout-grid'} size={10} color={carpeta?'rgba(255,255,255,0.32)':'rgba(255,255,255,0.16)'}/>
+                              <span className="font-syne text-[8px] font-black tracking-widest uppercase truncate" style={{color:carpeta?'rgba(255,255,255,0.4)':'rgba(255,255,255,0.2)'}}>
+                                {carpeta || 'Sin carpeta'}
+                              </span>
+                              <span className="font-syne text-[8px] font-black ml-auto flex-shrink-0" style={{color:'rgba(255,255,255,0.18)'}}>{cuantas}</span>
+                            </div>
+                          )}
+                          <div
                             draggable
                             onDragStart={e=>e.dataTransfer.setData('text/plain',item.id)}
                             onClick={()=>openItem(item)}
@@ -849,6 +896,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                               </div>
                             </div>
                           </div>
+                          </Fragment>
                         )
                       })}
                       {/* Empty drop target */}
@@ -1002,7 +1050,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                 {/* Vídeo */}
                 <div>
                   <div className="font-syne text-[7px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>VÍDEO</div>
-                  <input value={editVideoUrl} onChange={e=>{videoTocado.current=true; setEditVideoUrl(e.target.value)}} placeholder="YouTube · Vimeo · Drive…" className="w-full px-3 py-2.5 rounded-xl text-[11px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+                  <input value={editVideoUrl} onChange={e=>{videoTocado.current=true; setEditVideoUrl(e.target.value)}} placeholder="Instagram · YouTube · Vimeo · Drive…" className="w-full px-3 py-2.5 rounded-xl text-[11px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
 
                   {/* Se dice por qué no hay botón de subir, en vez de dejar un hueco
                       donde la portada sí lo tiene. La subida de vídeo está apagada a
@@ -1017,7 +1065,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                   {(editVideoUrl || activeItem.video_url) && (
                     <div className="rounded-xl overflow-hidden mt-2">
                       {videoEmbed(editVideoUrl||activeItem.video_url)
-                        ? <div style={{aspectRatio:'16/9'}}><iframe src={videoEmbed(editVideoUrl||activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>
+                        ? <div className="mx-auto" style={{aspectRatio:videoEsVertical(editVideoUrl||activeItem.video_url)?'9/16':'16/9',maxWidth:videoEsVertical(editVideoUrl||activeItem.video_url)?'260px':'none'}}><iframe src={videoEmbed(editVideoUrl||activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>
                         : <video src={editVideoUrl||activeItem.video_url} controls className="w-full" style={{maxHeight:'180px',objectFit:'contain',background:'#000'}} preload="metadata"/>
                       }
                     </div>
@@ -1231,6 +1279,31 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                   {!editVideoUrl&&activeItem.video_url&&<div className="rounded-2xl overflow-hidden" style={{background:'#000'}}>{videoEmbed(activeItem.video_url)?<div className="mx-auto" style={{aspectRatio:videoEsVertical(activeItem.video_url)?'9/16':'16/9',maxWidth:videoEsVertical(activeItem.video_url)?'320px':'none'}}><iframe src={videoEmbed(activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>:<video src={activeItem.video_url} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/>}</div>}
                   {!editVideoUrl&&!activeItem.video_url&&<div className="flex items-center gap-2 rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px dashed rgba(255,255,255,0.07)`}}><LucideIcon name="film" size={14} color="rgba(255,255,255,0.12)"/><span className="font-syne text-[9px]" style={{color:'rgba(255,255,255,0.18)'}}>Pega un enlace de YouTube, Vimeo, Instagram o Drive</span></div>}
                 </div>
+
+                {/* Carpeta: solo para lo publicado, que es lo que se acumula.
+                    Antes de publicar no hace falta ordenar nada — la pieza está en
+                    su columna y se ve. Después es cuando se pierde entre cien. */}
+                {activeItem.status === 'publicado' && (
+                  <div className="mb-5">
+                    <div className="font-syne text-[8.5px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>CARPETA</div>
+                    <input
+                      list="carpetas-existentes"
+                      value={editCarpeta}
+                      onChange={e=>{carpetaTocada.current=true; setEditCarpeta(e.target.value)}}
+                      placeholder="Escribe una nueva o elige de la lista…"
+                      className="w-full px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none"
+                      style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU}}
+                      onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')}
+                      onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+                    {/* Las que ya existen, para no escribir dos veces la misma con
+                        una tilde de diferencia y acabar con dos carpetas gemelas. */}
+                    <datalist id="carpetas-existentes">
+                      {[...new Set(((data.agenda||[]) as ContentItem[]).map(a=>a.carpeta).filter(Boolean))].map(c=>(
+                        <option key={c as string} value={c as string}/>
+                      ))}
+                    </datalist>
+                  </div>
+                )}
 
                 {/* Logo de cuenta */}
                 <input ref={logoFileInputRef} type="file" accept="image/*" className="hidden" onChange={e=>{ const f=e.target.files?.[0]; if(f) uploadAccountLogo(f); e.target.value='' }}/>

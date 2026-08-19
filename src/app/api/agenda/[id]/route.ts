@@ -40,7 +40,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   // `feedback` y `cover_url` faltaban en el allowlist, así que "Opiniones del
   // equipo" pintaba el estado optimista, decía "Opinión publicada" y se perdía al
   // recargar: el PATCH nunca las llevaba.
-  const payload: any = pick(body, ['title','platform','content_type','status','publish_date','publish_time','notes','client_id','account_name','video_url','feedback','cover_url'])
+  const payload: any = pick(body, ['title','platform','content_type','status','publish_date','publish_time','notes','client_id','account_name','video_url','carpeta','feedback','cover_url'])
   let { data, error } = await admin.from('content_agenda').update(payload).eq('id', id).select('*, client:clients(id,name,initials,color)').single()
   // El fallback debe cubrir también las columnas nuevas: si cover_url no existe
   // en la BD (upload-cover ya contempla ese caso), sin esto el guardado entero
