@@ -56,6 +56,37 @@ export default function CopiasTab({ showToast }: { showToast: (m: string) => voi
     } catch { showToast('No se pudo preparar la descarga') }
   }
 
+  /**
+   * Notas de Memoria con la dirección PÚBLICA del fichero escrita dentro del
+   * texto. Es lo único que quedaba para poder cerrar el bucket de vídeos.
+   *
+   * Se enseña aquí y no en Memoria porque es la misma pregunta que las copias
+   * —¿están tus datos como deben?— y esta pestaña ya es solo del propietario.
+   * Y solo aparece si HAY alguna: un aviso permanente de algo ya resuelto es
+   * ruido, y el ruido es lo que hace que se dejen de mirar los avisos.
+   */
+  const [enlaces, setEnlaces] = useState<{ total: number; afectadas: { id: string; title: string; enlaces: number }[] } | null>(null)
+  const [arreglando, setArreglando] = useState(false)
+  const revisarEnlaces = useCallback(async () => {
+    try {
+      const r = await fetch('/api/admin/memoria-enlaces')
+      if (r.ok) setEnlaces(await r.json())
+    } catch { /* silencioso: es información secundaria y las copias mandan */ }
+  }, [])
+  useEffect(() => { revisarEnlaces() }, [revisarEnlaces])
+
+  const arreglarEnlaces = async () => {
+    setArreglando(true)
+    try {
+      const r = await fetch('/api/admin/memoria-enlaces', { method: 'POST' })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { showToast(j.error || 'No se pudieron arreglar'); return }
+      showToast(`${j.arregladas} ${j.arregladas === 1 ? 'nota arreglada' : 'notas arregladas'}`)
+      await revisarEnlaces()
+    } catch { showToast('No se pudieron arreglar') }
+    finally { setArreglando(false) }
+  }
+
   const ultima = copias?.[0]
   const tam = (b: number | null) => (b == null ? '' : b > 1_048_576 ? `${(b / 1_048_576).toFixed(1)} MB` : `${Math.round(b / 1024)} KB`)
 
@@ -83,7 +114,20 @@ export default function CopiasTab({ showToast }: { showToast: (m: string) => voi
               Última copia {relTime(ultima.creada || `${ultima.dia}T04:00:00Z`)}
             </div>
             <div className="font-figtree text-[12.5px] mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
-              {copias!.length} {copias!.length === 1 ? 'copia guardada' : 'copias guardadas'} · se hace sola cada noche · se conservan 30 días
+              {copias!.length} {copias!.length === 1 ? 'copia guardada' : 'copias guardadas'} · se hace sola cada noche
+              {(() => {
+                // El espacio ocupado, a la vista. Es la pregunta razonable al ver
+                // que algo se guarda solo cada noche, y la respuesta tiene que
+                // estar aquí y no en un comentario del código: van comprimidas
+                // (~6× menos) y la poda deja los últimos 14 días más el día 1 de
+                // cada mes, así que no crece sin fin.
+                const total = copias!.reduce((n, c) => n + (c.bytes || 0), 0)
+                return total > 0 ? ` · ocupan ${tam(total)} en total` : ''
+              })()}
+            </div>
+            <div className="font-figtree text-[11.5px] mt-1.5" style={{ color: 'rgba(255,255,255,0.28)' }}>
+              Comprimidas. Se guardan los últimos 14 días y el día 1 de cada mes durante un año, así que
+              el espacio deja de crecer en vez de acumularse sin fin.
             </div>
           </>
         ) : (
@@ -134,6 +178,30 @@ export default function CopiasTab({ showToast }: { showToast: (m: string) => voi
           una llave del correo de nadie.
         </div>
       </div>
+
+      {/* Enlaces antiguos de Memoria. Solo si quedan. */}
+      {enlaces && enlaces.total > 0 && (
+        <div className="rounded-2xl p-5" style={{ background: SURFACE, border: `1px solid ${AMBAR}35` }}>
+          <div className="font-syne text-[8.5px] font-black tracking-[0.2em] mb-2" style={{ color: AMBAR }}>
+            ENLACES ANTIGUOS EN MEMORIA
+          </div>
+          <div className="font-figtree text-[13px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.6)' }}>
+            {enlaces.afectadas.length} {enlaces.afectadas.length === 1 ? 'nota guarda' : 'notas guardan'} la dirección
+            del fichero <span className="text-white font-semibold">al descubierto</span>: quien la tenga puede abrirla
+            sin entrar en la app. Se cambian por un enlace que pide sesión, y el texto de la nota no se toca.
+          </div>
+          <div className="font-figtree text-[11.5px] mt-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            {enlaces.afectadas.slice(0, 4).map(a => a.title).join(' · ')}
+            {enlaces.afectadas.length > 4 ? ` y ${enlaces.afectadas.length - 4} más` : ''}
+          </div>
+          <button onClick={arreglarEnlaces} disabled={arreglando}
+            className="mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all active:scale-95 disabled:opacity-40"
+            style={{ background: `${AMBAR}18`, border: `1px solid ${AMBAR}3A`, color: AMBAR }}>
+            <LucideIcon name={arreglando ? 'refresh-cw' : 'shield-check'} size={12} color={AMBAR} />
+            {arreglando ? 'ARREGLANDO…' : 'ARREGLARLOS'}
+          </button>
+        </div>
+      )}
 
       {/* El histórico. Se enseña entero porque «cuántas hay» es la señal de que
           esto sigue vivo. */}

@@ -23,17 +23,24 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const body = await request.json()
   const admin = ctx.admin
 
-  // Quién la tenía ANTES. Sin esto no se puede distinguir «te acaban de asignar
-  // esto» de «alguien ha retocado las notas de una tarea que ya era tuya», y
-  // avisar de lo segundo enseña a ignorar los avisos.
-  const { data: antes } = await admin
-    .from('tasks').select('assigned_to,co_assigned_to,text').eq('id', id).single()
   const fields = pick(body, ['text','level','done','due_date','project_id','client_id','assigned_to','co_assigned_to','notes'])
   // Sella el momento de completado (y lo limpia al reabrir) para que los
   // reportes de tendencia sean reales y no dependan de updated_at.
   if (typeof (fields as any).done === 'boolean') {
     (fields as any).completed_at = (fields as any).done ? new Date().toISOString() : null
   }
+  // Quién la tenía ANTES, y SOLO si esta petición toca el reparto.
+  //
+  // Hace falta para distinguir «te acaban de asignar esto» de «alguien ha
+  // retocado las notas de una tarea que ya era tuya» — avisar de lo segundo
+  // enseña a ignorar los avisos. Pero la petición más frecuente de toda la app es
+  // marcar una tarea hecha, y esa no toca el reparto: cobrarle una consulta extra
+  // a cada clic para un aviso que nunca va a mandar es pagar por nada.
+  const tocaElReparto = 'assigned_to' in fields || 'co_assigned_to' in fields
+  const { data: antes } = tocaElReparto
+    ? await admin.from('tasks').select('assigned_to,co_assigned_to,text').eq('id', id).single()
+    : { data: null }
+
   const SELECT = '*, assignee:profiles!assigned_to(id,name,initials,avatar_color), co_assignee:profiles!co_assigned_to(id,name,initials,avatar_color), client:clients(id,name,initials,color)'
   const stamp = { updated_at: new Date().toISOString() }
 
@@ -62,7 +69,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   // `notification_log` y las llamadas HTTP. La tarea ya está guardada, así que un
   // fallo del push se registra y no tumba la respuesta.
   const yaEstaban = [antes?.assigned_to, antes?.co_assigned_to]
-  const reciennllegados = [data?.assigned_to, data?.co_assigned_to]
+  const reciennllegados = !tocaElReparto ? [] : [data?.assigned_to, data?.co_assigned_to]
     .filter((p): p is string => !!p && p !== ctx.userId && !yaEstaban.includes(p))
   if (reciennllegados.length) {
     const { data: quien } = await admin.from('profiles').select('name').eq('id', ctx.userId).single()

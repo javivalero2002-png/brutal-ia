@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { gzipSync } from 'node:zlib'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Copia de seguridad de la base.
@@ -66,6 +67,7 @@ export type ResumenCopia = {
   filas: Record<string, number>
   total: number
   bytes: number
+  bytesSinComprimir: number
   omitidas: string[]
 }
 
@@ -151,9 +153,21 @@ export async function hacerCopia(admin: SupabaseClient, dia: string): Promise<Re
     0,
   )
 
-  const fichero = `${dia}.json`
-  const { error } = await admin.storage.from(BUCKET_COPIAS).upload(fichero, cuerpo, {
-    contentType: 'application/json',
+  // COMPRIMIDO, y no es una optimización prematura: está medido.
+  //
+  // El plan gratuito de Supabase da 1 GB de Storage, compartido con TODO lo que
+  // sube la app. Con las tablas de hoy una copia son ~2,8 MB, y treinta son 85 MB
+  // —asumible—; pero al ritmo actual, a un año son 336 MB (un tercio del plan) y
+  // a tres años 1.008 MB: el plan entero. Y cuando el Storage se llena no fallan
+  // solo las copias — dejan de poder subirse adjuntos, portadas y documentos.
+  //
+  // gzip sobre JSON da 6,2× medido con datos variados (con filas repetidas da
+  // 200×, que es un espejismo). Eso convierte los tres años en 163 MB.
+  const comprimido = gzipSync(Buffer.from(cuerpo, 'utf8'), { level: 6 })
+
+  const fichero = `${dia}.json.gz`
+  const { error } = await admin.storage.from(BUCKET_COPIAS).upload(fichero, comprimido, {
+    contentType: 'application/gzip',
     // Sobrescribe la del mismo día: si el cron se ejecuta dos veces, no quedan
     // dos ficheros del mismo día compitiendo por ser el bueno.
     upsert: true,
@@ -164,26 +178,47 @@ export async function hacerCopia(admin: SupabaseClient, dia: string): Promise<Re
     fichero,
     filas,
     total: Object.values(filas).reduce((n, x) => n + x, 0),
-    bytes: cuerpo.length,
+    bytes: comprimido.length,
+    bytesSinComprimir: cuerpo.length,
     omitidas: Object.entries(COLUMNAS_OMITIDAS).map(([t, cs]) => `${t}.${cs.join(', ')}`),
   }
 }
 
 /**
- * Borra las copias más viejas que `conservar` ficheros.
+ * Poda las copias sobrantes. Escalonada, no «las últimas N».
  *
- * Sin poda, un JSON diario llena el medio giga del plan gratuito y entonces
- * fallan las copias Y las subidas de la app. Devuelve cuántas ha borrado.
+ * Guardar treinta días seguidos y tirar el resto cubre mal los dos casos reales:
+ * «ayer borré algo» necesita días recientes, y «¿qué decía el brief de aquel
+ * cliente en septiembre?» necesita meses atrás — y para eso treinta copias
+ * consecutivas de hace un mes no valen de nada, solo ocupan.
+ *
+ * Se queda: los últimos 14 días, y el día 1 de cada mes durante un año. Son ~26
+ * ficheros en vez de 30, cubren un año en vez de un mes, y ocupan menos.
  */
-export async function podarCopias(admin: SupabaseClient, conservar = 30): Promise<number> {
+export async function podarCopias(admin: SupabaseClient, diasSeguidos = 14, meses = 12): Promise<number> {
   const { data, error } = await admin.storage.from(BUCKET_COPIAS).list('', {
-    limit: 200,
+    limit: 500,
     sortBy: { column: 'name', order: 'desc' },
   })
   if (error || !data) return 0
-  // Los nombres son 'YYYY-MM-DD.json', así que ordenar por nombre es ordenar por
-  // fecha — sin depender de la marca de tiempo del Storage.
-  const sobran = data.filter(f => f.name.endsWith('.json')).slice(conservar).map(f => f.name)
+
+  // Los nombres son 'YYYY-MM-DD.json[.gz]', así que ordenar por nombre es ordenar
+  // por fecha — sin depender de la marca de tiempo del Storage, que cambia si un
+  // fichero se vuelve a subir.
+  const copias = data.filter(f => /^\d{4}-\d{2}-\d{2}\.json(\.gz)?$/.test(f.name))
+  const mensuales = new Set<string>()
+  const sobran: string[] = []
+
+  copias.forEach((f, i) => {
+    const dia = /^\d{4}-\d{2}-\d{2}/.exec(f.name)?.[0] ?? ''
+    if (i < diasSeguidos) return                       // las recientes, todas
+    const mes = dia.slice(0, 7)
+    // Del resto, solo la PRIMERA de cada mes que aparezca (van de nueva a vieja,
+    // así que es la más reciente del mes: la que más cerca está de su cierre).
+    if (!mensuales.has(mes) && mensuales.size < meses) { mensuales.add(mes); return }
+    sobran.push(f.name)
+  })
+
   if (!sobran.length) return 0
   const { error: errBorrado } = await admin.storage.from(BUCKET_COPIAS).remove(sobran)
   // El borrado SÍ se mira: si falla, el bucket crece en silencio hasta llenarse.

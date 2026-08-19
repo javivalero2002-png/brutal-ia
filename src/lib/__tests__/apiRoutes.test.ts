@@ -30,7 +30,21 @@ function rutas(dir = RAIZ, out: string[] = []): string[] {
 }
 
 const TODAS = rutas()
-const leer = (f: string) => readFileSync(f, 'utf8')
+/**
+ * El fichero SIN comentarios.
+ *
+ * Este fichero leía el texto crudo mientras `regresiones.test.ts` ya quitaba los
+ * comentarios, y eso abre el agujero en las dos direcciones: un comentario puede
+ * SATISFACER una regla —que es el fallo grave, porque tapa código que no
+ * cumple— y también puede DISPARARLA en falso. Lo segundo pasó de verdad: un
+ * comentario que explicaba por qué NO se corta un ISO por posición hizo saltar la
+ * regla que prohíbe cortarlo.
+ *
+ * En un repo que comenta tanto como este, una regla que mira la prosa no mira el
+ * código.
+ */
+const leer = (f: string) =>
+  readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
 const nombre = (f: string) => f.replace(`${RAIZ}/`, '').replace('/route.ts', '')
 
 // ── Excepciones, cada una con su motivo ──────────────────────────────────────
