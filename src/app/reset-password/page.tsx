@@ -143,7 +143,15 @@ export default function ResetPasswordPage() {
             <div style={{ ...s.aviso, background: 'rgba(255,176,32,0.1)', border: '1px solid rgba(255,176,32,0.25)', color: '#FFB020' }}>
               {pidiendo === 'hecho'
                 ? 'Hecho. Si ese correo está dado de alta, te llega un enlace nuevo en un minuto. Míralo también en spam.'
-                : 'Este enlace ya se ha usado o ha caducado. Son de un solo uso — pide otro aquí:'}
+                : (
+                  <>
+                    Este enlace ya no vale: <strong>caducan en una hora y solo sirven una vez</strong>, y mandarlos
+                    por WhatsApp o Slack los suele quemar porque la vista previa los abre sola.
+                    <br /><br />
+                    <strong>Si te dieron una contraseña temporal, entra con ella directamente</strong> — esa no
+                    caduca. O pide un enlace nuevo aquí:
+                  </>
+                )}
             </div>
           )}
           {sesion === 'no' && pidiendo !== 'hecho' && (

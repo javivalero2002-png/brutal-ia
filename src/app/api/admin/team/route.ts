@@ -3,6 +3,7 @@ import { ACCENT_COLORS } from '@/components/shared/design-tokens'
 import { APP_URL } from '@/lib/appUrl'
 import { NextRequest, NextResponse } from 'next/server'
 import { PUSH_ROW } from '@/lib/push'
+import { randomBytes } from 'node:crypto'
 
 // Tres viajes a Supabase seguidos —crear la cuenta de auth, insertar el perfil y
 // generar el enlace— y el primero, en frío, no es rápido. Se declara el techo a
@@ -59,6 +60,18 @@ export async function POST(request: NextRequest) {
 
   if (!email || !name) return NextResponse.json({ error: 'email and name required' }, { status: 400 })
 
+  // Normalizado AQUÍ, no solo en la pantalla.
+  //
+  // La pantalla ya mandaba `.trim().toLowerCase()`, pero una API que depende de
+  // que su cliente se porte bien no está bien hecha: cualquier otra forma de
+  // llamarla —o un cambio en esa pantalla— vuelve a abrir el hueco. Y el hueco
+  // aquí es feo: Supabase normaliza los correos por dentro, así que
+  // `Laura@…` y `laura@…` son la MISMA cuenta para él y dos distintas para
+  // nuestra búsqueda. Resultado: no encontramos el perfil, pedimos crear la
+  // cuenta, Supabase nos devuelve la que ya existía, y el insert del perfil
+  // revienta con «duplicate key». Que es justo lo que pasó.
+  const correo = String(email).trim().toLowerCase()
+
   const rawInitials = initials || name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
   // La paleta compartida, no una lista a mano. Tres de los colores que había
   // aquí eran barajados de los dígitos de 1B5FFA que no existían en ningún otro
@@ -66,14 +79,40 @@ export async function POST(request: NextRequest) {
   // así que el color de un miembro nuevo ni siquiera aparecía seleccionable.
   const color = avatar_color || ACCENT_COLORS[Math.abs(email.charCodeAt(0)) % ACCENT_COLORS.length]
   const { randomBytes } = await import('crypto')
-  const pwd = password || randomBytes(16).toString('base64url') + 'Aa1!'
+  // Contraseña temporal LEGIBLE, y que se le enseña al propietario.
+  //
+  // Antes era `randomBytes(16).toString('base64url')`: imposible de dictar, de
+  // copiar a mano o de leer por teléfono — y daba igual, porque no se enseñaba a
+  // nadie. Eso dejaba el enlace de recuperación como ÚNICA puerta de entrada, y
+  // ese enlace caduca en una hora y se quema al primer uso (una vista previa de
+  // WhatsApp basta). Si moría, la persona no podía entrar de ninguna forma: nadie
+  // en el mundo conocía su contraseña.
+  //
+  // Con una legible el propietario puede darla por el canal que sea, no caduca, y
+  // el paso «pon tu propia contraseña» de la puesta en marcha pasa a ser verdad —
+  // porque ahora sí se la ha dado otra persona.
+  const pwd = password || claveTemporal()
 
-  // Check if user already exists
-  const { data: existingProfile } = await admin
+  // ¿Existe ya?
+  //
+  // `maybeSingle` y no `single`: con `single`, «no hay ninguna» ES un error de
+  // PostgREST, así que el camino normal —dar de alta a alguien nuevo— pasaba por
+  // una rama de error. Y el error se descartaba al desestructurar solo `data`,
+  // que es la trampa que este repo tiene documentada: un fallo de consulta era
+  // indistinguible de «no existe», y entonces se intentaba crear encima.
+  const { data: existingProfile, error: errBusqueda } = await admin
     .from('profiles')
     .select('id, email')
-    .eq('email', email)
-    .single()
+    .eq('email', correo)
+    .maybeSingle()
+
+  // Si no se puede saber si existe, NO se crea a ciegas: crear encima de una
+  // cuenta viva es lo que reventaba con «duplicate key», y en el peor caso podría
+  // pisar el perfil de alguien.
+  if (errBusqueda) {
+    console.error('[team] no se pudo comprobar si el miembro existe:', errBusqueda.message)
+    return NextResponse.json({ error: 'No se pudo comprobar si esa cuenta ya existe. Inténtalo otra vez.' }, { status: 503 })
+  }
 
   if (existingProfile) {
     // El `role` NO se toca aqui, y es a proposito.
@@ -96,7 +135,7 @@ export async function POST(request: NextRequest) {
     // Y se devuelve enlace TAMBIÉN al actualizar. Sin esto, repetir un alta que
     // se quedó a medias —lo primero que hace cualquiera— entraba por aquí y salía
     // sin enlace, que es justo lo que se venía a buscar.
-    const { link, motivo } = await generarEnlace(admin, email)
+    const { link, motivo } = await generarEnlace(admin, correo)
     return NextResponse.json({ ok: true, action: 'updated', email, inviteLink: link, avisoEnlace: motivo })
   }
 
@@ -109,29 +148,51 @@ export async function POST(request: NextRequest) {
   })
 
   if (createErr || !newUser.user) {
+    // «Ya está registrado» NO es un fallo: es que la cuenta existe en
+    // autenticación aunque su perfil no apareciera por email. Pasa cuando el
+    // correo se guardó distinto, o cuando un alta anterior murió a medias. Dar de
+    // alta a alguien que ya está tiene que devolver su enlace, no un error —que
+    // es exactamente lo que el propietario quiere en ese momento.
+    if (createErr && /already|registered|exists/i.test(createErr.message || '')) {
+      const { link, motivo } = await generarEnlace(admin, correo)
+      return NextResponse.json({ ok: true, action: 'existing', email: correo, inviteLink: link, avisoEnlace: motivo })
+    }
     return NextResponse.json({ error: createErr?.message || 'Failed to create user' }, { status: 500 })
   }
 
   // Create profile row
   const { error: profileErr } = await admin.from('profiles').insert({
     id: newUser.user.id,
-    email,
+    email: correo,
     name,
     initials: rawInitials,
     avatar_color: color,
     role,
   })
 
-  if (profileErr) return NextResponse.json({ error: profileErr.message }, { status: 500 })
+  if (profileErr) {
+    // Choque de clave = el perfil ya estaba. Misma idea: no es un fallo del
+    // propietario, es que la cuenta existe. Se le da su enlace y se acabó. Antes
+    // esto salía en pantalla como «duplicate key value violates unique constraint
+    // "profiles_pkey"», que no le dice nada a nadie y parece que la app está rota.
+    if (/duplicate key|already exists|23505/i.test(profileErr.message || '')) {
+      const { link, motivo } = await generarEnlace(admin, correo)
+      return NextResponse.json({ ok: true, action: 'existing', email: correo, inviteLink: link, avisoEnlace: motivo })
+    }
+    return NextResponse.json({ error: profileErr.message }, { status: 500 })
+  }
 
   // Generate a password-reset link so the new member can set their own password
-  const { link: inviteLink, motivo } = await generarEnlace(admin, email)
+  const { link: inviteLink, motivo } = await generarEnlace(admin, correo)
 
   // El enlace es lo ÚNICO que se le puede mandar a la persona nueva: si no sale,
   // hay que decirlo. Antes el fallo se tragaba con un `catch {}` y la respuesta
   // era ok:true sin enlace, así que parecía que el alta no había funcionado — y
   // lo lógico entonces es repetirla.
-  return NextResponse.json({ ok: true, action: 'created', email, inviteLink, avisoEnlace: motivo })
+  // La clave viaja en la respuesta a propósito: es lo único que el propietario
+  // puede dar y que no caduca. Solo la ve él —esta ruta ya exige ser propietario—
+  // y solo en el momento de crear la cuenta; no se guarda en ningún sitio legible.
+  return NextResponse.json({ ok: true, action: 'created', email, inviteLink, avisoEnlace: motivo, clave: password ? null : pwd })
 }
 
 // PATCH: update profile by email, or regenerate invite link
@@ -143,6 +204,9 @@ export async function PATCH(request: NextRequest) {
   const body = await request.json()
   const { email, action, ...updates } = body
   if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
+  // Igual que en el alta: Supabase normaliza los correos por dentro, así que
+  // buscar por el texto crudo puede no encontrar una cuenta que sí existe.
+  const correo = String(email).trim().toLowerCase()
 
   if (action === 'regenerate_invite') {
     const appUrl = APP_URL
@@ -162,7 +226,7 @@ export async function PATCH(request: NextRequest) {
   const safeUpdates: Record<string, unknown> = {}
   for (const k of ALLOWED_COLS) if (k in updates) safeUpdates[k] = updates[k]
   if (Object.keys(safeUpdates).length === 0) return NextResponse.json({ error: 'No valid fields' }, { status: 400 })
-  const { error } = await admin.from('profiles').update(safeUpdates).eq('email', email)
+  const { error } = await admin.from('profiles').update(safeUpdates).eq('email', correo)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
@@ -172,6 +236,21 @@ export async function PATCH(request: NextRequest) {
  * El enlace para que la persona ponga su contraseña. Devuelve el motivo cuando no
  * sale, en vez de un null mudo.
  */
+/**
+ * Una contraseña temporal que se pueda leer en voz alta.
+ *
+ * Palabras cortas sin tildes ni ambigüedad, más cuatro cifras. Sale algo como
+ * `nube-plata-7412`: se dicta por teléfono, se copia a mano sin errores y se
+ * escribe en un móvil sin pelearse con las mayúsculas. La entropía es de sobra
+ * para una clave que se usa una vez y se cambia en el primer minuto.
+ */
+function claveTemporal() {
+  const A = ['nube', 'faro', 'roble', 'duna', 'lino', 'brisa', 'cobre', 'menta', 'nieve', 'sauce']
+  const B = ['plata', 'coral', 'ambar', 'verde', 'indigo', 'lima', 'siena', 'perla', 'rubi', 'jade']
+  const n = randomBytes(4)
+  return `${A[n[0] % A.length]}-${B[n[1] % B.length]}-${1000 + ((n[2] << 8 | n[3]) % 9000)}`
+}
+
 async function generarEnlace(admin: Awaited<ReturnType<typeof createAdminClient>>, email: string) {
   try {
     const { data, error } = await admin.auth.admin.generateLink({
@@ -193,7 +272,7 @@ export async function DELETE(request: NextRequest) {
   if (!ctx) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { admin } = ctx
-  const email = request.nextUrl.searchParams.get('email')
+  const email = (request.nextUrl.searchParams.get('email') || '').trim().toLowerCase()
   if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 })
 
   const { data: profile } = await admin.from('profiles').select('id, role').eq('email', email).single()

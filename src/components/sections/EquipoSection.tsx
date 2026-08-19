@@ -50,7 +50,8 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
   const [newMemberEmail, setNewMemberEmail] = useState('')
   const [newMemberRole, setNewMemberRole] = useState<'member'|'owner'>('member')
   const [addingLoading, setAddingLoading] = useState(false)
-  const [inviteResult, setInviteResult] = useState<{email:string;inviteLink:string|null}|null>(null)
+  const [inviteResult, setInviteResult] = useState<{email:string;inviteLink:string|null;clave?:string|null;yaExistia?:boolean}|null>(null)
+  const [copiedClave, setCopiedClave] = useState(false)
   const [copiedInvite, setCopiedInvite] = useState(false)
   const isOwner = profile?.role === 'owner'
   // Member management (owner only)
@@ -196,7 +197,7 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
       })
       const json = await res.json()
       if (!res.ok) { showToast(json.error || 'Error al crear cuenta'); return }
-      setInviteResult({ email: newMemberEmail.trim().toLowerCase(), inviteLink: json.inviteLink || null })
+      setInviteResult({ email: newMemberEmail.trim().toLowerCase(), inviteLink: json.inviteLink || null, clave: json.clave || null, yaExistia: json.action === 'existing' })
       // Si el enlace no salió, se dice POR QUÉ. Antes se tragaba el fallo y
       // quedaba una cuenta creada sin nada que mandarle: parecía que no había
       // funcionado.
@@ -368,6 +369,13 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
                         {mDueToday.length>0&&mOverdue.length===0?<span style={{color:'rgba(255,176,32,0.75)'}}> · {mDueToday.length} hoy</span>:null}
                         {' · '}
                         <span style={{color:gmailOk?GRN+'88':'rgba(255,255,255,0.2)'}}>{gmailOk?'Gmail ✓':'Sin Gmail'}</span>
+                        {/* Si no ha pasado la puesta en marcha, la app está muda
+                            para esa persona: es ahí donde se activan los avisos y
+                            se conecta el correo. Sin verlo, parecía que el equipo
+                            estaba dentro cuando no había entrado nadie. */}
+                        {!member.onboarding_at && (
+                          <span style={{color:'rgba(255,176,32,0.85)'}}> · sin estrenar</span>
+                        )}
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
@@ -496,18 +504,49 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
                 <div className="flex items-center gap-3 p-4 rounded-2xl mb-6" style={{background:'rgba(34,197,94,0.06)',border:`1px solid rgba(34,197,94,0.2)`}}>
                   <LucideIcon name="check-circle" size={18} color={GRN}/>
                   <div>
-                    <div className="font-figtree text-[14px] font-semibold text-white">Cuenta creada</div>
+                    <div className="font-figtree text-[14px] font-semibold text-white">{inviteResult.yaExistia ? 'Esa cuenta ya existía' : 'Cuenta creada'}</div>
                     <div className="text-[11px] mt-0.5" style={{color:'rgba(255,255,255,0.4)'}}>{inviteResult.email}</div>
                   </div>
                 </div>
 
+                {/* La CONTRASEÑA primero, y el enlace después.
+                    Estaba al revés, y el enlace era la única vía: caduca en UNA
+                    hora —no en 24, como decía este texto— y es de un solo uso, así
+                    que una vista previa de WhatsApp lo quema antes de que nadie lo
+                    abra. Si moría, la persona no podía entrar de ninguna forma,
+                    porque la contraseña que se le había puesto no la conocía
+                    nadie: era aleatoria y no se enseñaba. */}
+                {inviteResult.clave && (
+                  <div className="mb-5">
+                    <div className="font-syne text-[8.5px] font-black tracking-widest mb-3" style={{color:GRN}}>CONTRASEÑA TEMPORAL · NO CADUCA</div>
+                    <div className="p-4 rounded-2xl mb-3 flex items-center gap-3" style={{background:'rgba(34,197,94,0.06)',border:`1px solid rgba(34,197,94,0.25)`}}>
+                      <code className="flex-1 text-[17px] font-bold tracking-wide" style={{color:'#fff',fontFamily:'ui-monospace,Menlo,monospace'}}>{inviteResult.clave}</code>
+                      <button onClick={()=>{ navigator.clipboard.writeText(inviteResult.clave!).catch(()=>{}); setCopiedClave(true); setTimeout(()=>setCopiedClave(false),2000) }}
+                        className="px-3 py-2 rounded-xl font-syne text-[8px] font-black tracking-widest flex-shrink-0"
+                        style={{background:copiedClave?'rgba(34,197,94,0.15)':'rgba(255,255,255,0.06)',border:`1px solid ${BORDER}`,color:copiedClave?GRN:'rgba(255,255,255,0.6)'}}>
+                        {copiedClave?'COPIADA':'COPIAR'}
+                      </button>
+                    </div>
+                    <div className="text-[11.5px] leading-relaxed" style={{color:'rgba(255,255,255,0.4)'}}>
+                      Pásale <strong className="text-white">el email y esta contraseña</strong> por donde quieras. Entra en {APP_HOST},
+                      y la app le pedirá cambiarla en el primer minuto. <span style={{color:'rgba(255,255,255,0.28)'}}>Apúntala antes de cerrar: no se vuelve a mostrar.</span>
+                    </div>
+                  </div>
+                )}
+
                 {inviteResult.inviteLink ? (
                   <div>
-                    <div className="font-syne text-[8.5px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.2)'}}>ENLACE DE ACCESO</div>
+                    <div className="font-syne text-[8.5px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.2)'}}>
+                      {inviteResult.clave ? 'O ESTE ENLACE, SI LO ABRE YA' : 'ENLACE DE ACCESO'}
+                    </div>
                     <div className="p-4 rounded-2xl mb-3" style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${BORDER}`}}>
                       <div className="text-[11px] break-all leading-relaxed" style={{color:'rgba(255,255,255,0.4)'}}>{inviteResult.inviteLink}</div>
                     </div>
-                    <div className="text-[11px] mb-4" style={{color:'rgba(255,255,255,0.3)'}}>Comparte este enlace con el nuevo miembro. Al hacer clic podran establecer su contrasena y acceder directamente. El enlace caduca en 24h.</div>
+                    <div className="text-[11px] mb-4 leading-relaxed" style={{color:'rgba(255,255,255,0.3)'}}>
+                      Ojo: <strong style={{color:'rgba(255,176,32,0.9)'}}>caduca en una hora y solo sirve una vez</strong>. Mandarlo por WhatsApp o
+                      Slack lo suele quemar, porque su vista previa lo abre sola antes que la persona. Si eso pasa, no hay problema:
+                      la contraseña de arriba sigue valiendo.
+                    </div>
                     <div className="flex gap-2">
                       <button onClick={()=>{ navigator.clipboard.writeText(inviteResult.inviteLink!).catch(()=>{}); setCopiedInvite(true); setTimeout(()=>setCopiedInvite(false),2000) }}
                         className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all hover:opacity-80"
@@ -573,7 +612,7 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
                 <button onClick={addMember} disabled={addingLoading||!newMemberName.trim()||!newMemberEmail.trim()}
                   className="w-full py-3 rounded-xl font-syne text-[9.5px] font-black tracking-widest text-white disabled:opacity-30 transition-all hover:opacity-80"
                   style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
-                  {addingLoading?'CREANDO CUENTA…':'CREAR CUENTA Y GENERAR ENLACE'}
+                  {addingLoading?'CREANDO CUENTA…':yaExiste?'YA EXISTE · DAME SU ACCESO':'CREAR CUENTA Y GENERAR ENLACE'}
                 </button>
                 <div className="text-[11px] pt-1" style={{color:'rgba(255,255,255,0.2)'}}>Recibiras un enlace de acceso para compartir con el nuevo miembro. Solo el email registrado podra acceder a la app.</div>
               </div>
