@@ -58,8 +58,17 @@ export async function PUT(request: NextRequest) {
   }
 
   const admin = await createAdminClient()
-  const { data: existente } = await admin
+  // El error SE MIRA. supabase-js no lanza: sin esto, un fallo de consulta es
+  // indistinguible de «no hay fila», así que se caía por la rama del insert y
+  // creaba una fila de preferencias DUPLICADA — y como `reglas` no tiene `name`
+  // único, nadie protesta. A partir de ahí hay dos filas y gana la que salga
+  // primero: silencias un aviso y vuelve solo al día siguiente.
+  const { data: existente, error: errLectura } = await admin
     .from('reglas').select('id').eq('name', PREFS_ROW).eq('created_by', user.id).maybeSingle()
+  if (errLectura) {
+    console.error('[push/prefs] no se pudo leer la fila existente:', errLectura.message)
+    return NextResponse.json({ error: 'No se pudo comprobar tus preferencias' }, { status: 503 })
+  }
 
   // La tabla no tiene `name` único, así que no hay upsert: se busca y se
   // actualiza o se inserta. Mismo camino que el latido.

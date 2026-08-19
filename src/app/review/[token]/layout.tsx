@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { createAdminClient } from '@/lib/supabase/server'
 import { APP_URL } from '@/lib/appUrl'
+import { firmarUrl } from '@/lib/storageFirmado'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // La tarjetita que sale al pegar el enlace en WhatsApp, Slack o un correo.
@@ -49,6 +50,11 @@ export async function generateMetadata(
       ? `Contenido para ${data.platform}, listo para tu revisión.`
       : 'Contenido listo para tu revisión.'
 
+    // `firmarUrl` devuelve null si no puede firmar, a propósito: un enlace roto que
+    // parece bueno confunde más que un hueco. Aquí eso significa tarjeta sin imagen,
+    // que es exactamente lo correcto.
+    const portadaFirmada = await firmarUrl(admin, data.cover_url)
+
     return {
       title: titulo,
       description: descripcion,
@@ -58,11 +64,21 @@ export async function generateMetadata(
         description: descripcion,
         url: `${APP_URL}/review/${token}`,
         type: 'article',
-        // La portada solo si es pública de verdad: las firmadas caducan, y una
-        // vista previa con la imagen rota es peor que una sin imagen.
-        ...(data.cover_url && !data.cover_url.includes('token=') ? { images: [data.cover_url] } : {}),
+        // FIRMADA, o ninguna.
+        //
+        // Esta condición estaba justo del revés en la práctica. Excluía las URLs
+        // firmadas (`token=`) y dejaba pasar las «públicas» — pero lo que la base
+        // guarda ES la dirección pública, y el bucket `content-videos` es PRIVADO
+        // desde que se cerró. O sea que la única imagen que llegaba a publicarse
+        // era justo la que siempre responde 400. La vista previa salía rota
+        // siempre, y el comentario decía que se hacía para evitar eso.
+        //
+        // La firma caduca, sí. Pero WhatsApp y Slack piden la imagen UNA vez, al
+        // pegar el enlace, y se la quedan: para lo que dura una tarjeta de vista
+        // previa, una firma vale. Una que no carga nunca, no.
+        ...(portadaFirmada ? { images: [portadaFirmada] } : {}),
       },
-      twitter: { card: data.cover_url ? 'summary_large_image' : 'summary', title: titulo, description: descripcion },
+      twitter: { card: portadaFirmada ? 'summary_large_image' : 'summary', title: titulo, description: descripcion },
     }
   } catch {
     // Que la vista previa falle no puede tumbar la página: el cliente tiene que
