@@ -14,6 +14,8 @@ export interface Profile {
   /** Cuándo pasó por la puesta en marcha. Sin valor = todavía no la ha visto. */
   onboarding_at?: string | null  /** Si su correo PERSONAL pasa por el modelo. El buzón compartido nunca lo consulta. */
   analizar_correo?: boolean | null
+  /** Si ve el buzón compartido del equipo en su Bandeja y en su Harvey. */
+  ver_colabs?: boolean | null
 
 }
 
