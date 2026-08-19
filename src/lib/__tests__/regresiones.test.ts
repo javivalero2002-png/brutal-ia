@@ -2708,3 +2708,46 @@ describe('la preferencia de uno no apaga el buzon de los siete', () => {
     }
   })
 })
+
+describe('con un correo abierto, el correo cabe', () => {
+  const I = leerCodigo('src/components/sections/InboxSection.tsx')
+  const D = leerCodigo('src/components/NexusDashboard.tsx')
+
+  // El fallo: 248 (menu) + 214 (cuentas) + 360 (lista) = 822 px de columnas FIJAS
+  // antes de que el panel de lectura recibiera un solo pixel. Las tres llevan
+  // `flex-shrink-0`, asi que en una ventana de ~800 px no encogian: el correo se
+  // salia por la derecha y el contenedor padre, con `overflow-hidden`, lo cortaba.
+  // Javi lo vio con «CONTENIDO DEL EMAIL» y «VER EN GMAIL» pegados al borde.
+
+  it('la columna de cuentas se retira cuando hay un correo abierto y no cabe', () => {
+    const i = I.indexOf("width:'214px'")
+    expect(i, 'ya no existe esa columna: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    // Hacia atras hasta el className del mismo div, que es donde vive la condicion.
+    const div = I.slice(Math.max(0, i - 320), i)
+    expect(/selected \?[^`]*hidden/.test(div),
+      'la columna de cuentas se queda fija con un correo abierto: en una ventana pequena empuja el correo fuera')
+      .toBe(true)
+  })
+
+  it('la lista CEDE ancho en vez de imponer 360 px', () => {
+    const i = I.indexOf('selected ? {width:')
+    expect(i, 'ya no hay columna de lista: revisa esta regla').toBeGreaterThan(-1)
+    const w = I.slice(i, i + 120)
+    expect(/clamp\(/.test(w), 'la lista vuelve a un ancho fijo: no cede sitio al correo').toBe(true)
+    expect(/width:'360px'/.test(w)).toBe(false)
+  })
+
+  it('lo que queda fijo deja sitio de sobra en una ventana pequena', () => {
+    // La regla de verdad, en numeros y no en forma: si alguien sube el minimo de la
+    // lista o el ancho del menu, esto se pone rojo aunque el `clamp` siga ahi.
+    const menu = Number((D.match(/width:sidebarOpen\?'(\d+)px'/) || [])[1])
+    const minLista = Number((I.match(/clamp\((\d+)px/) || [])[1])
+    expect(menu, 'no se encuentra el ancho del menu: revisa esta regla').toBeGreaterThan(0)
+    expect(minLista, 'no se encuentra el minimo de la lista: revisa esta regla').toBeGreaterThan(0)
+    // 790 px es la ventana en la que Javi lo vio cortado. 250 px es lo que necesita
+    // el panel para que quepan las tarjetas de acciones sin desbordar.
+    expect(790 - menu - minLista,
+      `con el menu abierto solo quedan ${790 - menu - minLista}px para el correo en una ventana de 790: se vuelve a cortar`)
+      .toBeGreaterThanOrEqual(250)
+  })
+})
