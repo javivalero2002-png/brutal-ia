@@ -352,6 +352,20 @@ export async function DELETE(request: NextRequest) {
     }, { status: 500 })
   }
 
-  await admin.from('profiles').delete().eq('id', profile.id)
+  // El error SÍ se mira. Sin esto, un fallo aquí devolvía `ok: true` con la cuenta
+  // de autenticación ya borrada y el perfil todavía en la tabla — el peor estado
+  // posible: la persona no puede entrar, sigue saliendo en la lista del equipo, y
+  // al intentar volver a darla de alta el alta choca contra su fila huérfana.
+  //
+  // `deleteUser` normalmente cascadea sobre `profiles`, así que este borrado suele
+  // no encontrar nada y va bien. Pero «suele» no es «siempre», y de eso justo se
+  // entera uno el día que no.
+  const { error: perfilErr } = await admin.from('profiles').delete().eq('id', profile.id)
+  if (perfilErr) {
+    console.error('[team] la cuenta se borró pero su perfil no:', perfilErr.message)
+    return NextResponse.json({
+      error: `La cuenta se ha dado de baja pero su ficha ha quedado en la lista (${perfilErr.message}). Vuelve a intentarlo.`,
+    }, { status: 500 })
+  }
   return NextResponse.json({ ok: true })
 }
