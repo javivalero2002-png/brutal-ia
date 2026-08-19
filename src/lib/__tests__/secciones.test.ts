@@ -159,8 +159,23 @@ describe('Diario · cableado completo', () => {
   // que ni es un diario ni debe permitir inventarse un histórico.
   it('el autor sale de la sesión, nunca del cuerpo', () => {
     const R = leerCod('src/app/api/diario/route.ts')
-    expect(/pick\(body, \['entrada', 'cierre'\]\)/.test(R),
-      'la allowlist deja pasar más que los dos textos: el autor podría venir del cliente').toBe(true)
+
+    // Antes esta regla fijaba la allowlist a literalmente `['entrada', 'cierre']`.
+    // El invariante que protege es OTRO —que la identidad no venga del cliente— y
+    // escribirlo como una lista cerrada lo confundía con «no añadas columnas»: al
+    // añadir `animo`, un campo de contenido perfectamente legítimo, se ponía roja
+    // sin que nada fuera mal. Una regla que se pone roja cuando NO hay fallo se
+    // acaba relajando de la peor forma: borrándola entera.
+    //
+    // Ahora prohíbe lo que de verdad no puede pasar: que la allowlist deje entrar
+    // quién eres, de cuándo es, o cuándo fichaste.
+    const lista = (R.match(/pick\(body, \[([^\]]*)\]\)/) || [])[1] || ''
+    expect(lista, 'ya no se usa pick() aquí: revisa esta regla en vez de borrarla').toBeTruthy()
+    for (const prohibido of ['user_id', 'id', 'autor', 'created_by', 'entrada_at', 'cierre_at', 'dia']) {
+      expect(lista.includes(`'${prohibido}'`),
+        `la allowlist deja pasar '${prohibido}': el cliente podría escribir en el día de otro o falsear la hora`)
+        .toBe(false)
+    }
     expect(/user_id: user\.id/.test(R), 'el autor no sale de la sesión').toBe(true)
   })
 

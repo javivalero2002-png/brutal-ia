@@ -54,6 +54,12 @@ const icons: Record<string,string> = {
   clock:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zm0-14v4l3 3',
   'map-pin':'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z M12 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4',
   'users-2':'M14 19a6 6 0 0 0-12 0M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm3 7a5 5 0 0 0-5-5',
+  // Caras del ánimo del día (Fichar). Trazos de Lucide, sin el círculo exterior:
+  // el círculo lo pone ya el botón que las envuelve y doblarlo emborrona a 13px.
+  'smile':'M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z',
+  'meh':'M8 15h8M9 9h.01M15 9h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z',
+  'frown':'M16 16s-1.5-2-4-2-4 2-4 2M9 9h.01M15 9h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z',
+  'trending-up':'M22 7l-8.5 8.5-5-5L2 17M16 7h6v6',
   'check-square':'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
   film:'M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM2 8h20M2 16h20M6 2v4M18 2v4M6 18v4M18 18v4',
   link:'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',

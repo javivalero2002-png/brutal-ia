@@ -2845,3 +2845,34 @@ describe('lo que flota no se posa encima del contenido', () => {
       .toBe(true)
   })
 })
+
+describe('lo que va a una columna con CHECK se valida antes', () => {
+  it('el animo del diario se comprueba contra su lista', () => {
+    // La trampa que ya vivio meses con `tasks.level`: un valor fuera de la lista no
+    // deja un dato raro — hace REBOTAR el upsert entero, asi que se pierde el
+    // cierre del dia completo por haber pulsado un boton. Y `animo` entra por
+    // `pick()`, o sea que puede llegar cualquier cosa.
+    const R = leerCodigo('src/app/api/diario/route.ts')
+    const i = R.indexOf("pick(body,")
+    expect(i, 'ya no se usa pick() aqui: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    if (!/'animo'/.test(R.slice(i, i + 120))) return   // si se quita el campo, no hay nada que validar
+
+    const ventana = R.slice(i, i + 700)
+    expect(/productivo[\s\S]{0,40}normal[\s\S]{0,40}bloqueado/.test(ventana),
+      'no se comprueba el animo contra su lista antes de escribirlo')
+      .toBe(true)
+    expect(/status: 400/.test(ventana),
+      'se detecta el valor invalido pero no se rechaza: acabaria igual en el upsert')
+      .toBe(true)
+  })
+
+  it('y la columna tiene el CHECK que lo respalda', () => {
+    // La validacion de la ruta es la que da un error util; el CHECK es el que
+    // impide que entre basura por cualquier otra via. Hacen falta las dos.
+    const sql = readdirSync('migrations').filter(f => f.endsWith('.sql'))
+      .map(f => readFileSync(join('migrations', f), 'utf8')).join('\n')
+    expect(/animo[\s\S]{0,120}check[\s\S]{0,120}bloqueado/i.test(sql),
+      'la columna animo no lleva CHECK: la ruta seria la unica barrera')
+      .toBe(true)
+  })
+})

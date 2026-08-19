@@ -77,3 +77,22 @@ describe('iconos: ningun nombre puede pintar un hueco vacio', () => {
     expect(malos).toEqual([])
   })
 })
+
+describe('el mapa no tiene un icono escrito dos veces', () => {
+  it('ninguna clave se repite', () => {
+    // Paso de verdad: se añadieron seis iconos y dos de ellos —`square` y `list`—
+    // ya estaban, definidos SIN comillas. La comprobacion previa buscaba solo
+    // claves entrecomilladas, asi que dijo que faltaban.
+    //
+    // Un objeto literal con la clave repetida es un error de TypeScript, pero de
+    // los que solo ve `tsc`: `npm test` pasaba y `npm run build` compilaba, porque
+    // Turbopack no comprueba tipos. Se colo hasta CI. Aqui se caza en la suite.
+    //
+    // Y si algun dia dejara de ser error de tipos, seguiria importando: la segunda
+    // definicion pisa a la primera en silencio, o sea el icono equivocado en la
+    // pantalla que usaba la de arriba.
+    const nombres = [...MAPA.matchAll(/^\s*'?([a-z0-9-]+)'?\s*:\s*'/gm)].map(m => m[1])
+    const repetidas = [...new Set(nombres.filter(n => nombres.filter(x => x === n).length > 1))]
+    expect(repetidas, 'hay iconos definidos dos veces: la segunda definicion pisa a la primera').toEqual([])
+  })
+})
