@@ -5,7 +5,7 @@ import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
 import { analyzeEmail, EmailAnalysis, plazoRestante, MINIMO_UTIL_MS } from '@/lib/ai'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { NextResponse } from 'next/server'
-import { sendPushToUser, sendPushToAll, canSendPush } from '@/lib/push'
+import { sendPushToUser, sendPushToAll, canSendPush, type PushPayload } from '@/lib/push'
 import { localDayKey } from '@/components/shared/helpers'
 
 // Hasta 20 analisis de email con Claude en secuencia: el default de Vercel se queda corto.
@@ -256,11 +256,12 @@ export async function POST() {
   // Notificación push por los emails nuevos sin leer (con rate-limit de 90s para evitar duplicados)
   if (newUnread.length > 0) {
     const first = newUnread[0]
-    const payload = {
+    const payload: PushPayload = {
       title: newUnread.length === 1 ? `📩 ${first.from_name}` : `📩 ${newUnread.length} emails nuevos`,
       body: newUnread.length === 1 ? first.subject : `${first.from_name}: ${first.subject} y ${newUnread.length - 1} más`,
       url: '/dashboard',
       tag: 'gmail-sync',
+      categoria: 'correo',
     }
     const lockKey = isCompanyAccount ? 'company' : user.id
     if (await canSendPush(admin, lockKey)) {

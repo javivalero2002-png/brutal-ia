@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { firmarCampos } from '@/lib/storageFirmado'
-import { sendPushToUser, sendPushToAll } from '@/lib/push'
+import { sendPushToUser, sendPushToAll, type PushPayload } from '@/lib/push'
 import { NextRequest, NextResponse } from 'next/server'
 
 // El POST espera un push (ver abajo), así que la ruta declara su tope: sin él un
@@ -123,11 +123,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   // serverless la instancia se congela al devolver y un envío suelto se pierde.
   const titulo = (existing as { title?: string }).title || 'una pieza'
   const autor = (existing as { created_by?: string | null }).created_by
-  const aviso = {
+  const aviso: PushPayload = {
     title: aprobado ? 'Un cliente ha aprobado' : 'Un cliente pide cambios',
     body: aprobado ? `«${titulo}» — aprobado sin cambios.` : `«${titulo}» — ${feedback.trim().slice(0, 90)}`,
     url: '/dashboard?s=contenido',
     tag: `review-${token}`,
+    categoria: 'cliente',
     urgent: !aprobado,
   }
   try {

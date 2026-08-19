@@ -1,5 +1,6 @@
 'use client'
 import { activarPush } from '@/lib/activarPush'
+import { AVISOS, ORDEN_AVISOS } from '@/lib/avisos'
 
 import { useState, useEffect } from 'react'
 import { BLU, GRN, RED, AMBAR, SURFACE, BORDER, LucideIcon, useIsMobile, relTime } from '@/components/shared'
@@ -11,6 +12,39 @@ interface PropsNotificaciones {
 }
 
 function NotificacionesTab({ showToast }: PropsNotificaciones) {
+  /**
+   * Qué avisos ha silenciado esta persona.
+   *
+   * Optimista al pulsar y con vuelta atrás si el guardado falla: el interruptor
+   * tiene que responder al dedo, pero mentir sobre lo que quedó guardado es peor
+   * que ir lento — creerías tener silenciado algo que sigue sonando.
+   */
+  const [prefs, setPrefs] = useState<Record<string, boolean>>({})
+  const [guardando, setGuardando] = useState(false)
+  useEffect(() => {
+    fetch('/api/push/prefs')
+      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then(j => setPrefs(j.prefs || {}))
+      .catch(() => { /* todo activo por defecto: es lo que espera quien los activó */ })
+  }, [])
+
+  const cambiarPref = async (cat: string, valor: boolean) => {
+    const antes = prefs
+    const nuevo = { ...prefs, [cat]: valor }
+    setPrefs(nuevo)
+    setGuardando(true)
+    try {
+      const r = await fetch('/api/push/prefs', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prefs: nuevo }),
+      })
+      if (!r.ok) throw new Error()
+    } catch {
+      setPrefs(antes)
+      showToast('No se pudo guardar. Sigue como estaba.')
+    } finally { setGuardando(false) }
+  }
+
   const isMobile = useIsMobile()
   const [supported, setSupported] = useState(true)
   const [needsInstall, setNeedsInstall] = useState(false)
@@ -133,17 +167,50 @@ function NotificacionesTab({ showToast }: PropsNotificaciones) {
           </span>
         </div>
 
-        <div className="mt-5 space-y-2.5">
-          {[
-            {icon:'check-square', txt:'Cuando te asignan una tarea'},
-            {icon:'message-circle', txt:'Cuando recibes un mensaje del equipo'},
-            {icon:'inbox', txt:'Cuando entran emails nuevos (personal y colabs)'},
-          ].map(x=>(
-            <div key={x.txt} className="flex items-center gap-3">
-              <LucideIcon name={x.icon} size={13} color="rgba(27,95,250,0.55)"/>
-              <span className="text-[12.5px]" style={{color:'rgba(255,255,255,0.5)'}}>{x.txt}</span>
-            </div>
-          ))}
+        {/* La lista SALE del catálogo, no de aquí.
+            Antes eran tres líneas escritas a mano mientras la app mandaba ocho
+            avisos distintos — tres de ellos añadidos el mismo día. Prometer de
+            menos es peor que no prometer: quien lee «solo me avisa de tareas y
+            correos» apaga los avisos sin saber que se pierde que un cliente ha
+            respondido o que su Gmail lleva una semana desconectado.
+
+            Y ahora cada línea es un interruptor: la pantalla HACE algo en vez de
+            contar algo. */}
+        <div className="mt-5 flex flex-col gap-1">
+          {ORDEN_AVISOS.map(cat => {
+            const a = AVISOS[cat]
+            const activo = prefs[cat] !== false
+            return (
+              <button key={cat}
+                onClick={() => a.silenciable && cambiarPref(cat, !activo)}
+                disabled={!a.silenciable || guardando || !subscribed}
+                className="flex items-start gap-3 py-2.5 px-3 -mx-3 rounded-xl text-left transition-colors disabled:cursor-default enabled:hover:bg-white/[0.03]">
+                {/* El interruptor. Apagado se ve apagado: sin color y sin bolita
+                    a la derecha, para que se lea de un vistazo cuál está mudo. */}
+                <div className="mt-0.5 flex-shrink-0 rounded-full transition-all"
+                  style={{
+                    width: '30px', height: '17px', padding: '2px',
+                    background: !subscribed ? 'rgba(255,255,255,0.06)' : activo ? `${BLU}` : 'rgba(255,255,255,0.12)',
+                    opacity: a.silenciable ? 1 : 0.45,
+                  }}>
+                  <div className="rounded-full transition-transform" style={{
+                    width: '13px', height: '13px', background: '#fff',
+                    transform: activo ? 'translateX(13px)' : 'translateX(0)',
+                  }}/>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-semibold" style={{color: activo ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.4)'}}>
+                    {a.label}
+                    {!a.silenciable && (
+                      <span className="font-syne text-[7px] font-black tracking-widest ml-2 px-1.5 py-0.5 rounded-full align-middle"
+                        style={{background:'rgba(255,255,255,0.06)', color:'rgba(255,255,255,0.3)'}}>SIEMPRE</span>
+                    )}
+                  </div>
+                  <div className="text-[11.5px] mt-0.5 leading-snug" style={{color:'rgba(255,255,255,0.32)'}}>{a.desc}</div>
+                </div>
+              </button>
+            )
+          })}
         </div>
 
         {needsInstall ? (

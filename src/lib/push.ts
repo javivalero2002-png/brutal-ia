@@ -11,7 +11,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // filtro que las excluye y los nombres no puedan volver a separarse. Se reexporta
 // aquí porque varios llamantes ya lo importaban desde este módulo.
 export { PUSH_ROW } from '@/lib/reglaRows'
-import { PUSH_ROW } from '@/lib/reglaRows'
+import { PUSH_ROW, PREFS_ROW } from '@/lib/reglaRows'
+import { quiereAviso, type CategoriaAviso } from '@/lib/avisos'
 
 let configured = false
 function ensureConfigured() {
@@ -30,7 +31,49 @@ function ensureConfigured() {
   return true
 }
 
-export type PushPayload = { title: string; body?: string; url?: string; tag?: string; urgent?: boolean }
+export type PushPayload = {
+  title: string
+  body?: string
+  url?: string
+  tag?: string
+  urgent?: boolean
+  /**
+   * De qué es este aviso. OBLIGATORIA: sin ella no se puede saber si quien lo
+   * recibe la ha silenciado, y —peor— la pantalla de Notificaciones se queda
+   * describiendo una lista que ya no es la de verdad. Hay una regla que la exige.
+   */
+  categoria: CategoriaAviso
+}
+
+// La fila vive en `reglaRows.ts` con las otras que no son reglas: declararla
+// aquí la habría dejado fuera del filtro, y el panel de Automatizaciones la
+// contaría como una automatización. Ya pasó con el logo de cuenta.
+export { PREFS_ROW } from '@/lib/reglaRows'
+
+/**
+ * Qué categorías ha silenciado esta gente. Una consulta para todos.
+ *
+ * Devuelve un mapa userId → preferencias. Los que no aparecen no han tocado
+ * nada, y eso significa QUE LO QUIEREN TODO: quien activó los avisos espera
+ * recibirlos, y solo silencia quien lo pide expresamente.
+ */
+async function leerPrefs(admin: SupabaseClient, userIds: string[]): Promise<Record<string, Record<string, boolean>>> {
+  const ids = [...new Set(userIds.filter(Boolean))]
+  if (!ids.length) return {}
+  const { data, error } = await admin
+    .from('reglas').select('created_by,condition_text').eq('name', PREFS_ROW).in('created_by', ids)
+  // Si no se pueden leer, se manda igual. Perder un aviso por no saber si alguien
+  // lo quería es peor que mandar uno de más: el silencio no se nota, el ruido sí.
+  if (error) {
+    console.error('[push] no se pudieron leer las preferencias de avisos:', error.message)
+    return {}
+  }
+  const mapa: Record<string, Record<string, boolean>> = {}
+  for (const r of data || []) {
+    try { mapa[(r as any).created_by] = JSON.parse((r as any).condition_text || '{}') } catch { /* ilegible = todo */ }
+  }
+  return mapa
+}
 
 // Throttle de notificaciones por ámbito ('company' o un user_id). Usa la tabla
 // dedicada `push_rate_limits`; si aún no existe (migración pendiente), permite
@@ -113,6 +156,11 @@ function fallaLectura(scope: string, error: { message: string }): never {
 }
 
 export async function sendPushToUser(admin: SupabaseClient, userId: string, payload: PushPayload) {
+  // Lo primero, ¿lo quiere? Si no, ni se lee su suscripción ni se registra en el
+  // historial: un aviso silenciado no ha ocurrido para quien lo silenció.
+  const prefs = await leerPrefs(admin, [userId])
+  if (!quiereAviso(prefs[userId], payload.categoria)) return 0
+
   const { data, error } = await admin.from('reglas').select('id,condition_text').eq('name', PUSH_ROW).eq('created_by', userId)
   if (error) fallaLectura(`usuario ${userId}`, error)
   await logNotifications(admin, [userId], payload)
@@ -125,6 +173,14 @@ export async function sendPushToAll(admin: SupabaseClient, payload: PushPayload,
   // Gemela de la de arriba: descartaba `error` igual, y esta avisa a los siete.
   const { data, error } = await q
   if (error) fallaLectura('todo el equipo', error)
-  await logNotifications(admin, (data || []).map((r: any) => r.created_by), payload)
-  return sendToRows(admin, data || [], payload)
+
+  // Se filtra POR PERSONA: en un envío a todo el equipo, quien haya silenciado
+  // esa categoría no lo recibe, y los demás sí. Antes o lo recibían todos o
+  // ninguno, que es lo mismo que no poder elegir.
+  const prefs = await leerPrefs(admin, (data || []).map((r: any) => r.created_by))
+  const quieren = (data || []).filter((r: any) => quiereAviso(prefs[r.created_by], payload.categoria))
+  if (!quieren.length) return 0
+
+  await logNotifications(admin, quieren.map((r: any) => r.created_by), payload)
+  return sendToRows(admin, quieren, payload)
 }

@@ -489,7 +489,7 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
                 <div className="font-syne text-[7.5px] font-black tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.3)' }}>POR DÓNDE EMPEZAR</div>
                 <div className="flex flex-col gap-1.5 font-figtree text-[12px]" style={{ color: 'rgba(255,255,255,0.6)' }}>
                   <span>· <strong className="text-white">Hoy</strong> — tu resumen del día y Harvey</span>
-                  <span>· <strong className="text-white">Diario</strong> — escribe qué te propones; se convierte en tareas</span>
+                  <span>· <strong className="text-white">Fichar</strong> — al entrar dices qué vas a hacer, al salir qué hiciste</span>
                   <span>· <strong className="text-white">Inbox</strong> — tu correo, con lo urgente marcado</span>
                 </div>
               </div>

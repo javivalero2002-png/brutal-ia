@@ -843,8 +843,15 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
           <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{ color: 'rgba(255,255,255,0.18)' }}>
             DÍA A DÍA
           </div>
+          {/* «Fichar» y no «Diario».
+              Un diario suena a deberes: algo que hay que escribir y que se te
+              acumula si no lo haces. Fichar es lo que de verdad se hace aquí —
+              dices a qué vienes al entrar y qué has hecho al salir— y es el verbo
+              que la propia pantalla ya usaba en sus botones. El identificador
+              interno sigue siendo `diario`: cambiarlo rompería los atajos, los
+              enlaces guardados y la columna de la base. */}
           <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{ letterSpacing: '-0.03em' }}>
-            Diario
+            Fichar
           </h1>
           <div className="font-figtree text-[11.5px] mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
             Lo que se propone y lo que hace el equipo, cada día.
@@ -1261,25 +1268,40 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
               BRIEFING DEL EQUIPO
             </div>
             <div className="flex gap-1">
-              {/* ARRANQUE es de otra naturaleza que los otros dos: HOY y SEMANA
-                  miran hacia atrás y se piden al servidor; este mira hacia
-                  ADELANTE y se compone de lo que ya está cargado. Va en el mismo
-                  sitio porque es la misma pregunta —cómo va el equipo— hecha desde
-                  el otro lado, y porque la sección ya tiene bloques de sobra. */}
-              {(['dia', 'semana', 'arranque'] as const).map(r => {
-                const activo = r === 'arranque' ? rango === r : briefing && rango === r
+              {/* Tres botones y DOS preguntas distintas: HOY y SEMANA miran hacia
+                  atrás («qué se ha hecho»), el tercero mira hacia delante («qué
+                  queda»). Puestos en fila parecían tres tramos de tiempo, así que
+                  el tercero se llama por lo que enseña —LO QUE VIENE— y va
+                  separado por una barrita. Se llamaba ARRANQUE, que es jerga: solo
+                  lo entiende quien lo escribió. */}
+              {(['dia', 'semana'] as const).map(r => {
+                const activo = !!briefing && rango === r
                 return (
-                  <button key={r} onClick={() => { if (r === 'arranque') { setRango(r) } else { pedirBriefing(r) } }}
+                  <button key={r} onClick={() => pedirBriefing(r)}
                     className="px-2.5 py-1 rounded-full font-syne text-[7.5px] font-black tracking-widest transition-all"
                     style={{
                       background: activo ? `${VIO}22` : 'rgba(255,255,255,0.04)',
                       border: `1px solid ${activo ? VIO + '40' : BORDER}`,
                       color: activo ? VIO : 'rgba(255,255,255,0.4)',
                     }}>
-                    {r === 'dia' ? 'HOY' : r === 'semana' ? 'SEMANA' : 'ARRANQUE'}
+                    {r === 'dia' ? 'HOY' : 'SEMANA'}
                   </button>
                 )
               })}
+
+              {/* La barrita: es lo que dice, sin escribirlo, que la de la derecha
+                  responde a otra pregunta. */}
+              <div className="self-stretch w-px mx-1" style={{ background: BORDER }} />
+
+              <button onClick={() => setRango('arranque')}
+                className="px-2.5 py-1 rounded-full font-syne text-[7.5px] font-black tracking-widest transition-all"
+                style={{
+                  background: rango === 'arranque' ? `${VIO}22` : 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${rango === 'arranque' ? VIO + '40' : BORDER}`,
+                  color: rango === 'arranque' ? VIO : 'rgba(255,255,255,0.4)',
+                }}>
+                LO QUE VIENE
+              </button>
             </div>
           </div>
 

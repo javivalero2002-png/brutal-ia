@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { sendPushToAll, sendPushToUser, canSendPush } from '@/lib/push'
+import { sendPushToAll, sendPushToUser, canSendPush, type PushPayload } from '@/lib/push'
 import { todayKey, localDayKey, rotuloNivel } from '@/components/shared/helpers'
 import { logQueryErrors } from '@/lib/queryLog'
 import { NON_RULE_ROWS_FILTER } from '@/lib/reglaRows'
@@ -482,7 +482,7 @@ async function ejecutarReglas(
           // y las demás reglas del bucle deben seguir.
           if (a.assignTo && a.assignTo !== r.created_by) {
             try {
-              await sendPushToUser(admin, a.assignTo, { title: `Tarea automática · ${r.name}`, body: text.slice(0, 120), url: '/dashboard', tag: `auto-${r.id}` })
+              await sendPushToUser(admin, a.assignTo, { title: `Tarea automática · ${r.name}`, body: text.slice(0, 120), url: '/dashboard', tag: `auto-${r.id}`, categoria: 'tarea' })
             } catch (err) {
               console.error(`[automations] el push al asignado falló (regla ${r.name}) y no se reintentará, la tarea ya está marcada:`, err)
             }
@@ -493,7 +493,7 @@ async function ejecutarReglas(
         const last = r.last_triggered_at ? new Date(r.last_triggered_at).getTime() : 0
         if (now - last < NOTIFY_THROTTLE_MS) break
         const body = fillTemplate(a.message || '{asunto}', match.vars).slice(0, 160) || r.name
-        const payload = { title: `⚡ ${r.name}`, body, url: '/dashboard', tag: `auto-${r.id}`, urgent: cfg.action.level === 'urgent' }
+        const payload: PushPayload = { title: `⚡ ${r.name}`, body, url: '/dashboard', tag: `auto-${r.id}`, urgent: cfg.action.level === 'urgent', categoria: 'automatizacion' }
         // canSendPush como en colabsSync y gmail/sync. Sin él, el único freno era
         // `last_triggered_at`, cuyo UPDATE (abajo) no comprueba errores: si esa
         // escritura fallaba, la regla notificaba a los 7 del equipo 24 veces al día.

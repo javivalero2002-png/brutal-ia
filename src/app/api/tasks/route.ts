@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
           body: data.text?.slice(0, 120) || '',
           url: '/dashboard',
           tag: `task-${data.id}`,
+          categoria: 'tarea',
         })
       } catch (err) {
         console.error('[tasks] el push de tarea asignada falló:', err)
