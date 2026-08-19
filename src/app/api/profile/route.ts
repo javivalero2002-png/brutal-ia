@@ -86,6 +86,13 @@ export async function PATCH(request: Request) {
     updates.avatar_color = body.avatar_color
   }
 
+  // Si su correo personal pasa por el modelo. Booleano estricto: `typeof` y no
+  // truthiness, porque `false` es un valor legítimo aquí y `!body.x` lo trataría
+  // como «no lo ha mandado» — que es justo la mitad de los casos.
+  if (typeof body.analizar_correo === 'boolean') {
+    updates.analizar_correo = body.analizar_correo
+  }
+
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400 })
   }
@@ -94,7 +101,7 @@ export async function PATCH(request: Request) {
     .from('profiles')
     .update(updates)
     .eq('id', ctx.userId)
-    .select('id,name,initials,avatar_color,email,role')
+    .select('id,name,initials,avatar_color,email,role,analizar_correo')
     .single()
 
   if (error) {

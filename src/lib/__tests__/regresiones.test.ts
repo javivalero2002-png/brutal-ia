@@ -2662,3 +2662,49 @@ describe('nadie se topa con la pantalla de Google sin avisar', () => {
     expect(/APP_HOST/.test(A), 'el dominio esta cableado: al cambiarlo, el aviso mandaria al sitio viejo').toBe(true)
   })
 })
+
+describe('la preferencia de uno no apaga el buzon de los siete', () => {
+  // El buzon `colaboraciones@` es correo de trabajo del estudio entero y su
+  // analisis es la razon de ser de la Bandeja. Que la preferencia personal de
+  // alguien pudiera apagarlo para los siete no seria una opcion: seria un fallo, y
+  // ademas de los silenciosos — nadie relaciona «apague algo en mi pantalla» con
+  // «el equipo lleva dos semanas sin resumenes».
+  it('la sincronizacion del buzon COMPARTIDO no consulta ninguna preferencia', () => {
+    const C = leerCodigo('src/lib/colabsSync.ts')
+    // La primera llamada a triar() del fichero es la del buzon compartido; la
+    // segunda es la del personal. Acotado al SITIO y no al fichero: buscar
+    // `analizar_correo` en todo colabsSync.ts daria verde con el fallo dentro,
+    // porque el sync personal SI lo usa y vive aqui al lado.
+    const compartido = C.indexOf('triar(email')
+    expect(compartido, 'ya no se tria en el buzon compartido: revisa esta regla').toBeGreaterThan(-1)
+    const llamada = C.slice(compartido, C.indexOf(')', compartido) + 1)
+    expect(/analizar_correo|permitido/.test(llamada),
+      'el buzon compartido consulta una preferencia personal: uno solo puede dejar al equipo sin analisis')
+      .toBe(false)
+  })
+
+  it('en la ruta manual, la cuenta de empresa gana a la preferencia', () => {
+    // La misma ruta sincroniza el buzon compartido cuando la cuenta conectada es la
+    // de colaboraciones. Sin el `isCompanyAccount ||`, quien conecte ese buzon
+    // apagaria su analisis para todos con su propio interruptor.
+    const R = leerCodigo('src/app/api/gmail/sync/route.ts')
+    const i = R.indexOf('const permitido =')
+    expect(i, 'ya no se calcula el permiso: revisa esta regla').toBeGreaterThan(-1)
+    expect(/isCompanyAccount \|\|/.test(R.slice(i, i + 90)),
+      'la preferencia personal manda tambien sobre el buzon compartido')
+      .toBe(true)
+  })
+
+  it('apagar el analisis NO deja de guardar el correo', () => {
+    // La distincion que sostiene todo el triaje: se guarda SIEMPRE, se analiza a
+    // veces. Si apagar el interruptor dejara de insertar, la persona perderia su
+    // correo creyendo que solo ha quitado un resumen. La regla mira que el insert
+    // no dependa de `analizar` en ninguno de los tres sincronizadores.
+    for (const ruta of ['src/lib/colabsSync.ts', 'src/app/api/gmail/sync/route.ts']) {
+      const C = leerCodigo(ruta)
+      expect(/if \(!analizar\)[\s\S]{0,80}continue/.test(C),
+        `${ruta} se salta el correo cuando no se analiza: eso lo pierde, no lo omite`)
+        .toBe(false)
+    }
+  })
+})

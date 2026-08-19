@@ -33,7 +33,7 @@ export async function POST() {
 
   const { data: profile } = await admin
     .from('profiles')
-    .select('gmail_refresh_token, gmail_connected')
+    .select('gmail_refresh_token, gmail_connected, analizar_correo')
     .eq('id', user.id)
     .single()
 
@@ -171,7 +171,14 @@ export async function POST() {
     if (known.has(email.gmail_id)) continue
 
     // ¿Le pagamos un análisis? Esto NO decide si se guarda: se guarda siempre.
-    const { analizar, motivo } = triar(email, DOMINIOS, CONOCIDOS)
+    //
+    // La preferencia de la persona SOLO manda en su buzón personal. Esta misma ruta
+    // sincroniza el buzón compartido cuando la cuenta conectada es la de
+    // colaboraciones, y ahí no pinta nada: ese correo es de trabajo y de los siete,
+    // así que dejar que la preferencia de uno apagara su análisis sería un fallo,
+    // no una opción. De ahí el `isCompanyAccount ||`.
+    const permitido = isCompanyAccount || profile.analizar_correo !== false
+    const { analizar, motivo } = triar(email, DOMINIOS, CONOCIDOS, permitido)
 
     let analysis: EmailAnalysis | null = null
     let estado: 'ok' | 'omitido' | 'pendiente' | 'fallo' = 'omitido'

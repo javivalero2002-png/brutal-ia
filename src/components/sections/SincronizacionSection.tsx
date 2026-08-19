@@ -48,6 +48,26 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
   }, [])
 
   const uid = profile?.id || 'default'
+  // Optimista y con vuelta atrás: un interruptor que tarda medio segundo en
+  // moverse se pulsa dos veces. Si el guardado falla se devuelve al sitio y se
+  // dice — que es lo contrario de quedarse mintiendo en la posición nueva.
+  const [analizaCorreo, setAnalizaCorreo] = useState<boolean>(profile?.analizar_correo !== false)
+  const [guardandoAnalisis, setGuardandoAnalisis] = useState(false)
+  const cambiarAnalisis = async (v: boolean) => {
+    const antes = analizaCorreo
+    setAnalizaCorreo(v); setGuardandoAnalisis(true)
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'PATCH', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ analizar_correo: v }),
+      })
+      if (!res.ok) throw new Error()
+      showToast(v ? 'Tu correo personal se analizará' : 'Tu correo personal ya no se analiza')
+    } catch {
+      setAnalizaCorreo(antes)
+      showToast('No se pudo guardar la preferencia')
+    } finally { setGuardandoAnalisis(false) }
+  }
   const LS_P = `bs_sync_personal_${uid}`
   const LS_C = `bs_sync_colabs_${uid}`
   const LS_L = `bs_sync_log_${uid}`
@@ -574,6 +594,33 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
                   justo donde más falta hace: quien reconecta ya conocía la app y
                   el aviso de Google le desconcierta más, no menos. */}
               {!personalOk && <div className="mt-3"><AvisoGoogle compacto/></div>}
+              {/* Solo con el buzón conectado: sin correo entrando, la pregunta no
+                  significa nada y solo ocupa sitio. */}
+              {personalOk && (
+                <div className="mt-3 flex items-start gap-3 px-3.5 py-3 rounded-2xl" style={{background:SURF2, border:`1px solid ${BORDER}`}}>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-figtree text-[12.5px]" style={{color:'rgba(255,255,255,0.72)'}}>
+                      Que la IA lea mi correo personal
+                    </div>
+                    <div className="font-figtree text-[11px] mt-0.5 leading-snug" style={{color:'rgba(255,255,255,0.3)'}}>
+                      {analizaCorreo
+                        ? 'El asunto y el principio del cuerpo pasan por Claude para el resumen y marcar lo urgente. Nadie más ve tu correo.'
+                        : 'Tu correo entra en la Bandeja y se puede buscar, pero no sale a ningún modelo. Sin resumen ni aviso de urgencia.'}
+                    </div>
+                    {/* Que no parezca que apaga el buzón compartido, que es la
+                        confusión natural en esta pantalla. */}
+                    <div className="font-figtree text-[10.5px] mt-1" style={{color:'rgba(255,255,255,0.2)'}}>
+                      No afecta al buzón de colaboraciones, que es del equipo.
+                    </div>
+                  </div>
+                  <button onClick={()=>cambiarAnalisis(!analizaCorreo)} disabled={guardandoAnalisis}
+                    aria-pressed={analizaCorreo} aria-label="Que la IA lea mi correo personal"
+                    className="flex-shrink-0 rounded-full transition-all disabled:opacity-40"
+                    style={{width:38, height:22, padding:2, background: analizaCorreo ? BLU : 'rgba(255,255,255,0.1)', border:`1px solid ${analizaCorreo ? BLU : BORDER}`}}>
+                    <div className="rounded-full transition-all" style={{width:16, height:16, background:'#FFFFFF', transform:`translateX(${analizaCorreo ? 16 : 0}px)`}}/>
+                  </button>
+                </div>
+              )}
             </div>
             {/* Token expired warning */}
             {personalExpired && (
