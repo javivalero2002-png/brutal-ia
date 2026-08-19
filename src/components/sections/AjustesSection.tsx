@@ -5,6 +5,7 @@ import type { NexusData } from '@/types'
 import { BLU, RED, SURFACE, SURF2, BORDER, LucideIcon, AjCard } from '@/components/shared'
 import { useIsMobile } from '@/components/shared'
 import SincronizacionSection from './SincronizacionSection'
+import CopiasTab from './CopiasTab'
 import EquipoSection from './EquipoSection'
 import MemoriaSection from './MemoriaSection'
 import AutomatizacionesSection from './AutomatizacionesSection'
@@ -35,7 +36,7 @@ interface PropsAjustes {
 
 function AjustesSection({profile,data,showToast,memFilter,setMemFilter,onOpenModal,isOwner,onNavigate,onVerPuestaEnMarcha}: PropsAjustes) {
   const isMobile = useIsMobile()
-  const [ajTab, setAjTab] = useState<'perfil'|'notificaciones'|'sincronizacion'|'equipo'|'memoria'|'automatizaciones'|'reportes'>('perfil')
+  const [ajTab, setAjTab] = useState<'perfil'|'notificaciones'|'sincronizacion'|'equipo'|'memoria'|'automatizaciones'|'reportes'|'copias'>('perfil')
   const [editName, setEditName] = useState(profile?.name||'')
   const [editInitials, setEditInitials] = useState(profile?.initials||'')
   const [editAvatarColor, setEditAvatarColor] = useState(profile?.avatar_color||BLU)
@@ -92,6 +93,9 @@ function AjustesSection({profile,data,showToast,memFilter,setMemFilter,onOpenMod
     {id:'memoria',label:'Memoria',icon:'database'},
     {id:'automatizaciones',label:'Automatizaciones',icon:'zap'},
     ...(isOwner ? [{id:'reportes',label:'Reportes',icon:'printer'}] as const : []),
+    // Solo al propietario: el fichero de copia es la base entera —quién cobra
+    // cuánto, el diario de cada uno—, el mismo criterio que el briefing.
+    ...(isOwner ? [{id:'copias',label:'Copias',icon:'archive-restore'}] as const : []),
   ] as const
 
   return (
@@ -128,6 +132,7 @@ function AjustesSection({profile,data,showToast,memFilter,setMemFilter,onOpenMod
         {ajTab === 'memoria' && <MemoriaSection data={data} memFilter={memFilter||'Todos'} setMemFilter={setMemFilter||(() => {})} onOpenModal={onOpenModal||(() => {})} showToast={showToast} />}
         {ajTab === 'automatizaciones' && <AutomatizacionesSection data={data} onOpenModal={onOpenModal||(() => {})} showToast={showToast} isOwner={isOwner} />}
         {ajTab === 'reportes' && isOwner && <ReportesSection data={data} onNavigate={onNavigate} />}
+        {ajTab === 'copias' && isOwner && <CopiasTab showToast={showToast} />}
 
         {ajTab === 'perfil' && (
         <div className={`${isMobile?'p-4':'p-8'} max-w-[680px] mx-auto`}>

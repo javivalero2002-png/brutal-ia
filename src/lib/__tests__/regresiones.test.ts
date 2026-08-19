@@ -1611,3 +1611,66 @@ describe('diario · el arrastre no depende de que la tarea exista', () => {
       .toBe(true)
   })
 })
+
+// ───────────────────────────────────────────────────────────────────────────────
+// La base tiene que poder reconstruirse desde este repositorio.
+//
+// Era el riesgo numero uno del activo, y no una hipotesis: `client_comments` y
+// `notification_log` se crearon a mano en el editor de Supabase y nunca llegaron
+// aqui. Una instancia levantada desde el repo arrancaba, compilaba y se rompia al
+// USARLA — en ejecucion y solo en la mitad de las pantallas. Es tambien lo que
+// bloqueaba poder desplegar esto para otra empresa.
+//
+// El desajuste no se ve leyendo: hay que comparar dos listas que viven en sitios
+// distintos. Eso es exactamente lo que sabe hacer un test.
+// ───────────────────────────────────────────────────────────────────────────────
+describe('el esquema se puede reconstruir desde el repo', () => {
+  // Sin comentarios, por la misma razon que `leerCodigo()` los quita del TS: en
+  // este repo se comenta mucho, y un comentario que EXPLICA una sentencia SQL la
+  // parece. Sin esto, `job_locks` colaba una tabla fantasma llamada «if» desde la
+  // frase «Con `create table if not exists`, una tabla preexistente con...».
+  const sinComentarios = (sql: string) => sql.replace(/--.*$/gm, '')
+  const ddl = [
+    readFileSync('supabase/schema.sql', 'utf8'),
+    ...readdirSync('migrations').filter(f => f.endsWith('.sql'))
+      .map(f => readFileSync(join('migrations', f), 'utf8')),
+  ].map(sinComentarios).join('\n')
+
+  // `create table [if not exists] [public.]nombre`
+  const creadas = new Set(
+    [...ddl.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?([a-z_][a-z0-9_]*)/gi)]
+      .map(m => m[1].toLowerCase()),
+  )
+
+  it('toda tabla que usa el codigo tiene su DDL aqui', () => {
+    const usadas = new Set<string>()
+    for (const ruta of TS) {
+      if (ruta.startsWith('src/lib/__tests__/')) continue
+      for (const m of leerCodigo(ruta).matchAll(/\.from\('([a-z_][a-z0-9_]*)'\)/g)) {
+        usadas.add(m[1])
+      }
+    }
+    // `auth.users` la crea Supabase, no nosotros.
+    const sinDDL = [...usadas].filter(t => !creadas.has(t) && t !== 'users').sort()
+    expect(sinDDL,
+      'el codigo usa tablas que este repo NO sabe crear: una instancia nueva arranca, compila y se rompe al usarla. Anade su DDL en migrations/')
+      .toEqual([])
+  })
+
+  it('no hay DDL de tablas que ya no usa nadie', () => {
+    // El desajuste al reves tambien miente: DDL de algo muerto hace creer que la
+    // funcion existe. Con lista de excepciones y su motivo, como el resto.
+    const VIVAS_SIN_USO_DIRECTO: Record<string, string> = {
+      // Se leen por el join `profile:profiles(...)` o por auth, no por .from()
+      // en el fichero donde aparecen — quitarlas romperia media app.
+    }
+    const usadas = new Set<string>()
+    for (const ruta of TS) {
+      for (const m of leerCodigo(ruta).matchAll(/\.from\('([a-z_][a-z0-9_]*)'\)/g)) usadas.add(m[1])
+    }
+    const huerfanas = [...creadas].filter(t => !usadas.has(t) && !(t in VIVAS_SIN_USO_DIRECTO)).sort()
+    expect(huerfanas,
+      'hay DDL de tablas que ningun codigo toca: o sobra, o alguien la dejo a medias. Si es deliberada, ponla en la lista con su motivo')
+      .toEqual([])
+  })
+})
