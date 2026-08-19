@@ -1953,3 +1953,88 @@ describe('los avisos que se mandan son los que se anuncian', () => {
       'la ruta guarda cualquier categoria que le manden: un cliente podria silenciar la averia saltandose la pantalla').toBe(true)
   })
 })
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Lo que sale del Storage sale FIRMADO.
+//
+// La base guarda la direccion publica como identificador estable y cada ruta de
+// lectura la cambia por una firma temporal antes de responder. Con el bucket
+// abierto, olvidarse era una fuga silenciosa; con el bucket cerrado —que es a
+// donde vamos— es una imagen rota en la cara del usuario. En los dos casos es un
+// fallo que solo se descubre usando la pantalla concreta que lo tiene.
+//
+// Se comprueba aqui porque son 65 rutas y nadie las repasa a mano dos veces.
+// ───────────────────────────────────────────────────────────────────────────────
+describe('nada del Storage sale sin firmar', () => {
+  it('toda ruta que DEVUELVE una columna de fichero la firma', () => {
+    // Las columnas que guardan una direccion del Storage, y las TABLAS que las
+    // tienen. Las dos listas hacen falta: casi todas las rutas piden `select('*')`,
+    // asi que la columna no aparece por su nombre en ningun sitio — y una regla
+    // que solo buscara el nombre se saltaria justo las que mas ficheros sirven.
+    // Verificado quitandole la firma a `agenda/route.ts`: sin las tablas, verde.
+    const COLUMNAS = ['cover_url', 'video_url', 'pdf_url']
+    const TABLAS_CON_FICHEROS = ['content_agenda', 'projects', 'task_attachments']
+
+    // Las que LEEN una tabla con ficheros pero no devuelven la direccion. Cada una
+    // con su motivo, y comprobadas abriendo el fichero — no dadas por buenas.
+    const EXENTAS: Record<string, string> = {
+      'src/app/api/clients/[id]/ai-advice/route.ts':
+        'lee los proyectos del cliente para el prompt y devuelve lo que contesta el modelo, no las filas',
+      'src/app/api/tasks/route.ts':
+        'toca task_attachments solo en el borrado en lote, para llevarse los ficheros del Storage; el GET devuelve tareas, que no tienen columna de fichero',
+    }
+    const infractores: string[] = []
+
+    for (const ruta of TS) {
+      if (!ruta.startsWith('src/app/api/')) continue
+      const C = leerCodigo(ruta)
+      // Solo cuenta si la columna viaja en la RESPUESTA. Leerla para otra cosa no
+      // es servirla: `tasks/route.ts` lee la url de un adjunto para BORRAR su
+      // fichero, y `clients/[id]/ai-advice` mete la fila entera en el prompt pero
+      // devuelve lo que contesta el modelo. Los dos daban falso positivo cuando
+      // esto se miro a ojo, que es justo por lo que ahora lo mira un test.
+      const porNombre = COLUMNAS.some(c => new RegExp(`select\\([^)]*\\b${c}\\b`, 's').test(C))
+      const porAsterisco = /select\('\*[,')]/.test(C)
+        && TABLAS_CON_FICHEROS.some(t => new RegExp(`from\\('${t}'\\)`).test(C))
+      if (!porNombre && !porAsterisco) continue
+      if (ruta in EXENTAS) continue
+      if (!/firmarCampos|firmarUrl/.test(C)) infractores.push(ruta)
+    }
+
+    // Una excepcion que ya no aplica es tan mala como una que falta: se queda
+    // tapando un fallo futuro sin que nadie lo sepa. Si la ruta desaparece o deja
+    // de leer ficheros, la lista lo dice sola.
+    const exentasMuertas = Object.keys(EXENTAS).filter(r => !TS.includes(r))
+    expect(exentasMuertas, 'estas exenciones apuntan a rutas que ya no existen: quitalas').toEqual([])
+
+    expect(infractores,
+      'devuelve una direccion del Storage sin firmarla: con el bucket cerrado es una imagen rota, y con el abierto una fuga — y las dos solo se ven entrando en esa pantalla concreta')
+      .toEqual([])
+  })
+
+  it('lo que se firma es lo que la consulta trae', () => {
+    // El gemelo del anterior, y ya mordio en la pantalla de revision: `firmarCampos`
+    // pedia `cover_url` y el `select` no la traia, asi que se firmaba una columna
+    // que nunca llegaba y el cliente no veia la imagen. Sin error, sin nada.
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (!ruta.startsWith('src/app/api/')) continue
+      const C = leerCodigo(ruta)
+      const i = C.indexOf('firmarCampos(')
+      if (i < 0) continue
+      for (const campo of C.slice(i, i + 260).match(/'(\w+_url)'/g) || []) {
+        const nombre = campo.replace(/'/g, '')
+        // `select('*')` y `select('*, cliente:...)` traen la columna: el asterisco
+        // vale igual con join detras. Comprobarlo solo con `'*'` marcaba en falso
+        // las cuatro rutas que usan la forma con join — que son casi todas.
+        const traeTodo = /select\('\*[,')]/.test(C)
+        if (!new RegExp(`select\\([^)]*\\b${nombre}\\b`, 's').test(C) && !traeTodo) {
+          infractores.push(`${ruta} firma «${nombre}» y no la trae`)
+        }
+      }
+    }
+    expect(infractores,
+      'firma una columna que la consulta no devuelve: no da error, simplemente no se ve la imagen')
+      .toEqual([])
+  })
+})
