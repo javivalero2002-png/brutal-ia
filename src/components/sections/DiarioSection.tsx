@@ -662,6 +662,37 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
     return { porPersona, vienen, eventos, totalColgadas: colgadas.length }
   }, [data.tasks, data.team, data.calendarEvents])
 
+  /**
+   * Objetivos escritos en días anteriores que siguen sin hacer y NO tienen tarea.
+   *
+   * `vienenDeAntes` mira tareas, y eso lo hacía depender de que la tarea
+   * existiera: un objetivo cuya tarea no llegó a crearse desaparecía al día
+   * siguiente sin rastro. Esto lo saca del DIARIO, que es donde el objetivo está
+   * escrito de verdad, así que sobrevive aunque la tarea nunca existiera.
+   */
+  const [huerfanos, setHuerfanos] = useState<{ dia: string; texto: string }[]>([])
+  useEffect(() => {
+    if (demo || !esHoy) { setHuerfanos([]); return }
+    let vivo = true
+    fetch('/api/diario/pendientes')
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (vivo && j?.pendientes) setHuerfanos(j.pendientes) })
+      .catch(() => { /* silencioso: `vienenDeAntes` sigue enseñando lo que sí tiene tarea */ })
+    return () => { vivo = false }
+  }, [demo, esHoy, dia])
+
+  /** Trae a hoy un objetivo que no tiene tarea: se crea aquí, ya de hoy. */
+  const traerHuerfano = async (texto: string) => {
+    setArrastrando(true)
+    try {
+      await data.createTask({ text: texto, level: 'high', done: false, assigned_to: profile?.id, source: 'ai', diario_dia: dia, diario_objetivo: texto })
+      cambiarFilas([...filas.map(x => x.trim()).filter(Boolean), texto])
+      setHuerfanos(h => h.filter(x => x.texto !== texto))
+      showToast('Traído a hoy')
+    } catch { showToast('No se pudo traer') }
+    finally { setArrastrando(false) }
+  }
+
   const [arrastrando, setArrastrando] = useState(false)
   const traerAHoy = async (ids: string[]) => {
     if (!ids.length) return
@@ -920,14 +951,17 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
       {/* Lo que quedó sin cumplir. Se enseña ANTES de los objetivos de hoy porque
           es lo primero que hay que decidir: ¿lo retomo o lo dejo ir? Sin esto se
           caía del radar en silencio justo cuando más falta hacía verlo. */}
-      {vienenDeAntes.length > 0 && (
+      {(vienenDeAntes.length > 0 || huerfanos.length > 0) && (
         <div className="rounded-2xl px-4 py-3.5 mb-4" style={{ background: `${AMBAR}0D`, border: `1px solid ${AMBAR}2E` }}>
           <div className="flex items-center gap-2 mb-2.5 flex-wrap">
             <LucideIcon name="history" size={14} color={AMBAR} />
             <div className="font-syne text-[8.5px] font-black tracking-widest flex-1" style={{ color: AMBAR }}>
-              VIENEN DE ANTES · {vienenDeAntes.length}
+              VIENEN DE ANTES · {vienenDeAntes.length + huerfanos.length}
             </div>
-            <button onClick={() => traerAHoy(vienenDeAntes.map(t => t.id))} disabled={arrastrando}
+            <button onClick={async () => {
+                if (vienenDeAntes.length) await traerAHoy(vienenDeAntes.map(t => t.id))
+                for (const h of huerfanos) await traerHuerfano(h.texto)
+              }} disabled={arrastrando}
               className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-widest transition-all active:scale-95 disabled:opacity-40"
               style={{ background: `${AMBAR}1E`, border: `1px solid ${AMBAR}45`, color: AMBAR }}>
               {arrastrando ? 'TRAYENDO…' : 'TRAER TODO A HOY'}
@@ -946,9 +980,24 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
                   style={{ color: AMBAR }}>TRAER</button>
               </div>
             ))}
-            {vienenDeAntes.length > 5 && (
+            {/* Los que no llegaron a ser tarea. Van igual que los demás: para
+                quien mira son lo mismo —algo que se propuso y no cerró—, y la
+                diferencia de dónde salen es un detalle nuestro, no suyo. */}
+            {huerfanos.slice(0, 5).map(h => (
+              <div key={`${h.dia}-${h.texto}`} className="flex items-center gap-2.5">
+                <span className="font-figtree text-[10.5px] flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  {etiquetaDia(h.dia)}
+                </span>
+                <span className="font-figtree text-[12.5px] flex-1 min-w-0 truncate" style={{ color: 'rgba(255,255,255,0.8)' }}>{h.texto}</span>
+                <button onClick={() => traerHuerfano(h.texto)} disabled={arrastrando}
+                  aria-label={`Traer «${h.texto}» a hoy`}
+                  className="font-syne text-[7.5px] font-black tracking-widest flex-shrink-0 transition-opacity hover:opacity-70 disabled:opacity-40"
+                  style={{ color: AMBAR }}>TRAER</button>
+              </div>
+            ))}
+            {vienenDeAntes.length + huerfanos.length > 10 && (
               <div className="font-figtree text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                y {vienenDeAntes.length - 5} más
+                y {vienenDeAntes.length + huerfanos.length - 10} más
               </div>
             )}
           </div>
