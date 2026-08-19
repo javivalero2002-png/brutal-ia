@@ -725,10 +725,13 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
     )
   }
 
-  const parseRevenue = (s: string): number => {
-    if (!s || s === '—') return 0
-    return parseFloat(s.replace(/[€$£\s]/g,'').replace(/\./g,'').replace(',','.').replace(/\/.*$/,'')) || 0
-  }
+  // `parseImporte`, no un parser propio: el de aquí ignoraba la «k» y el «/año»,
+  // así que «12k/mes» valía 12 € y «120k/año» valía 120 €/mes en vez de 10.000.
+  // Es el mismo fallo que ya se arregló en Reportes, vivo en la copia de al lado —
+  // y este fichero YA importaba `parseImporte` y lo usaba seis veces en el detalle:
+  // la línea que dice «es lo que suma en Reportes» contradecía a la tarjeta de
+  // arriba en la misma pantalla.
+  const parseRevenue = (s: string): number => parseImporte(s).mensual
   const activeClients = data.clients.filter((c: Client)=>c.status==='Activo')
   const totalMRR = activeClients.reduce((sum: number, c: Client) => sum + parseRevenue(c.revenue||''), 0)
   // El desglose tiene que contar los MISMOS clientes que el total que hay al lado.

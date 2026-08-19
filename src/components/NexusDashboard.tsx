@@ -11,7 +11,7 @@ import CreateModal from '@/components/CreateModal'
 
 import { BLU, RED, GRN, AMBAR, SURFACE, SURF2, BORDER, ACCENT_COLORS } from '@/components/shared/design-tokens'
 import { useIsMobile, useBackClosable } from '@/components/shared/hooks'
-import { dlDate, todayKey, localDayKey, daysBetweenKeys } from '@/components/shared/helpers'
+import { dlDate, todayKey, localDayKey, daysBetweenKeys, rotuloNivel, esTareaDe } from '@/components/shared/helpers'
 import { construirKanbanCols } from '@/components/shared/kanban'
 import LucideIcon from '@/components/shared/LucideIcon'
 import { SectionErrorBoundary } from '@/components/shared/ErrorBoundary'
@@ -530,7 +530,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
     return [
       ...data.clients.map(c => ({ type:'Cliente', title:c.name, sub:c.industry, act:()=>{ setSelectedClient(c.id); setSection('clientes'); setSearchOpen(false) }})),
       ...data.projects.map(p => ({ type:'Proyecto', title:p.name, sub:p.client?.name||'—', act:()=>{ setSelectedProject(p.id); setProjView('list'); setSection('proyectos'); setSearchOpen(false) }})),
-      ...data.tasks.map(t => ({ type:'Tarea', title:t.text, sub:t.level==='urgent'?'Urgente':t.level==='high'?'Alta':'Normal', act:()=>{ setSection('tareas'); setSearchOpen(false) }})),
+      ...data.tasks.map(t => ({ type:'Tarea', title:t.text, sub:rotuloNivel(t.level), act:()=>{ setSection('tareas'); setSearchOpen(false) }})),
       ...data.memoria.map(m => ({ type:'Memoria', title:m.title, sub:m.category, act:()=>{ setSection('memoria'); setSearchOpen(false) }})),
       ...data.agenda.map((a: any) => ({ type:'Contenido', title:a.title, sub:a.platform, act:()=>{ setSection('contenido'); setSearchOpen(false) }})),
       ...data.inbox.map((m: any) => ({ type:'Inbox', title:m.subject||m.from_name||'Sin asunto', sub:m.from_name||'', act:()=>{ setSection('inbox'); setSearchOpen(false) }})),
@@ -614,7 +614,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
           : trigType==='many_overdue'?`${trigger.threshold}+ tareas vencidas`
           : trigType==='high_priority_unassigned'?'Tareas urgentes sin responsable'
           : `Sin emails de ${trigClient?.name||'cliente'} en ${trigger.days} días`
-        const actTxt = actType==='create_task'?`Crear tarea${action.level&&action.level!=='normal'?` (${action.level==='urgent'?'urgente':'alta'})`:''}`
+        const actTxt = actType==='create_task'?`Crear tarea${action.level&&action.level!=='normal'?` (${rotuloNivel(action.level).toLowerCase()})`:''}`
           : actType==='notify_team'?'Notificar al equipo':'Avisarme a mí'
         await data.createRegla({ name:mf.nombre.trim(), condition_text: JSON.stringify({ v:1, trigger, action }), action_text: `${condTxt} › ${actTxt}`, active:true })
         showToast('Regla creada · el motor la ejecutará')
@@ -637,7 +637,12 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   }
 
   const unreadCount = data.inbox.filter(m => !m.is_read).length
-  const urgentCount = data.tasks.filter(t => !t.done && t.level === 'urgent').length
+  // MÍAS. Sin el filtro contaba las urgentes del equipo entero —`GET /api/tasks`
+  // devuelve todas a propósito—, así que la insignia del menú decía 23 mientras la
+  // campana de al lado, que sí acota por persona, decía 0. Dos números del mismo
+  // concepto en la misma pantalla: o asustas el primer día, o se aprende a ignorar
+  // las insignias, y entonces tampoco se ve la que sí era tuya.
+  const urgentCount = data.tasks.filter(t => !t.done && t.level === 'urgent' && esTareaDe(t, profile)).length
   const isOwner = profile.role === 'owner'
   const todayCalCount = (data.calendarEvents||[]).filter((e: any) => e.start?.slice(0,10) === todayKey()).length
 
@@ -849,10 +854,28 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
               lista, así que se reutiliza. */}
           {navItem('proyectos','Proyectos','folder-open', overdueProjs.length||undefined)}
           {navItem('contenido','Contenido','film')}
+          {/* Memoria es «cómo se hacen las cosas aquí»: la sección que más sirve a
+              quien acaba de entrar, y era la única a la que solo se llegaba por
+              atajo de teclado o buscando el título de una nota que aún no sabes
+              que existe. */}
+          {navItem('memoria','Memoria','brain')}
+
+          {navLabel('ESTUDIO')}
+          {navItem('equipo','Equipo','user-check')}
+          {navItem('automatizaciones','Automatizaciones','zap')}
+          {/* Reportes solo al propietario: la sección pinta «SECCIÓN RESTRINGIDA»
+              a los demás, y un menú que lleva a una puerta cerrada es peor que no
+              tener la entrada. */}
+          {profile.role==='owner' && navItem('reportes','Reportes','bar-chart-2')}
 
           {navLabel('IA')}
           {navItem('chat','Brutal.IA','message-square')}
-          {profile.role==='owner' && (
+          {/* Sin candado. Lo llevaba, pero era el ÚNICO de la app: a Harvey se
+              llega igual por G·Y, por el panel MÁS del móvil y por los botones
+              «pregúntale a Harvey» de Inbox y Diario, y su orbe vive en la
+              portada de todo el mundo. Lo único que hacía el candado era que un
+              miembro aterrizara ahí sin entrada por la que volver. */}
+          {(
             <button onClick={()=>{setSection('harvey'); if (isMobile) setSidebarOpen(false)}}
               className="flex items-center gap-3 w-full py-2.5 px-3 rounded-xl text-left transition-all duration-150"
               style={{
@@ -916,7 +939,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
             )}
             {/* Título de sección */}
             <span className="font-syne text-[10px] font-black tracking-[0.25em] truncate flex-1" style={{color:'rgba(255,255,255,0.55)'}}>
-              {({hoy:'HOY',inbox:'INBOX',calendario:'CALENDARIO',tareas:'TAREAS',clientes:'CLIENTES',proyectos:'PROYECTOS',contenido:'CONTENIDO',chat:'BRUTAL.IA',harvey:'HARVEY',ajustes:'OPERATIVA',memoria:'MEMORIA',equipo:'EQUIPO',reportes:'REPORTES',automatizaciones:'AUTOMATIZACIONES'} as Record<string,string>)[section] || 'BRUTAL.IA'}
+              {({hoy:'HOY',inbox:'INBOX',calendario:'CALENDARIO',tareas:'TAREAS',diario:'DIARIO',clientes:'CLIENTES',proyectos:'PROYECTOS',contenido:'CONTENIDO',chat:'BRUTAL.IA',harvey:'HARVEY',ajustes:'OPERATIVA',memoria:'MEMORIA',equipo:'EQUIPO',reportes:'REPORTES',automatizaciones:'AUTOMATIZACIONES'} as Record<string,string>)[section] || 'BRUTAL.IA'}
             </span>
             {/* Sin gate de owner en el menú: tarea, cliente, proyecto y pieza los
                 puede crear cualquiera —sus rutas no miran el rol— y ocultar el
@@ -1045,6 +1068,12 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
                   {id:'harvey' as Section, icon:'mic', label:'Harvey'},
                   {id:'ajustes' as Section, icon:'settings', label:'Operativa'},
                   {id:'equipo' as Section, icon:'user-check', label:'Equipo'},
+                  // Diario faltaba en las DOS navegaciones del móvil: el botón MÁS
+                  // se encendía al estar en Diario y al abrirlo no había nada marcado.
+                  {id:'diario' as Section, icon:'pen-line', label:'Diario'},
+                  {id:'memoria' as Section, icon:'brain', label:'Memoria'},
+                  {id:'automatizaciones' as Section, icon:'zap', label:'Automat.'},
+                  ...(profile.role==='owner' ? [{id:'reportes' as Section, icon:'bar-chart-2', label:'Reportes'}] : []),
                 ] as {id:Section,icon:string,label:string}[]).map(item=>(
                   <button key={item.id} onClick={()=>{setSection(item.id);setMasOpen(false)}}
                     className="flex flex-col items-center gap-2 py-4 rounded-2xl transition-all active:scale-95"

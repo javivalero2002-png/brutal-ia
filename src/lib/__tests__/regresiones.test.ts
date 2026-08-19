@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { estadoDeadline, dlLabel } from '@/components/shared/helpers'
+import { SECCIONES } from '@/components/shared/secciones'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Las clases de bug de la auditoría, cerradas con llave.
@@ -1291,17 +1292,34 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
   // Pero «las 12 mas recientes» convertia eso en una trampa: cada documento que
   // entra echa fuera una decision o un aprendizaje escritos a mano, que son pocos
   // y son justo lo que dice COMO se trabaja aqui. Guardar mas haria saber menos.
-  it('harvey elige la memoria por relevancia, no por fecha', () => {
-    const H = leerCodigo('src/components/sections/HarveySection.tsx')
-    expect(/data\.memoria[^\n]{0,40}\.slice\(0\s*,\s*12\)/.test(H),
-      'vuelve a coger «las 12 mas recientes»: los documentos echarian fuera lo escrito a mano').toBe(false)
-    const i = H.indexOf('const memoriaRelevante')
-    expect(i, 'ya no existe memoriaRelevante: revisa esta regla').toBeGreaterThan(-1)
-    const cuerpo = H.slice(i, H.indexOf('\n  const buildContext', i))
-    // Lo curado entra SIEMPRE; los documentos, los que vengan a cuento.
-    expect(/curadas/.test(cuerpo) && /esDoc/.test(cuerpo),
-      'no separa lo curado de los documentos: vuelven a competir por el mismo hueco').toBe(true)
-    expect(/buildContext\(userText\)/.test(H),
+  it('nadie arma contexto de memoria cortando por fecha', () => {
+    // Esta regla miraba SOLO HarveySection, y ahi la logica ya estaba bien: el
+    // bug vivia en HoySection, que cogia «las 12 mas recientes» y por tanto perdia
+    // la doctrina del estudio en cuanto habia trece documentos subidos. Una regla
+    // atada a un fichero no ve el gemelo del de al lado; esta mira a TODOS.
+    //
+    // El criterio en si —lo curado entra siempre, los documentos por relevancia—
+    // tiene sus propios tests en src/lib/__tests__/memoriaRelevante.test.ts, que es
+    // donde se puede comprobar de verdad. Aqui solo se vigila que nadie se lo salte.
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (ruta === 'src/lib/memoriaRelevante.ts') continue          // el que decide
+      const C = leerCodigo(ruta)
+      if (/data\.memoria[^\n]{0,40}\.slice\(\s*0\s*,\s*\d+\s*\)/.test(C)) infractores.push(ruta)
+    }
+    expect(infractores,
+      'corta la memoria por fecha: cada PDF que se sube empuja fuera lo escrito a mano, y el modelo deja de saber como se trabaja aqui sin que se note')
+      .toEqual([])
+
+    // Y quien SI arma contexto, que use el de verdad.
+    for (const ruta of ['src/components/sections/HarveySection.tsx', 'src/components/sections/HoySection.tsx']) {
+      expect(leerCodigo(ruta).includes("from '@/lib/memoriaRelevante'"),
+        `${ruta} arma contexto de memoria sin usar el selector comun: es como nacio el gemelo`).toBe(true)
+    }
+
+    // El contexto se construye SABIENDO que se ha preguntado, o no hay relevancia
+    // que valga: sin la pregunta el selector solo puede caer a los recientes.
+    expect(/buildContext\(userText\)/.test(leerCodigo('src/components/sections/HarveySection.tsx')),
       'el contexto se construye sin saber que se ha preguntado: no puede elegir por relevancia').toBe(true)
   })
 
@@ -1455,6 +1473,116 @@ describe('diario · auditoria del 19 de agosto', () => {
   })
 })
 
+// ───────────────────────────────────────────────────────────────────────────────
+// Las mejoras del 2026-08-19. Cuatro de las seis eran GEMELOS —lo mismo arreglado
+// en un sitio y viejo en el otro—, así que las reglas miran a TODOS los ficheros
+// en vez de al que tenía el fallo: una regla atada a un fichero no ve a su gemelo.
+// ───────────────────────────────────────────────────────────────────────────────
+describe('mejoras del 19 de agosto', () => {
+
+  // Pulsabas ALTA al crear y la tarea salía etiquetada MEDIA, porque el rótulo
+  // estaba escrito de tres maneras. Y el filtro era `value="urgent"` con la
+  // etiqueta «Alta»: filtrar por Alta devolvía las Urgentes.
+  it('nadie se escribe su propio vocabulario de prioridades', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (ruta === 'src/components/shared/helpers.ts') continue      // donde vive
+      if (ruta.startsWith('src/lib/__tests__/')) continue
+      const C = leerCodigo(ruta)
+      // El patrón exacto: traducir un `level` a un rótulo con un ternario.
+      if (/level\s*===\s*'urgent'\s*\?\s*'[A-Za-zÁÉÍÓÚáéíóú]/.test(C)) infractores.push(ruta)
+      // O un mapa propio de los tres niveles.
+      if (/urgent\s*:\s*\{\s*label\s*:\s*'[A-Z]/.test(C)) infractores.push(ruta)
+      // Y el vocabulario VIEJO, escrito como sea. Buscar la FORMA del mapa dejaba
+      // pasar copias con otra forma —salieron dos escritas `l:` en vez de `label:`,
+      // y una con solo el nivel `high` cambiado—; el rótulo en sí no se escapa.
+      // «Media» y «Baja» no son niveles de esta app: los tres son Urgente/Alta/Normal.
+      if (/['"](MEDIA|BAJA|Media|Baja)['"]/.test(C)) infractores.push(ruta)
+    }
+    expect([...new Set(infractores)],
+      'traduce los niveles por su cuenta: asi es como «Urgente» acabo mostrandose como ALTA en una pantalla y como MEDIA en otra')
+      .toEqual([])
+  })
+
+  // El importe lo escribe una persona a mano («12k/mes», «120k/año»), así que hay
+  // un solo parser que sabe de sufijos y de anual. Clientes tenia el suyo, viejo, y
+  // la MISMA pantalla decia «es lo que suma en Reportes» debajo de otra cifra.
+  it('el dinero lo interpreta un solo parser', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (ruta === 'src/components/shared/helpers.ts') continue
+      const C = leerCodigo(ruta)
+      // Un parseFloat sobre `revenue` es siempre un parser casero: el bueno
+      // devuelve { mensual, anual } y no se llama asi.
+      if (/parseFloat\([^)]*revenue/i.test(C) || /const parse\w*\s*=\s*\([^)]*\)\s*(:\s*number\s*)?=>\s*\{?[^}]*parseFloat[^}]*replace\(\/\\\/\.\*/.test(C)) {
+        infractores.push(ruta)
+      }
+    }
+    expect(infractores,
+      'interpreta importes por su cuenta: «12k» valdra 12 € y el MRR del estudio dependera de por que pantalla entres')
+      .toEqual([])
+  })
+
+  // La insignia del menu contaba las urgentes del EQUIPO mientras la campana de al
+  // lado contaba solo las tuyas: dos numeros del mismo concepto discrepando.
+  it('el contador del menu cuenta las tareas de quien mira', () => {
+    const C = leerCodigo('src/components/NexusDashboard.tsx')
+    const i = C.indexOf('const urgentCount')
+    expect(i, 'ya no existe urgentCount: revisa esta regla').toBeGreaterThan(-1)
+    expect(/esTareaDe\(/.test(C.slice(i, i + 200)),
+      'la insignia del menu cuenta las urgentes de todo el equipo mientras la campana de al lado cuenta las tuyas')
+      .toBe(true)
+  })
+
+  // Repartir trabajo en un estudio es crear la tarea suelta y asignarla despues, y
+  // ese camino —el PATCH— no avisaba a nadie. El co-responsable no se enteraba
+  // nunca, ni al crear.
+  it('entrar en una tarea avisa, se entre al crearla o al reasignarla', () => {
+    const P = leerCodigo('src/app/api/tasks/[id]/route.ts')
+    expect(/sendPushToUser\(/.test(P),
+      'reasignar una tarea no avisa a nadie: el selector «ASIGNAR A» guarda por aqui').toBe(true)
+    expect(/export const maxDuration/.test(P),
+      'espera un push sin declarar maxDuration: un cuelgue no se distingue de un fallo').toBe(true)
+    // Y con el ANTES, o avisaria por cualquier retoque de una tarea que ya era tuya.
+    expect(/antes\?\.assigned_to/.test(P),
+      'no mira quien la tenia antes: avisaria al tocar las notas de una tarea que ya era tuya, y eso ensena a ignorar los avisos').toBe(true)
+    // Acotado al trozo que decide A QUIEN se avisa, no al fichero: `co_assigned_to`
+    // aparece en el pick() y en el SELECT de las dos rutas, asi que buscarlo suelto
+    // pasaba en verde con el aviso roto. Y el ancla es la LLAMADA, no la primera
+    // aparicion del nombre — que es el import.
+    for (const ruta of ['src/app/api/tasks/route.ts', 'src/app/api/tasks/[id]/route.ts']) {
+      const C = leerCodigo(ruta)
+      const i = C.indexOf('await sendPushToUser(')
+      expect(i, `${ruta} ya no manda push: revisa esta regla`).toBeGreaterThan(-1)
+      expect(/co_assigned_to/.test(C.slice(Math.max(0, i - 700), i)),
+        `${ruta} decide a quien avisar sin mirar al co-responsable: no le llega nada`).toBe(true)
+    }
+  })
+
+  // Cuatro secciones existian y no estaban en ningun menu. Memoria es «como se
+  // hacen las cosas aqui»: la que mas sirve a quien acaba de entrar.
+  it('toda seccion navegable esta en algun menu y tiene titulo', () => {
+    const C = leerCodigo('src/components/NexusDashboard.tsx')
+    const sinMenu = SECCIONES.filter(x =>
+      !new RegExp(`navItem\\('${x}'`).test(C) && !new RegExp(`id:'${x}' as Section`).test(C) && x !== 'harvey')
+    expect(sinMenu,
+      'estas secciones existen y no hay forma de llegar a ellas salvo por atajo de teclado: quien no se sepa el atajo no vuelve a entrar')
+      .toEqual([])
+    // Y el rotulo de la cabecera del movil, que no tenia `diario` y ponia BRUTAL.IA.
+    const mapa = C.slice(C.indexOf("{({hoy:'HOY'"), C.indexOf("{({hoy:'HOY'") + 700)
+    const sinTitulo = SECCIONES.filter(x => !new RegExp(`${x}:'`).test(mapa))
+    expect(sinTitulo, 'la cabecera del movil no sabe como se llama esta seccion y pone «BRUTAL.IA»').toEqual([])
+  })
+
+  // Archivar desde el movil no se podia deshacer desde el movil: la carpeta solo
+  // existia en la columna de escritorio. Un archivado sin vuelta es un borrado.
+  it('lo que se archiva se puede recuperar desde el mismo sitio', () => {
+    const I = leerCodigo('src/components/sections/InboxSection.tsx')
+    const tabs = I.slice(I.indexOf('const tabs = ['), I.indexOf('const tabs = [') + 1400)
+    expect(/Archivados/.test(tabs),
+      'la carpeta Archivados solo esta en escritorio: desde el movil se archiva y no hay forma de volver a verlo').toBe(true)
+  })
+})
 
 // ───────────────────────────────────────────────────────────────────────────────
 // Lo que no se cerró vuelve, exista la tarea o no.

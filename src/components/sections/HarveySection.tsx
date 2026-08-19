@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { memoriaRelevante as elegirMemoria } from '@/lib/memoriaRelevante'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
 import { parsearAccionHarvey, type AccionHarvey } from '@/lib/harveyAccion'
@@ -190,29 +191,9 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
    *
    * Así se puede guardar todo sin que guardar más valga menos.
    */
-  const memoriaRelevante = (pregunta?: string) => {
-    const todas = (data.memoria || []) as { title?: string; category?: string; content?: string }[]
-    const esDoc = (m: { category?: string }) => (m.category || '').toLowerCase() === 'documento'
-    const curadas = todas.filter(m => !esDoc(m))
-    const docs = todas.filter(esDoc)
-
-    const limpia = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    // Palabras de 4+ letras: las cortas («que», «con») casan con todo y no
-    // seleccionan nada.
-    const claves = limpia(pregunta || '').split(/[^a-z0-9]+/).filter(p => p.length >= 4)
-
-    const puntua = (m: { title?: string; content?: string }) => {
-      if (!claves.length) return 0
-      const texto = limpia(`${m.title || ''} ${m.content || ''}`)
-      return claves.reduce((n, k) => n + (texto.includes(k) ? 1 : 0), 0)
-    }
-
-    const docsElegidos = claves.length
-      ? [...docs].map(m => ({ m, p: puntua(m) })).filter(x => x.p > 0).sort((a, b) => b.p - a.p).slice(0, 6).map(x => x.m)
-      : docs.slice(0, 4)
-
-    return [...curadas.slice(0, 10), ...docsElegidos]
-  }
+  // La función vive en `src/lib/memoriaRelevante.ts` con sus tests: aquí estaba
+  // la versión buena y en HoySection la rota, que es cómo nacen los gemelos.
+  const memoriaRelevante = (pregunta?: string) => elegirMemoria(data.memoria as any, pregunta)
 
   const buildContext = (pregunta?: string) => {
     const tasks = (data.tasks||[]) as any[]

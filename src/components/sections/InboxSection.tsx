@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { NexusData } from '@/types'
-import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR } from '@/components/shared'
+import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR, rotuloNivel } from '@/components/shared'
 import { useIsMobile, useBackClosable } from '@/components/shared'
 import { strColor, relTime, todayKey } from '@/components/shared'
 // `plural` no se reexporta desde el índice de shared: se importa del módulo.
@@ -282,7 +282,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
   const relatedTasks = matchedClient ? data.tasks.filter((t: any) => !t.done && t.client_id===matchedClient.id).slice(0, 4) : []
 
   const uc = (u: string) => u==='urgent'?RED:u==='high'?AMBAR:BLU
-  const ul = (u: string) => u==='urgent'?'URGENTE':u==='high'?'ALTA':'NORMAL'
+  const ul = (u: string) => rotuloNivel(u, true)
 
   const tabs = [
     {id:'Todos', label:'Todos', n: allMsgs.length, accent:'rgba(255,255,255,0.35)'},
@@ -293,6 +293,10 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
     {id:'Clientes', label:'Clientes', n: fromClients, accent:'rgba(255,176,32,0.8)'},
     {id:'Interno', label:'Equipo', n: internal, accent: 'rgba(167,139,250,0.8)'},
     ...(allMsgs.some((m:any)=>m.source==='whatsapp') ? [{id:'WhatsApp', label:'WhatsApp', n: allMsgs.filter((m:any)=>m.source==='whatsapp').length, accent:'rgba(37,211,102,0.8)'}] : []),
+    // Archivados también en móvil. La carpeta solo existía en la columna de
+    // escritorio, así que desde el teléfono se podía archivar un correo y no había
+    // ninguna forma de volver a verlo: un archivado sin deshacer es un borrado.
+    {id:'Archivados', label:'Archivados', n: archivedCount, accent:'rgba(255,255,255,0.35)'},
   ]
 
   return (

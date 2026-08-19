@@ -1,7 +1,12 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { sendPushToUser } from '@/lib/push'
 import { borrarFicherosDeAdjuntos } from '@/lib/taskAttachments'
 import { getAuthCtx, canAccessTask } from '@/lib/authz'
 import { NextRequest, NextResponse } from 'next/server'
+
+// El push de reasignación se ESPERA (ver abajo), así que la ruta declara su tope:
+// sin él, un cuelgue de FCM/APNs no se distingue de un fallo y no hay mensaje.
+export const maxDuration = 60
 
 // Solo columnas conocidas: campos desconocidos no deben tumbar la petición
 // ni permitir escribir columnas arbitrarias (p. ej. created_by).
@@ -17,6 +22,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const body = await request.json()
   const admin = ctx.admin
+
+  // Quién la tenía ANTES. Sin esto no se puede distinguir «te acaban de asignar
+  // esto» de «alguien ha retocado las notas de una tarea que ya era tuya», y
+  // avisar de lo segundo enseña a ignorar los avisos.
+  const { data: antes } = await admin
+    .from('tasks').select('assigned_to,co_assigned_to,text').eq('id', id).single()
   const fields = pick(body, ['text','level','done','due_date','project_id','client_id','assigned_to','co_assigned_to','notes'])
   // Sella el momento de completado (y lo limpia al reabrir) para que los
   // reportes de tendencia sean reales y no dependan de updated_at.
@@ -37,6 +48,37 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Aviso a quien ACABA de entrar en la tarea.
+  //
+  // Antes solo avisaba el POST, o sea solo al crearla y solo al responsable. Pero
+  // repartir trabajo en un estudio es crear la tarea suelta y asignarla después —y
+  // el selector «ASIGNAR A» guarda por aquí—, así que el camino normal era el
+  // mudo. El co-responsable no se enteraba nunca, ni al crear ni al reasignar.
+  // `/api/notifications` ya contemplaba a los dos; este era el gemelo que faltaba.
+  //
+  // Con await y no suelto: en serverless la instancia se congela al devolver, y a
+  // `sendPushToUser` le quedan por delante la consulta a `reglas`, el insert en
+  // `notification_log` y las llamadas HTTP. La tarea ya está guardada, así que un
+  // fallo del push se registra y no tumba la respuesta.
+  const yaEstaban = [antes?.assigned_to, antes?.co_assigned_to]
+  const reciennllegados = [data?.assigned_to, data?.co_assigned_to]
+    .filter((p): p is string => !!p && p !== ctx.userId && !yaEstaban.includes(p))
+  if (reciennllegados.length) {
+    const { data: quien } = await admin.from('profiles').select('name').eq('id', ctx.userId).single()
+    for (const destino of reciennllegados) {
+      try {
+        await sendPushToUser(admin, destino, {
+          title: `${quien?.name || 'Alguien'} te ha asignado una tarea`,
+          body: (data?.text || antes?.text || '').slice(0, 120),
+          url: '/dashboard',
+          tag: `task-${id}`,
+        })
+      } catch (err) {
+        console.error('[tasks] el push de reasignación falló:', err)
+      }
+    }
+  }
   return NextResponse.json(data)
 }
 

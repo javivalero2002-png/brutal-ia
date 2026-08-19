@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { NexusData } from '@/types'
-import { PLATAFORMA_COLOR, useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, dlDate, AMBAR } from '@/components/shared'
+import { PLATAFORMA_COLOR, useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, dlDate, AMBAR, NIVEL_TAREA, rotuloNivel, nivelTarea } from '@/components/shared'
 // `plural` no se reexporta desde el índice de shared: se importa del módulo.
 import { plural } from '@/components/shared/helpers'
 import { PlatformLogo } from '@/components/PlatformLogo'
@@ -456,7 +456,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
                                 {e.type==='content'
                                   ? <><PlatformLogo platform={e.raw?.platform} size={9}/><span className="font-syne text-[7px] font-black tracking-wide" style={{color:e.color+'cc'}}>{e.raw?.platform}</span></>
                                   : e.type==='task'
-                                    ? <><LucideIcon name="check-circle" size={8} color={e.color}/><span className="font-syne text-[7px] font-black tracking-wide" style={{color:e.color+'cc'}}>{e.raw?.level==='urgent'?'URGENTE':e.raw?.level==='high'?'MEDIA':'TAREA'}</span></>
+                                    ? <><LucideIcon name="check-circle" size={8} color={e.color}/><span className="font-syne text-[7px] font-black tracking-wide" style={{color:e.color+'cc'}}>{e.raw?.level ? rotuloNivel(e.raw.level, true) : 'TAREA'}</span></>
                                     : <span className="font-syne text-[7px] font-black tracking-wide" style={{color:e.color+'cc'}}>{e.type==='gcal'?'GCAL':e.type==='project'?'PROY.':'—'}</span>
                                 }
                               </div>
@@ -739,8 +739,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
                                   {/* Priority + assignee row */}
                                   <div className="flex items-center gap-2 flex-wrap">
                                     {(()=>{
-                                      const priMap: Record<string,{label:string,color:string}> = {urgent:{label:'ALTA',color:RED},high:{label:'MEDIA',color:'#FFB020'},normal:{label:'BAJA',color:BLU}}
-                                      const pri = priMap[e.raw?.level] || priMap.normal
+                                      const pri = { label: rotuloNivel(e.raw?.level, true), color: NIVEL_TAREA[nivelTarea(e.raw?.level)].color }
                                       return <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full" style={{color:pri.color,background:`${pri.color}15`,border:`1px solid ${pri.color}25`}}>{pri.label}</span>
                                     })()}
                                     {e.raw?.assignee && (

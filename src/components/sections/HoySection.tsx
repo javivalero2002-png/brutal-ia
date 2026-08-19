@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { memoriaRelevante, lineasDeMemoria } from '@/lib/memoriaRelevante'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
 import { parsearAccionHarvey, type AccionHarvey } from '@/lib/harveyAccion'
@@ -251,8 +252,11 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
       return `${e.title} (${e.start?.slice(0,10)||'?'}${timeStr})`
     }).join(' · ')
 
-    const memAll = (data.memoria||[]) as any[]
-    const memLines = memAll.slice(0,12).map((m:any)=>`  - ${m.title}${m.category?` [${m.category}]`:''}: ${(m.content||'').replace(/\s+/g,' ').slice(0,400)}`).join('\n')
+    // Por relevancia, no por fecha. Cogía las 12 más recientes, y como cada PDF
+    // subido entra como una nota más, a partir del documento trece el orbe de esta
+    // pantalla —la portada de todo el mundo— ya no veía ni una decisión del
+    // estudio. HarveySection tenía esto arreglado desde hace días: era el gemelo.
+    const memLines = lineasDeMemoria(memoriaRelevante(data.memoria as any))
 
     return `BRUTAL STUDIOS — ${madridDateLabel()}
 
