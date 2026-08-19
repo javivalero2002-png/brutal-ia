@@ -24,9 +24,27 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
 
   if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  // El equipo, para que quien opine pueda decir QUIÉN es.
+  //
+  // Sin esto el selector de la página no se pintaba nunca —`item.equipo` era
+  // siempre undefined— y todo lo que llegaba por el enlace se firmaba como
+  // «Cliente». El POST ya validaba el autor contra `profiles`: estaba hecha la
+  // mitad servidor y no la mitad lectura, y `item` va tipado como `any` en la
+  // página, así que TypeScript no podía avisar.
+  //
+  // Solo el nombre, las iniciales y el color: es un endpoint PÚBLICO y el correo o
+  // el rol de la gente no tienen nada que hacer aquí.
+  const { data: equipo, error: errEquipo } = await admin
+    .from('profiles').select('name, initials, avatar_color').order('name')
+  // Un fallo aquí no tumba la revisión: se pierde el selector, no la opinión.
+  if (errEquipo) console.error('[review] no se pudo leer el equipo:', errEquipo.message)
+
   // El bucket es privado: lo guardado es un identificador, no una URL que
   // funcione. Se firma justo antes de salir. Ver src/lib/storageFirmado.ts.
-  return NextResponse.json(await firmarCampos(admin, data, ['cover_url', 'video_url']))
+  return NextResponse.json({
+    ...await firmarCampos(admin, data, ['cover_url', 'video_url']),
+    equipo: (equipo || []).map(p => ({ name: p.name, initials: p.initials, color: p.avatar_color })),
+  })
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {

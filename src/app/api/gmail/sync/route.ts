@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { aplazarResto } from '@/lib/aplazarCorreos'
 import { triar, remitentesConocidos, dominiosPropios } from '@/lib/inboxTriage'
 import { checkAiRateLimit } from '@/lib/rate-limit'
 import { codigoDeFallo } from '@/lib/gmailAuth'
@@ -289,21 +290,16 @@ export async function POST() {
   // siguiente pasada ya no estaban entre los más recientes. Se perdían, en
   // silencio. Quedarse sin tiempo pasa de perder correo a aplazarlo.
   if (truncado) {
-    const cola = emails.slice(i).filter(e => !known.has(e.gmail_id)).map(e => ({
-      user_id: user.id, source: 'gmail', gmail_id: e.gmail_id,
-      from_name: e.from_name, from_email: e.from_email, subject: e.subject,
-      body_preview: e.body_preview, is_read: !e.is_unread, is_unread: e.is_unread,
-      received_at: e.received_at, shared: isCompanyAccount,
-      attachments: e.attachments?.length ? e.attachments : [],
-      ai_estado: 'pendiente',
-    }))
-    if (cola.length) {
-      // `gmail_id` es UNIQUE, así que esto es idempotente: si la siguiente pasada
-      // los vuelve a traer, el insert rebota y no duplica.
-      const { error } = await admin.from('inbox_messages').insert(cola)
-      if (error) console.error('[sync] no se pudo aplazar el resto de correos:', error.message)
-    }
-    console.warn(`[sync] presupuesto agotado: ${cola.length} correos guardados como pendientes de analizar`)
+    // Por `aplazarResto`, que es ahora el ÚNICO sitio donde vive esto. Antes esta
+    // ruta lo tenía escrito a mano y las dos funciones del cron no lo tenían en
+    // absoluto: el correo que se caía del corte cada hora no se guardaba y, como
+    // la ventana de Gmail no pagina, no volvía nunca.
+    const aplazados = await aplazarResto(
+      admin,
+      emails.slice(i).filter(e => !known.has(e.gmail_id)),
+      { userId: user.id, shared: isCompanyAccount, etiqueta: 'sync' },
+    )
+    console.warn(`[sync] presupuesto agotado: ${aplazados} correos guardados como pendientes de analizar`)
   }
   if (omitidos) console.log(`[sync] ${omitidos} correos guardados sin analizar (promoción o red social)`)
 

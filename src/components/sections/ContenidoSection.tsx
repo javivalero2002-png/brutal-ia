@@ -322,6 +322,13 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
     setEditVideoUrl(item.video_url||'')
     setEditCoverUrl(item.cover_url||'')
     coverTocada.current = false
+    // La carpeta se sembraba en NINGÚN sitio: el campo nacía vacío aunque la pieza
+    // tuviera carpeta, y —peor— `carpetaTocada` seguía en true de la pieza
+    // anterior, así que al guardar cualquier cosa de ESTA se le escribía encima la
+    // carpeta de AQUELLA. Sus dos gemelos de al lado (portada y vídeo) sí se
+    // siembran y se rearman; a este se le olvidó, que es el fallo de este repo.
+    setEditCarpeta(item.carpeta||'')
+    carpetaTocada.current = false
     videoTocado.current = false
     setEditAccountName(item.account_name||'')
     setEditPublishDate(item.publish_date||'')
