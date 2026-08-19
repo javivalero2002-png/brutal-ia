@@ -2,15 +2,9 @@
 import { useState, useEffect, use } from 'react'
 import { PlatformLogo } from '@/components/PlatformLogo'
 import { PLATAFORMA_COLOR } from '@/components/shared/design-tokens'
-
-function videoEmbed(url: string): string | null {
-  if (!url) return null
-  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?\s]+)/)
-  if (yt) return `https://www.youtube.com/embed/${yt[1]}`
-  const vm = url.match(/vimeo\.com\/(\d+)/)
-  if (vm) return `https://player.vimeo.com/video/${vm[1]}`
-  return null
-}
+// El de `shared`, no una copia: aquí había una segunda versión que además se
+// había quedado atrás — la de shared entiende Drive y esta no.
+import { videoEmbed } from '@/components/shared/helpers'
 
 const platColor = PLATAFORMA_COLOR
 
@@ -29,14 +23,21 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
       .catch(() => setError('Enlace no válido o caducado.'))
   }, [token])
 
-  const submitFeedback = async () => {
-    if (!feedback.trim()) return
+  /**
+   * Un solo camino para mandar la respuesta, se pida cambios o se apruebe.
+   *
+   * `aprobado` viaja como bandera y no como texto: el equipo tiene que poder
+   * distinguir «el cliente ha dado el visto bueno» de «el cliente ha escrito algo
+   * que parece un sí», y eso no se deduce leyendo prosa.
+   */
+  const enviar = async (texto: string, aprobado = false) => {
+    if (!texto.trim()) return
     setSending(true)
     try {
       const res = await fetch(`/api/review/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ feedback }),
+        body: JSON.stringify({ feedback: texto, aprobado }),
       })
       if (res.ok) setSent(true)
       else setError('No se pudo enviar. Inténtalo de nuevo en un momento.')
@@ -48,6 +49,8 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
       setError('No hemos podido enviarlo — comprueba tu conexión y vuelve a intentarlo. Tu texto sigue aquí.')
     } finally { setSending(false) }
   }
+
+  const submitFeedback = () => enviar(feedback)
 
   const pc = item ? (platColor[item.platform] || '#1B5FFA') : '#1B5FFA'
   const embed = item?.video_url ? videoEmbed(item.video_url) : null
@@ -103,20 +106,43 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
               )}
             </div>
 
-            {/* Video */}
-            {embed && (
+            {/* El material. Tres casos y NINGUNO es un hueco mudo: se puede
+                incrustar, no se puede pero hay enlace, o solo hay portada. Antes
+                solo se pintaba el primero, así que a un cliente con el vídeo en
+                Drive —lo que la propia app le recomienda— se le pedía opinión
+                sobre algo que no veía. */}
+            {embed ? (
               <div className="rounded-2xl overflow-hidden" style={{ aspectRatio: '16/9', background: '#000' }}>
                 <iframe src={embed} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen />
               </div>
+            ) : item.video_url ? (
+              <a href={item.video_url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2.5 rounded-2xl py-5 transition-opacity hover:opacity-80"
+                style={{ background: 'rgba(27,95,250,0.08)', border: '1px solid rgba(27,95,250,0.25)' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B87FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+                <span className="text-sm font-semibold" style={{ color: '#5B87FF' }}>Ver el material</span>
+              </a>
+            ) : item.cover_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={item.cover_url} alt={item.title} className="w-full rounded-2xl"
+                style={{ display: 'block', background: 'rgba(255,255,255,0.03)' }} />
+            ) : null}
+
+            {/* La portada acompaña al vídeo cuando hay las dos: da contexto sin
+                competir con él. */}
+            {(embed || item.video_url) && item.cover_url && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={item.cover_url} alt="" className="w-full rounded-2xl" style={{ display: 'block' }} />
             )}
 
-            {/* Notes from team */}
-            {item.notes && (
-              <div className="rounded-2xl p-5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <div className="text-xs font-bold tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.25)' }}>NOTAS DEL EQUIPO</div>
-                <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'rgba(255,255,255,0.65)' }}>{item.notes}</p>
-              </div>
-            )}
+            {/* Aquí había un bloque «NOTAS DEL EQUIPO» que NO podía pintarse
+                nunca: el endpoint excluye `notes` a propósito por ser de uso
+                interno, así que `item.notes` no llega jamás. Código muerto que
+                aparentaba una función que no existe. Si algún día se quiere
+                mandar contexto al cliente, hará falta un campo PÚBLICO aparte —
+                reexponer las notas internas no es la solución. */}
 
             {/* Feedback form */}
             {sent ? (
@@ -142,6 +168,30 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
                   onFocus={e => (e.target.style.borderColor = 'rgba(27,95,250,0.4)')}
                   onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.08)')}
                 />
+                {/* Aprobar de un clic.
+                    Hasta ahora aprobar era literalmente el «…o aprobación» del
+                    marcador de posición: texto libre que alguien del equipo lee,
+                    interpreta y traduce a mover una tarjeta a mano. Para un
+                    estudio cuyo entregable es contenido revisado por clientes, la
+                    respuesta MÁS frecuente era la peor servida.
+                    Va como una entrada más del mismo array de opiniones, así que
+                    no hace falta ninguna columna nueva. */}
+                <button
+                  onClick={() => enviar('Aprobado sin cambios.', true)}
+                  disabled={sending}
+                  className="w-full flex items-center justify-center gap-2.5 py-3.5 rounded-xl text-xs font-bold tracking-widest transition-all disabled:opacity-40 mb-3"
+                  style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: '#4ADE80' }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#4ADE80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  APROBAR SIN CAMBIOS
+                </button>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex-1" style={{ height: '1px', background: 'rgba(255,255,255,0.07)' }}/>
+                  <span className="text-[10px] font-bold tracking-widest" style={{ color: 'rgba(255,255,255,0.2)' }}>O PIDE CAMBIOS</span>
+                  <div className="flex-1" style={{ height: '1px', background: 'rgba(255,255,255,0.07)' }}/>
+                </div>
+
                 <div className="flex items-center gap-3 mt-4">
                   <button
                     onClick={submitFeedback}
