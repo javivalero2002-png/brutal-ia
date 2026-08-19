@@ -2339,3 +2339,87 @@ describe('todo enlace de invitacion pasa por el mismo sitio', () => {
       .toBe(false)
   })
 })
+
+describe('quedarse sin tiempo aplaza correo, no lo pierde', () => {
+  // La ventana de Gmail NO pagina: `messages.list` devuelve los N mas recientes y
+  // ya esta. Un correo que se queda detras del corte por tiempo no es un correo
+  // que se vera luego — es un correo que no se vera NUNCA, porque en la pasada
+  // siguiente ya no estara entre los mas recientes. Y no falla nada: desaparece.
+  //
+  // Regla GENERAL sobre los tres sitios que cortan por tiempo, no sobre uno: el
+  // rescate estaba escrito solo en /api/gmail/sync y faltaba en las DOS funciones
+  // del cron, que son justo las que corren cada hora sin que nadie mire.
+  const SINCRONIZADORES = [
+    'src/app/api/gmail/sync/route.ts',
+    'src/lib/colabsSync.ts',
+  ]
+
+  it.each(SINCRONIZADORES)('%s aplaza lo que deja detras', (ruta) => {
+    const C = leerCodigo(ruta)
+    const cortes = [...C.matchAll(/truncado = true/g)]
+    expect(cortes.length, `${ruta} ya no corta por tiempo: revisa esta regla en vez de borrarla`).toBeGreaterThan(0)
+    // Una llamada a aplazarResto por cada corte. Con menos, algun bucle tira su
+    // resto — que es exactamente como estaba colabsSync: dos cortes, cero rescates.
+    const rescates = [...C.matchAll(/aplazarResto\(/g)].length
+    expect(rescates,
+      `${ruta} tiene ${cortes.length} cortes por tiempo y ${rescates} rescates: el correo que cae detras de un corte sin rescate se pierde para siempre`)
+      .toBeGreaterThanOrEqual(cortes.length)
+  })
+
+  it('el rescate vive en UN solo sitio', () => {
+    // Estaba escrito a mano en la ruta y ausente en el cron: el gemelo clasico.
+    // Si alguien vuelve a escribirlo a mano, el insert con `ai_estado: 'pendiente'`
+    // aparecera fuera de aplazarCorreos.ts y esto se pone rojo.
+    for (const ruta of SINCRONIZADORES) {
+      const C = leerCodigo(ruta)
+      expect(/ai_estado:\s*'pendiente'/.test(C),
+        `${ruta} escribe el aplazamiento a mano en vez de usar aplazarResto: son dos implementaciones que se separaran`)
+        .toBe(false)
+    }
+  })
+
+  it('lo aplazado se guarda como pendiente, que es lo que lo hace recuperable', () => {
+    const H = leerCodigo('src/lib/aplazarCorreos.ts')
+    expect(H).toContain("ai_estado: 'pendiente'")
+    // Sin mirar el error, un fallo del insert es indistinguible de un exito y el
+    // correo se pierde igual, pero ademas creyendo que se guardo.
+    expect(/if \(error\)/.test(H), 'el insert del aplazamiento no mira su error').toBe(true)
+  })
+})
+
+describe('ningun fichero de ruta es una copia exacta de otro', () => {
+  it('dos rutas distintas no pueden tener el MISMO contenido', () => {
+    // Esto no es teorico: paso en esta misma sesion. Un script de verificacion
+    // guardaba copias de seguridad usando solo el NOMBRE del fichero, y en este
+    // repo hay 59 rutas que se llaman todas `route.ts`. Dos se pisaron, y
+    // `src/app/api/review/[token]/route.ts` acabo siendo una copia byte a byte de
+    // `src/app/api/admin/team/route.ts`.
+    //
+    // Lo grave es lo que NO lo detecto: `tsc --noEmit` paso, `npm run build`
+    // compilo, y el commit se subio. Los dos ficheros son rutas validas, asi que
+    // para el compilador no hay nada que objetar — simplemente el enlace de
+    // revision habia dejado de existir y en su lugar respondia la API de equipo.
+    // Lo cazo un test que buscaba otra cosa.
+    const rutas: string[] = []
+    const recorrer = (dir: string) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name)
+        if (e.isDirectory()) recorrer(p)
+        else if (e.name === 'route.ts') rutas.push(p)
+      }
+    }
+    recorrer('src/app/api')
+    expect(rutas.length, 'no se encuentran rutas: revisa esta regla en vez de borrarla').toBeGreaterThan(10)
+
+    const porContenido = new Map<string, string[]>()
+    for (const r of rutas) {
+      const c = readFileSync(r, 'utf8')
+      if (!porContenido.has(c)) porContenido.set(c, [])
+      porContenido.get(c)!.push(r)
+    }
+    const duplicadas = [...porContenido.values()].filter(g => g.length > 1)
+    expect(duplicadas.map(g => g.join('  ==  ')),
+      'hay rutas con contenido identico: una se ha pisado con la otra y ni tsc ni el build lo ven')
+      .toEqual([])
+  })
+})

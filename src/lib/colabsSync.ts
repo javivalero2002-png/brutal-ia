@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { aplazarResto } from '@/lib/aplazarCorreos'
 import { triar, remitentesConocidos, dominiosPropios } from '@/lib/inboxTriage'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { esTokenMuerto, esConexionRota, avisarConexionCaida } from '@/lib/gmailAuth'
@@ -179,8 +180,13 @@ async function syncColabsInboxSinCerrojo(
   // y mas estricta (ver comentario de arriba). Se toma el menor, para que la
   // intencion se conserve y el invariante no dependa de que alguien recuerde.
   let truncado = false
+  // Dónde se rompió el bucle. Arranca en `length` porque si NO se rompe no
+  // queda nada detrás — y así `emails.slice(corte)` sale vacío sin casos aparte.
+  let corte = emails.length
 
-  for (const email of emails) {
+  // Indexado para saber POR DÓNDE se cortó: sin el índice no hay forma de
+  // guardar lo que queda detrás, y lo que queda detrás se pierde para siempre.
+  for (const [indice, email] of emails.entries()) {
     if (colabsKnown.has(email.gmail_id)) continue
     // Dos limites, y hacen falta los dos:
     //  · `plazoRestante` es el de la FUNCION — no empezar una llamada que no quepa;
@@ -202,7 +208,7 @@ async function syncColabsInboxSinCerrojo(
       // milisegundos, así que no debe gastar plaza del presupuesto ni quedarse
       // fuera por falta de tiempo.
       const plazo = Math.min(plazoRestante(T0, 60), TOPE_COLABS_MS - (Date.now() - T0))
-      if (plazo < MINIMO_UTIL_MS) { truncado = true; break }
+      if (plazo < MINIMO_UTIL_MS) { truncado = true; corte = indice; break }
       try {
         analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients, plazo)
       } catch { aiFailures++ }
@@ -275,6 +281,17 @@ async function syncColabsInboxSinCerrojo(
       }
       if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgent: analysis?.urgency === 'urgent' })
     }
+  }
+
+  // Lo que quedó detrás del corte se APLAZA, no se pierde. Ver aplazarCorreos.ts:
+  // la ventana de Gmail no pagina, así que un correo que no entra aquí no vuelve.
+  if (truncado) {
+    const aplazados = await aplazarResto(
+      admin,
+      emails.slice(corte).filter(e => !colabsKnown.has(e.gmail_id)),
+      { userId: ownerId, shared: true, etiqueta: 'colabs' },
+    )
+    if (aplazados) console.log('[colabs] aplazados', aplazados, 'correos para la siguiente pasada')
   }
 
   // Los emails de colaboraciones son de todo el equipo: push a todos los suscritos (rate-limit 90s)
@@ -410,8 +427,13 @@ async function syncPersonalInboxSinCerrojo(
   // compartido es uno solo. Al agotarse se sale limpiamente y lo que falte lo
   // recoge la ejecucion siguiente — el bucle salta los gmail_id ya conocidos.
   let truncado = false
+  // Dónde se rompió el bucle. Arranca en `length` porque si NO se rompe no
+  // queda nada detrás — y así `emails.slice(corte)` sale vacío sin casos aparte.
+  let corte = emails.length
 
-  for (const email of emails) {
+  // Indexado para saber POR DÓNDE se cortó: sin el índice no hay forma de
+  // guardar lo que queda detrás, y lo que queda detrás se pierde para siempre.
+  for (const [indice, email] of emails.entries()) {
     if (personalKnown.has(email.gmail_id)) continue
     // Igual que el del buzon compartido, con el tope personal: son SIETE dentro
     // de la misma ejecucion del cron.
@@ -426,7 +448,7 @@ async function syncPersonalInboxSinCerrojo(
       // milisegundos, así que no debe gastar plaza del presupuesto ni quedarse
       // fuera por falta de tiempo.
       const plazo = Math.min(plazoRestante(T0, 60), TOPE_PERSONAL_MS - (Date.now() - T0))
-      if (plazo < MINIMO_UTIL_MS) { truncado = true; break }
+      if (plazo < MINIMO_UTIL_MS) { truncado = true; corte = indice; break }
       try {
         analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients, plazo)
       } catch { aiFailures++ }
@@ -471,6 +493,17 @@ async function syncPersonalInboxSinCerrojo(
       newCount++
       if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgent: analysis?.urgency === 'urgent' })
     }
+  }
+
+  // Igual que en el buzón compartido y en /api/gmail/sync: lo que quedó detrás del
+  // corte se aplaza en vez de perderse. Ver aplazarCorreos.ts.
+  if (truncado) {
+    const aplazados = await aplazarResto(
+      admin,
+      emails.slice(corte).filter(e => !personalKnown.has(e.gmail_id)),
+      { userId: profile.id, shared: false, etiqueta: 'sync personal' },
+    )
+    if (aplazados) console.log('[sync personal] aplazados', aplazados, 'correos para la siguiente pasada')
   }
 
   if (newUnread.length > 0) {
