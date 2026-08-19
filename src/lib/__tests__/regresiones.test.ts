@@ -2207,3 +2207,62 @@ describe('el enlace de invitacion no se gasta antes de usarse', () => {
     expect(/exchangeCodeForSession\(/.test(R), 'no recoge el codigo del parametro').toBe(true)
   })
 })
+
+// ───────────────────────────────────────────────────────────────────────────────
+// La contraseña se pide UNA vez, y el motivo que se da es verdad.
+//
+// Quien llega por el enlace de invitacion elige su contraseña en /reset-password
+// y treinta segundos despues la puesta en marcha se la volvia a pedir diciendole
+// «la que usas ahora te la dio otra persona, asi que la conoce alguien mas». Eso
+// es FALSO por ese camino: se la acababa de poner el, y no la sabe nadie.
+//
+// No era solo repetir un paso. Era explicar un motivo que no existe, en la
+// primera pantalla que ve alguien de la app.
+// ───────────────────────────────────────────────────────────────────────────────
+describe('la contraseña se pide una vez y con un motivo cierto', () => {
+  it('elegir la contraseña al entrar deja constancia', () => {
+    const R = leerCodigo('src/app/reset-password/page.tsx')
+    const i = R.indexOf('setOk(true)')
+    expect(i, 'ya no se guarda asi: revisa esta regla').toBeGreaterThan(-1)
+    expect(/nx_clave_elegida/.test(R.slice(i, i + 700)),
+      'no deja dicho que la contraseña ya se eligio: la puesta en marcha la volvera a pedir con un motivo falso')
+      .toBe(true)
+  })
+
+  it('el paso de contraseña dice la verdad segun como se haya entrado', () => {
+    const P = leerCodigo('src/components/PuestaEnMarcha.tsx')
+    expect(/claveYaElegida/.test(P),
+      'el paso no sabe como ha entrado la persona: dira «te la dio otra persona» a quien se la acaba de poner')
+      .toBe(true)
+    // Las dos cabeceras, y ELEGIDAS POR LA CONDICION — no basta con que los dos
+    // textos esten en el fichero. Comprobarlo asi daba verde con la condicion
+    // cableada a `false`, o sea con el texto falso saliendole a todo el mundo:
+    // verificado poniendo `{false ? (` y viendo la regla en verde.
+    const t = P.indexOf('claveYaElegida ?')
+    expect(t, 'la cabecera ya no depende de como se haya entrado').toBeGreaterThan(-1)
+    const ternario = P.slice(t, t + 700)
+    expect(/Tu contraseña ya está puesta/.test(ternario), 'falta el texto para quien ya la eligio').toBe(true)
+    expect(/te la dio otra persona/.test(ternario), 'falta el texto para quien entra con la temporal').toBe(true)
+  })
+
+  it('quien ya la eligio puede seguir sin volver a escribirla', () => {
+    const P = leerCodigo('src/components/PuestaEnMarcha.tsx')
+    // Anclado al BOTON, no a la primera aparicion de `paso === 2`: esa es el
+    // bloque que pinta los campos, y el boton esta 150 lineas mas abajo. Anclar al
+    // primer `indexOf` es el tropiezo que ya ha dado verde con el fallo dentro
+    // varias veces en este fichero.
+    const i = P.lastIndexOf('paso === 2 &&')
+    expect(i, 'ya no existe el paso 2: revisa esta regla').toBeGreaterThan(-1)
+    expect(/claveYaElegida[\s\S]{0,240}SIGUIENTE/.test(P.slice(i, i + 600)),
+      'obliga a escribir la contraseña otra vez aunque acabe de elegirla')
+      .toBe(true)
+  })
+
+  it('al terminar se olvida, para que la proxima vez decida de nuevo', () => {
+    const P = leerCodigo('src/components/PuestaEnMarcha.tsx')
+    const i = P.indexOf('const terminar')
+    expect(/removeItem\('nx_clave_elegida'\)/.test(P.slice(i, i + 900)),
+      'la marca sobrevive a la puesta en marcha: si se resetea y se entra con una temporal nueva, el paso se saltaria sin motivo')
+      .toBe(true)
+  })
+})

@@ -111,6 +111,22 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
   const [actual, setActual] = useState('')
   const [nueva, setNueva] = useState('')
   const [repetida, setRepetida] = useState('')
+  /**
+   * ¿Ya eligió su contraseña al entrar?
+   *
+   * Quien llega por el enlace de invitación la pone en `/reset-password` treinta
+   * segundos antes de ver esto. Volver a pedírsela —y encima diciéndole que «te la
+   * dio otra persona»— es explicarle un motivo que no existe, en la primera
+   * pantalla que ve de la app.
+   *
+   * Quien entra con la contraseña temporal que le pasó el propietario SÍ tiene que
+   * cambiarla, y para esa persona el paso y su texto son verdad.
+   */
+  const [claveYaElegida, setClaveYaElegida] = useState(false)
+  useEffect(() => {
+    try { setClaveYaElegida(localStorage.getItem('nx_clave_elegida') === '1') } catch { /* se pide, como antes */ }
+  }, [])
+
   const [claveCambiada, setClaveCambiada] = useState(false)
 
   const [avisos, setAvisos] = useState(false)
@@ -181,6 +197,10 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
       // En las DOS ramas: si falla el POST y el paso guardado sobrevive, al
       // volver a abrirla se cae a mitad del recorrido en vez de al principio.
       olvidarPasoGuardado()
+      // Y la marca de «ya elegí contraseña»: si algún día se vuelve a hacer la
+      // puesta en marcha —porque se reseteó, o porque entra en otro sitio— el paso
+      // tiene que decidir de nuevo, no arrastrar lo de la vez anterior.
+      try { localStorage.removeItem('nx_clave_elegida') } catch {}
       setGuardando(false)
     }
   }, [onTerminar, showToast])
@@ -314,7 +334,7 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
               <div className="flex flex-col gap-2">
                 {[
                   { i: 'user', t: 'Tu ficha', d: 'Nombre, iniciales y color con los que te verá el equipo' },
-                  { i: 'key', t: 'Tu contraseña', d: 'La actual te la dio otra persona' },
+                  { i: 'key', t: 'Tu contraseña', d: 'Que solo la sepas tú' },
                   { i: 'download', t: 'Instalar la app', d: 'Acceso directo, sin barra del navegador' },
                   { i: 'mail', t: 'Gmail', d: 'Para que tu correo entre en la app' },
                   { i: 'bell', t: 'Avisos', d: 'Notificaciones de lo urgente' },
@@ -361,8 +381,13 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
 
           {paso === 2 && (
             <>
-              <Cabecera icono="key" eyebrow="SEGURIDAD" titulo="Pon tu propia contraseña"
-                bajada="La que usas ahora te la dio otra persona, así que la conoce alguien más." />
+              {claveYaElegida ? (
+                <Cabecera icono="key" eyebrow="SEGURIDAD" titulo="Tu contraseña ya está puesta"
+                  bajada="La elegiste al entrar y no la sabe nadie más. Puedes cambiarla aquí si quieres, o seguir." />
+              ) : (
+                <Cabecera icono="key" eyebrow="SEGURIDAD" titulo="Pon tu propia contraseña"
+                  bajada="La que usas ahora te la dio otra persona, así que la conoce alguien más." />
+              )}
               <div className="flex flex-col gap-2">
                 <input type="password" value={actual} onChange={e => setActual(e.target.value)} placeholder="Contraseña actual" className={campo} style={estiloCampo} />
                 <input type="password" value={nueva} onChange={e => setNueva(e.target.value)} placeholder="Nueva (mínimo 8 caracteres)" className={campo} style={estiloCampo} />
@@ -513,7 +538,13 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
           )}
           {paso === 0 && <Boton primario onClick={() => irA(1)}>EMPEZAR</Boton>}
           {paso === 1 && <Boton primario onClick={guardarPerfil}>GUARDAR</Boton>}
-          {paso === 2 && <Boton primario onClick={cambiarClave} disabled={!actual || !nueva || !repetida}>CAMBIAR</Boton>}
+          {paso === 2 && (claveYaElegida && !actual && !nueva
+            /* Ya la eligió: el gesto normal es seguir, no cambiarla otra vez. Pero
+               los campos se quedan, porque «quiero cambiarla igualmente» tiene que
+               poder hacerse sin buscar dónde. En cuanto escribe algo, el botón
+               vuelve a ser CAMBIAR. */
+            ? <Boton primario onClick={() => irA(3)}>SIGUIENTE</Boton>
+            : <Boton primario onClick={cambiarClave} disabled={!actual || !nueva || !repetida}>CAMBIAR</Boton>)}
           {(paso === 3 || paso === 4 || paso === 5) && <Boton primario onClick={() => irA(paso + 1)}>SIGUIENTE</Boton>}
           {paso === ultimo && <Boton primario onClick={terminar}>ENTRAR EN NEXUS</Boton>}
         </div>
