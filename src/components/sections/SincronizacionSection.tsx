@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { AvisoGoogle } from '@/components/shared'
 import { rutaApp } from '@/lib/appUrl'
 import type { NexusData } from '@/types'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, useIsMobile, LucideIcon, AjGroup, todayKey } from '@/components/shared'
@@ -568,6 +569,11 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
                     </a>
                   )}
               </div>
+              {/* Uno para los DOS enlaces de arriba —conectar y reauth—, porque la
+                  pantalla de Google es la misma en los dos casos. Y «reauth» es
+                  justo donde más falta hace: quien reconecta ya conocía la app y
+                  el aviso de Google le desconcierta más, no menos. */}
+              {!personalOk && <div className="mt-3"><AvisoGoogle compacto/></div>}
             </div>
             {/* Token expired warning */}
             {personalExpired && (

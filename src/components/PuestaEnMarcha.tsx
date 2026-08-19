@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import { AvisoGoogle } from '@/components/shared'
 import { BLU, GRN, AMBAR, AMARILLO, SURFACE, SURF2, BORDER, ACCENT_COLORS } from '@/components/shared/design-tokens'
 import LucideIcon from '@/components/shared/LucideIcon'
 import type { Profile } from '@/types'
@@ -492,6 +493,7 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
                   <p className="font-figtree text-[11.5px] mb-3" style={{ color: 'rgba(255,255,255,0.32)' }}>
                     Se abrirá Google para que des permiso. Al volver seguimos donde lo dejaste.
                   </p>
+                  <div className="mb-3"><AvisoGoogle /></div>
                   <a href="/api/gmail/connect?account=personal"
                     onClick={() => { try { localStorage.setItem(CLAVE_PASO, '4') } catch {} }}
                     className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl font-syne text-[9px] font-black tracking-widest"

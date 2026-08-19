@@ -2617,3 +2617,48 @@ describe('el paso de la contrasena es opcional de verdad, no solo en el texto', 
   })
 
 })
+
+describe('nadie se topa con la pantalla de Google sin avisar', () => {
+  // `gmail.readonly` es un permiso RESTRINGIDO: Google enseña «esta aplicación no
+  // está verificada» y hay que entrar en «Configuración avanzada» para seguir.
+  // Quitar esa pantalla pide una auditoría de seguridad que para siete personas no
+  // tiene sentido, asi que se queda — y una alarma de seguridad sin previo aviso
+  // hace lo que Google quiere: que la persona se eche atras. Lo que la desactiva
+  // es haberla anunciado antes.
+  //
+  // Regla a nivel de FICHERO, no de linea, y a proposito: el aviso es de pantalla,
+  // no tiene que estar pegado a cada boton. Lo que se vigila es que ninguna
+  // pantalla con boton de conectar se quede sin el.
+  const pantallas = (() => {
+    const encontradas: string[] = []
+    const recorrer = (dir: string) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name)
+        if (e.isDirectory()) recorrer(p)
+        else if (/\.tsx$/.test(e.name) && leerCodigo(p).includes('/api/gmail/connect')) encontradas.push(p)
+      }
+    }
+    recorrer('src/components')
+    return encontradas
+  })()
+
+  it('hay pantallas que conectan Gmail', () => {
+    expect(pantallas.length, 'nadie enlaza ya a gmail/connect: revisa esta regla en vez de borrarla').toBeGreaterThan(0)
+  })
+
+  it.each(pantallas)('%s enseña el aviso', (ruta) => {
+    expect(leerCodigo(ruta).includes('<AvisoGoogle'),
+      'esta pantalla manda a Google sin avisar de que dira que la app no esta verificada')
+      .toBe(true)
+  })
+
+  it('el aviso lleva los pasos LITERALES que hay que pulsar', () => {
+    // El texto exacto de esos botones es lo unico que uno busca con la vista
+    // cuando esta nervioso. Un «sigue las instrucciones» generico no sirve.
+    const A = leerCodigo('src/components/shared/AvisoGoogle.tsx')
+    expect(A).toContain('Configuración avanzada')
+    expect(A).toContain('no está verificada')
+    // Y el dominio no se escribe a mano: sale de APP_HOST, como todo lo demas.
+    expect(/APP_HOST/.test(A), 'el dominio esta cableado: al cambiarlo, el aviso mandaria al sitio viejo').toBe(true)
+  })
+})
