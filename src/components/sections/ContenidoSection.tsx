@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { rutaApp } from '@/lib/appUrl'
 import type { NexusData, ContentItem } from '@/types'
-import { PLATAFORMA_COLOR, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, todayKey, buscaEnTexto } from '@/components/shared'
+import { PLATAFORMA_COLOR, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, videoEsVertical, todayKey, buscaEnTexto } from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
 import BocetoPanel from '@/components/BocetoPanel'
 import type { IrASeccion } from '@/components/shared/secciones'
@@ -1204,25 +1204,31 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                 <div>
                   <div className="flex items-center justify-between mb-2.5">
                     <div className="font-syne text-[8.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>VÍDEO</div>
-                    <span className="font-syne text-[7px] font-black tracking-wide px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.2)',border:'1px solid rgba(255,255,255,0.07)'}}>YouTube · Vimeo · Drive</span>
+                    <span className="font-syne text-[7px] font-black tracking-wide px-2 py-0.5 rounded-full" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.2)',border:'1px solid rgba(255,255,255,0.07)'}}>Instagram · YouTube · Vimeo · Drive</span>
                   </div>
-                  <div className="flex gap-2 mb-2.5">
-                    <input value={editVideoUrl} onChange={e=>{videoTocado.current=true; setEditVideoUrl(e.target.value)}} placeholder="Pega el enlace del vídeo…" className="flex-1 px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU,minWidth:0}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
+                  {/* El campo va SOLO en su fila.
+                      El texto de ayuda estaba dentro de este mismo `flex`, así que
+                      le robaba el ancho entero: el campo quedaba aplastado a unos
+                      veinte píxeles y no se podía escribir en él. Parecía que la
+                      pantalla estaba rota, y lo que estaba roto era el reparto de
+                      espacio de una fila. */}
+                  <div className="mb-2.5">
+                    <input value={editVideoUrl} onChange={e=>{videoTocado.current=true; setEditVideoUrl(e.target.value)}} placeholder="Pega el enlace de Instagram, YouTube, Vimeo o Drive…" className="w-full px-3 py-2.5 rounded-xl text-[12px] text-white placeholder-white/20 outline-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,caretColor:BLU}} onFocus={e=>(e.target.style.borderColor='rgba(27,95,250,0.3)')} onBlur={e=>(e.target.style.borderColor='rgba(255,255,255,0.07)')}/>
 
-                  {/* Se dice por qué no hay botón de subir, en vez de dejar un hueco
-                      donde la portada sí lo tiene. La subida de vídeo está apagada a
-                      propósito (api/agenda/[id]/upload-video devuelve 400 con este
-                      mismo motivo): un vídeo ocupa cientos de veces lo que una
-                      portada y el almacenamiento se paga. */}
-                  {!(editVideoUrl || activeItem.video_url) && (
-                    <div className="font-figtree text-[10px] mt-1.5 leading-snug" style={{color:'rgba(255,255,255,0.28)'}}>
-                      Los vídeos van por enlace: súbelo a YouTube, Vimeo o Drive y pega aquí la dirección.
-                    </div>
-                  )}
+                    {/* Se dice por qué no hay botón de subir, en vez de dejar un hueco
+                        donde la portada sí lo tiene. La subida de vídeo está apagada a
+                        propósito (api/agenda/[id]/upload-video devuelve 400 con este
+                        mismo motivo): un vídeo ocupa cientos de veces lo que una
+                        portada y el almacenamiento se paga. */}
+                    {!(editVideoUrl || activeItem.video_url) && (
+                      <div className="font-figtree text-[10px] mt-1.5 leading-snug" style={{color:'rgba(255,255,255,0.28)'}}>
+                        Pega el enlace de la publicación. Si es de Instagram se ve aquí mismo.
+                      </div>
+                    )}
                   </div>
-                  {videoEmbed(editVideoUrl)&&<div className="rounded-2xl overflow-hidden" style={{aspectRatio:'16/9',background:'#000'}}><iframe src={videoEmbed(editVideoUrl)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>}
+                  {videoEmbed(editVideoUrl)&&<div className="rounded-2xl overflow-hidden mx-auto" style={{aspectRatio:videoEsVertical(editVideoUrl)?'9/16':'16/9',maxWidth:videoEsVertical(editVideoUrl)?'320px':'none',background:'#000'}}><iframe src={videoEmbed(editVideoUrl)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>}
                   {!videoEmbed(editVideoUrl)&&editVideoUrl&&<div className="rounded-2xl overflow-hidden" style={{background:'#000'}}><video src={editVideoUrl} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/></div>}
-                  {!editVideoUrl&&activeItem.video_url&&<div className="rounded-2xl overflow-hidden" style={{background:'#000'}}>{videoEmbed(activeItem.video_url)?<div style={{aspectRatio:'16/9'}}><iframe src={videoEmbed(activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>:<video src={activeItem.video_url} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/>}</div>}
+                  {!editVideoUrl&&activeItem.video_url&&<div className="rounded-2xl overflow-hidden" style={{background:'#000'}}>{videoEmbed(activeItem.video_url)?<div className="mx-auto" style={{aspectRatio:videoEsVertical(activeItem.video_url)?'9/16':'16/9',maxWidth:videoEsVertical(activeItem.video_url)?'320px':'none'}}><iframe src={videoEmbed(activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>:<video src={activeItem.video_url} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/>}</div>}
                   {!editVideoUrl&&!activeItem.video_url&&<div className="flex items-center gap-2 rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px dashed rgba(255,255,255,0.07)`}}><LucideIcon name="film" size={14} color="rgba(255,255,255,0.12)"/><span className="font-syne text-[9px]" style={{color:'rgba(255,255,255,0.18)'}}>Pega un enlace de YouTube, Vimeo, Instagram o Drive</span></div>}
                 </div>
 

@@ -4,7 +4,7 @@ import { PlatformLogo } from '@/components/PlatformLogo'
 import { PLATAFORMA_COLOR } from '@/components/shared/design-tokens'
 // El de `shared`, no una copia: aquí había una segunda versión que además se
 // había quedado atrás — la de shared entiende Drive y esta no.
-import { videoEmbed } from '@/components/shared/helpers'
+import { videoEmbed, videoEsVertical } from '@/components/shared/helpers'
 
 const platColor = PLATAFORMA_COLOR
 
@@ -124,7 +124,14 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
                 Drive —lo que la propia app le recomienda— se le pedía opinión
                 sobre algo que no veía. */}
             {embed ? (
-              <div className="rounded-2xl overflow-hidden" style={{ aspectRatio: '16/9', background: '#000' }}>
+              // El marco se adapta al vídeo, no al revés. Un reel en un hueco 16:9
+              // sale como un sello entre dos franjas negras — y el reel es el
+              // formato que más se manda a revisar.
+              <div className="rounded-2xl overflow-hidden mx-auto" style={{
+                aspectRatio: videoEsVertical(item.video_url) ? '9/16' : '16/9',
+                maxWidth: videoEsVertical(item.video_url) ? '340px' : 'none',
+                background: '#000',
+              }}>
                 <iframe src={embed} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen />
               </div>
             ) : item.video_url ? (

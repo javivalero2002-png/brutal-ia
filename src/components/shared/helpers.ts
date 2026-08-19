@@ -291,8 +291,26 @@ export const videoEmbed = (url: string) => {
   const dr = url.match(/drive\.google\.com\/file\/d\/([^/?&\s]+)/)
     || url.match(/drive\.google\.com\/[^\s]*[?&]id=([^&\s]+)/)
   if (dr) return `https://drive.google.com/file/d/${dr[1]}/preview`
+
+  // Instagram: reels, publicaciones y tv. Es lo que más se va a pegar aquí —el
+  // estudio publica ahí— y hasta ahora no se entendía, aunque el propio texto de
+  // la pantalla lo prometía. Pegabas el enlace y no se veía nada.
+  const ig = url.match(/instagram\.com\/(?:reel|reels|p|tv)\/([^/?&\s]+)/)
+  if (ig) return `https://www.instagram.com/p/${ig[1]}/embed`
+
   return null
 }
+
+/**
+ * ¿El vídeo es vertical? Decide la forma del hueco donde se pinta.
+ *
+ * Un reel de Instagram en un marco 16:9 sale como un sello en medio de dos
+ * franjas negras — que es justo lo contrario de «verse con facilidad» cuando es el
+ * formato que más se publica. Con esto el marco se adapta al vídeo en vez de al
+ * revés.
+ */
+export const videoEsVertical = (url: string) =>
+  /instagram\.com\/(reel|reels|tv)\//.test(url || '')
 
 // Estado de un deadline en DÍAS, no en instantes.
 //
