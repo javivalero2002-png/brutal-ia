@@ -1563,8 +1563,19 @@ describe('mejoras del 19 de agosto', () => {
   // hacen las cosas aqui»: la que mas sirve a quien acaba de entrar.
   it('toda seccion navegable esta en algun menu y tiene titulo', () => {
     const C = leerCodigo('src/components/NexusDashboard.tsx')
+    // Operativa CUENTA como puerta: memoria, equipo, automatizaciones y reportes
+    // son pestanas suyas, y ponerlas ademas en la barra lateral era duplicar la
+    // entrada y alargar la lista — un menu con todo dentro no es mas accesible,
+    // es mas dificil de recorrer.
+    //
+    // Lo que esta regla protege NO es «esta en la barra», es «se puede llegar sin
+    // saberse un atajo de teclado». Contarlo mal la convertia en una regla de
+    // diseno, y el diseno lo decide quien usa la app.
+    const A = leerCodigo('src/components/sections/AjustesSection.tsx')
+    const enOperativa = (x: string) => new RegExp(`ajTab === '${x}'`).test(A)
     const sinMenu = SECCIONES.filter(x =>
-      !new RegExp(`navItem\\('${x}'`).test(C) && !new RegExp(`id:'${x}' as Section`).test(C) && x !== 'harvey')
+      !new RegExp(`navItem\\('${x}'`).test(C) && !new RegExp(`id:'${x}' as Section`).test(C)
+      && !enOperativa(x) && x !== 'harvey')
     expect(sinMenu,
       'estas secciones existen y no hay forma de llegar a ellas salvo por atajo de teclado: quien no se sepa el atajo no vuelve a entrar')
       .toEqual([])
