@@ -137,7 +137,29 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
               </a>
             )}
 
-            {embed ? (
+            {/* La PORTADA manda sobre el incrustado, por lo mismo que dentro de
+                la app: vive en nuestro Storage y ningún bloqueador la toca,
+                mientras que un incrustado de Instagram se tapa con un recuadro
+                gris que no podemos detectar. Y aquí el que lo abre es un cliente:
+                si no ve la pieza, no opina.
+                Con play encima, porque un clic lleva al vídeo de verdad. */}
+            {item.cover_url && item.video_url ? (
+              <a href={item.video_url} target="_blank" rel="noopener noreferrer"
+                className="relative block rounded-2xl overflow-hidden mx-auto"
+                style={{
+                  aspectRatio: videoEsVertical(item.video_url) ? '9/16' : '16/9',
+                  maxWidth: videoEsVertical(item.video_url) ? '340px' : 'none',
+                  background: '#000',
+                }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={item.cover_url} alt={item.title} className="w-full h-full object-cover"/>
+                <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.28)' }}>
+                  <div className="rounded-full flex items-center justify-center" style={{ width: 56, height: 56, background: 'rgba(255,255,255,0.92)' }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#111"><path d="M8 5v14l11-7z"/></svg>
+                  </div>
+                </div>
+              </a>
+            ) : embed ? (
               // El marco se adapta al vídeo, no al revés. Un reel en un hueco 16:9
               // sale como un sello entre dos franjas negras — y el reel es el
               // formato que más se manda a revisar.
