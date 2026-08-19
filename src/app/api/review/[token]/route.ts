@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { firmarCampos } from '@/lib/storageFirmado'
-import { sendPushToUser, sendPushToAll, type PushPayload } from '@/lib/push'
+import { sendPushToUser, sendPushToAll, canSendPush, type PushPayload } from '@/lib/push'
 import { NextRequest, NextResponse } from 'next/server'
 
 // El POST espera un push (ver abajo), así que la ruta declara su tope: sin él un
@@ -173,7 +173,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     urgent: !aprobado,
   }
   try {
-    if (creador) await sendPushToUser(admin, creador, aviso)
+    // CON freno, como todos los demás envíos — y aquí hace más falta que en
+    // ninguno: este es el ÚNICO sitio donde el push lo dispara alguien SIN cuenta.
+    // El enlace se pasa al grupo de WhatsApp, así que basta con que tres personas
+    // opinen seguidas —o con que alguien pulse enviar cinco veces— para que a los
+    // siete les suene el móvil cinco veces. El freno es por pieza, no global: dos
+    // clientes opinando de dos piezas distintas sí deben avisar los dos.
+    if (!(await canSendPush(admin, `review-${token}`))) {
+      // La opinión ya está guardada. Callar el aviso no pierde nada.
+    } else if (creador) await sendPushToUser(admin, creador, aviso)
     else await sendPushToAll(admin, aviso)
   } catch (err) {
     // La opinión YA está guardada: un fallo del aviso no puede devolverle un

@@ -846,7 +846,11 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
           {navItem('calendario','Calendario','calendar',todayCalCount||undefined)}
 
           {navLabel('GESTIÓN')}
-          {navItem('tareas','Tareas','check-square',data.tasks.filter((t:Task)=>!t.done&&t.level==='urgent').length||undefined)}
+          {/* `urgentCount`, NO otra cuenta escrita aquí: la de arriba filtra por
+              `esTareaDe`, esta no, así que el menú enseñaba las urgentes de TODO el
+              equipo y la campana las tuyas. Dos números distintos para la misma
+              pregunta — y el mismo gemelo que ya avisa el comentario de abajo. */}
+          {navItem('tareas','Tareas','check-square',urgentCount||undefined)}
           {navItem('diario','Fichar','pen-line')}
           {navItem('clientes','Clientes','users')}
           {/* La cuenta del badge estaba escrita otra vez aquí, con la misma resta

@@ -140,8 +140,11 @@ describe('alta de un miembro · lo que vive quien entra en el equipo', () => {
       // fuera para siempre, porque nadie conocía su contraseña.
       expect(json.inviteLink, 'no devuelve enlace').toBeTruthy()
       expect(json.clave, 'no devuelve contraseña temporal: si el enlace muere, no hay forma de entrar').toBeTruthy()
-      // Legible: se dicta por teléfono y se copia a mano sin errores.
-      expect(json.clave).toMatch(/^[a-z]+-[a-z]+-\d{4}$/)
+      // Legible: se dicta por teléfono y se copia a mano sin errores. Tres palabras
+      // y no dos desde que se midió la entropía de la anterior: 10 × 10 × 9000 son
+      // menos de 20 bits, y el argumento de «da igual, se cambia en el primer
+      // minuto» resultó falso — ese paso se puede saltar.
+      expect(json.clave).toMatch(/^[a-z]+-[a-z]+-[a-z]+-\d{4}$/)
       expect(PERFILES).toHaveLength(2)
       expect(PERFILES[1].onboarding_at, 'nace con la puesta en marcha pendiente').toBeUndefined()
     })

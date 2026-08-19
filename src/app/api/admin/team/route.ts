@@ -3,7 +3,7 @@ import { ACCENT_COLORS } from '@/components/shared/design-tokens'
 import { APP_URL } from '@/lib/appUrl'
 import { NextRequest, NextResponse } from 'next/server'
 import { PUSH_ROW } from '@/lib/push'
-import { randomBytes } from 'node:crypto'
+import { randomInt } from 'node:crypto'
 
 // Tres viajes a Supabase seguidos —crear la cuenta de auth, insertar el perfil y
 // generar el enlace— y el primero, en frío, no es rápido. Se declara el techo a
@@ -242,10 +242,26 @@ export async function PATCH(request: NextRequest) {
  * para una clave que se usa una vez y se cambia en el primer minuto.
  */
 function claveTemporal() {
-  const A = ['nube', 'faro', 'roble', 'duna', 'lino', 'brisa', 'cobre', 'menta', 'nieve', 'sauce']
-  const B = ['plata', 'coral', 'ambar', 'verde', 'indigo', 'lima', 'siena', 'perla', 'rubi', 'jade']
-  const n = randomBytes(4)
-  return `${A[n[0] % A.length]}-${B[n[1] % B.length]}-${1000 + ((n[2] << 8 | n[3]) % 9000)}`
+  // Tres palabras y no dos, y listas de 16 y no de 10.
+  //
+  // Antes eran 10 × 10 × 9000 = 900.000 combinaciones: **menos de 20 bits**. El
+  // comentario de arriba decía que era «de sobra porque se cambia en el primer
+  // minuto», y eso resultó ser falso — el paso de cambiarla en la puesta en marcha
+  // se puede saltar, y a propósito. O sea que esta clave puede ser la de verdad de
+  // alguien durante meses, viajando por WhatsApp.
+  //
+  // Ahora son 16 × 16 × 16 × 9000 ≈ 37 millones, unos 25 bits, y se sigue pudiendo
+  // dictar por teléfono: «faro-coral-duna-7412». Que es de lo que iba el formato.
+  const A = ['nube', 'faro', 'roble', 'duna', 'lino', 'brisa', 'cobre', 'menta',
+             'nieve', 'sauce', 'cedro', 'olivo', 'marea', 'cumbre', 'valle', 'junco']
+  const B = ['plata', 'coral', 'ambar', 'verde', 'indigo', 'lima', 'siena', 'perla',
+             'rubi', 'jade', 'cobalto', 'ocre', 'malva', 'turquesa', 'granate', 'arena']
+  // `randomInt`, no `randomBytes` + `%`: con 256 valores y listas de 10, el módulo
+  // hacía los seis primeros más probables que los cuatro últimos. Poco, pero es
+  // sesgo gratis — y con listas de 16 el módulo ya no sesga, así que esto es para
+  // que siga siendo cierto si alguien añade una palabra número 17.
+  const de = (xs: string[]) => xs[randomInt(xs.length)]
+  return `${de(A)}-${de(B)}-${de(A)}-${1000 + randomInt(9000)}`
 }
 
 async function generarEnlace(admin: Awaited<ReturnType<typeof createAdminClient>>, email: string) {

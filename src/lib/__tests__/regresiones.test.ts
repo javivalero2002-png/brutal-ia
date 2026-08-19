@@ -1688,8 +1688,18 @@ describe('el esquema se puede reconstruir desde el repo', () => {
   // parece. Sin esto, `job_locks` colaba una tabla fantasma llamada «if» desde la
   // frase «Con `create table if not exists`, una tabla preexistente con...».
   const sinComentarios = (sql: string) => sql.replace(/--.*$/gm, '')
+  // TODO el SQL del repo, no solo `schema.sql` y `migrations/`.
+  //
+  // Esta lista se dejaba fuera `supabase/migration_*.sql`, que es donde vive el DDL
+  // de ocho columnas en uso (`content_agenda.cover_url`, `.video_url`,
+  // `.account_name`, `inbox_messages.shared`, `.attachments`, los tokens de Gmail
+  // en `profiles`, `projects.pdf_analysis`). La regla pasaba en verde y a la vez
+  // decia, sin querer, que esas columnas no existian: quien la creyera y no mirara
+  // habria escrito migraciones duplicadas.
   const ddl = [
     readFileSync('supabase/schema.sql', 'utf8'),
+    ...readdirSync('supabase').filter(f => f.endsWith('.sql') && f !== 'schema.sql')
+      .map(f => readFileSync(join('supabase', f), 'utf8')),
     ...readdirSync('migrations').filter(f => f.endsWith('.sql'))
       .map(f => readFileSync(join('migrations', f), 'utf8')),
   ].map(sinComentarios).join('\n')
@@ -1712,6 +1722,52 @@ describe('el esquema se puede reconstruir desde el repo', () => {
     const sinDDL = [...usadas].filter(t => !creadas.has(t) && t !== 'users').sort()
     expect(sinDDL,
       'el codigo usa tablas que este repo NO sabe crear: una instancia nueva arranca, compila y se rompe al usarla. Anade su DDL en migrations/')
+      .toEqual([])
+  })
+
+  it('toda COLUMNA que el codigo lee tiene su DDL aqui', () => {
+    // La regla hermana comparaba TABLAS, y por eso decia «cerrado» sobre un riesgo
+    // que seguia abierto: `tasks.co_assigned_to` y `projects.pdf_url` se habian
+    // anadido a mano por el panel de Supabase y no existian en ningun .sql. En
+    // produccion funcionaban; en una instancia nueva, 42703 — y con
+    // `co_assigned_to` es peor, porque GET /api/tasks lleva el embed
+    // `co_assignee:profiles!co_assigned_to` y sin la clave ajena devuelve 500.
+    //
+    // PRECISION ANTES QUE COBERTURA, como el checker de colores: solo se miran los
+    // `.select('...')` con literal plano. Lo que lleva embed, alias, `*` o
+    // interpolacion se calla, porque interpretarlo mal da falsos positivos y una
+    // regla que grita sin motivo se acaba borrando entera.
+    const columnas = new Set<string>()
+    for (const ruta of TS) {
+      if (ruta.startsWith('src/lib/__tests__/')) continue
+      for (const m of leerCodigo(ruta).matchAll(/\.select\(\s*'([^'`$]*)'/g)) {
+        for (const bruto of m[1].split(',')) {
+          const c = bruto.trim()
+          // Fuera: embeds `cliente:clients(...)`, joins `profiles!col`, `*`, y
+          // cualquier cosa que no sea un nombre de columna a secas.
+          if (!/^[a-z_][a-z0-9_]*$/.test(c)) continue
+          columnas.add(c)
+        }
+      }
+    }
+    expect(columnas.size, 'no se encuentran columnas: revisa esta regla en vez de borrarla').toBeGreaterThan(20)
+
+    // El DDL no esta separado por tabla, asi que se comprueba que el nombre EXISTA.
+    // Es a proposito mas flojo de lo ideal: una columna que existe en otra tabla
+    // pasaria. Se prefiere no cazar un caso raro a inventarse fallos.
+    const declarada = (c: string) =>
+      new RegExp(`add column[^;]*\\b${c}\\b|^\\s*${c}\\s+(text|uuid|boolean|jsonb|json|timestamptz|timestamp|date|int|integer|bigint|numeric|serial)`, 'im').test(ddl)
+
+    const EXCEPCIONES: Record<string, string> = {
+      id: 'la crea cada `create table` con su propia sintaxis (`primary key`)',
+      created_at: 'idem: va con `default now()` en la definicion de cada tabla',
+      updated_at: 'idem',
+      count: 'no es una columna: es el `count` de PostgREST',
+    }
+
+    const sinDDL = [...columnas].filter(c => !declarada(c) && !EXCEPCIONES[c]).sort()
+    expect(sinDDL,
+      'el codigo lee columnas que este repo NO sabe crear: en produccion van porque se anadieron a mano, pero una instancia nueva se rompe al usarlas. Anade su DDL en migrations/')
       .toEqual([])
   })
 
@@ -2465,5 +2521,65 @@ describe('las carpetas archivan, no esconden', () => {
     expect(/!projSearch\.trim\(\)/.test(P.slice(i, i + 160)),
       'con una busqueda activa los resultados quedan dentro de carpetas cerradas: no se ven')
       .toBe(true)
+  })
+})
+
+describe('un numero se calcula UNA vez', () => {
+  it('la insignia de Tareas del menu no recuenta por su cuenta', () => {
+    // La campana usaba `urgentCount`, que filtra por `esTareaDe`, y el menu volvia
+    // a contar ahi mismo SIN el filtro: dos numeros distintos para la misma
+    // pregunta, y el del menu enseñaba las urgentes de todo el equipo. El fichero
+    // ya tiene un comentario avisando de este mismo gemelo diez lineas mas abajo.
+    const D = leerCodigo('src/components/NexusDashboard.tsx')
+    const menu = D.slice(D.indexOf("navItem('tareas'"), D.indexOf("navItem('tareas'") + 200)
+    expect(menu.includes('urgentCount'),
+      'la insignia de Tareas vuelve a contar en vez de usar urgentCount: el menu y la campana discreparan')
+      .toBe(true)
+    expect(/level\s*===?\s*'urgent'/.test(menu),
+      'la insignia recuenta las urgentes a mano: si ese conteo no filtra por persona, enseña las de todo el equipo')
+      .toBe(false)
+  })
+})
+
+describe('el enlace publico no puede hacer sonar siete moviles', () => {
+  it('el push de una opinion pasa por canSendPush', () => {
+    // Es el UNICO push que dispara alguien SIN cuenta: el enlace se pasa al grupo
+    // de WhatsApp. Sin freno, tres opiniones seguidas —o cinco clics en enviar—
+    // son cinco avisos a los siete. El freno va por PIEZA, no global, para que dos
+    // clientes opinando de dos piezas distintas si avisen los dos.
+    const R = leerCodigo('src/app/api/review/[token]/route.ts')
+    const i = R.indexOf('sendPushToUser(admin, creador')
+    expect(i, 'ya no se manda push desde aqui: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    expect(/canSendPush\(admin, `review-/.test(R.slice(Math.max(0, i - 900), i)),
+      'la opinion dispara push sin freno, y este endpoint es publico')
+      .toBe(true)
+  })
+})
+
+describe('la vista previa del enlace enseña algo o no enseña nada', () => {
+  it('la portada de la tarjetita va FIRMADA', () => {
+    // El bucket es privado, asi que la direccion que guarda la base responde 400 a
+    // cualquiera. La condicion anterior excluia las firmadas y dejaba pasar
+    // justo esa: la unica imagen que llegaba a publicarse era la que nunca carga.
+    const L = leerCodigo('src/app/review/[token]/layout.tsx')
+    expect(/images:\s*\[portadaFirmada\]/.test(L),
+      'la tarjetita publica la direccion cruda de un bucket privado: la imagen siempre saldra rota')
+      .toBe(true)
+    expect(/images:\s*\[data\.cover_url\]/.test(L)).toBe(false)
+  })
+})
+
+describe('las preferencias de avisos no se duplican', () => {
+  it('la lectura previa mira su error antes de decidir insertar', () => {
+    // supabase-js no lanza: sin mirar el error, un fallo de consulta es igual que
+    // «no hay fila» y se cae por la rama del insert. `reglas` no tiene `name`
+    // unico, asi que quedan DOS filas de preferencias y gana la que salga primero:
+    // silencias un aviso y vuelve solo al dia siguiente.
+    const P = leerCodigo('src/app/api/push/prefs/route.ts')
+    const i = P.indexOf("select('id').eq('name', PREFS_ROW)")
+    expect(i, 'ya no se busca la fila: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const ventana = P.slice(Math.max(0, i - 200), i + 400)
+    expect(/error:\s*errLectura/.test(ventana), 'la lectura no captura su error').toBe(true)
+    expect(/if \(errLectura\)/.test(ventana), 'captura el error y no lo mira, que es lo mismo que no capturarlo').toBe(true)
   })
 })
