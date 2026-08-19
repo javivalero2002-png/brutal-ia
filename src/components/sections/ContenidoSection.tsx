@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, Fragment } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { rutaApp } from '@/lib/appUrl'
 import type { NexusData, ContentItem } from '@/types'
-import { PLATAFORMA_COLOR, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, videoEsVertical, todayKey, buscaEnTexto } from '@/components/shared'
+import { Abanico, PLATAFORMA_COLOR, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, videoEsVertical, todayKey, buscaEnTexto } from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
 import BocetoPanel from '@/components/BocetoPanel'
 import type { IrASeccion } from '@/components/shared/secciones'
@@ -684,8 +684,17 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                         return (
                           <Fragment key={item.id}>
                           {abreCarpeta && (
-                            <div className="flex items-center gap-2 px-1 pt-1.5 pb-0.5">
-                              <LucideIcon name={carpeta ? 'folder-open' : 'layout-grid'} size={10} color={carpeta?'rgba(255,255,255,0.32)':'rgba(255,255,255,0.16)'}/>
+                            <div className="flex items-center gap-2 px-1 pt-2 pb-1">
+                              {/* La carpeta enseña lo que lleva dentro: tres portadas
+                                  asomando dicen de un vistazo si es la que buscas,
+                                  cosa que un icono de carpeta no hace. Sin portadas
+                                  —o sin carpeta— se cae al icono de siempre. */}
+                              {carpeta ? (
+                                <Abanico tam={22} alRoto={()=>{}}
+                                  portadas={items.filter((x: any)=>(x.carpeta||null)===carpeta).map((x: any)=>({url:x.cover_url||null,color:platColor[x.platform]||BLU}))}/>
+                              ) : (
+                                <LucideIcon name="layout-grid" size={10} color="rgba(255,255,255,0.16)"/>
+                              )}
                               <span className="font-syne text-[8px] font-black tracking-widest uppercase truncate" style={{color:carpeta?'rgba(255,255,255,0.4)':'rgba(255,255,255,0.2)'}}>
                                 {carpeta || 'Sin carpeta'}
                               </span>

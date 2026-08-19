@@ -2423,3 +2423,47 @@ describe('ningun fichero de ruta es una copia exacta de otro', () => {
       .toEqual([])
   })
 })
+describe('un progreso que dice 100% ha terminado', () => {
+  const P = leerCodigo('src/components/sections/ProyectosSection.tsx')
+
+  it('llegar al 100% de la subida cambia de fase, no se queda ahi', () => {
+    // El fallo: la barra medía SOLO la subida a Storage, y después venían extraer
+    // la portada y leer el PDF con Claude — varios segundos con el indicador al
+    // 100% y el rótulo diciendo «SUBIENDO PDF…». Decir «hecho» mientras sigues
+    // esperando es peor que no decir nada: parece que la app se ha colgado.
+    const i = P.indexOf('setPdfUploadPct(100)')
+    expect(i, 'ya no se llega al 100%: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    // Ventana corta a propósito: la fase tiene que cambiar AHÍ, no en cualquier
+    // punto posterior del manejador.
+    expect(/setPdfFase\('leyendo'\)/.test(P.slice(i, i + 220)),
+      'la subida llega al 100% y nadie cambia de fase: el indicador se queda diciendo «hecho» mientras aun se lee el PDF')
+      .toBe(true)
+  })
+
+  it('la fase que no se puede medir NO enseña porcentaje', () => {
+    // Poner un número a lo que no se sabe cuánto tarda es volver a mentir, con más
+    // decimales. La segunda fase va con una animación sin fin.
+    const i = P.indexOf("pdfFase !== 'leyendo' &&")
+    expect(i, 'el porcentaje se pinta tambien mientras se lee el PDF: es un numero inventado').toBeGreaterThan(-1)
+    expect(P.slice(i, i + 120)).toContain('{pdfUploadPct}%')
+  })
+})
+
+describe('las carpetas archivan, no esconden', () => {
+  const P = leerCodigo('src/components/sections/ProyectosSection.tsx')
+
+  it('solo se agrupa lo terminado', () => {
+    // Agrupar una columna en la que se trabaja escondería trabajo vivo detrás de
+    // un clic. Se archiva lo que ya no se toca y se consulta.
+    const i = P.indexOf('const agrupa =')
+    expect(i).toBeGreaterThan(-1)
+    expect(P.slice(i, i + 160)).toContain("col.status === 'completado'")
+  })
+
+  it('buscando no se agrupa: quien busca quiere resultados, no carpetas', () => {
+    const i = P.indexOf('const agrupa =')
+    expect(/!projSearch\.trim\(\)/.test(P.slice(i, i + 160)),
+      'con una busqueda activa los resultados quedan dentro de carpetas cerradas: no se ven')
+      .toBe(true)
+  })
+})
