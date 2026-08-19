@@ -23,13 +23,13 @@ function fields(type: string, team: Profile[]) {
       f('Facturación', 'facturacion', 'Ej: 12k/mes · 120k/año · €1.500'),
     ],
     proyecto: [
-      f('Nombre del proyecto', 'nombre', 'Ej: Campaign Summer 2026'),
+      f('Nombre del proyecto', 'nombre', 'Ej: Campaña Higgsfield — verano'),
       f('Cliente', 'cliente', 'Ej: Nike España'),
       { label:'Estado inicial', key:'estado', type:'proj-status', placeholder:'' },
       { label:'Deadline', key:'deadline', type:'date-input', placeholder:'' },
     ],
     tarea: [
-      f('Descripción de la tarea', 'text', 'Ej: Preparar deck propuesta Q3 para Nike'),
+      f('Descripción de la tarea', 'text', 'Ej: Crear el guion del vídeo de Instagram'),
       { label:'Prioridad', key:'priority', type:'priority' },
       { label:'Asignar a', key:'asignado', type:'assignee' },
       f('Cliente (opcional)', 'cliente', 'Ej: Nike España'),
@@ -37,7 +37,7 @@ function fields(type: string, team: Profile[]) {
       { label:'Fecha límite', key:'due_date', type:'date-input', placeholder:'' },
     ],
     memoria: [
-      f('Título', 'titulo', 'Ej: Nike — Guía de tono de voz 2026'),
+      f('Título', 'titulo', 'Ej: Higgsfield — guía de tono y formato'),
       { label:'Categoría', key:'categoria', type:'category', placeholder:'' },
       { label:'Contenido', key:'contenido', type:'textarea', placeholder:'Escribe el contenido de esta entrada…' },
     ],
@@ -47,7 +47,7 @@ function fields(type: string, team: Profile[]) {
       f('Acción automática', 'accion', 'Ej: Crear tarea de seguimiento urgente'),
     ],
     contenido: [
-      f('Título de la pieza', 'titulo', 'Ej: Stories lanzamiento verano Nike'),
+      f('Título de la pieza', 'titulo', 'Ej: Reel de lanzamiento — Higgsfield'),
       f('Cliente', 'cliente', 'Ej: Nike España'),
       { label:'Plataforma', key:'plataforma', type:'platform' },
       { label:'Cuenta / Perfil', key:'cuenta', type:'account', placeholder:'' },

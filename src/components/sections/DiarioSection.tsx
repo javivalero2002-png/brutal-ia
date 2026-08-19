@@ -106,6 +106,24 @@ const etiquetaDia = (clave: string): string => {
 }
 
 /** Los objetivos, uno por línea. Es el formato que permite tacharlos luego. */
+/**
+ * Lo que se escribe aquí, dicho con las palabras del estudio.
+ *
+ * Antes ponía «Cerrar el presupuesto de Nike»: lenguaje de agencia de medios, no
+ * de gente que hace vídeo. Un ejemplo que no se parece a tu trabajo no enseña a
+ * usar la pantalla — enseña que la pantalla es para otros.
+ *
+ * Van VARIOS y cambian por fila a propósito: al añadir la segunda y la tercera se
+ * ve el abanico —una pieza, su guion, un retoque— en vez de repetir el mismo. Es
+ * la forma más barata de enseñar que aquí cabe cualquier tamaño de tarea.
+ */
+const EJEMPLOS = [
+  'Crear el vídeo de Instagram',
+  'Pensar el guion del vídeo de Higgsfield',
+  'Retocar el vídeo de Higgsfield',
+  'Montar el reel de la semana',
+]
+
 const lineas = (t?: string | null) =>
   (t || '').split('\n').map(l => l.replace(/^[-•*\s]+/, '').trim()).filter(Boolean)
 
@@ -1076,7 +1094,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
                           enfocarFila(Math.max(0, i - 1))
                         }
                       }}
-                      placeholder={i === 0 ? 'Cerrar el presupuesto de Nike' : 'Otro objetivo…'}
+                      placeholder={EJEMPLOS[i] || 'Otro objetivo…'}
                       className="flex-1 min-w-0 bg-transparent text-[12.5px] text-white placeholder-white/20 outline-none py-1"
                       style={{ caretColor: BLU, textDecoration: hecho ? 'line-through' : undefined, opacity: hecho ? 0.55 : 1 }}
                     />

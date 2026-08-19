@@ -168,14 +168,14 @@ const CAL_EVENTS: CalendarEvent[] = [
 const DIARIO_DEMO = [
   {
     id: 'd1', user_id: 'u1', dia: 'hoy',
-    entrada: 'Cerrar el presupuesto de Nike\nMontar el reel de Mango',
-    cierre: 'Presupuesto enviado. El reel se queda a falta de locución.',
+    entrada: 'Crear el vídeo de Instagram de Higgsfield\nPensar el guion del siguiente',
+    cierre: 'Vídeo montado y subido. El guion se queda a medias.',
     entrada_at: new Date().toISOString(), cierre_at: new Date().toISOString(),
     autor: { id: 'u1', name: 'Javier Valero', initials: 'JV', avatar_color: '#1B5FFA' },
   },
   {
     id: 'd2', user_id: 'u2', dia: 'hoy',
-    entrada: 'Revisar creatividades de Zara\nLlamar al proveedor de attrezzo',
+    entrada: 'Retocar el vídeo de Higgsfield\nMontar el reel de la semana',
     cierre: null,
     entrada_at: new Date().toISOString(), cierre_at: null,
     autor: { id: 'u2', name: 'Paula Bravo', initials: 'PB', avatar_color: '#22c55e' },
