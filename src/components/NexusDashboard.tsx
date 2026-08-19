@@ -854,19 +854,15 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
               lista, así que se reutiliza. */}
           {navItem('proyectos','Proyectos','folder-open', overdueProjs.length||undefined)}
           {navItem('contenido','Contenido','film')}
-          {/* Memoria es «cómo se hacen las cosas aquí»: la sección que más sirve a
-              quien acaba de entrar, y era la única a la que solo se llegaba por
-              atajo de teclado o buscando el título de una nota que aún no sabes
-              que existe. */}
-          {navItem('memoria','Memoria','brain')}
+          {/* Memoria, Equipo, Automatizaciones y Reportes NO van aquí, y es
+              deliberado: las cuatro ya son pestañas dentro de Operativa, así que
+              ponerlas también en el menú era duplicar la puerta y alargar la
+              lista. Un menú con todo dentro no es más accesible — es más difícil
+              de recorrer, y lo del día a día se pierde entre lo de vez en cuando.
 
-          {navLabel('ESTUDIO')}
-          {navItem('equipo','Equipo','user-check')}
-          {navItem('automatizaciones','Automatizaciones','zap')}
-          {/* Reportes solo al propietario: la sección pinta «SECCIÓN RESTRINGIDA»
-              a los demás, y un menú que lleva a una puerta cerrada es peor que no
-              tener la entrada. */}
-          {profile.role==='owner' && navItem('reportes','Reportes','bar-chart-2')}
+              Lo que se conserva del intento anterior: el buscador (⌘K) llega a
+              las cuatro, la cabecera del móvil sabe cómo se llaman, y Reportes
+              solo se le ofrece al propietario. */}
 
           {navLabel('IA')}
           {navItem('chat','Brutal.IA','message-square')}
@@ -1068,12 +1064,14 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
                   {id:'harvey' as Section, icon:'mic', label:'Harvey'},
                   {id:'ajustes' as Section, icon:'settings', label:'Operativa'},
                   {id:'equipo' as Section, icon:'user-check', label:'Equipo'},
-                  // Diario faltaba en las DOS navegaciones del móvil: el botón MÁS
-                  // se encendía al estar en Diario y al abrirlo no había nada marcado.
+                  // Diario SÍ: faltaba en las dos navegaciones del móvil y es de uso
+                  // diario. El botón MÁS se encendía al estar en Diario y al
+                  // abrirlo no había nada marcado.
+                  //
+                  // Memoria, Automatizaciones y Reportes no: se llega por
+                  // Operativa, que ya está aquí arriba. Este panel es para lo que
+                  // se abre a menudo, no para inventariar la app.
                   {id:'diario' as Section, icon:'pen-line', label:'Diario'},
-                  {id:'memoria' as Section, icon:'brain', label:'Memoria'},
-                  {id:'automatizaciones' as Section, icon:'zap', label:'Automat.'},
-                  ...(profile.role==='owner' ? [{id:'reportes' as Section, icon:'bar-chart-2', label:'Reportes'}] : []),
                 ] as {id:Section,icon:string,label:string}[]).map(item=>(
                   <button key={item.id} onClick={()=>{setSection(item.id);setMasOpen(false)}}
                     className="flex flex-col items-center gap-2 py-4 rounded-2xl transition-all active:scale-95"
