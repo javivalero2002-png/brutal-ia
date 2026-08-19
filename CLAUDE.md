@@ -294,20 +294,39 @@ fallaba con 42703 y devolvía **404** — le mandabas el enlace a un cliente, es
 su opinión, y le salía que no existe. Están en
 `migrations/20260813_feedback_y_from_user_id.sql`.
 
-**Bucket a privado — DESBLOQUEADO, pendiente de ejecutar.** `content-videos` sigue
-público a propósito. Lo que impedía cerrarlo era que Memoria guardaba el enlace
-DENTRO del texto de la nota; `/api/archivo` lo resuelve y ya está desplegado. De
-las 13 rutas de lectura, **12 ya firman**. Lo que queda:
+**Bucket a privado — CERRADO, y verificado el 2026-08-19.** `content-videos` es
+privado. No de palabra: se cogieron las seis direcciones que la base guarda de
+verdad y se pidieron **sin sesión, sin cookies y sin cabeceras**. Las seis
+responden `HTTP 400`, igual que una ruta inventada en el mismo bucket. Ese es el
+único modo honesto de comprobarlo — el interruptor apagado en el panel y el bucket
+cerrado de verdad no son la misma afirmación.
 
-- **Notas anteriores al commit `3496b49`** (30 jul – 13 ago) llevan la URL pública
-  cruda dentro de `memoria.content`. Nadie las parsea, así que `rutaDeStorage()` no
-  las salva. Se arreglan **a mano desde la app**, anteponiendo el enlace estable —
-  no hace falta SQL.
-- **Comprobar antes:** `select id,title from memoria where content like
-  '%.supabase.co/storage/%'` (solo lee).
-- **Cerrar es un interruptor en Supabase y se deshace con el mismo clic.** Lo
-  irreversible es *borrar* o *renombrar* el bucket: el nombre va escrito dentro de
-  cada dirección guardada.
+Esta sección decía «sigue público a propósito» y llevaba desfasada tiempo
+indeterminado. Es la clase de mentira peor: hace que se trate como pendiente algo
+ya hecho, y —al revés, si se cierra sin actualizar— que alguien confíe en una
+puerta que cree abierta.
+
+Cómo reproducir la comprobación, que es lo que hace que esto valga algo:
+
+```bash
+# Una dirección cualquiera de projects.cover_url / task_attachments.url,
+# tal cual está guardada en la base:
+curl -s -o /dev/null -w '%{http_code}\n' 'https://…supabase.co/storage/v1/object/public/content-videos/…'
+# 400 = cerrado.   200 = ABIERTO: cualquiera con la dirección se lo descarga.
+```
+
+Lo que hizo posible cerrarlo, por si hay que rehacerlo en otra instancia: la base
+guarda la dirección pública como **identificador estable** y cada ruta de lectura
+la cambia por una firma temporal antes de responder (`src/lib/storageFirmado.ts`).
+Hay dos reglas en `regresiones.test.ts` que lo vigilan — que toda ruta que
+devuelve una columna de fichero la firme, y que lo que se firma sea lo que la
+consulta trae. El caso que no encajaba ahí era Memoria, que guarda el enlace
+DENTRO del texto de la nota; lo resuelve `/api/archivo`, y
+`/api/admin/memoria-enlaces` encuentra y arregla las notas antiguas que aún
+llevaran la dirección cruda (Operativa → Copias).
+
+**Lo irreversible sigue siendo *borrar* o *renombrar* el bucket**: el nombre va
+escrito dentro de cada dirección guardada. Abrirlo y cerrarlo es el mismo clic.
 
 Los restos del plan rechazado viven en `docs/sql-rechazado/`. **No los ejecutes.**
 Estuvieron por error dentro de `migrations/`, junto a una migración legítima y con
