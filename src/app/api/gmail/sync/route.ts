@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { checkAiRateLimit } from '@/lib/rate-limit'
 import { codigoDeFallo } from '@/lib/gmailAuth'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
 import { analyzeEmail, EmailAnalysis, plazoRestante, MINIMO_UTIL_MS } from '@/lib/ai'
@@ -20,6 +21,13 @@ export async function POST() {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const admin = await createAdminClient()
+  // Tope: el sync analiza hasta 20 correos con el modelo por llamada, así que
+  // pulsarlo en bucle es la forma más cara de gastar el presupuesto del mes. El
+  // automático del cliente cae aquí también, y le viene bien: si algo lo dispara
+  // en bucle, se frena solo en vez de multiplicar la factura.
+  if (await checkAiRateLimit(admin, user.id, 'sync')) {
+    return NextResponse.json({ error: 'Demasiadas sincronizaciones seguidas. Espera un momento.' }, { status: 429 })
+  }
 
   const { data: profile } = await admin
     .from('profiles')

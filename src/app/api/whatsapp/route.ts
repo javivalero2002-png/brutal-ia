@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { analyzeWhatsAppMessage } from '@/lib/ai'
+import { checkAiRateLimit } from '@/lib/rate-limit'
 import { sendWhatsAppMessage, parseWebhookMessage, downloadWhatsAppMedia } from '@/lib/whatsapp'
 import { NextRequest, NextResponse } from 'next/server'
 import { createHmac } from 'crypto'
@@ -70,8 +71,22 @@ export async function POST(request: NextRequest) {
     try { imageBase64 = await downloadWhatsAppMedia(mediaId) } catch { }
   }
 
+  // Tope de llamadas al modelo, POR NÚMERO que escribe.
+  //
+  // Era la única ruta de IA sin él, y la más expuesta: las demás exigen sesión —o
+  // sea, ser una de siete personas—, y esta la invoca Meta desde internet. La
+  // firma HMAC garantiza que viene de Meta, no que sea razonable: quien tenga el
+  // número podía mandar mil mensajes, y cada uno era una llamada a Claude contra
+  // la misma tarjeta.
+  //
+  // Por remitente y no global, para que un número pesado no deje sin servicio a
+  // los clientes de verdad. Superado el tope el mensaje SE GUARDA igual con el
+  // texto en crudo: perderlo sería peor que no analizarlo.
+  const pasado = await checkAiRateLimit(supabase, `wa:${from}`, 'whatsapp')
+
   let analysis: Awaited<ReturnType<typeof analyzeWhatsAppMessage>>
   try {
+    if (pasado) throw new Error('rate-limited')
     analysis = await analyzeWhatsAppMessage(text, imageBase64, knownClients)
   } catch {
     analysis = { extractedInfo: text.slice(0, 200), shouldCreateTask: false, urgency: 'normal', confirmationQuestion: '' }

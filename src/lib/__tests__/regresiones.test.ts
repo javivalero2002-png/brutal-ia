@@ -1674,3 +1674,60 @@ describe('el esquema se puede reconstruir desde el repo', () => {
       .toEqual([])
   })
 })
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Nada que importe puede fallar en silencio.
+//
+// El patron que dominaba esta app no era romperse: era romperse SIN AVISAR. Los
+// correos dejaban de entrar y te enterabas cuando un cliente preguntaba; el cron
+// estuvo muerto un dia entero; un merge no desplego y no fallo. Estas reglas
+// fijan las tres bocas por las que eso se sabe ahora.
+// ───────────────────────────────────────────────────────────────────────────────
+describe('lo que se cae, se dice', () => {
+
+  it('cuando muere el token de Gmail, se avisa a quien lo sufre', () => {
+    const C = leerCodigo('src/lib/colabsSync.ts')
+    // Acotado a las ramas que BORRAN la conexion: que el fichero mencione el aviso
+    // no dice nada si la rama que apaga el correo no lo llama.
+    for (const campo of ['gmail_colabs_connected: false', 'gmail_connected: false']) {
+      const i = C.indexOf(campo)
+      expect(i, `ya no existe la rama de ${campo}: revisa esta regla`).toBeGreaterThan(-1)
+      expect(/avisarConexionCaida\(/.test(C.slice(i, i + 400)),
+        `apaga la conexion de Gmail sin avisar a nadie: los correos dejan de entrar en silencio, y con el modo de prueba de Google eso pasa cada 7 dias`)
+        .toBe(true)
+    }
+  })
+
+  it('todo proceso automatico deja latido, tambien cuando falla', () => {
+    for (const ruta of ['src/app/api/cron/sync-colabs/route.ts', 'src/app/api/cron/backup/route.ts']) {
+      const C = leerCodigo(ruta)
+      expect(/marcarLatido\(/.test(C),
+        `${ruta} no deja constancia de haber corrido: «hoy no ha pasado nada» y «lleva ocho horas parado» se verian igual`)
+        .toBe(true)
+    }
+    // Y el de la copia, tambien en la rama de error: «corrio y se rompio» es
+    // informacion distinta de «no corrio».
+    const B = leerCodigo('src/app/api/cron/backup/route.ts')
+    const iCatch = B.indexOf('} catch (e) {')
+    expect(iCatch, 'ya no hay catch en el cron de copia: revisa esta regla').toBeGreaterThan(-1)
+    expect(/marcarLatido\(/.test(B.slice(iCatch)),
+      'la copia solo late cuando va bien: un fallo se veria igual que no haber corrido').toBe(true)
+  })
+
+  it('ninguna ruta que llama al modelo se queda sin tope', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (!ruta.startsWith('src/app/api/')) continue
+      const C = leerCodigo(ruta)
+      // Atada al IMPORT de `@/lib/ai`, no a nombres de funcion: buscar `generar\\w*`
+      // marcaba `admin/team` por su `generarEnlace()`, que hace un enlace de
+      // invitacion y no llama a ningun modelo. Quien importa el modulo del modelo
+      // es exactamente quien puede gastar dinero.
+      if (!/from '@\/lib\/ai'/.test(C)) continue
+      if (!/check\w*RateLimit\(/.test(C)) infractores.push(ruta)
+    }
+    expect(infractores,
+      'llama al modelo sin tope de peticiones: la mas expuesta es el webhook de WhatsApp, que invoca Meta desde internet contra la misma tarjeta')
+      .toEqual([])
+  })
+})

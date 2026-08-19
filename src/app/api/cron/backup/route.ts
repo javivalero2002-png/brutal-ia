@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { hacerCopia, podarCopias } from '@/lib/copiaSeguridad'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
+import { marcarLatido } from '@/lib/reglaRows'
 import { todayKey } from '@/components/shared/helpers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -53,12 +54,16 @@ export async function GET(request: NextRequest) {
       notificacionesPodadas = typeof data === 'number' ? data : null
     }
 
+    await marcarLatido(admin, 'copia', true, `${resumen.total} filas`)
     return NextResponse.json({ ok: true, ...resumen, podadas, notificacionesPodadas })
   } catch (e) {
     // Una copia que falla en silencio es exactamente igual de útil que no tenerla,
     // y peor: crees que la tienes. El error sube con su motivo.
     const motivo = e instanceof Error ? e.message : String(e)
     console.error('[cron/backup] la copia falló:', motivo)
+    // El latido se escribe TAMBIÉN al fallar: «corrió y se rompió» es
+    // información distinta de «no corrió», y la pantalla debe poder decir cuál.
+    await marcarLatido(admin, 'copia', false, motivo.slice(0, 200))
     return NextResponse.json({ ok: false, error: motivo }, { status: 500 })
   } finally {
     await releaseLock(admin, 'copia-seguridad', cerrojo.holder)

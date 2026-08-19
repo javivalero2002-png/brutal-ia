@@ -4,6 +4,7 @@ import { syncColabsInbox, syncPersonalInbox } from '@/lib/colabsSync'
 import { runAutomations } from '@/lib/automations'
 import { madridHour } from '@/components/shared/helpers'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
+import { marcarLatido } from '@/lib/reglaRows'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Este cron no lo espera nadie: lo dispara Vercel y su unico "usuario" es el
@@ -272,9 +273,15 @@ export async function GET(request: NextRequest) {
       otros.map(f => `${f.mailbox}=${f.error}`).join(' | '))
   }
 
+  const traidos = outcomes.filter(o => o.ok).reduce((n, o) => n + (o.synced || 0), 0)
+  // Latido: sin esto no había forma de distinguir «hoy no ha llegado correo» de
+  // «el cron lleva ocho horas sin ejecutarse». Pasó, y nadie lo vio en un día.
+  await marcarLatido(admin, 'sync-colabs', !failed,
+    `${traidos} correos${reconexion.length ? ` · ${reconexion.length} sin conexión` : ''}`)
+
   return NextResponse.json({
     ok: !failed,
-    synced: outcomes.filter(o => o.ok).reduce((n, o) => n + (o.synced || 0), 0),
+    synced: traidos,
     mailboxes: outcomes,
     // Visible desde fuera: si esto es > 0 de forma sostenida, el presupuesto se
     // queda corto y hay que repartir los buzones en mas ejecuciones.

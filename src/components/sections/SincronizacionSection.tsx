@@ -72,6 +72,26 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
     })
   }
 
+  /**
+   * El latido de lo automático.
+   *
+   * Sin esto, «hoy no ha llegado correo» y «el cron lleva ocho horas sin
+   * ejecutarse» se ven exactamente igual desde la Bandeja. Pasó el 18 de agosto y
+   * estuvo un día entero sin que nadie lo notara.
+   */
+  const [latidos, setLatidos] = useState<{ tarea: string; en: string | null; ok: boolean | null; detalle: string | null; retrasado: boolean | null; minutosDesde: number | null }[] | null>(null)
+  const [latidoRoto, setLatidoRoto] = useState(false)
+  useEffect(() => {
+    let vivo = true
+    fetch('/api/admin/latido')
+      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then(j => { if (vivo) { setLatidos(j.procesos || []); setLatidoRoto(false) } })
+      // «No pude leerlo» NO se pinta como «no ha corrido nada»: sería el mismo
+      // fallo que este panel existe para destapar.
+      .catch(() => { if (vivo) setLatidoRoto(true) })
+    return () => { vivo = false }
+  }, [lastSyncTick])
+
   const reloadStatus = () => {
     // Solo mostramos "cargando" si NO teníamos ya un estado cacheado (evita el parpadeo)
     if (!gmailStatus) setLoadingGmail(true)
@@ -342,6 +362,52 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
   return (
     <div className="h-full overflow-y-auto">
       <div className={`${isMobile?'p-4':'p-8'} space-y-6`} style={{maxWidth:'760px',margin:'0 auto'}}>
+
+        {/* ── LATIDO DE LO AUTOMÁTICO ──────────────────────────────────────
+            Va ARRIBA del todo y antes que el estado de las cuentas: si los
+            procesos no corren, da igual que Gmail esté conectado. */}
+        {(latidoRoto || (latidos && latidos.length > 0)) && (() => {
+          const alarma = latidos?.filter(p => p.retrasado || p.ok === false) || []
+          const mal = latidoRoto || alarma.length > 0
+          const NOMBRES: Record<string, string> = { 'sync-colabs': 'Entrada de correo', copia: 'Copia de seguridad' }
+          const hace = (m: number | null) =>
+            m == null ? 'nunca' : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} d`
+          return (
+            <div className="rounded-2xl p-4" style={{
+              background: mal ? 'rgba(240,67,81,0.06)' : 'rgba(255,255,255,0.02)',
+              border: `1px solid ${mal ? 'rgba(240,67,81,0.28)' : BORDER}`,
+            }}>
+              <div className="font-syne text-[8px] font-black tracking-[0.2em] mb-2.5" style={{ color: mal ? RED : 'rgba(255,255,255,0.25)' }}>
+                {mal ? 'ALGO AUTOMÁTICO NO ESTÁ CORRIENDO' : 'TODO LO AUTOMÁTICO, AL DÍA'}
+              </div>
+              {latidoRoto ? (
+                <div className="font-figtree text-[12.5px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  No se ha podido comprobar. No significa que esté parado — significa que no lo sabemos.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {latidos!.map(p => (
+                    <div key={p.tarea} className="flex items-baseline gap-2.5 flex-wrap">
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{
+                        background: p.minutosDesde == null ? 'rgba(255,255,255,0.2)' : p.retrasado || p.ok === false ? RED : GRN,
+                      }}/>
+                      <span className="font-figtree text-[12.5px]" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                        {NOMBRES[p.tarea] || p.tarea}
+                      </span>
+                      <span className="font-figtree text-[12px]" style={{ color: p.retrasado ? RED : 'rgba(255,255,255,0.4)' }}>
+                        {p.minutosDesde == null ? 'todavía no ha corrido' : hace(p.minutosDesde)}
+                        {p.ok === false ? ' · falló' : ''}
+                      </span>
+                      {p.detalle && !p.retrasado && p.ok !== false && (
+                        <span className="font-figtree text-[11.5px]" style={{ color: 'rgba(255,255,255,0.28)' }}>{p.detalle}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* ── HERO PANEL ── */}
         <div className="relative rounded-3xl overflow-hidden" style={{background:allConnected?'rgba(34,197,94,0.05)':anyConnected?'rgba(27,95,250,0.06)':'rgba(255,255,255,0.03)',border:`1px solid ${allConnected?'rgba(34,197,94,0.2)':anyConnected?'rgba(27,95,250,0.18)':BORDER}`}}>
