@@ -23,6 +23,17 @@ export async function POST(request: NextRequest) {
 
   const admin = await createAdminClient()
 
+  // ANTES del lote, y no dentro, aunque cueste un viaje: el filtro de la consulta
+  // de correos depende de esto, y dentro del `Promise.all` no estaría resuelto
+  // todavía. Se intentó y salió una consulta SIN filtro de usuario — o sea el
+  // correo personal de los siete entrando en el Harvey de cualquiera. Un viaje de
+  // más es un precio ridículo por no tener que acordarse de eso nunca.
+  const { data: quien, error: errQuien } = await admin
+    .from('profiles').select('ver_colabs').eq('id', user.id).maybeSingle()
+  if (errQuien) console.error('[chat] no se pudo leer ver_colabs:', errQuien.message)
+  // Ante la duda, se enseña: es lo que ya veía ayer.
+  const veColabs = quien?.ver_colabs !== false
+
   const q = await Promise.all([
     admin.from('profiles').select('name').eq('id', user.id).single(),
     admin.from('clients').select('name'),
@@ -30,11 +41,23 @@ export async function POST(request: NextRequest) {
     admin.from('tasks').select('text,level,assignee:profiles!assigned_to(name)').eq('done', false),
     admin.from('profiles').select('id'),
     // Fetch emails with content so Brutal IA and Harvey know what they're about
-    admin.from('inbox_messages')
-      .select('from_name,subject,ai_summary,ai_urgency,shared,received_at,is_read')
-      .or(`user_id.eq.${user.id},shared.eq.true`)
-      .order('received_at', { ascending: false })
-      .limit(20),
+    //
+    // El buzón compartido entra aquí SOLO si esta persona lo ve en la Bandeja.
+    // Es el gemelo del filtro de /api/inbox y hay que arreglar los dos a la vez:
+    // ocultarle a alguien el correo del equipo en la pantalla y seguir metiéndoselo
+    // a su Harvey no es medio arreglo, es ninguno — Harvey se lo cuenta al
+    // preguntarle «¿qué tengo hoy?». Se lee del perfil en la consulta de arriba
+    // porque este Promise.all ya lo trae; una consulta más aquí sería gratis de
+    // escribir y no de ejecutar.
+    (veColabs
+      ? admin.from('inbox_messages')
+          .select('from_name,subject,ai_summary,ai_urgency,shared,received_at,is_read')
+          .or(`user_id.eq.${user.id},shared.eq.true`)
+          .order('received_at', { ascending: false }).limit(20)
+      : admin.from('inbox_messages')
+          .select('from_name,subject,ai_summary,ai_urgency,shared,received_at,is_read')
+          .eq('user_id', user.id)
+          .order('received_at', { ascending: false }).limit(20)),
     // Fetch history BEFORE saving current message so it doesn't appear twice in the messages array
     admin.from('chat_messages').select('role, content').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20),
     // Tabla `content_agenda` (no `agenda`), y sin filtro de usuario: el pipeline

@@ -52,7 +52,20 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
   // moverse se pulsa dos veces. Si el guardado falla se devuelve al sitio y se
   // dice — que es lo contrario de quedarse mintiendo en la posición nueva.
   const [analizaCorreo, setAnalizaCorreo] = useState<boolean>(profile?.analizar_correo !== false)
+  const [veColabs, setVeColabs] = useState<boolean>(profile?.ver_colabs !== false)
   const [guardandoAnalisis, setGuardandoAnalisis] = useState(false)
+  const cambiarVerColabs = async (v: boolean) => {
+    const antes = veColabs
+    setVeColabs(v)
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'PATCH', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ ver_colabs: v }),
+      })
+      if (!res.ok) throw new Error()
+      showToast(v ? 'Verás el buzón de colaboraciones' : 'Ya no verás el buzón de colaboraciones')
+    } catch { setVeColabs(antes); showToast('No se pudo guardar la preferencia') }
+  }
   const cambiarAnalisis = async (v: boolean) => {
     const antes = analizaCorreo
     setAnalizaCorreo(v); setGuardandoAnalisis(true)
@@ -621,6 +634,28 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
                   </button>
                 </div>
               )}
+              {/* Ver o no el buzón del equipo. Va aquí y no en Ajustes porque es la
+                  pantalla donde se entiende: al lado está el propio buzón compartido.
+                  No lo desconecta ni deja de sincronizarlo — solo deja de salir en
+                  TU Bandeja y en TU Harvey. */}
+              <div className="mt-3 flex items-start gap-3 px-3.5 py-3 rounded-2xl" style={{background:SURF2, border:`1px solid ${BORDER}`}}>
+                <div className="flex-1 min-w-0">
+                  <div className="font-figtree text-[12.5px]" style={{color:'rgba(255,255,255,0.72)'}}>
+                    Ver el buzón de colaboraciones
+                  </div>
+                  <div className="font-figtree text-[11px] mt-0.5 leading-snug" style={{color:'rgba(255,255,255,0.3)'}}>
+                    {veColabs
+                      ? 'El correo del equipo sale en tu Bandeja y Harvey lo tiene en cuenta.'
+                      : 'Solo verás tu correo. El buzón del equipo se sigue sincronizando para los demás.'}
+                  </div>
+                </div>
+                <button onClick={()=>cambiarVerColabs(!veColabs)}
+                  aria-pressed={veColabs} aria-label="Ver el buzón de colaboraciones"
+                  className="flex-shrink-0 rounded-full transition-all"
+                  style={{width:38, height:22, padding:2, background: veColabs ? BLU : 'rgba(255,255,255,0.1)', border:`1px solid ${veColabs ? BLU : BORDER}`}}>
+                  <div className="rounded-full transition-all" style={{width:16, height:16, background:'#FFFFFF', transform:`translateX(${veColabs ? 16 : 0}px)`}}/>
+                </button>
+              </div>
             </div>
             {/* Token expired warning */}
             {personalExpired && (

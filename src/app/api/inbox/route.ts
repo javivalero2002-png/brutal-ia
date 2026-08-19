@@ -12,13 +12,33 @@ export async function GET() {
 
   const admin = await createAdminClient()
 
-  // Own messages + shared company (colabs) messages
-  const { data, error } = await admin
-    .from('inbox_messages')
-    .select('*')
-    .or(`user_id.eq.${user.id},shared.eq.true`)
-    .order('received_at', { ascending: false })
-    .limit(100)
+  // ¿Esta persona ve el buzón compartido?
+  //
+  // La marca `shared` está en el CORREO, no en la persona, así que sin esto lo ve
+  // cualquiera con sesión — y dar de baja a alguien y volver a crearlo no cambia
+  // nada: la cuenta nueva lo vería igual.
+  //
+  // Un fallo al leer la preferencia NO oculta el buzón: se sigue enseñando. Es el
+  // lado seguro — que a alguien le aparezca correo del equipo que ya veía ayer es
+  // un incordio; que desaparezca sin motivo parece que se ha perdido.
+  const { data: perfil, error: errPerfil } = await admin
+    .from('profiles').select('ver_colabs').eq('id', user.id).maybeSingle()
+  if (errPerfil) console.error('[inbox] no se pudo leer ver_colabs:', errPerfil.message)
+  const veColabs = perfil?.ver_colabs !== false
+
+  // Las dos consultas ENTERAS, cada una con su filtro pegado.
+  //
+  // Estaba escrito como un constructor en una variable y el filtro dos líneas más
+  // abajo, y una regla nueva lo marcó: es exactamente la forma en la que se
+  // esconde un filtro que falta —de un vistazo se lee `.select('*')` sin `where`—.
+  // Se cambió el código en vez de relajar la regla.
+  const { data, error } = veColabs
+    ? await admin.from('inbox_messages').select('*')
+        .or(`user_id.eq.${user.id},shared.eq.true`)
+        .order('received_at', { ascending: false }).limit(100)
+    : await admin.from('inbox_messages').select('*')
+        .eq('user_id', user.id)
+        .order('received_at', { ascending: false }).limit(100)
 
   if (error) {
     // El fallback existe porque la columna `shared` puede no estar en la BD.

@@ -2751,3 +2751,65 @@ describe('con un correo abierto, el correo cabe', () => {
       .toBeGreaterThanOrEqual(250)
   })
 })
+
+describe('ocultar el buzon del equipo lo oculta ENTERO', () => {
+  // Javi: «Julio y Pablo no tienen que ver el Gmail de colaboraciones, se
+  // solventará cuando borre sus cuentas». No se solventa: la marca `shared` esta en
+  // el CORREO, no en la persona, asi que la cuenta nueva lo veria igual. Y borrar
+  // se llevaria por delante su Bandeja, su Fichar y sus conversaciones con Harvey.
+  //
+  // Lo que si lo resuelve es esta preferencia — y tiene que valer en LOS DOS sitios
+  // donde ese correo aparece. Ocultarlo en la pantalla y seguir metiendoselo a su
+  // Harvey no es medio arreglo: es ninguno, porque Harvey se lo cuenta al
+  // preguntarle «¿que tengo hoy?».
+  const SITIOS = ['src/app/api/inbox/route.ts', 'src/app/api/chat/route.ts']
+
+  it.each(SITIOS)('%s consulta ver_colabs antes de traer el correo compartido', (ruta) => {
+    const C = leerCodigo(ruta)
+    expect(/ver_colabs/.test(C), 'no lee la preferencia en ningun sitio').toBe(true)
+
+    // Y que MANDE sobre la consulta, no que solo aparezca en el fichero. La primera
+    // version de esta regla buscaba `veColabs` en todo el fichero y daba verde con
+    // la consulta cableada a `.or(shared.eq.true)`: la palabra seguia ahi, en la
+    // linea que la define. Comprobar que un nombre existe no comprueba que decida.
+    const i = C.indexOf("from('inbox_messages')")
+    expect(i, 'ya no se leen correos aqui: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const antes = C.slice(Math.max(0, i - 220), i)
+    expect(/veColabs\s*$|veColabs\s*\?/.test(antes.trim()) || /veColabs\s*\?/.test(antes),
+      'la consulta de correos no esta gobernada por la preferencia: se lee y se ignora')
+      .toBe(true)
+  })
+
+  it('ninguna consulta de correos se queda SIN filtro de usuario', () => {
+    // Al montar esto se rompio de verdad: quitar el `.or(...)` del chat dejo la
+    // consulta sin filtro ninguno — el correo personal de los siete entrando en el
+    // Harvey de cualquiera. Lo cazo una lectura, no un test; ahora lo caza un test.
+    for (const ruta of SITIOS) {
+      const C = leerCodigo(ruta)
+      // La ventana acaba en el PRIMER `.limit(` de cada consulta, y no en un salto
+      // de linea o una llave. La primera version se comia la rama de al lado del
+      // ternario: al quitarle el filtro a UNA de las dos, encontraba el `user_id`
+      // de la OTRA y daba verde. Una ventana demasiado grande es una regla que
+      // mira otro sitio.
+      for (const m of C.matchAll(/from\('inbox_messages'\)([\s\S]*?\.limit\()/g)) {
+        const consulta = m[1]
+        if (!/\.select\(/.test(consulta)) continue          // solo lecturas
+        if (/\.in\('id'/.test(consulta)) continue           // el bulk va por ids ya filtrados
+        expect(/user_id/.test(consulta),
+          `${ruta}: hay una lectura de inbox_messages sin filtro de usuario:\n${consulta.slice(0, 200)}`)
+          .toBe(true)
+      }
+    }
+  })
+
+  it('ante un fallo al leer la preferencia, se ENSEÑA', () => {
+    // Que aparezca correo que ya veias ayer es un incordio; que desaparezca sin
+    // motivo parece que se ha perdido. `!== false` y no `=== true`.
+    for (const ruta of SITIOS) {
+      const C = leerCodigo(ruta)
+      expect(/ver_colabs !== false/.test(C),
+        `${ruta}: un fallo al leer la preferencia oculta el buzon del equipo`)
+        .toBe(true)
+    }
+  })
+})

@@ -93,6 +93,11 @@ export async function PATCH(request: Request) {
     updates.analizar_correo = body.analizar_correo
   }
 
+  // Si ve el buzón compartido del equipo.
+  if (typeof body.ver_colabs === 'boolean') {
+    updates.ver_colabs = body.ver_colabs
+  }
+
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'Nada que actualizar' }, { status: 400 })
   }
@@ -101,7 +106,7 @@ export async function PATCH(request: Request) {
     .from('profiles')
     .update(updates)
     .eq('id', ctx.userId)
-    .select('id,name,initials,avatar_color,email,role,analizar_correo')
+    .select('id,name,initials,avatar_color,email,role,analizar_correo,ver_colabs')
     .single()
 
   if (error) {
