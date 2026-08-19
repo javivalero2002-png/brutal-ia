@@ -2038,3 +2038,26 @@ describe('nada del Storage sale sin firmar', () => {
       .toEqual([])
   })
 })
+
+// ───────────────────────────────────────────────────────────────────────────────
+// `main` SIEMPRE despliega.
+//
+// Los previews de PR no pueden construir nunca —las variables de entorno son solo
+// de Production a propósito, porque un preview con credenciales de produccion
+// escribe en la base de VERDAD— asi que se apagan en `vercel.json`. Pero ahi hay
+// una trampa documentada por Vercel: cualquier rama NO especificada vale `true`,
+// o sea que un `deploymentEnabled: false` a secas apaga tambien produccion.
+//
+// Y ese fallo es de los que no avisan: el merge entra, el check sale limpio, y
+// produccion se queda sirviendo el commit anterior. Ya paso una vez por otra
+// causa (la suscripcion suspendida) y costo un dia entero.
+// ───────────────────────────────────────────────────────────────────────────────
+describe('el despliegue de produccion no se puede apagar sin querer', () => {
+  it('main sigue habilitado en vercel.json', () => {
+    const v = JSON.parse(readFileSync('vercel.json', 'utf8'))
+    const conf = v.git?.deploymentEnabled
+    if (conf === undefined) return                    // sin configurar = todo activo
+    expect(conf, 'apaga TODOS los despliegues, produccion incluida: los merges a main dejaran de publicar y el check saldra limpio').not.toBe(false)
+    expect(conf.main, 'main no esta explicitamente habilitado: si un patron lo apaga, produccion deja de desplegarse en silencio').toBe(true)
+  })
+})
