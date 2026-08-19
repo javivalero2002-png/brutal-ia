@@ -33,6 +33,14 @@ let ULTIMO_ENLACE_PARA: string | null = null
  * constraint "profiles_pkey"» en la cara del usuario.
  */
 let CREAR_DEVUELVE_EXISTENTE = false
+let ULTIMO_UPDATE: { tabla: string; campos: Fila } | null = null
+/**
+ * Que el UPDATE falle. Es el caso que separa «no revienta» de «no miente»: si el
+ * borrado de la marca falla y nadie mira el error, la ruta devuelve un enlace tan
+ * contento y esa persona entra directa al panel, sin puesta en marcha. Cara de
+ * haber ido bien y el resultado exactamente contrario al que se pidio.
+ */
+let FALLO_UPDATE: string | null = null
 
 const admin = {
   from(tabla: string) {
@@ -67,9 +75,15 @@ const admin = {
       // `.update(x).eq('email', y)`, así que devolver una promesa aquí rompía la
       // cadena. Detalle tonto, pero es la clase de cosa que solo se descubre
       // EJECUTANDO — leyendo el código no aparece.
-      update: () => api,
+      update: (campos: Fila) => {
+        // Registra QUÉ se actualiza: sin esto no se puede comprobar que la puesta
+        // en marcha se borra de verdad, solo que la ruta no revienta.
+        ULTIMO_UPDATE = { tabla, campos }
+        return api
+      },
       delete: () => api,
-      then: (res: (v: { error: null }) => unknown) => res({ error: null }),
+      then: (res: (v: { error: { message: string } | null }) => unknown) =>
+        res({ error: FALLO_UPDATE ? { message: FALLO_UPDATE } : null }),
     }
     return api
   },
@@ -128,6 +142,8 @@ beforeEach(() => {
   FALLO_BUSQUEDA = null
   ULTIMO_ENLACE_PARA = null
   CREAR_DEVUELVE_EXISTENTE = false
+  ULTIMO_UPDATE = null
+  FALLO_UPDATE = null
 })
 
 describe('alta de un miembro · lo que vive quien entra en el equipo', () => {
@@ -225,5 +241,61 @@ describe('alta de un miembro · lo que vive quien entra en el equipo', () => {
     await pedir({ email: '  Pablo@BrutalStudios.ES ', name: 'Pablo' })
     expect(ULTIMO_ENLACE_PARA, 'pide el enlace para un correo sin normalizar: Supabase no lo encontraría')
       .toBe('pablo@brutalstudios.es')
+  })
+})
+
+describe('empezar de cero sin borrar la cuenta', () => {
+  const reiniciar = async (email: string) => {
+    const { PATCH } = await import('@/app/api/admin/team/route')
+    const res = await PATCH(new Request('http://x/api/admin/team', {
+      method: 'PATCH', body: JSON.stringify({ email, action: 'reiniciar_acceso' }),
+    }) as never)
+    return { status: res.status, json: await res.json() }
+  }
+
+  it('borra la marca de puesta en marcha Y devuelve enlace', async () => {
+    PERFILES.push({ id: 'p-laura', email: 'laura@brutalstudios.es', role: 'member', onboarding_at: '2026-08-01' })
+    const { status, json } = await reiniciar('laura@brutalstudios.es')
+    expect(status).toBe(200)
+    // Las DOS cosas. Con el enlace pero sin borrar la marca, esa persona entra
+    // directa al panel y no ve la puesta en marcha — que es justo lo que se pedia,
+    // pero con cara de haber ido bien.
+    expect(ULTIMO_UPDATE?.tabla, 'no toca profiles').toBe('profiles')
+    expect(ULTIMO_UPDATE?.campos, 'no borra la marca de puesta en marcha').toEqual({ onboarding_at: null })
+    expect(json.inviteLink, 'no devuelve enlace').toBeTruthy()
+    expect(json.reiniciado).toBe(true)
+  })
+
+  it('el enlace apunta a NUESTRA pantalla, igual que el del alta', async () => {
+    // Mismo camino (`generarEnlace`), asi que hereda el arreglo de PKCE. Si alguien
+    // lo reescribe a mano aqui, este enlace se gastaria al abrirlo.
+    PERFILES.push({ id: 'p-fer', email: 'fer@brutalstudios.es', role: 'member' })
+    const { json } = await reiniciar('fer@brutalstudios.es')
+    expect(json.inviteLink).toContain('/reset-password?token_hash=')
+    expect(json.inviteLink).not.toContain('/auth/v1/verify')
+  })
+
+  it('el correo se normaliza, como en todo lo demas', async () => {
+    PERFILES.push({ id: 'p-pablo', email: 'pablo@brutalstudios.es', role: 'member' })
+    await reiniciar('  Pablo@BrutalStudios.ES ')
+    expect(ULTIMO_ENLACE_PARA, 'pide el enlace sin normalizar: Supabase no encontraria la cuenta')
+      .toBe('pablo@brutalstudios.es')
+  })
+
+  it('si no se puede borrar la marca, NO se da el enlace', async () => {
+    PERFILES.push({ id: 'p-ana', email: 'ana@brutalstudios.es', role: 'member', onboarding_at: '2026-08-01' })
+    FALLO_UPDATE = 'connection reset'
+    const { status, json } = await reiniciar('ana@brutalstudios.es')
+    // Dar el enlace igualmente seria lo peor de los dos mundos: le mandas el enlace
+    // a alguien convencido de que vera la puesta en marcha, y no la ve.
+    expect(status, 'devuelve 200 con la marca sin borrar').toBe(500)
+    expect(json.inviteLink, 'da el enlace aunque el reinicio haya fallado').toBeFalsy()
+  })
+
+  it('solo el propietario puede reiniciar el acceso de alguien', async () => {
+    PERFILES = [{ id: 'yo', email: 'javi@brutalstudios.es', role: 'member' }]
+    const { status } = await reiniciar('laura@brutalstudios.es')
+    expect(status).toBe(403)
+    expect(ULTIMO_UPDATE, 'ha tocado profiles sin ser propietario').toBeNull()
   })
 })
