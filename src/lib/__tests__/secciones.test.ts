@@ -657,4 +657,185 @@ describe('harvey · no pierde el hilo de la conversación', () => {
     expect(/askHarvey\(texto, previos\)/.test(cuerpo),
       'manda `nuevo` en vez de `previos`: el servidor ya añade el mensaje actual, así que iría duplicado').toBe(true)
   })
+
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// El arranque de semana: el DATO antes que la IA.
+//
+// HOY y SEMANA miran hacia atrás y se piden al servidor. ARRANQUE mira hacia
+// adelante y se compone de lo que YA está cargado — `data.tasks` y
+// `data.calendarEvents` — así que no cuesta una ruta, ni una llamada al modelo,
+// ni un céntimo. La lectura de Harvey es un botón encima, no el mecanismo.
+//
+// Si algún día esto pasara a pedirle el resumen a la IA para PODER pintarlo, un
+// lunes con la API caída dejaría al equipo sin su parte. El dato tiene que estar
+// aunque la IA no conteste.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('diario · el arranque de semana no depende de la IA', () => {
+  const D = readFileSync('src/components/sections/DiarioSection.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  it('se compone de lo que ya está cargado, sin pedir nada', () => {
+    const i = D.indexOf('const arranque = useMemo')
+    expect(i, 'ya no existe `arranque`: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = D.slice(i, D.indexOf('\n  }, [', i))
+    expect(/data\.tasks/.test(cuerpo) && /data\.calendarEvents/.test(cuerpo),
+      'el arranque ya no sale de los datos cargados').toBe(true)
+    expect(/fetch\(/.test(cuerpo),
+      'el arranque pide algo al servidor: era gratis y ahora cuesta una ruta').toBe(false)
+  })
+
+  it('la lectura de Harvey es opcional, no el mecanismo', () => {
+    // `onAskHarvey` va con `?`: sin él la sección sigue enseñando el arranque.
+    expect(/onAskHarvey\?:/.test(D),
+      'onAskHarvey dejó de ser opcional: sin él la sección no podría pintar el arranque').toBe(true)
+    expect(/\{onAskHarvey && \(/.test(D),
+      'el botón no está guardado: sin la prop reventaría en vez de omitirse').toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Todo objetivo escrito acaba siendo una tarea. También los tardíos.
+//
+// Las tareas se creaban SOLO al fichar, y ese botón desaparece en cuanto fichas.
+// Un objetivo escrito después se quedaba como texto en el diario: no salía en la
+// carga de nadie, no contaba en Reportes, y al día siguiente no aparecía en
+// «vienen de antes» —que lee TAREAS—, así que desaparecía sin más. Javi lo vio
+// con «Prueba top»: la escribió, no la cerró, y al día siguiente no estaba.
+//
+// El único camino que quedaba era tacharla, y entonces nacía ya COMPLETADA: solo
+// se podía registrar lo que sí hiciste, justo al revés de para lo que sirve.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('diario · un objetivo escrito después de fichar también es una tarea', () => {
+  const D = readFileSync('src/components/sections/DiarioSection.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  it('salir de la fila crea su tarea', () => {
+    const i = D.indexOf('const crearTareaDe')
+    expect(i, 'ya no existe crearTareaDe: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = D.slice(i, D.indexOf('\n  }', i))
+    // Pendiente, no completada: el objetivo se escribe ANTES de hacerlo.
+    expect(/done: false/.test(cuerpo),
+      'la tarea del objetivo nace ya completada: solo se podría registrar lo que ya hiciste').toBe(true)
+    // Y con el vínculo, o no emparejaría con su objetivo.
+    expect(/diario_dia: dia/.test(cuerpo) && /diario_objetivo: o/.test(cuerpo),
+      'la tarea nace sin vínculo: no emparejaría con su objetivo ni podría arrastrarse').toBe(true)
+
+    // Cableada al SALIR de la fila, no al teclear: con el retardo del autoguardado
+    // se crearía una tarea «Prue» a mitad de escribir y el vínculo se quedaría así.
+    const iF = D.indexOf('value={fila}')
+    expect(iF, 'ya no existe la fila de objetivo: revisa esta regla').toBeGreaterThan(-1)
+    expect(/onBlur=\{\(\) => crearTareaDe\(fila\)\}/.test(D.slice(iF, D.indexOf('/>', iF))),
+      'la fila no crea su tarea al salir: un objetivo escrito tras fichar no llegaría nunca a Tareas').toBe(true)
+  })
+
+  it('no crea nada en un día pasado ni antes de fichar', () => {
+    const i = D.indexOf('const crearTareaDe')
+    const guarda = D.slice(i, i + 420)
+    expect(/esPasado/.test(guarda),
+      'crearía tareas al repasar un día pasado, y se apuntarían a hoy').toBe(true)
+    expect(/miEntrada\?\.entrada_at/.test(guarda),
+      'crea antes de fichar: el botón FICHAR las crea todas de golpe y prometería lo que ya está').toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Crear una tarea en Tareas también es marcar tu día.
+//
+// Escribir un objetivo en el Diario y crear una tarea en Tareas son dos formas de
+// decir lo mismo —esto es de mi día—, pero el Diario solo miraba la primera: si
+// te organizabas desde Tareas, tu día salía vacío y el anillo decía «0 de 2»
+// ignorando lo que sí habías cerrado. Dos modalidades que no se hablaban.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('diario · el día cuenta también lo creado desde Tareas', () => {
+  const D = readFileSync('src/components/sections/DiarioSection.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  it('el anillo mide el día entero, no solo los objetivos', () => {
+    expect(/const totalDelDia = objetivosDeHoy\.length \+ otrasDelDia\.length/.test(D),
+      'el anillo vuelve a contar solo objetivos: un día trabajado desde Tareas marcaría 0 %').toBe(true)
+    expect(/const hechasDelDia/.test(D), 'no cuenta las hechas del día entero').toBe(true)
+  })
+
+  it('van aparte y etiquetadas, no mezcladas con los objetivos', () => {
+    // Fundirlas borraría la distancia entre lo que uno se PROPUSO y lo que fue
+    // apareciendo, que es justo lo que el Diario existe para enseñar.
+    const i = D.indexOf('const otrasDelDia')
+    expect(i, 'ya no existe otrasDelDia: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = D.slice(i, D.indexOf('\n\n', i))
+    expect(/!objetivosDeHoy\.some/.test(cuerpo),
+      'no excluye las que ya son objetivo: cada objetivo se contaría dos veces').toBe(true)
+    expect(/TAMBIÉN HOY/.test(D),
+      'las tareas del día se mezclan con los objetivos sin distinguirlas').toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Las fuentes de Harvey se OFRECEN, no se dicen.
+//
+// Javi lo pidió expresamente: «no quiero que lo diga, como mucho un botón de
+// revisar fuentes». Y tiene razón técnica además de de gusto — esto se reproduce
+// EN VOZ ALTA, así que citar notas convertiría cada respuesta en una bibliografía
+// leída. El botón deja comprobar de dónde salió a quien dude, sin estorbar a
+// quien no.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('harvey · las fuentes son un botón, no parte de la respuesta', () => {
+  const H = readFileSync('src/components/sections/HarveySection.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  it('se guardan con el turno y se pintan aparte', () => {
+    expect(/fuentes:fuentesRef\.current/.test(H),
+      'el turno no guarda de qué notas salió: no se podrían revisar después').toBe(true)
+    expect(/REVISAR FUENTES/.test(H), 'ya no hay botón de fuentes').toBe(true)
+  })
+
+  it('el prompt NO le pide que las cite', () => {
+    // Si se le pidiera en el system prompt, las diría en voz alta — que es
+    // exactamente lo que se descartó.
+    const R = readFileSync('src/app/api/harvey/chat/route.ts', 'utf8')
+    expect(/cita (la|las) fuente|di de qué nota|menciona la nota/i.test(R),
+      'se le pide a Harvey que cite las fuentes: las leería en voz alta').toBe(false)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// La racha del diario: personal, y sin morir cada sábado.
+//
+// Dos decisiones que la hacen útil en vez de decorativa:
+//
+//  · Es MÍA, no una tabla comparativa en Equipo. En un estudio de siete personas
+//    que se conocen, un contador público de rachas convierte una herramienta de
+//    hábito en un marcador, y romperla pasa a ser un fracaso delante de los demás.
+//    La señal que necesita un jefe —quién no lo usa— ya está en Reportes.
+//  · Los fines de semana se SALTAN. Aquí se trabaja de lunes a viernes: una racha
+//    que muere cada sábado no mide nada y desmotiva en vez de motivar.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('diario · la racha es personal y salta los fines de semana', () => {
+  const S = readFileSync('src/components/shared/SemanaDiario.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  it('salta sábados y domingos en vez de romper', () => {
+    const i = S.indexOf('const racha = useMemo')
+    expect(i, 'ya no existe la racha: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = S.slice(i, S.indexOf('\n  }, [', i))
+    // 0 = domingo, 6 = sábado. `continue`, no `break`: saltar, no cortar.
+    expect(/d === 0 \|\| d === 6[\s\S]{0,80}continue/.test(cuerpo),
+      'el fin de semana rompe la racha: moriría cada sábado y no mediría nada').toBe(true)
+  })
+
+  it('es de una persona, no un ranking del equipo', () => {
+    expect(/p\.id === miId/.test(S),
+      'la racha dejó de ser personal: un marcador público convierte el hábito en competición').toBe(true)
+    // Y no se pinta en Equipo, que es donde sería comparativa.
+    //
+    // SIN COMENTARIOS, o la regla miente: «seguidos» aparece en un comentario de
+    // esa sección («TRES viajes a Supabase seguidos») y la daba por infringida.
+    // Es la trampa que CLAUDE.md tiene escrita — una regla que un comentario
+    // puede satisfacer, o romper, no comprueba código: comprueba prosa.
+    const E = readFileSync('src/components/sections/EquipoSection.tsx', 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+    expect(/racha|SEGUIDOS/i.test(E),
+      'la racha aparece en Equipo: ahí es una tabla comparativa, que es justo lo que se descartó').toBe(false)
+  })
 })

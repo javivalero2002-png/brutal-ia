@@ -181,6 +181,34 @@ export function parseImporte(bruto?: string | null): { mensual: number; anual: b
   return { mensual: anual ? total / 12 : total, anual }
 }
 
+/**
+ * ¿Casa este texto con lo que se ha buscado?
+ *
+ * Lo que había era un `includes()` de la cadena entera en minúsculas, y eso falla
+ * en los dos casos que se dan de verdad al escribir en español:
+ *
+ *   · «diseno» no encontraba «diseño», ni «Nike» encontraba «nike» con tilde
+ *     alrededor: la comparación no normalizaba.
+ *   · «presupuesto nike» no encontraba «Presupuesto de Nike», porque buscaba la
+ *     frase LITERAL y sobra un «de» en medio.
+ *
+ * Ahora se parte la búsqueda en palabras y se exigen TODAS, en cualquier orden y
+ * en cualquier sitio del texto. Es lo que hace la gente sin darse cuenta: teclear
+ * dos palabras que recuerda y esperar que aparezca.
+ *
+ * Importa más ahora que los documentos entran solos en Memoria: con veinte notas
+ * se encontraba a ojo, con doscientas no.
+ */
+const sinTildes = (t: string) =>
+  (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+export function buscaEnTexto(texto: string, consulta: string): boolean {
+  const q = sinTildes(consulta).split(/\s+/).filter(Boolean)
+  if (!q.length) return true
+  const t = sinTildes(texto)
+  return q.every(p => t.includes(p))
+}
+
 export const esTareaDe = (
   t: {
     assignee?: { id?: string } | null; co_assignee?: { id?: string } | null

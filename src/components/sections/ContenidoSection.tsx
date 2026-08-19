@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { rutaApp } from '@/lib/appUrl'
 import type { NexusData, ContentItem } from '@/types'
-import { PLATAFORMA_COLOR, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, todayKey } from '@/components/shared'
+import { PLATAFORMA_COLOR, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, todayKey, buscaEnTexto } from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
 import BocetoPanel from '@/components/BocetoPanel'
 import type { IrASeccion } from '@/components/shared/secciones'
@@ -398,7 +398,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
   const activePlatforms = [...new Set(filteredByAccount.filter((a: any)=>a.platform).map((a: any)=>String(a.platform).trim()))].filter(Boolean).sort() as string[]
   const allPlatforms: string[] = ['Todas', ...activePlatforms]
   const filteredByPlatform = platformFilter === 'Todas' ? filteredByAccount : filteredByAccount.filter((a: any)=>String(a.platform||'').trim()===platformFilter)
-  const filteredAgenda = !contentSearch.trim() ? filteredByPlatform : filteredByPlatform.filter((a: any)=>a.title?.toLowerCase().includes(contentSearch.toLowerCase()))
+  const filteredAgenda = !contentSearch.trim() ? filteredByPlatform : filteredByPlatform.filter((a: any)=>buscaEnTexto(`${a.title||''} ${a.account_name||''} ${a.platform||''}`, contentSearch))
   filteredAgendaRef.current = filteredAgenda
 
   const changeStatus = async (item: any, newStatus: ContentItem['status']) => {
@@ -1343,7 +1343,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
               </div>
               <div className="flex-1 px-7 py-6 space-y-4">
                 <div className="flex items-center justify-between">
-                  <div className="font-syne text-[8.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>OPINIONES DEL EQUIPO</div>
+                  <div className="font-syne text-[8.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>OPINIONES</div>
                   {(()=>{ try { const ops=JSON.parse(activeItem.feedback||'[]'); return Array.isArray(ops)&&ops.length>0?<span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-full" style={{background:`${BLU}15`,color:`${BLU}bb`}}>{ops.length}</span>:null } catch { return null } })()}
                 </div>
                 {(()=>{ try { const ops=JSON.parse(activeItem.feedback||'[]'); return Array.isArray(ops)&&ops.length>0?(
@@ -1352,7 +1352,13 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                       <div key={i} className="flex items-start gap-3 p-3.5 rounded-2xl transition-all" style={{background:'rgba(255,255,255,0.03)',border:`1px solid rgba(255,255,255,0.06)`}}>
                         <div className="w-8 h-8 rounded-xl flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0" style={{background:`${op.color||BLU}18`,color:op.color||BLU}}>{op.initials}</div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap"><span className="font-figtree text-[12px] font-bold" style={{color:'rgba(255,255,255,0.8)'}}>{op.name}</span>{op.emoji&&<span className="text-[16px] leading-none">{op.emoji}</span>}<span className="font-syne text-[7px] ml-auto flex-shrink-0" style={{color:'rgba(255,255,255,0.18)'}}>{op.at?new Date(op.at).toLocaleDateString('es-ES',{day:'numeric',month:'short'}):''}</span></div>
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">{op.origen==='cliente'
+                            /* La opinión del cliente llega con el nombre de relleno
+                               «Cliente», y pintarlo como si fuera una persona del
+                               equipo confunde: no se sabe quién es ni hace falta.
+                               Una etiqueta dice de dónde viene sin fingir un autor. */
+                            ? <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,176,32,0.12)',color:'rgba(255,176,32,0.8)'}}>DEL CLIENTE</span>
+                            : <span className="font-figtree text-[12px] font-bold" style={{color:'rgba(255,255,255,0.8)'}}>{op.name}</span>}{op.emoji&&<span className="text-[16px] leading-none">{op.emoji}</span>}<span className="font-syne text-[7px] ml-auto flex-shrink-0" style={{color:'rgba(255,255,255,0.18)'}}>{op.at?new Date(op.at).toLocaleDateString('es-ES',{day:'numeric',month:'short'}):''}</span></div>
                           {op.note&&<p className="font-syne text-[10px] leading-relaxed" style={{color:'rgba(255,255,255,0.42)'}}>{op.note}</p>}
                         </div>
                       </div>

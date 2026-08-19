@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { rutaApp } from '@/lib/appUrl'
-import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, todayKey, localDayKey, AMBAR } from '@/components/shared'
+import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, todayKey, localDayKey, AMBAR, buscaEnTexto } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
 import LucideIcon from '@/components/shared/LucideIcon'
 import type { Client, NexusData} from '@/types'
@@ -149,7 +149,7 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
   // silencio cuales son las 12 que Harvey mete en su contexto (buildContext hace
   // slice(0,12)) y las que ve Hoy.
   const filtered = [...(memSearch.trim()
-    ? byClientFilter.filter((m: any)=>(m.title+' '+m.content).toLowerCase().includes(memSearch.toLowerCase()))
+    ? byClientFilter.filter((m: any)=>buscaEnTexto(`${m.title} ${m.content} ${m.category||''} ${m.client?.name||''}`, memSearch))
     : byClientFilter)].sort((a: any, b: any) => {
       const pinDiff = (pinnedIds.has(b.id)?1:0) - (pinnedIds.has(a.id)?1:0)
       if (pinDiff !== 0) return pinDiff
@@ -287,7 +287,24 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
       <div className="space-y-2">
         {filtered.map((m: any)=>{
           const isExp = expanded===m.id
-          const isLong = (m.content||'').length > 120
+          /**
+           * El enlace del documento va APARTE, como botón.
+           *
+           * Se guarda dentro del texto de la nota («📎 Documento: https://…») para
+           * que sobreviva a cualquier cambio de esquema, y eso está bien — pero
+           * pintarlo tal cual metía una URL firmada de 400 caracteres SIN espacios
+           * en medio del resumen: no parte por ningún sitio, así que se salía del
+           * marco y se comía la nota. Además nadie lee una URL: se pulsa.
+           */
+          const mDoc = /📎\s*Documento:\s*(\S+)/.exec(m.content || '')
+          const enlaceDoc = mDoc?.[1] || null
+          const cuerpo = (m.content || '').replace(/\n*📎\s*Documento:\s*\S+/, '').trim()
+          // La ficha que mete el análisis («Tipo: … · Cliente: … · Importe: …») se
+          // saca a chips: es lo que se mira de un vistazo y en prosa se pierde.
+          const mFicha = /^(?:Tipo|Cliente|Fechas|Importe|Presupuesto|Alcance):[^\n]*$/m.exec(cuerpo)
+          const ficha = mFicha ? mFicha[0].split(' · ').map(x => x.trim()).filter(Boolean) : []
+          const resumen = mFicha ? cuerpo.replace(mFicha[0], '').replace(/\n{3,}/g, '\n\n').trim() : cuerpo
+          const isLong = resumen.length > 120
           return (
           <div key={m.id} className="rounded-2xl transition-all group" style={{background:pinnedIds.has(m.id)?'rgba(255,176,32,0.015)':SURFACE,border:`1px solid ${isExp?'rgba(27,95,250,0.2)':pinnedIds.has(m.id)?'rgba(255,176,32,0.14)':BORDER}`,borderLeft:`3px solid ${pinnedIds.has(m.id)?'rgba(255,176,32,0.38)':'transparent'}`}}>
             <div className="flex items-start gap-4 p-5 cursor-pointer" onClick={()=>setExpanded(isExp?null:m.id)}>
@@ -303,7 +320,33 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
                   {pinnedIds.has(m.id) && <span className="font-syne text-[6.5px] font-black px-1.5 py-0.5 rounded-full" style={{background:'rgba(255,176,32,0.1)',color:'rgba(255,176,32,0.7)'}}>FIJADA</span>}
                   {m.client?.name && <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full flex-shrink-0" style={{background:(m.client.color||BLU)+'14',color:(m.client.color||BLU)+'bb'}}>{m.client.name}</span>}
                 </div>
-                <div className={`text-[12px] leading-relaxed ${isExp?'':'line-clamp-2'}`} style={{color:'rgba(255,255,255,0.45)'}}>{m.content}</div>
+                {/* `break-words` por si algún día vuelve a colarse algo largo sin
+                    espacios: un token así rompe el marco por muy bien que se parsee. */}
+                <div className={`text-[12px] leading-relaxed break-words ${isExp?'':'line-clamp-2'}`} style={{color:'rgba(255,255,255,0.45)',overflowWrap:'anywhere'}}>{resumen}</div>
+
+                {isExp && ficha.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2.5">
+                    {ficha.map((f: string, k: number) => {
+                      const [etq, ...resto] = f.split(':')
+                      return (
+                        <span key={k} className="flex items-baseline gap-1 px-2.5 py-1 rounded-lg font-figtree text-[10.5px]"
+                          style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`}}>
+                          <span className="font-syne text-[7px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.28)'}}>{etq.toUpperCase()}</span>
+                          <span style={{color:'rgba(255,255,255,0.75)'}}>{resto.join(':').trim()}</span>
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {enlaceDoc && (
+                  <a href={enlaceDoc} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()}
+                    className="inline-flex items-center gap-1.5 mt-2.5 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-widest transition-opacity hover:opacity-80"
+                    style={{background:`${BLU}14`,border:`1px solid ${BLU}30`,color:BLU}}>
+                    <LucideIcon name="paperclip" size={11} color={BLU}/>
+                    ABRIR DOCUMENTO
+                  </a>
+                )}
                 {!isExp && isLong && <div className="font-syne text-[8px] font-black mt-1.5 transition-colors" style={{color:'rgba(27,95,250,0.5)'}}>VER MÁS</div>}
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">

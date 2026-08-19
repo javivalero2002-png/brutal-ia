@@ -54,6 +54,8 @@ interface Props {
   profile: Profile
   showToast: (m: string) => void
   onNavigate: IrASeccion
+  /** Manda una pregunta ya escrita a Harvey. Mismo mecanismo que usa Inbox. */
+  onAskHarvey?: (mensaje: string) => void
   /**
    * Entradas de muestra para /preview. Con esto la sección NO toca la red.
    *
@@ -107,7 +109,7 @@ const etiquetaDia = (clave: string): string => {
 const lineas = (t?: string | null) =>
   (t || '').split('\n').map(l => l.replace(/^[-•*\s]+/, '').trim()).filter(Boolean)
 
-export default function DiarioSection({ data, profile, showToast, onNavigate, demo, diasDemo }: Props) {
+export default function DiarioSection({ data, profile, showToast, onNavigate, onAskHarvey, demo, diasDemo }: Props) {
   const isMobile = useIsMobile()
   const [entradas, setEntradas] = useState<Entrada[]>([])
   const [cargando, setCargando] = useState(true)
@@ -123,7 +125,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   // sección — es una consulta pesada que la mayoría de las visitas no necesita.
   const esJefe = profile?.role === 'owner'
   const [briefing, setBriefing] = useState<any>(null)
-  const [rango, setRango] = useState<'dia' | 'semana'>('dia')
+  const [rango, setRango] = useState<'dia' | 'semana' | 'arranque'>('dia')
   const [cargandoBrief, setCargandoBrief] = useState(false)
   // El día que se está mirando. Hoy por defecto; se puede retroceder para
   // consultar lo que hizo el equipo cualquier otro día — el diario es un
@@ -587,6 +589,53 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
     ) as { id: string; text?: string; diario_dia?: string | null }[]
   }, [data.tasks, profile?.id, dia, esHoy])
 
+  /**
+   * El arranque de semana: lo que se arrastra y lo que viene.
+   *
+   * HOY y SEMANA miran hacia atrás —qué hizo cada uno—, y eso no es lo que se
+   * pregunta un lunes por la mañana. Lo que se pregunta es qué quedó colgado y
+   * qué se viene encima, y eso no lo contestaba ninguna pantalla.
+   *
+   * Se compone de lo que YA está cargado (`data.tasks`, `data.calendarEvents`):
+   * ni una ruta nueva, ni una llamada a la IA, ni un céntimo. La lectura se la
+   * puede pedir a Harvey quien quiera, con un botón — pero el dato está antes y
+   * sin depender de nadie.
+   */
+  const arranque = useMemo(() => {
+    const hoy = todayKey()
+    const enSieteDias = sumarDias(hoy, 7)
+    const equipo = (data.team || []) as { id: string; name?: string; initials?: string; avatar_color?: string }[]
+    const tareas = (data.tasks || []) as {
+      id: string; text?: string; done?: boolean; due_date?: string | null
+      diario_dia?: string | null; assigned_to?: string | null; level?: string
+    }[]
+
+    // Lo que se arrastra: sin terminar y de un día que ya pasó. `diario_dia` es lo
+    // que dice de qué día es una tarea del diario; para las que no vienen de ahí
+    // vale el vencimiento pasado, que es la misma idea.
+    const colgadas = tareas.filter(t => !t.done && (
+      (!!t.diario_dia && t.diario_dia < hoy) || (!t.diario_dia && !!t.due_date && t.due_date < hoy)
+    ))
+
+    const porPersona = equipo.map(p => ({
+      persona: p,
+      colgadas: colgadas.filter(t => t.assigned_to === p.id),
+    })).filter(x => x.colgadas.length > 0)
+
+    const vienen = tareas
+      .filter(t => !t.done && !!t.due_date && t.due_date >= hoy && t.due_date < enSieteDias)
+      .sort((a, b) => (a.due_date || '').localeCompare(b.due_date || ''))
+
+    const eventos = ((data.calendarEvents || []) as { id: string; title: string; start: string }[])
+      .filter(e => {
+        const d = (e.start || '').slice(0, 10)
+        return d >= hoy && d < enSieteDias
+      })
+      .sort((a, b) => (a.start || '').localeCompare(b.start || ''))
+
+    return { porPersona, vienen, eventos, totalColgadas: colgadas.length }
+  }, [data.tasks, data.team, data.calendarEvents])
+
   const [arrastrando, setArrastrando] = useState(false)
   const traerAHoy = async (ids: string[]) => {
     if (!ids.length) return
@@ -606,6 +655,34 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
       showToast(`${plural(j.movidas ?? ids.length, 'objetivo traído', 'objetivos traídos')} a hoy`)
     } catch { showToast('No se pudo traer') }
     finally { setArrastrando(false) }
+  }
+
+  /**
+   * Crea la tarea de un objetivo que aún no la tiene.
+   *
+   * Las tareas se creaban SOLO al fichar, y ese botón desaparece en cuanto
+   * fichas. O sea que un objetivo escrito después no llegaba nunca a Tareas: se
+   * quedaba como texto en el diario, no salía en la carga de nadie, no contaba en
+   * Reportes y —lo que lo destapó— al día siguiente no aparecía en «vienen de
+   * antes», porque eso lee TAREAS. Javi lo vio con «Prueba top»: la escribió,
+   * no la cerró, y al día siguiente había desaparecido.
+   *
+   * El único camino que quedaba era tacharla, y entonces nacía ya completada —
+   * o sea que solo podías registrar lo que SÍ hiciste. Justo al revés de para lo
+   * que sirve.
+   *
+   * Se dispara al SALIR de la fila, no mientras escribes: el retardo del
+   * autoguardado crearía una tarea «Prue» a mitad de teclear, y el vínculo se
+   * quedaría con ese texto.
+   */
+  const crearTareaDe = async (texto: string) => {
+    const o = texto.trim()
+    // Solo con el día ya abierto: antes de fichar es el botón quien las crea
+    // todas de golpe, y adelantarse dejaría el botón prometiendo lo que ya está.
+    if (!o || demo || esPasado || !miEntrada?.entrada_at || tareaDe(o)) return
+    try {
+      await data.createTask({ text: o, level: 'high', done: false, assigned_to: profile?.id, source: 'ai', diario_dia: dia, diario_objetivo: o })
+    } catch { /* silencioso: el objetivo ya está guardado en el diario */ }
   }
 
   /** Los objetivos que todavía no son tarea mía de este día. */
@@ -628,8 +705,28 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
   }
   // Los objetivos ya no existen se descuentan solos: si borras una línea, su
   // marca de cumplido deja de contar en vez de inflar el porcentaje.
+  /**
+   * Las tareas de MI día que no escribí como objetivo.
+   *
+   * Crear una tarea en Tareas y escribir un objetivo en el Diario son dos formas
+   * de decir lo mismo —esto es de mi día—, pero el Diario solo miraba lo segundo:
+   * si te organizabas desde Tareas, tu día salía vacío y el anillo decía «0 de 2»
+   * ignorando cinco tareas hechas. Dos maneras de marcar el día que no se hablaban.
+   *
+   * Van APARTE y etiquetadas, no mezcladas con los objetivos: lo que uno se
+   * propuso por la mañana y lo que fue apareciendo no son lo mismo, y fundirlos
+   * borraría justo la distancia que el Diario existe para enseñar.
+   */
+  const otrasDelDia = misTareasDelDia.filter((t: { text?: string }) =>
+    !objetivosDeHoy.some(o => normalizar(o) === normalizar(t.text || '')),
+  ) as { id: string; text?: string; done?: boolean }[]
+
   const cumplidosVivos = objetivosDeHoy.filter(estaHecho).length
-  const pctObjetivos = objetivosDeHoy.length ? Math.round((cumplidosVivos / objetivosDeHoy.length) * 100) : 0
+  // El anillo mide el DÍA entero: los objetivos más lo que se creó por el camino.
+  // Con solo los objetivos decía «0 de 2» en un día con cinco tareas cerradas.
+  const totalDelDia = objetivosDeHoy.length + otrasDelDia.length
+  const hechasDelDia = cumplidosVivos + otrasDelDia.filter(t => t.done).length
+  const pctObjetivos = totalDelDia ? Math.round((hechasDelDia / totalDelDia) * 100) : 0
   const colorNivel = (l: string) => l === 'urgent' ? RED : l === 'high' ? AMBAR : BLU
   const yaCerrado = !!miEntrada?.cierre_at
 
@@ -729,8 +826,12 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
               MI DÍA · {fechaLarga(dia).toUpperCase()}
             </div>
             <div className="font-figtree font-bold text-white leading-tight" style={{ fontSize: isMobile ? '19px' : '23px', letterSpacing: '-0.02em' }}>
-              {objetivosDeHoy.length
-                ? `${cumplidosVivos} de ${plural(objetivosDeHoy.length, 'objetivo', 'objetivos')}`
+              {totalDelDia
+                ? (otrasDelDia.length
+                    // Si hay tareas que no venían de un objetivo, se dice «del día»:
+                    // llamarlas «objetivos» sería mentir sobre de dónde salieron.
+                    ? `${hechasDelDia} de ${totalDelDia} del día`
+                    : `${cumplidosVivos} de ${plural(objetivosDeHoy.length, 'objetivo', 'objetivos')}`)
                 : 'Sin objetivos todavía'}
             </div>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -799,6 +900,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
         diaSeleccionado={dia}
         onElegirDia={setDia}
         onAbrirMes={() => setVerCalendario(true)}
+        miId={profile?.id}
         demo={diasDemo}
         isMobile={isMobile}
       />
@@ -840,6 +942,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
                       ref={el => { refsFilas.current[i] = el }}
                       value={fila}
                       onChange={e => cambiarFilas(filas.map((f, k) => (k === i ? e.target.value : f)))}
+                      onBlur={() => crearTareaDe(fila)}
                       onKeyDown={e => {
                         if (e.key === 'Enter') {
                           e.preventDefault()
@@ -902,7 +1005,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
             <div className="font-syne text-[9px] font-black tracking-widest" style={{ color: GRN }}>¿LO COMPLETÉ?</div>
           </div>
 
-          {objetivosDeHoy.length > 0 ? (
+          {totalDelDia > 0 ? (
             <div className="px-4 pb-2.5 flex flex-wrap gap-2">
               {objetivosDeHoy.map((o, i) => {
                 const hecho = estaHecho(o)
@@ -928,6 +1031,33 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
                   </button>
                 )
               })}
+
+              {/* Lo que apareció por el camino, desde Tareas. Etiquetado y detrás:
+                  cuenta para el día, pero no es lo que uno se propuso. */}
+              {otrasDelDia.length > 0 && (
+                <>
+                  <div className="w-full font-syne text-[7px] font-black tracking-widest mt-1 mb-0.5" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                    TAMBIÉN HOY · DESDE TAREAS
+                  </div>
+                  {otrasDelDia.map(t => (
+                    <button key={t.id}
+                      onClick={() => { if (esHoy) data.updateTask(t.id, { done: !t.done }).then(() => cargar()).catch(() => showToast('No se pudo guardar')) }}
+                      disabled={!esHoy}
+                      title={esHoy ? undefined : 'Solo se puede marcar en el día de hoy'}
+                      className="flex items-center gap-2 pl-2 pr-3.5 py-2 rounded-full text-left transition-all active:scale-95 disabled:active:scale-100 disabled:cursor-default"
+                      style={{ background: t.done ? `${GRN}12` : 'rgba(255,255,255,0.03)', border: `1px dashed ${t.done ? GRN + '3A' : BORDER}`, maxWidth: '100%' }}>
+                      <span className="w-[18px] h-[18px] rounded-full flex items-center justify-center flex-shrink-0"
+                        style={{ background: t.done ? GRN : 'transparent', border: `1.5px solid ${t.done ? GRN : 'rgba(255,255,255,0.18)'}` }}>
+                        {t.done && <LucideIcon name="check" size={10} color="#06110A" />}
+                      </span>
+                      <span className="font-figtree text-[12px] truncate"
+                        style={{ color: t.done ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.7)', textDecoration: t.done ? 'line-through' : 'none' }}>
+                        {t.text}
+                      </span>
+                    </button>
+                  ))}
+                </>
+              )}
             </div>
           ) : (
             <div className="px-4 pb-2.5 font-figtree text-[12px]" style={{ color: 'rgba(255,255,255,0.22)' }}>
@@ -1018,21 +1148,104 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, de
               BRIEFING DEL EQUIPO
             </div>
             <div className="flex gap-1">
-              {(['dia', 'semana'] as const).map(r => (
-                <button key={r} onClick={() => pedirBriefing(r)}
-                  className="px-2.5 py-1 rounded-full font-syne text-[7.5px] font-black tracking-widest transition-all"
-                  style={{
-                    background: briefing && rango === r ? `${VIO}22` : 'rgba(255,255,255,0.04)',
-                    border: `1px solid ${briefing && rango === r ? VIO + '40' : BORDER}`,
-                    color: briefing && rango === r ? VIO : 'rgba(255,255,255,0.4)',
-                  }}>
-                  {r === 'dia' ? 'HOY' : 'SEMANA'}
-                </button>
-              ))}
+              {/* ARRANQUE es de otra naturaleza que los otros dos: HOY y SEMANA
+                  miran hacia atrás y se piden al servidor; este mira hacia
+                  ADELANTE y se compone de lo que ya está cargado. Va en el mismo
+                  sitio porque es la misma pregunta —cómo va el equipo— hecha desde
+                  el otro lado, y porque la sección ya tiene bloques de sobra. */}
+              {(['dia', 'semana', 'arranque'] as const).map(r => {
+                const activo = r === 'arranque' ? rango === r : briefing && rango === r
+                return (
+                  <button key={r} onClick={() => { if (r === 'arranque') { setRango(r) } else { pedirBriefing(r) } }}
+                    className="px-2.5 py-1 rounded-full font-syne text-[7.5px] font-black tracking-widest transition-all"
+                    style={{
+                      background: activo ? `${VIO}22` : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${activo ? VIO + '40' : BORDER}`,
+                      color: activo ? VIO : 'rgba(255,255,255,0.4)',
+                    }}>
+                    {r === 'dia' ? 'HOY' : r === 'semana' ? 'SEMANA' : 'ARRANQUE'}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
-          {cargandoBrief ? (
+          {rango === 'arranque' ? (
+            <div className="px-4 pb-4">
+              {arranque.totalColgadas === 0 && !arranque.vienen.length && !arranque.eventos.length ? (
+                <div className="font-figtree text-[12px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  Nada colgado y nada con fecha esta semana. Empezáis en limpio.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3.5">
+                  {arranque.porPersona.length > 0 && (
+                    <div>
+                      <div className="font-syne text-[7.5px] font-black tracking-widest mb-2" style={{ color: AMBAR }}>
+                        SE ARRASTRA · {arranque.totalColgadas}
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        {arranque.porPersona.map(x => (
+                          <div key={x.persona.id} className="flex items-start gap-2.5">
+                            <div className="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 font-syne text-[7px] font-black mt-0.5"
+                              style={{ background: `${x.persona.avatar_color || BLU}22`, color: x.persona.avatar_color || BLU }}>
+                              {x.persona.initials || (x.persona.name || '?').slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="font-figtree text-[12px] flex-1 min-w-0" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                              <span className="font-bold text-white">{x.persona.name}</span>{' · '}
+                              {x.colgadas.slice(0, 3).map(t => t.text).filter(Boolean).join(' · ')}
+                              {x.colgadas.length > 3 ? ` y ${x.colgadas.length - 3} más` : ''}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(arranque.vienen.length > 0 || arranque.eventos.length > 0) && (
+                    <div>
+                      <div className="font-syne text-[7.5px] font-black tracking-widest mb-2" style={{ color: BLU }}>
+                        LO QUE VIENE · 7 DÍAS
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        {arranque.vienen.slice(0, 5).map(t => (
+                          <div key={t.id} className="font-figtree text-[12px] flex items-baseline gap-2">
+                            <span className="font-syne text-[9px] flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }}>{etiquetaDia(t.due_date || '')}</span>
+                            <span className="min-w-0 truncate" style={{ color: 'rgba(255,255,255,0.75)' }}>{t.text}</span>
+                          </div>
+                        ))}
+                        {arranque.eventos.slice(0, 4).map(e => (
+                          <div key={e.id} className="font-figtree text-[12px] flex items-baseline gap-2">
+                            <span className="font-syne text-[9px] flex-shrink-0" style={{ color: `${VIO}AA` }}>{etiquetaDia((e.start || '').slice(0, 10))}</span>
+                            <span className="min-w-0 truncate" style={{ color: 'rgba(255,255,255,0.6)' }}>{e.title}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* La lectura se la pide quien quiera. El DATO está antes y sin
+                      depender de que la IA responda ni de gastar una llamada. */}
+                  {onAskHarvey && (
+                    <button
+                      onClick={() => onAskHarvey(
+                        `Arranque de semana. Dame la lectura en 3 o 4 frases: qué es lo más urgente, quién va más cargado y qué riesgo ves.\n\n` +
+                        `SE ARRASTRA de días anteriores (${arranque.totalColgadas}):\n` +
+                        (arranque.porPersona.map(x => `  ${x.persona.name}: ${x.colgadas.map(t => t.text).filter(Boolean).join(' · ')}`).join('\n') || '  nada') +
+                        `\n\nCON FECHA ESTA SEMANA:\n` +
+                        (arranque.vienen.map(t => `  ${t.due_date}: ${t.text}`).join('\n') || '  nada') +
+                        `\n\nEN EL CALENDARIO:\n` +
+                        (arranque.eventos.map(e => `  ${(e.start || '').slice(0, 10)}: ${e.title}`).join('\n') || '  nada'),
+                      )}
+                      className="self-start flex items-center gap-2 px-3.5 py-2 rounded-xl font-syne text-[8px] font-black tracking-widest transition-all active:scale-95"
+                      style={{ background: `${VIO}18`, border: `1px solid ${VIO}3A`, color: VIO }}>
+                      <LucideIcon name="sparkles" size={11} color={VIO} />
+                      QUE LO LEA HARVEY
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : cargandoBrief ? (
             <div className="px-4 pb-4 font-figtree text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>Cargando…</div>
           ) : !briefing ? (
             <div className="px-4 pb-4 font-figtree text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>

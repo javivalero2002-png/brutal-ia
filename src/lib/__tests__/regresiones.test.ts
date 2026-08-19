@@ -1332,4 +1332,23 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
     expect(/if \(!r\.ok\)/.test(carga),
       'no comprueba r.ok: un 403 o un 500 resuelven la promesa y se leerian como datos vacios').toBe(true)
   })
+
+  // Buscar con `includes()` de la cadena entera en minusculas falla en los dos
+  // casos que se dan de verdad escribiendo en espanol: «diseno» no encuentra
+  // «diseño» (no normaliza) y «presupuesto nike» no encuentra «Presupuesto de
+  // Nike» (busca la frase literal). Estaba escrito SIETE veces en seis ficheros,
+  // y en Proyectos dos de ellas eran la lista y su RECUENTO: arreglando una sola,
+  // el numero y lo que se ve dirian cosas distintas.
+  it('ninguna busqueda vuelve al includes() sin normalizar', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (ruta === 'src/components/shared/helpers.ts') continue   // el helper
+      const C = leerCodigo(ruta)
+      // El patron exacto: comparar contra una variable de busqueda con includes.
+      if (/toLowerCase\(\)\.includes\([a-zA-Z]*[Ss]earch[a-zA-Z]*\.toLowerCase\(\)\)/.test(C)) infractores.push(ruta)
+    }
+    expect(infractores,
+      'busca con includes() sin normalizar: «diseno» no encontraria «diseño» ni dos palabras sueltas encontrarian la frase')
+      .toEqual([])
+  })
 })

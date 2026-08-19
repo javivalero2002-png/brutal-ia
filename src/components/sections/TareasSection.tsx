@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { Task, Project, Profile, NexusData} from '@/types'
-import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, todayKey, daysBetweenKeys, estadoDeadline } from '@/components/shared'
+import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, todayKey, daysBetweenKeys, estadoDeadline, buscaEnTexto } from '@/components/shared'
 import { plural, nivelTarea } from '@/components/shared/helpers'
 import type { IrASeccion } from '@/components/shared/secciones'
 import TableroLunes from '@/components/shared/TableroLunes'
@@ -472,7 +472,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   const filtered = useMemo(()=>{
     return data.tasks.filter((t:Task)=>{
       if (focusMode && !isFocusTask(t)) return false
-      if (searchText && !t.text.toLowerCase().includes(searchText.toLowerCase())) return false
+      if (searchText && !buscaEnTexto(`${t.text} ${(t.assignee as any)?.name||''} ${(t.client as any)?.name||''}`, searchText)) return false
       if (assigneeFilter!=='all' && t.assigned_to !== assigneeFilter && t.co_assigned_to !== assigneeFilter) return false
       if (projectFilter!=='all' && t.project_id !== projectFilter) return false
       if (priorityFilter!=='all' && t.level !== priorityFilter) return false
@@ -526,7 +526,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   // incluyendo las completadas (columna "Hecho").
   const kanbanTasks = useMemo(()=>{
     return data.tasks.filter((t:Task)=>{
-      if (searchText && !t.text.toLowerCase().includes(searchText.toLowerCase())) return false
+      if (searchText && !buscaEnTexto(`${t.text} ${(t.assignee as any)?.name||''} ${(t.client as any)?.name||''}`, searchText)) return false
       if (assigneeFilter!=='all' && t.assigned_to !== assigneeFilter && t.co_assigned_to !== assigneeFilter) return false
       if (projectFilter!=='all' && t.project_id !== projectFilter) return false
       return true
