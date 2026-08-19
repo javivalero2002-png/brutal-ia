@@ -256,14 +256,27 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
   const PASOS = ['Bienvenida', 'Tu ficha', 'Contraseña', 'Instalar', 'Gmail', 'Avisos', 'Listo']
   const ultimo = PASOS.length - 1
 
-  const Cabecera = ({ icono, eyebrow, titulo, bajada }: { icono: string; eyebrow: string; titulo: string; bajada: string }) => (
+  const Cabecera = ({ icono, eyebrow, titulo, bajada, opcional }: { icono: string; eyebrow: string; titulo: string; bajada: string; opcional?: boolean }) => (
     <div className="flex items-start gap-3 mb-5">
       <div className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
         style={{ background: `${BLU}1A`, border: `1px solid ${BLU}42` }}>
         <LucideIcon name={icono} size={17} color={BLU} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="font-syne text-[8px] font-black tracking-[0.2em] mb-1" style={{ color: 'rgba(255,255,255,0.3)' }}>{eyebrow}</div>
+        <div className="flex items-center gap-2 mb-1">
+          <div className="font-syne text-[8px] font-black tracking-[0.2em]" style={{ color: 'rgba(255,255,255,0.3)' }}>{eyebrow}</div>
+          {/* Que se vea que se puede saltar, y no en letra pequeña al final.
+              Quien llega por el enlace de invitación YA ha puesto su contraseña en
+              esa pantalla: para esa persona —que son casi todas— este paso está
+              hecho. Sin el distintivo parece un trámite obligatorio más, y eso hace
+              que la gente escriba una contraseña nueva sin necesitarlo. */}
+          {opcional && (
+            <span className="font-syne text-[7.5px] font-black tracking-[0.18em] px-1.5 py-0.5 rounded-full"
+              style={{ background: 'rgba(255,176,32,0.1)', border: '1px solid rgba(255,176,32,0.28)', color: 'rgba(255,176,32,0.85)' }}>
+              OPCIONAL
+            </span>
+          )}
+        </div>
         <h2 className="font-figtree text-[19px] font-black text-white leading-tight" style={{ letterSpacing: '-0.02em' }}>{titulo}</h2>
         <p className="font-figtree text-[12.5px] mt-1.5 leading-snug" style={{ color: 'rgba(255,255,255,0.42)' }}>{bajada}</p>
       </div>
@@ -334,7 +347,7 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
               <div className="flex flex-col gap-2">
                 {[
                   { i: 'user', t: 'Tu ficha', d: 'Nombre, iniciales y color con los que te verá el equipo' },
-                  { i: 'key', t: 'Tu contraseña', d: 'Que solo la sepas tú' },
+                  { i: 'key', t: 'Tu contraseña', d: 'Opcional — si entraste por el enlace, ya la pusiste' },
                   { i: 'download', t: 'Instalar la app', d: 'Acceso directo, sin barra del navegador' },
                   { i: 'mail', t: 'Gmail', d: 'Para que tu correo entre en la app' },
                   { i: 'bell', t: 'Avisos', d: 'Notificaciones de lo urgente' },
@@ -381,12 +394,17 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
 
           {paso === 2 && (
             <>
+              {/* Las dos versiones van marcadas OPCIONAL, y no solo la primera.
+                  El camino normal es el enlace de invitación, y ahí la contraseña
+                  se pone en esa misma pantalla: cuando llegas aquí ya está hecho.
+                  La otra versión existe para quien entró con una temporal que le
+                  pasaron — de ahí «por si no has tenido opción de ponerla tú». */}
               {claveYaElegida ? (
-                <Cabecera icono="key" eyebrow="SEGURIDAD" titulo="Tu contraseña ya está puesta"
-                  bajada="La elegiste al entrar y no la sabe nadie más. Puedes cambiarla aquí si quieres, o seguir." />
+                <Cabecera icono="key" eyebrow="SEGURIDAD" opcional titulo="Tu contraseña ya está puesta"
+                  bajada="La elegiste tú al entrar por el enlace, así que este paso te lo puedes saltar. Está aquí por si no has tenido opción de ponerla — o si quieres cambiarla igualmente." />
               ) : (
-                <Cabecera icono="key" eyebrow="SEGURIDAD" titulo="Pon tu propia contraseña"
-                  bajada="La que usas ahora te la dio otra persona, así que la conoce alguien más." />
+                <Cabecera icono="key" eyebrow="SEGURIDAD" opcional titulo="Pon tu propia contraseña"
+                  bajada="Por si no has tenido opción de elegirla tú: si entraste con una que te pasó otra persona, cámbiala aquí. Si ya la pusiste al entrar, sigue sin más." />
               )}
               <div className="flex flex-col gap-2">
                 <input type="password" value={actual} onChange={e => setActual(e.target.value)} placeholder="Contraseña actual" className={campo} style={estiloCampo} />
@@ -538,12 +556,17 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
           )}
           {paso === 0 && <Boton primario onClick={() => irA(1)}>EMPEZAR</Boton>}
           {paso === 1 && <Boton primario onClick={guardarPerfil}>GUARDAR</Boton>}
-          {paso === 2 && (claveYaElegida && !actual && !nueva
-            /* Ya la eligió: el gesto normal es seguir, no cambiarla otra vez. Pero
-               los campos se quedan, porque «quiero cambiarla igualmente» tiene que
-               poder hacerse sin buscar dónde. En cuanto escribe algo, el botón
-               vuelve a ser CAMBIAR. */
-            ? <Boton primario onClick={() => irA(3)}>SIGUIENTE</Boton>
+          {paso === 2 && (!actual && !nueva && !repetida
+            /* Sin escribir nada, el botón grande es SEGUIR — y ya no depende de si
+               tenemos la marca de «eligió su clave al entrar».
+               Antes, sin la marca, el botón principal decía CAMBIAR y salía
+               apagado: la única salida era un SALTAR gris y pequeño. Eso se lee
+               como «tienes que hacerlo», que es justo lo contrario de OPCIONAL —
+               y la marca vive en localStorage, así que basta con una pestaña
+               privada, otro navegador o un móvil distinto para perderla.
+               Los campos se quedan a la vista: en cuanto escribe algo, el botón
+               vuelve a ser CAMBIAR y hace lo que dice. */
+            ? <Boton primario onClick={() => irA(3)}>SEGUIR</Boton>
             : <Boton primario onClick={cambiarClave} disabled={!actual || !nueva || !repetida}>CAMBIAR</Boton>)}
           {(paso === 3 || paso === 4 || paso === 5) && <Boton primario onClick={() => irA(paso + 1)}>SIGUIENTE</Boton>}
           {paso === ultimo && <Boton primario onClick={terminar}>ENTRAR EN NEXUS</Boton>}
