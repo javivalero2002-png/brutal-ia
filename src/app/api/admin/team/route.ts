@@ -209,17 +209,14 @@ export async function PATCH(request: NextRequest) {
   const correo = String(email).trim().toLowerCase()
 
   if (action === 'regenerate_invite') {
-    const appUrl = APP_URL
-    let inviteLink: string | null = null
-    try {
-      const { data: linkData } = await admin.auth.admin.generateLink({
-        type: 'recovery',
-        email,
-        options: { redirectTo: `${appUrl}/reset-password` },
-      })
-      inviteLink = (linkData as any)?.properties?.action_link || null
-    } catch { /* non-fatal */ }
-    return NextResponse.json({ ok: true, inviteLink })
+    // Por `generarEnlace()`, que es donde vive el arreglo de PKCE.
+    //
+    // Esta rama se lo saltaba y devolvía el `action_link` de Supabase — o sea, la
+    // VÍA DE RESCATE de un enlace quemado devolvía otro enlace quemado. Y con el
+    // `email` crudo en vez del `correo` normalizado que se calcula tres líneas
+    // más arriba, que es el mismo fallo que ya rompió el alta.
+    const { link, motivo } = await generarEnlace(admin, correo)
+    return NextResponse.json({ ok: true, inviteLink: link, motivo })
   }
 
   const ALLOWED_COLS = ['name', 'role', 'initials', 'avatar_color']

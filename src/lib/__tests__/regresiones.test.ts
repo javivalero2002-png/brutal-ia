@@ -2266,3 +2266,76 @@ describe('la contraseña se pide una vez y con un motivo cierto', () => {
       .toBe(true)
   })
 })
+
+describe('abrir una pieza rearma TODOS sus campos, no casi todos', () => {
+  const C = leerCodigo('src/components/sections/ContenidoSection.tsx')
+
+  // Regla GENERAL, no un caso: la que faltaba era `carpeta`, y la que falte
+  // mañana sera otra. El patron del repo es un `useState` para el valor y un
+  // `useRef` «xTocada» que dice si el usuario lo toco —porque un campo que no se
+  // ha tocado NO debe viajar en el PATCH—. Ese ref es global al componente, asi
+  // que si `openItem` no lo baja, la pieza que abres hereda el «lo toque» de la
+  // anterior y le escribe encima su valor.
+  const refs = [...C.matchAll(/const (\w+)Tocada = useRef/g)].map(m => m[1])
+
+  it('hay refs de «tocado» que vigilar', () => {
+    expect(refs.length, 'ya no existe el patron xTocada: revisa esta regla en vez de borrarla').toBeGreaterThan(0)
+  })
+
+  const abrir = (() => {
+    const i = C.indexOf('const openItem =')
+    return i === -1 ? '' : C.slice(i, i + 2000)
+  })()
+
+  it.each(refs)('openItem baja %sTocada', (campo) => {
+    expect(abrir.includes(`${campo}Tocada.current = false`),
+      `openItem no rearma ${campo}Tocada: al abrir otra pieza hereda el «lo toque» de la anterior y le pisa el valor al guardar`)
+      .toBe(true)
+  })
+
+  it.each(refs)('openItem siembra el valor de %s desde la fila', (campo) => {
+    const set = 'setEdit' + campo[0].toUpperCase() + campo.slice(1)
+    // `\\w*` porque el ref y el setter no siempre se llaman igual: el ref es
+    // `coverTocada` y el setter `setEditCoverUrl`. Lo que se comprueba es que el
+    // valor salga de la FILA, no como se llame la variable.
+    expect(new RegExp(set + '\\w*\\(item\\.').test(abrir),
+      `openItem no siembra ${campo}: el campo se pinta vacio aunque la pieza tenga valor, y guardar lo borra`)
+      .toBe(true)
+  })
+})
+
+describe('el enlace de revision es util de verdad', () => {
+  const R = leerCodigo('src/app/api/review/[token]/route.ts')
+  const P = leerCodigo('src/app/review/[token]/page.tsx')
+
+  it('si la pagina pinta el equipo, el GET lo devuelve', () => {
+    // La mitad servidor estaba hecha (el POST valida el autor contra profiles) y la
+    // mitad lectura no, asi que el selector «¿Quien eres?» no se pintaba NUNCA y
+    // todo se firmaba como «Cliente». La pagina tipa `item` como any, o sea que
+    // TypeScript no podia avisar: esto es lo unico que lo ve.
+    if (!P.includes('item.equipo')) return
+    const get = R.slice(R.indexOf('export async function GET'), R.indexOf('export async function POST'))
+    expect(/equipo/.test(get),
+      'la pagina pinta item.equipo pero el GET no lo devuelve: el selector no aparece nunca')
+      .toBe(true)
+  })
+})
+
+describe('todo enlace de invitacion pasa por el mismo sitio', () => {
+  const T = leerCodigo('src/app/api/admin/team/route.ts')
+
+  it('nadie lee action_link fuera de generarEnlace', () => {
+    // `action_link` pasa por la pagina de verificacion de Supabase, que CONSUME el
+    // token antes de que la nuestra se ejecute. `generarEnlace()` monta el enlace
+    // con el token en crudo y es el unico sitio autorizado a caer al de Supabase
+    // —y cuando lo hace, lo dice—. La rama «regenerar enlace» se lo saltaba: la
+    // via de rescate de un enlace quemado devolvia otro enlace quemado.
+    const g = T.indexOf('async function generarEnlace')
+    expect(g, 'ya no existe generarEnlace: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const fin = T.indexOf('export async function DELETE')
+    const fuera = T.slice(0, g) + T.slice(fin === -1 ? T.length : fin)
+    expect(fuera.includes('action_link'),
+      'se lee action_link fuera de generarEnlace: ese enlace se gasta al abrirlo')
+      .toBe(false)
+  })
+})
