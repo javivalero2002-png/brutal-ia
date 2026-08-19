@@ -900,6 +900,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
         diaSeleccionado={dia}
         onElegirDia={setDia}
         onAbrirMes={() => setVerCalendario(true)}
+        miId={profile?.id}
         demo={diasDemo}
         isMobile={isMobile}
       />

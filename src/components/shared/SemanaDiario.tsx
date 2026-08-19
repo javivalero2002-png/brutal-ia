@@ -46,10 +46,12 @@ function sumar(clave: string, n: number): string {
 }
 
 export default function SemanaDiario({
-  diaSeleccionado, onElegirDia, onAbrirMes, demo, isMobile,
+  diaSeleccionado, onElegirDia, onAbrirMes, demo, isMobile, miId,
 }: {
   diaSeleccionado: string
   onElegirDia: (dia: string) => void
+  /** Para la racha: es MÍA, no un ranking. Ver `racha`. */
+  miId?: string
   /** Abre el calendario mensual, para cuando hace falta ir más lejos. */
   onAbrirMes?: () => void
   /** En /preview no hay sesión: días de muestra en vez de llamar a la red. */
@@ -83,6 +85,38 @@ export default function SemanaDiario({
 
   useEffect(() => { cargar() }, [cargar])
 
+  /**
+   * Mi racha: días LABORABLES seguidos escribiendo el diario.
+   *
+   * Es personal y solo mía, no una tabla comparativa en Equipo. En un estudio de
+   * siete personas que se conocen, un contador público de rachas convierte una
+   * herramienta de hábito en un marcador, y romperla pasa a ser un pequeño
+   * fracaso delante de los demás. La señal que necesita un jefe —quién no lo está
+   * usando— ya existe en Reportes, y ahí sí tiene sentido.
+   *
+   * Los fines de semana se SALTAN, no se cuentan ni la rompen: aquí se trabaja de
+   * lunes a viernes, y una racha que muere cada sábado no mide nada.
+   *
+   * Se cuenta hacia atrás desde hoy; si hoy aún no has escrito, se empieza en
+   * ayer — para que la racha de ayer no desaparezca a las nueve de la mañana.
+   */
+  const racha = useMemo(() => {
+    if (!miId) return 0
+    const estuve = (f: string) => (dias[f]?.personas || []).some(p => p.id === miId)
+    let cursor = estuve(hoy) ? hoy : sumar(hoy, -1)
+    let n = 0
+    // 60 vueltas: la lista solo cubre el mes o dos que se han pedido, así que la
+    // racha se corta sola al salirse de los datos. El tope es por seguridad.
+    for (let i = 0; i < 60; i++) {
+      const d = new Date(`${cursor}T12:00:00Z`).getUTCDay()
+      if (d === 0 || d === 6) { cursor = sumar(cursor, -1); continue }
+      if (!estuve(cursor)) break
+      n++
+      cursor = sumar(cursor, -1)
+    }
+    return n
+  }, [dias, miId, hoy])
+
   const etiqueta = (() => {
     const a = new Date(`${fechas[0]}T12:00:00Z`), b = new Date(`${fechas[6]}T12:00:00Z`)
     const mismoMes = a.getUTCMonth() === b.getUTCMonth()
@@ -99,6 +133,15 @@ export default function SemanaDiario({
         <LucideIcon name="calendar" size={14} color={BLU} />
         <div className="font-syne text-[9px] font-black tracking-widest" style={{ color: BLU }}>LA SEMANA</div>
         <div className="font-figtree text-[12.5px] flex-1 min-w-0" style={{ color: 'rgba(255,255,255,0.45)' }}>{etiqueta}</div>
+        {/* Solo a partir de DOS: «1 día seguido» no es una racha, es un día. */}
+        {racha >= 2 && (
+          <span className="flex items-center gap-1 px-2.5 py-1 rounded-full font-syne text-[7.5px] font-black tracking-widest flex-shrink-0"
+            style={{ background: `${AMBAR}16`, border: `1px solid ${AMBAR}33`, color: AMBAR }}
+            title="Días laborables seguidos escribiendo tu diario">
+            <LucideIcon name="flame" size={10} color={AMBAR} />
+            {racha} SEGUIDOS
+          </span>
+        )}
 
         <div className="flex items-center gap-1 flex-shrink-0">
           <button onClick={() => setLunes(sumar(lunes, -7))} aria-label="Semana anterior"

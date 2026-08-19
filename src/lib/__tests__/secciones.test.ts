@@ -798,3 +798,44 @@ describe('harvey · las fuentes son un botón, no parte de la respuesta', () => 
       'se le pide a Harvey que cite las fuentes: las leería en voz alta').toBe(false)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// La racha del diario: personal, y sin morir cada sábado.
+//
+// Dos decisiones que la hacen útil en vez de decorativa:
+//
+//  · Es MÍA, no una tabla comparativa en Equipo. En un estudio de siete personas
+//    que se conocen, un contador público de rachas convierte una herramienta de
+//    hábito en un marcador, y romperla pasa a ser un fracaso delante de los demás.
+//    La señal que necesita un jefe —quién no lo usa— ya está en Reportes.
+//  · Los fines de semana se SALTAN. Aquí se trabaja de lunes a viernes: una racha
+//    que muere cada sábado no mide nada y desmotiva en vez de motivar.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('diario · la racha es personal y salta los fines de semana', () => {
+  const S = readFileSync('src/components/shared/SemanaDiario.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+
+  it('salta sábados y domingos en vez de romper', () => {
+    const i = S.indexOf('const racha = useMemo')
+    expect(i, 'ya no existe la racha: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = S.slice(i, S.indexOf('\n  }, [', i))
+    // 0 = domingo, 6 = sábado. `continue`, no `break`: saltar, no cortar.
+    expect(/d === 0 \|\| d === 6[\s\S]{0,80}continue/.test(cuerpo),
+      'el fin de semana rompe la racha: moriría cada sábado y no mediría nada').toBe(true)
+  })
+
+  it('es de una persona, no un ranking del equipo', () => {
+    expect(/p\.id === miId/.test(S),
+      'la racha dejó de ser personal: un marcador público convierte el hábito en competición').toBe(true)
+    // Y no se pinta en Equipo, que es donde sería comparativa.
+    //
+    // SIN COMENTARIOS, o la regla miente: «seguidos» aparece en un comentario de
+    // esa sección («TRES viajes a Supabase seguidos») y la daba por infringida.
+    // Es la trampa que CLAUDE.md tiene escrita — una regla que un comentario
+    // puede satisfacer, o romper, no comprueba código: comprueba prosa.
+    const E = readFileSync('src/components/sections/EquipoSection.tsx', 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+    expect(/racha|SEGUIDOS/i.test(E),
+      'la racha aparece en Equipo: ahí es una tabla comparativa, que es justo lo que se descartó').toBe(false)
+  })
+})
