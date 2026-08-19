@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { AvisoGoogle } from '@/components/shared'
 import { rutaApp } from '@/lib/appUrl'
 import type { NexusData } from '@/types'
@@ -53,6 +53,26 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
   // dice — que es lo contrario de quedarse mintiendo en la posición nueva.
   const [analizaCorreo, setAnalizaCorreo] = useState<boolean>(profile?.analizar_correo !== false)
   const [veColabs, setVeColabs] = useState<boolean>(profile?.ver_colabs !== false)
+  // Las cuentas de Gmail conectadas. Vienen del servidor y NO llevan token: el
+  // cliente solo necesita saber qué direcciones hay.
+  const [cuentas, setCuentas] = useState<{ email: string; compartida: boolean }[]>([])
+  const cargarCuentas = useCallback(() => {
+    fetch('/api/gmail/cuentas').then(r => (r.ok ? r.json() : null))
+      .then(j => setCuentas(Array.isArray(j?.cuentas) ? j.cuentas : []))
+      .catch(() => {})
+  }, [])
+  useEffect(() => { cargarCuentas() }, [cargarCuentas])
+  const desconectarCuenta = async (email: string) => {
+    try {
+      const res = await fetch('/api/gmail/cuentas', {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      if (!res.ok) throw new Error()
+      showToast(`${email} desconectada`)
+      cargarCuentas()
+    } catch { showToast('No se pudo desconectar') }
+  }
   const [guardandoAnalisis, setGuardandoAnalisis] = useState(false)
   const cambiarVerColabs = async (v: boolean) => {
     const antes = veColabs
@@ -574,7 +594,37 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
                   <div className="font-syne text-[9px] tracking-wide" style={{color:'rgba(255,255,255,0.3)'}}>
                     {personalOk ? (gmailStatus.gmail_account || 'Cuenta conectada') : 'Cuenta no conectada'}
                   </div>
-                  {personalOk && (
+                  {/* Las cuentas conectadas, una por línea.
+                  Antes había DOS ranuras fijas —«mi Gmail» y «colaboraciones»— y eso
+                  obligaba a que la segunda cuenta de cualquiera fuese la compartida.
+                  Los jefes necesitan dos PROPIAS, así que se enseñan como lista: lo
+                  que distingue una cuenta de otra es su dirección, no la casilla
+                  donde estaba guardada. */}
+              {cuentas.filter(c => !c.compartida).length > 0 && (
+                <div className="mt-3 rounded-2xl overflow-hidden" style={{ background: SURF2, border: `1px solid ${BORDER}` }}>
+                  <div className="font-syne text-[7.5px] font-black tracking-[0.18em] px-3.5 pt-3 pb-1.5" style={{ color: 'rgba(255,255,255,0.28)' }}>
+                    TUS CUENTAS
+                  </div>
+                  {cuentas.filter(c => !c.compartida).map(c => (
+                    <div key={c.email} className="flex items-center gap-2.5 px-3.5 py-2.5">
+                      <LucideIcon name="mail" size={12} color="rgba(255,255,255,0.3)" />
+                      <span className="font-figtree text-[12px] truncate flex-1" style={{ color: 'rgba(255,255,255,0.65)' }}>{c.email}</span>
+                      <button onClick={() => desconectarCuenta(c.email)}
+                        className="font-syne text-[8px] font-black tracking-widest px-2.5 py-1 rounded-lg transition-opacity hover:opacity-70"
+                        style={{ color: 'rgba(255,255,255,0.28)', border: `1px solid ${BORDER}` }}>
+                        QUITAR
+                      </button>
+                    </div>
+                  ))}
+                  <a href="/api/gmail/connect?account=personal"
+                    className="flex items-center justify-center gap-2 mx-3.5 mb-3 mt-1 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest no-underline transition-opacity hover:opacity-80"
+                    style={{ background: 'rgba(255,255,255,0.03)', border: `1px dashed ${BORDER}`, color: 'rgba(255,255,255,0.4)' }}>
+                    <LucideIcon name="plus" size={11} color="rgba(255,255,255,0.35)" />
+                    CONECTAR OTRA CUENTA
+                  </a>
+                </div>
+              )}
+              {personalOk && (
                     <div className="mt-1.5 flex items-center gap-3 flex-wrap">
                       <span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.2)'}}>{plural(personalEmails,'email')}</span>
                       {unreadPersonal > 0 && <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full" style={{background:`${BLU}15`,color:BLU}}>{unreadPersonal} sin leer</span>}

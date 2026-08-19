@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { guardarCuenta } from '@/lib/gmailCuentas'
 import { getAuthCtx } from '@/lib/authz'
 import { getOAuthClient, OAUTH_STATE_COOKIE } from '@/lib/gmail'
 import { google } from 'googleapis'
@@ -76,6 +77,9 @@ export async function GET(request: NextRequest) {
   if (!tokens.refresh_token) {
     return done(`${base}/dashboard?gmail=no_refresh_token`)
   }
+  // Atado a una constante tras la guarda: `tokens.refresh_token` es `string | null`
+  // en el tipo del SDK y TypeScript no lo estrecha a través de las ramas de abajo.
+  const refreshToken: string = tokens.refresh_token
 
   // Resolve the authenticated email address and cache it in the profile
   let email: string | null = null
@@ -85,6 +89,22 @@ export async function GET(request: NextRequest) {
     const { data: info } = await oauth2.userinfo.get()
     email = info.email || null
   } catch {}
+
+  // Sin dirección no se puede seguir, y antes sí se podía.
+  //
+  // Con dos columnas fijas daba igual: el token iba a «la ranura personal» o a «la
+  // de colabs» y punto. Ahora las cuentas se identifican POR SU DIRECCIÓN —es lo
+  // que permite tener dos propias— así que una conexión sin dirección no se puede
+  // guardar, ni distinguir, ni desconectar después.
+  //
+  // No debería pasar: pedimos `userinfo.email` en el consentimiento. Si pasa es que
+  // algo va mal de verdad, y decirlo es mejor que guardar una conexión que luego no
+  // sincroniza nada y nadie sabe por qué.
+  if (!email) {
+    console.error('[gmail] Google no devolvió la dirección de la cuenta; no se guarda la conexión')
+    return done(`${base}/dashboard?gmail=error`)
+  }
+  const correoCuenta: string = email
 
   const supabase = await createAdminClient()
 
@@ -133,6 +153,11 @@ export async function GET(request: NextRequest) {
       console.error('[gmail] no se pudo guardar el token de colabs:', errColabs?.message ?? 'ninguna fila actualizada')
       return done(`${base}/dashboard?gmail=error`)
     }
+    // Y en la tabla de cuentas, que es la que mandan los sincronizadores desde
+    // ahora. Se escriben LAS DOS mientras las columnas viejas existan: así volver
+    // atrás es revertir el código, sin tocar la base ni pedir reconexiones.
+    const gc = await guardarCuenta(supabase, { profile_id: userId, email: correoCuenta, refresh_token: refreshToken, compartida: true })
+    if (!gc.ok) return done(`${base}/dashboard?gmail=error`)
     return done(`${base}/dashboard?gmail=colabs_connected`)
   }
 
@@ -150,6 +175,9 @@ export async function GET(request: NextRequest) {
     console.error('[gmail] no se pudo guardar el token personal:', errPersonal?.message ?? 'ninguna fila actualizada')
     return done(`${base}/dashboard?gmail=error`)
   }
+
+  const gcp = await guardarCuenta(supabase, { profile_id: userId, email: correoCuenta, refresh_token: refreshToken, compartida: false })
+  if (!gcp.ok) return done(`${base}/dashboard?gmail=error`)
 
   return done(`${base}/dashboard?gmail=connected`)
 }

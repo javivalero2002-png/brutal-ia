@@ -118,11 +118,21 @@ export async function GET(request: NextRequest) {
   record('colabs', await syncColabsInbox(admin))
 
   // Buzones personales de todos los perfiles con Gmail conectado
+  // A quién sincronizar: quien tenga alguna cuenta propia en `gmail_cuentas`, MÁS
+  // quien siga solo con las columnas viejas.
+  //
+  // Con la unión y no con una sola de las dos: mirar solo las columnas dejaría
+  // fuera a quien tenga sus cuentas en la tabla y las columnas vacías, y mirar solo
+  // la tabla dejaría fuera a todos hasta que se corra la migración. Mientras
+  // convivan los dos modelos, la respuesta correcta es la suma.
+  const { data: conCuentas, error: errCuentas } = await admin
+    .from('gmail_cuentas').select('profile_id').eq('compartida', false)
+  if (errCuentas) console.error('[cron] no se pudieron leer las cuentas:', errCuentas.message)
+
   const { data: profiles, error: profilesError } = await admin
     .from('profiles')
     .select('id, gmail_refresh_token, analizar_correo')
-    .eq('gmail_connected', true)
-    .not('gmail_refresh_token', 'is', null)
+    .or(`gmail_connected.eq.true,id.in.(${[...new Set((conCuentas || []).map(c => c.profile_id))].join(',') || '00000000-0000-0000-0000-000000000000'})`)
 
   if (profilesError) {
     console.error('[cron] no se pudieron leer los perfiles:', profilesError.message)

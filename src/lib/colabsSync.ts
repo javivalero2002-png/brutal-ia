@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { cuentaCompartida, cuentasDe } from '@/lib/gmailCuentas'
 import { aplazarResto } from '@/lib/aplazarCorreos'
 import { triar, remitentesConocidos, dominiosPropios } from '@/lib/inboxTriage'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
@@ -14,7 +15,11 @@ type SyncResult =
   // `insertFailures` sale al exterior a propósito: con los inserts fallando el
   // resultado es `synced: 0` sobre 20 revisados, que desde fuera es idéntico a
   // "no había nada nuevo". Es el recuento el que distingue las dos cosas.
-  | { ok: true; synced: number; total: number; account: string; aiFailures?: number; insertFailures?: number; saltado?: boolean }
+  | { ok: true; synced: number; total: number; account: string; aiFailures?: number; insertFailures?: number; saltado?: boolean
+      // `truncado` ya viajaba en los `return` pero no estaba en el tipo, asi que
+      // leerlo desde fuera no compilaba. Al recorrer varias cuentas hace falta:
+      // es la senal de parar y dejar el resto para la pasada siguiente.
+      truncado?: boolean }
   | { ok: false; error: string; code?: number; details?: unknown }
 
 
@@ -83,19 +88,34 @@ async function syncColabsInboxSinCerrojo(
 ): Promise<SyncResult> {
   // Token del buzón compartido: el MÁS RECIENTE de cualquier perfil que lo tenga
   // (si alguien reconecta, su token nuevo debe ganar al viejo de otro perfil)
-  const { data: owner } = await admin
-    .from('profiles')
-    .select('id, gmail_colabs_refresh_token')
-    .not('gmail_colabs_refresh_token', 'is', null)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  const token = owner?.gmail_colabs_refresh_token as string | undefined
+  // De `gmail_cuentas`, buscando por la MARCA de compartida y no por la dirección:
+  // quién decide cuál es el buzón común es quien lo conectó, no una constante.
+  //
+  // El respaldo por las columnas viejas se queda mientras existan. No es cinturón y
+  // tirantes por si acaso: es lo que hace que desplegar esto sin haber corrido la
+  // migración no deje al equipo sin correo compartido.
+  const compartida = await cuentaCompartida(admin)
+  let token = compartida?.refresh_token as string | undefined
+  // De quién es esa conexión: para saber a quién avisar si se cae y a quién
+  // atribuir los correos. Venga de la tabla o de las columnas viejas, un solo
+  // nombre — si no, cada uso de abajo tendría que preguntar de dónde salió.
+  let duenoConexion: string | null = compartida?.profile_id ?? null
+  if (!token) {
+    const { data: owner } = await admin
+      .from('profiles')
+      .select('id, gmail_colabs_refresh_token')
+      .not('gmail_colabs_refresh_token', 'is', null)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    token = owner?.gmail_colabs_refresh_token as string | undefined
+    duenoConexion = owner?.id ?? null
+    if (token) console.warn('[colabs] usando el token de profiles: ¿falta correr 20260820_gmail_cuentas.sql?')
+  }
   if (!token) return { ok: false, error: 'Colaboraciones not connected' }
 
   // El user_id de los mensajes: quien dispara la sync, o el dueño del buzón (cron)
-  const ownerId = opts.triggeredBy || owner!.id
+  const ownerId = opts.triggeredBy || duenoConexion!
 
   const { data: clientsData } = await admin.from('clients').select('name')
   const knownClients = (clientsData || []).map((c: { name: string }) => c.name)
@@ -120,11 +140,11 @@ async function syncColabsInboxSinCerrojo(
       return { ok: false, error: 'auth_rota' }
     }
     if (isTokenExpired) {
-      await admin.from('profiles').update({ gmail_colabs_connected: false, gmail_colabs_refresh_token: null }).eq('id', owner!.id)
+      await admin.from('profiles').update({ gmail_colabs_connected: false, gmail_colabs_refresh_token: null }).eq('id', duenoConexion!)
       // Y se AVISA. Hasta ahora se borraba la conexión y se devolvía un error que
       // nadie proactivo leía: el correo del buzón compartido dejaba de entrar en
       // silencio, y con el modo de prueba de Google eso pasa cada siete días.
-      await avisarConexionCaida(admin, owner!.id, 'colabs')
+      await avisarConexionCaida(admin, duenoConexion!, 'colabs')
       return { ok: false, error: 'token_expired' }
     }
 
@@ -351,7 +371,46 @@ export async function syncPersonalInbox(
   const cerrojo = await acquireLock(admin, clave, TTL_CERROJO_MS)
   if (!cerrojo.adquirido) return { ok: true, synced: 0, total: 0, account: '', saltado: true }
   try {
-    return await syncPersonalInboxSinCerrojo(admin, profile)
+    // UNA PASADA POR CADA CUENTA PROPIA, no una y ya.
+    //
+    // Antes cada persona tenía exactamente un buzón personal, porque el token vivía
+    // en una columna. Ahora puede tener varios —los jefes quieren su Gmail y su
+    // dirección de empresa— así que se recorren todos dentro del MISMO cerrojo:
+    // son de la misma persona y no compiten entre sí, y un cerrojo por cuenta
+    // multiplicaría las filas de bloqueo sin evitar nada.
+    //
+    // Las compartidas se excluyen aquí: de esas se encarga `syncColabsInbox`, y
+    // sincronizarlas dos veces duplicaría el trabajo de análisis por cada persona
+    // que la tenga conectada.
+    const cuentas = (await cuentasDe(admin, profile.id)).filter(c => !c.compartida)
+
+    // Sin cuentas en la tabla se usa la columna vieja. Es lo que permite desplegar
+    // esto antes de correr la migración sin dejar a nadie sin correo.
+    if (!cuentas.length) return await syncPersonalInboxSinCerrojo(admin, profile, profile.gmail_refresh_token, '')
+
+    let total = 0, synced = 0, aiFailures = 0, insertFailures = 0
+    // `algunoTruncado` y no `truncado`: esto NO es un punto de corte por tiempo
+    // —los cortes están dentro de cada pasada y cada uno aplaza lo suyo—, es solo
+    // recoger la señal para no empezar la cuenta siguiente. La regla de
+    // regresiones.test.ts cuenta cortes y exige un rescate por cada uno; llamarlo
+    // igual la haría contar uno de más y ponerse roja sin fallo.
+    let algunoTruncado = false
+    const cuentasOk: string[] = []
+    let ultimoError: string | null = null
+    for (const c of cuentas) {
+      const r = await syncPersonalInboxSinCerrojo(admin, profile, c.refresh_token, c.email)
+      if (!r.ok) { ultimoError = r.error; continue }
+      total += r.total || 0; synced += r.synced || 0
+      aiFailures += r.aiFailures || 0; insertFailures += r.insertFailures || 0
+      if (r.truncado) algunoTruncado = true
+      cuentasOk.push(c.email)
+      // Si una cuenta se queda sin tiempo, la siguiente tampoco lo tendrá: el
+      // presupuesto es de la función entera, no de cada buzón. Parar aquí deja el
+      // resto para la pasada siguiente en vez de gastar el tiempo que no hay.
+      if (r.truncado) break
+    }
+    if (!cuentasOk.length) return { ok: false, error: ultimoError || 'not connected' }
+    return { ok: true, synced, total, account: cuentasOk.join(', '), aiFailures, insertFailures, ...(algunoTruncado ? { truncado: true } : {}) }
   } finally {
     if (!cerrojo.degradado) await releaseLock(admin, clave, cerrojo.holder)
   }
@@ -359,9 +418,12 @@ export async function syncPersonalInbox(
 
 async function syncPersonalInboxSinCerrojo(
   admin: SupabaseClient,
-  profile: { id: string; gmail_refresh_token: string | null; analizar_correo?: boolean | null }
+  profile: { id: string; gmail_refresh_token: string | null; analizar_correo?: boolean | null },
+  /** El token de ESTA cuenta. Se pasa desde fuera porque ahora hay varias. */
+  token: string | null,
+  /** Su dirección, solo para poder decir cuál falló. Vacía = la columna vieja. */
+  correoCuenta: string,
 ): Promise<SyncResult> {
-  const token = profile.gmail_refresh_token
   if (!token) return { ok: false, error: 'not connected' }
 
   const { data: clientsData } = await admin.from('clients').select('name')
