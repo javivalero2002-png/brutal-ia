@@ -839,7 +839,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
             <div className="px-6 py-5 space-y-4 flex-1 min-h-0 overflow-y-auto">
               <div>
                 <label className="block font-syne text-[9px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.28)'}}>TÍTULO</label>
-                <input autoFocus value={eventForm.title} onChange={e=>setEventForm(f=>f&&{...f,title:e.target.value})} placeholder="Ej: Reunión con Nike" className="w-full px-4 py-3 rounded-2xl text-[14px] text-white placeholder-white/20 outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}}/>
+                <input autoFocus value={eventForm.title} onChange={e=>setEventForm(f=>f&&{...f,title:e.target.value})} placeholder="Ej: Rodaje del vídeo de Higgsfield" className="w-full px-4 py-3 rounded-2xl text-[14px] text-white placeholder-white/20 outline-none" style={{background:SURF2,border:`1.5px solid ${BORDER}`,caretColor:BLU}}/>
               </div>
               <div className="flex gap-3">
                 <div className="flex-1">
