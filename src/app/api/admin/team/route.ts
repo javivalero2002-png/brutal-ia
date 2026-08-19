@@ -208,6 +208,37 @@ export async function PATCH(request: NextRequest) {
   // buscar por el texto crudo puede no encontrar una cuenta que sí existe.
   const correo = String(email).trim().toLowerCase()
 
+  // Empezar de cero SIN borrar nada.
+  //
+  // Lo que Javi quiere el día de la presentación es que cada uno reciba su enlace,
+  // ponga su contraseña y vea la puesta en marcha. Eso NO necesita borrar la
+  // cuenta — y borrarla cuesta caro: `inbox_messages`, `chat_messages` y `diario`
+  // cuelgan de `profiles` con ON DELETE CASCADE, así que la baja se lleva por
+  // delante el historial de correo, las conversaciones con Harvey y el Fichar
+  // entero de esa persona. Sin preguntar y sin vuelta atrás.
+  //
+  // Y encima puede ni llegar a ocurrir: `task_attachments.created_by` no tiene
+  // regla de borrado y `client_comments.profile_id` es RESTRICT, así que a quien
+  // haya adjuntado un fichero o comentado en un enlace de revisión, la baja le
+  // REBOTA con un error de clave foránea. Delante del equipo, eso es «el botón no
+  // funciona».
+  //
+  // Esto hace las dos cosas que sí hacen falta, y solo esas: borra la marca de
+  // puesta en marcha y devuelve un enlace nuevo.
+  if (action === 'reiniciar_acceso') {
+    const { error: errReset } = await admin
+      .from('profiles').update({ onboarding_at: null }).eq('email', correo)
+    // El error SE MIRA: sin esto se devolvería un enlace con la puesta en marcha
+    // todavía marcada como hecha, y la persona entraría directa al panel — que es
+    // justo lo contrario de lo que se ha pedido, pero con cara de haber ido bien.
+    if (errReset) {
+      console.error('[team] no se pudo reiniciar la puesta en marcha:', errReset.message)
+      return NextResponse.json({ error: 'No se pudo reiniciar la puesta en marcha' }, { status: 500 })
+    }
+    const { link, motivo } = await generarEnlace(admin, correo)
+    return NextResponse.json({ ok: true, inviteLink: link, motivo, reiniciado: true })
+  }
+
   if (action === 'regenerate_invite') {
     // Por `generarEnlace()`, que es donde vive el arreglo de PKCE.
     //

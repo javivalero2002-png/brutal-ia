@@ -212,20 +212,28 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
     finally { setAddingLoading(false) }
   }
 
-  const openInvitePanel = async (email: string, name: string) => {
+  /**
+   * @param accion `regenerate_invite` da un enlace nuevo y ya.
+   *   `reiniciar_acceso` ADEMÁS borra la marca de puesta en marcha, para que esa
+   *   persona la vuelva a ver entera. Es lo que se quiere el día que se enseña la
+   *   app: enlace → contraseña → puesta en marcha, sin borrar la cuenta —que se
+   *   llevaría por delante su correo, su Fichar y sus conversaciones con Harvey—.
+   */
+  const openInvitePanel = async (email: string, name: string, accion: 'regenerate_invite' | 'reiniciar_acceso' = 'regenerate_invite') => {
     setInvitePanel({ email, name, link: null, loading: true })
     setAddingMember(false); setSelected(null)
     try {
       const res = await fetch('/api/admin/team', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, action: 'regenerate_invite' }),
+        body: JSON.stringify({ email, action: accion }),
       })
       const json = await res.json()
       // Sin comprobar r.ok el panel se quedaba sin enlace y sin decir por que, y
       // ese enlace es lo unico que le puedes mandar a la persona nueva.
       if (!res.ok) { setInvitePanel(prev => prev ? { ...prev, loading: false } : null); showToast(json?.error || 'No se pudo generar el enlace'); return }
       setInvitePanel(prev => prev ? { ...prev, link: json.inviteLink || null, loading: false } : null)
+      if (json.reiniciado) showToast(`${name} volverá a ver la puesta en marcha`)
     } catch {
       setInvitePanel(prev => prev ? { ...prev, loading: false } : null)
       showToast('Error al generar enlace')
@@ -466,6 +474,17 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
                     className="px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all hover:opacity-80"
                     style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.35)'}}>
                     REGENERAR
+                  </button>
+                  {/* Empezar de cero SIN borrar la cuenta. Borrarla se lleva su
+                      correo, su Fichar y sus conversaciones con Harvey —cuelgan de
+                      `profiles` con CASCADE— y encima puede rebotar si esa persona
+                      adjuntó un fichero alguna vez. Esto hace lo único que hace
+                      falta: enlace nuevo y la puesta en marcha otra vez. */}
+                  <button onClick={()=>openInvitePanel(invitePanel.email, invitePanel.name, 'reiniciar_acceso')}
+                    title="Enlace nuevo y la puesta en marcha desde el principio, sin perder nada suyo"
+                    className="px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all hover:opacity-80"
+                    style={{background:'rgba(255,176,32,0.06)',border:`1px solid rgba(255,176,32,0.22)`,color:'rgba(255,176,32,0.75)'}}>
+                    EMPEZAR DE CERO
                   </button>
                 </div>
               </div>
