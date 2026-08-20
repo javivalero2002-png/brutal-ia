@@ -3010,3 +3010,42 @@ describe('una cuenta secundaria caducada no borra el token de la buena', () => {
       .toBe(true)
   })
 })
+
+describe('el boton de sincronizar es UNO', () => {
+  const S = leerCodigo('src/components/sections/SincronizacionSection.tsx')
+
+  it('nadie escribe su propio boton de sincronizar a mano', () => {
+    // Habia CINCO repartidos por esta pantalla y ninguno se parecia a otro: dos
+    // decian «Sync» en gris, uno «SYNC AHORA» en azul solido, y los de reconectar
+    // decian «Reauth». Tres estilos y dos idiomas para la misma accion.
+    //
+    // Se vigila que no vuelva a aparecer uno escrito a mano: un `<button>` cuyo
+    // contenido lleve el icono `refresh-cw` es exactamente eso.
+    for (const m of S.matchAll(/<button[\s\S]{0,700}?<\/button>/g)) {
+      expect(/refresh-cw/.test(m[0]),
+        `hay un boton de sincronizar escrito a mano en vez de <BotonSincronizar>:\n${m[0].slice(0, 180)}`)
+        .toBe(false)
+    }
+  })
+
+  it('la pantalla usa el componente compartido', () => {
+    expect(/<BotonSincronizar/.test(S), 'ya no se usa el componente: revisa esta regla').toBe(true)
+  })
+
+  it('esta en español: ni «Sync» ni «Reauth»', () => {
+    // «Sync» no lo entiende quien no programa, y «Reauth» es jerga de OAuth.
+    const B = leerCodigo('src/components/shared/BotonSincronizar.tsx')
+    expect(/'Sync'|>Sync<|Reauth/.test(S + B),
+      'vuelve a haber texto en jerga inglesa en los botones')
+      .toBe(false)
+  })
+
+  it('no se puede pulsar dos veces mientras trabaja', () => {
+    // Cada sincronizacion analiza correos con Claude: pulsarlo tres veces seguidas
+    // es pagar tres veces por lo mismo.
+    const B = leerCodigo('src/components/shared/BotonSincronizar.tsx')
+    expect(/disabled=\{disabled \|\| sincronizando\}/.test(B),
+      'el boton sigue pulsable mientras sincroniza: cada clic de mas cuesta dinero')
+      .toBe(true)
+  })
+})
