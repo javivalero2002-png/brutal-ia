@@ -1,4 +1,5 @@
 import { getAuthCtx } from '@/lib/authz'
+import { quitarCuentaTodas } from '@/lib/gmailCuentas'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
@@ -30,12 +31,25 @@ export async function POST(request: NextRequest) {
       .update({ gmail_colabs_connected: false, gmail_colabs_refresh_token: null, gmail_colabs_account: null })
       .not('gmail_colabs_refresh_token', 'is', null)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // Y de `gmail_cuentas`, que es lo que de verdad consultan los sincronizadores
+    // desde el cambio a varias cuentas. Sin esto, apagar el buzón compartido aquí
+    // limpiaba `profiles` y la UI decía «desconectado», pero `cuentaCompartida()`
+    // seguía encontrando la fila de la tabla y el cron seguía bajando el correo
+    // de todo el equipo después de haberlo apagado.
+    const errCuentas = await quitarCuentaTodas(admin, { compartida: true })
+    if (errCuentas) console.error('[gmail] no se pudo limpiar gmail_cuentas (colabs):', errCuentas)
   } else {
     const { error } = await admin
       .from('profiles')
       .update({ gmail_connected: false, gmail_refresh_token: null, gmail_account: null })
       .eq('id', userId)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // Mismo motivo que arriba: sin esto, la cuenta migrada desde las columnas
+    // viejas seguía viva en `gmail_cuentas` y el cron la seguía sincronizando.
+    const errCuentas = await quitarCuentaTodas(admin, { profileId: userId, compartida: false })
+    if (errCuentas) console.error('[gmail] no se pudo limpiar gmail_cuentas (personal):', errCuentas)
   }
 
   return NextResponse.json({ ok: true })

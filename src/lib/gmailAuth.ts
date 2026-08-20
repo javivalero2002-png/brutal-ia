@@ -82,14 +82,21 @@ export async function avisarConexionCaida(
   admin: SupabaseClient,
   userId: string,
   cual: 'personal' | 'colabs',
+  /** La dirección concreta, si la persona tiene más de una cuenta personal. Sin
+   * esto, «tu Gmail» no dice CUÁL de las dos hay que reconectar. */
+  correo?: string,
 ) {
   // Como mucho uno cada seis horas por buzón. El cron corre cada hora y el token
   // sigue muerto hasta que alguien lo reconecta: sin freno serían 24 avisos al
   // día de lo mismo, y eso no es avisar, es enseñar a ignorar los avisos.
-  const puede = await canSendPush(admin, `gmail-caido:${cual}:${userId}`, 6 * 60 * 60 * 1000)
+  // El freno de deduplicación va por CUENTA cuando hay dirección, no por perfil:
+  // si Pablo tiene dos y la primera cae, la segunda que caiga después tiene que
+  // poder avisar aparte — son dos averías distintas.
+  const clave = correo ? `gmail-caido:${cual}:${userId}:${correo}` : `gmail-caido:${cual}:${userId}`
+  const puede = await canSendPush(admin, clave, 6 * 60 * 60 * 1000)
   if (!puede) return
 
-  const nombre = cual === 'colabs' ? 'el buzón de colaboraciones' : 'tu Gmail'
+  const nombre = cual === 'colabs' ? 'el buzón de colaboraciones' : correo ? `tu Gmail (${correo})` : 'tu Gmail'
   try {
     await sendPushToUser(admin, userId, {
       title: 'Se ha desconectado el correo',

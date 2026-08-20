@@ -2876,3 +2876,137 @@ describe('lo que va a una columna con CHECK se valida antes', () => {
       .toBe(true)
   })
 })
+
+describe('varias cuentas de Gmail por persona', () => {
+  it('el token NUNCA sale al cliente', () => {
+    // `refresh_token` da acceso al correo entero de esa persona, para siempre y sin
+    // contrasena. La ruta devuelve direcciones y la marca de compartida, nada mas.
+    const R = leerCodigo('src/app/api/gmail/cuentas/route.ts')
+    const i = R.indexOf('NextResponse.json({')
+    expect(i, 'la ruta ya no responde asi: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    expect(/refresh_token/.test(R.slice(i, i + 300)),
+      'la respuesta lleva el refresh_token: eso es la llave del correo de alguien')
+      .toBe(false)
+  })
+
+  it('solo se tocan las cuentas de quien pide, nunca las de otro', () => {
+    // El id sale de la SESION. Si viniera del cuerpo, mandar la direccion de un
+    // companero desconectaria su correo.
+    const R = leerCodigo('src/app/api/gmail/cuentas/route.ts')
+    expect(/quitarCuenta\(admin, user\.id,/.test(R),
+      'se desconecta por una identidad que no sale de la sesion')
+      .toBe(true)
+    // Las DOS funciones que reciben un `profileId` tienen que acotarse por él. La
+    // primera version de esta regla solo miraba `quitarCuenta`, y al verificarla
+    // por mutacion la modificacion cayo —por accidente— en `cuentasDe`: la regla
+    // siguio verde con una funcion devolviendo las cuentas de TODO el mundo. El
+    // accidente enseño el hueco.
+    const L = leerCodigo('src/lib/gmailCuentas.ts')
+    for (const fn of ['cuentasDe', 'quitarCuenta']) {
+      const i = L.indexOf(`export async function ${fn}`)
+      expect(i, `ya no existe ${fn}: revisa esta regla en vez de borrarla`).toBeGreaterThan(-1)
+      const fin = L.indexOf('export async function', i + 10)
+      const cuerpo = L.slice(i, fin === -1 ? L.length : fin)
+      expect(/\.eq\('profile_id', profileId\)/.test(cuerpo),
+        `${fn} no se acota a la persona: leeria o borraria las cuentas de otro`)
+        .toBe(true)
+    }
+  })
+
+  it('el buzon COMPARTIDO no se sincroniza dos veces', () => {
+    // Cada persona que lo tenga conectado lo traeria entero por su cuenta, pagando
+    // el analisis otra vez. De el se encarga `syncColabsInbox`, una sola vez.
+    const C = leerCodigo('src/lib/colabsSync.ts')
+    const i = C.indexOf('cuentasDe(admin, profile.id)')
+    expect(i, 'el sync personal ya no lee las cuentas: revisa esta regla').toBeGreaterThan(-1)
+    expect(/filter\(c => !c\.compartida\)/.test(C.slice(i, i + 120)),
+      'el sync personal no excluye la cuenta compartida: se analizaria una vez por persona')
+      .toBe(true)
+  })
+
+  it('desplegar sin haber corrido la migracion NO deja a nadie sin correo', () => {
+    // Las columnas viejas siguen ahi y siguen siendo el respaldo. Es lo que hace
+    // que este cambio sea reversible revirtiendo codigo, sin tocar la base.
+    const C = leerCodigo('src/lib/colabsSync.ts')
+    expect(/gmail_colabs_refresh_token/.test(C),
+      'el buzon compartido ya no tiene respaldo por las columnas viejas')
+      .toBe(true)
+    const i = C.indexOf('if (!cuentas.length)')
+    expect(i, 'el sync personal no contempla la tabla vacia: sin migracion, nadie sincroniza').toBeGreaterThan(-1)
+    expect(/gmail_refresh_token/.test(C.slice(i, i + 200)),
+      'con la tabla vacia no se cae a la columna vieja')
+      .toBe(true)
+  })
+
+  it('la migracion RELLENA la tabla desde lo que ya habia', () => {
+    // Sin el relleno, desplegar esto desconecta a todo el equipo a la vez.
+    const sql = readFileSync('migrations/20260820_gmail_cuentas.sql', 'utf8')
+    expect(/insert into public\.gmail_cuentas[\s\S]*from public\.profiles/.test(sql),
+      'la migracion crea la tabla vacia: al desplegar, nadie tendria cuentas')
+      .toBe(true)
+    expect(/drop column/i.test(sql),
+      'la migracion borra las columnas viejas: volver atras dejaria de ser posible sin tocar la base')
+      .toBe(false)
+  })
+})
+
+describe('desconectar Gmail desconecta de verdad', () => {
+  // Encontrado por revision adversarial antes de fusionar el cambio a varias
+  // cuentas: desconectar limpiaba `profiles` pero dejaba viva la fila en
+  // `gmail_cuentas`, que es lo que los sincronizadores consultan de verdad. El
+  // correo seguia entrando —y pagandose su analisis— despues de haber dicho que no.
+
+  it('/api/gmail/disconnect limpia gmail_cuentas en las DOS ramas', () => {
+    const R = leerCodigo('src/app/api/gmail/disconnect/route.ts')
+    const n = [...R.matchAll(/quitarCuentaTodas\(/g)].length
+    expect(n, 'no limpia gmail_cuentas: la fila sigue viva y el correo sigue entrando').toBe(2)
+  })
+
+  it('quitarCuenta cuenta las filas que borra de verdad', () => {
+    // `delete` sin filas no es un error en Postgres: sin `.select()` para contar,
+    // un email mal escrito respondia "desconectada" sin haber desconectado nada.
+    const L = leerCodigo('src/lib/gmailCuentas.ts')
+    const i = L.indexOf('export async function quitarCuenta(')
+    const cuerpo = L.slice(i, L.indexOf('export async function quitarCuentaTodas'))
+    expect(/\.select\('id'\)/.test(cuerpo), 'no cuenta las filas borradas').toBe(true)
+    expect(/quitadas:\s*0/.test(cuerpo) === false || /data\?\.length/.test(cuerpo),
+      'no calcula cuantas filas borro de verdad').toBe(true)
+  })
+
+  it('la ruta responde 404 si no habia nada que desconectar', () => {
+    const R = leerCodigo('src/app/api/gmail/cuentas/route.ts')
+    expect(/quitadas === 0/.test(R), 'no distingue "borrada" de "no habia nada que borrar"').toBe(true)
+  })
+})
+
+describe('el buzon compartido se recupera reconectandolo', () => {
+  // El fallo exacto que encontro la auditoria: con `ascending: true`, reconectar
+  // colabs despues de que caducara creaba una fila NUEVA que siempre perdia contra
+  // la vieja y muerta. Reconectar no arreglaba nada, para siempre.
+  it('cuentaCompartida elige la MAS RECIENTE, no la mas antigua', () => {
+    const L = leerCodigo('src/lib/gmailCuentas.ts')
+    const i = L.indexOf('export async function cuentaCompartida')
+    const cuerpo = L.slice(i, L.indexOf('export async function guardarCuenta'))
+    expect(/ascending:\s*false/.test(cuerpo),
+      'ordena por la mas antigua: reconectar el buzon compartido despues de que caduque no lo arreglaria nunca')
+      .toBe(true)
+  })
+})
+
+describe('una cuenta secundaria caducada no borra el token de la buena', () => {
+  // Con varias cuentas por persona, la rama de token caducado vaciaba
+  // `profiles.gmail_refresh_token` sin mirar CUAL de las cuentas habia caducado.
+  // Si era la secundaria, se borraba el token de la que seguia viva.
+  it('el sync personal borra por CUENTA cuando hay direccion, no el perfil entero', () => {
+    const C = leerCodigo('src/lib/colabsSync.ts')
+    const i = C.lastIndexOf('if (isTokenExpired) {')
+    expect(i, 'ya no existe esa rama: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const cuerpo = C.slice(i, i + 700)
+    expect(/if \(correoCuenta\)/.test(cuerpo),
+      'la rama de token caducado no distingue si hay varias cuentas: puede borrar la que seguia viva')
+      .toBe(true)
+    expect(/quitarCuenta\(admin, profile\.id, correoCuenta\)/.test(cuerpo),
+      'no borra la cuenta caducada de gmail_cuentas: se reintentaria para siempre')
+      .toBe(true)
+  })
+})
