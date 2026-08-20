@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { cuentaCompartida, cuentasDe } from '@/lib/gmailCuentas'
+import { cuentaCompartida, cuentasDe, quitarCuenta } from '@/lib/gmailCuentas'
 import { aplazarResto } from '@/lib/aplazarCorreos'
 import { triar, remitentesConocidos, dominiosPropios } from '@/lib/inboxTriage'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
@@ -449,8 +449,25 @@ async function syncPersonalInboxSinCerrojo(
       return { ok: false, error: 'auth_rota' }
     }
     if (isTokenExpired) {
-      await admin.from('profiles').update({ gmail_connected: false, gmail_refresh_token: null }).eq('id', profile.id)
-      await avisarConexionCaida(admin, profile.id, 'personal')
+      // POR CUENTA, no por perfil entero.
+      //
+      // Antes esto vaciaba `profiles.gmail_refresh_token` sin mirar cuál de las
+      // cuentas de la persona era la que acababa de caducar. Con una sola cuenta
+      // daba igual — era la única que había—; con varias, la caducada podía ser la
+      // secundaria y esto borraba el token de la BUENA, que seguía viva. El
+      // resultado: la pantalla decía «no conectado» sobre una cuenta que
+      // funcionaba, y la de verdad muerta se reintentaba para siempre porque nadie
+      // la borraba de `gmail_cuentas`.
+      if (correoCuenta) {
+        await quitarCuenta(admin, profile.id, correoCuenta)
+        // Si esa dirección es también la de las columnas viejas, se limpian —
+        // `quitarCuenta` ya lo hace por dentro comparándola con `gmail_account`.
+      } else {
+        // El camino de respaldo (tabla vacía, sin migración corrida): solo existe
+        // esta cuenta, así que sigue siendo correcto vaciar el perfil entero.
+        await admin.from('profiles').update({ gmail_connected: false, gmail_refresh_token: null }).eq('id', profile.id)
+      }
+      await avisarConexionCaida(admin, profile.id, 'personal', correoCuenta || undefined)
       return { ok: false, error: 'token_expired' }
     }
 

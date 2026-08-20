@@ -44,11 +44,16 @@ export async function cuentasDe(admin: SupabaseClient, profileId: string): Promi
  * hubiera más de una, gana la más antigua — que es la que lleva funcionando.
  */
 export async function cuentaCompartida(admin: SupabaseClient): Promise<CuentaGmail | null> {
+  // La MÁS RECIENTE, no la más antigua. El código que esto sustituyó decía por
+  // qué, y la razón no cambió: «si alguien reconecta, su token nuevo debe ganar al
+  // viejo». Con `ascending: true` pasaba justo lo contrario — reconectar el buzón
+  // compartido después de que caducara creaba una fila nueva que SIEMPRE perdía
+  // contra la vieja y muerta, así que reconectarlo no lo arreglaba nunca.
   const { data, error } = await admin
     .from('gmail_cuentas')
     .select('id, profile_id, email, refresh_token, compartida')
     .eq('compartida', true)
-    .order('creada_at', { ascending: true })
+    .order('creada_at', { ascending: false })
     .limit(1)
   if (error) {
     console.error('[gmail] no se pudo leer la cuenta compartida:', error.message)
@@ -75,22 +80,64 @@ export async function guardarCuenta(
   return { ok: true }
 }
 
-/** Retirar una conexión. Devuelve cuántas quitó, para poder decirlo. */
+/**
+ * Retirar una conexión.
+ *
+ * Mira dos cosas que la primera versión no miraba: cuántas filas borró de verdad
+ * —un `delete` sin filas no es un error en Postgres, así que sin esto un email mal
+ * escrito respondía «desconectada» sin haber desconectado nada— y si esa dirección
+ * es también la que vive en las columnas viejas de `profiles`. Mientras esas
+ * columnas existan como respaldo, dejarlas con el token vivo después de borrar la
+ * fila de la tabla es el mismo fallo desde el otro lado: el cron se cae a ellas y
+ * el correo sigue entrando después de haber dicho que no.
+ */
 export async function quitarCuenta(
   admin: SupabaseClient,
   profileId: string,
   email: string,
-): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await admin
+): Promise<{ ok: boolean; quitadas: number; error?: string }> {
+  const correo = email.toLowerCase().trim()
+  const { data, error } = await admin
     .from('gmail_cuentas')
     .delete()
     .eq('profile_id', profileId)
-    .eq('email', email.toLowerCase().trim())
-  // El error SE MIRA: sin esto, «desconectada» se diría igual con la cuenta viva y
-  // el correo seguiría entrando después de haber dicho que no.
+    .eq('email', correo)
+    .select('id')
   if (error) {
     console.error('[gmail] no se pudo quitar la cuenta:', error.message)
-    return { ok: false, error: error.message }
+    return { ok: false, quitadas: 0, error: error.message }
   }
-  return { ok: true }
+  const quitadas = data?.length || 0
+
+  // Si esa misma dirección es la de las columnas viejas, se limpian también. Se
+  // hace por DIRECCIÓN y no a ciegas: borrar `gmail_refresh_token` porque se quitó
+  // CUALQUIER cuenta desconectaría de golpe la que la persona quería conservar.
+  const { data: perfil } = await admin
+    .from('profiles').select('gmail_account, gmail_colabs_account').eq('id', profileId).maybeSingle()
+  if (perfil?.gmail_account?.toLowerCase().trim() === correo) {
+    await admin.from('profiles').update({ gmail_connected: false, gmail_refresh_token: null, gmail_account: null }).eq('id', profileId)
+  }
+  if (perfil?.gmail_colabs_account?.toLowerCase().trim() === correo) {
+    await admin.from('profiles').update({ gmail_colabs_connected: false, gmail_colabs_refresh_token: null, gmail_colabs_account: null }).eq('id', profileId)
+  }
+
+  return { ok: true, quitadas }
+}
+
+/**
+ * Retirar TODAS las conexiones que cumplan un criterio, sin conocer sus emails uno
+ * a uno.
+ *
+ * Para `/api/gmail/disconnect`: el botón de desconectar borra por perfil o por
+ * «es la compartida», no por dirección — al revés que `quitarCuenta`, que borra
+ * una concreta porque la persona ya sabe cuál.
+ */
+export async function quitarCuentaTodas(
+  admin: SupabaseClient,
+  criterio: { profileId?: string; compartida: boolean },
+): Promise<string | null> {
+  let q = admin.from('gmail_cuentas').delete().eq('compartida', criterio.compartida)
+  if (criterio.profileId) q = q.eq('profile_id', criterio.profileId)
+  const { error } = await q
+  return error?.message ?? null
 }

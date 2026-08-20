@@ -36,5 +36,10 @@ export async function DELETE(request: NextRequest) {
   // que impide desconectarle el correo a otro mandando su dirección.
   const r = await quitarCuenta(admin, user.id, email)
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: 500 })
+  if (r.quitadas === 0) {
+    // Nada que borrar no es lo mismo que «desconectada»: sin distinguirlo, un
+    // email mal escrito responde 200 y la persona se cree fuera sin estarlo.
+    return NextResponse.json({ error: 'Esa cuenta no estaba conectada' }, { status: 404 })
+  }
   return NextResponse.json({ ok: true })
 }
