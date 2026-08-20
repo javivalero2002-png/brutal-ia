@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { BotonSincronizar } from '@/components/shared'
 import { AvisoGoogle } from '@/components/shared'
 import { rutaApp } from '@/lib/appUrl'
 import type { NexusData } from '@/types'
@@ -380,13 +381,13 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
   )
 
   // Desconectar era un icono `log-out` sin texto, del mismo tamaño y pegado a «Sync»
-  // y «Reauth», y ejecutaba al primer clic. El de Colaboraciones borra el refresh
+  // y «Reconectar», y ejecutaba al primer clic. El de Colaboraciones borra el refresh
   // token de TODOS los perfiles que lo tengan (api/gmail/disconnect), o sea que un
   // dedo torcido deja a los siete sin buzón compartido y sin saber qué han pulsado.
   //
   // Dos pasos, como el resto de la app: el primer clic arma el botón y lo convierte
   // en la frase completa de lo que va a pasar, el segundo ejecuta, y hay una X para
-  // salir. Va separado del par Sync/Reauth por un divisor para que no se pulse de
+  // salir. Va separado del par Sincronizar/Reconectar por un divisor para que no se pulse de
   // paso, y siempre con etiqueta de texto.
   const BotonDesconectar = ({account, aviso}: {account:'personal'|'colabs'; aviso:string}) => (
     <span className="flex items-center gap-2 flex-shrink-0">
@@ -507,14 +508,13 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
 
               {/* Right: sync all button */}
               <div className="flex flex-col items-end gap-3 flex-shrink-0">
-                <button
+                <BotonSincronizar
+                  variante="principal"
                   onClick={syncAll}
-                  disabled={syncingAll||!anyConnected||syncing||syncingColabs}
-                  className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[9.5px] font-black tracking-widest text-white transition-all hover:opacity-85 active:scale-95 disabled:opacity-30"
-                  style={{background:`linear-gradient(135deg,${BLU},#1440CC)`,boxShadow:`0 4px 20px ${BLU}35`}}>
-                  <LucideIcon name={syncingAll?'loader':'refresh-cw'} size={13} color="white"/>
-                  {syncingAll?'SINCRONIZANDO…':'SYNC AHORA'}
-                </button>
+                  sincronizando={syncingAll}
+                  disabled={!anyConnected||syncing||syncingColabs}
+                  title="Sincronizar todos los buzones conectados"
+                />
                 {(lastPersonal || lastColabs) && (
                   <div className="flex flex-col items-end gap-0.5">
                     {lastPersonal && <span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.18)'}}>Personal sync {timeAgo(lastPersonal)}</span>}
@@ -634,15 +634,16 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
                   )}
                 </div>
                 {/* flex-wrap: al armarse, «Desconectar» pasa de icono a frase larga y
-                    en móvil ya no cabe en la misma línea que Sync y Reauth. */}
+                    en móvil ya no cabe en la misma línea que Sincronizar y Reconectar. */}
                 <div className="flex items-center justify-end gap-2 flex-wrap flex-shrink-0" style={isMobile?{flexBasis:'100%'}:undefined}>
                   {personalOk ? (
                     <>
-                      <button onClick={syncPersonal} disabled={syncing||syncingAll} className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all disabled:opacity-40 hover:opacity-80" style={{background:SURF2,color:syncing?BLU:'rgba(255,255,255,0.4)',border:`1px solid ${BORDER}`}}>
-                        <LucideIcon name="refresh-cw" size={11} color={syncing?BLU:'rgba(255,255,255,0.3)'}/>{syncing?'Sync…':'Sync'}
-                      </button>
-                      <a href="/api/gmail/connect?account=personal" className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all hover:opacity-80 no-underline" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>
-                        <LucideIcon name="rotate-ccw" size={10} color="rgba(255,255,255,0.2)"/>Reauth
+                      <BotonSincronizar onClick={syncPersonal} sincronizando={syncing} disabled={syncingAll}/>
+                      <a href="/api/gmail/connect?account=personal"
+                        title="Volver a dar permiso a Google, sin perder nada"
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full font-syne text-[8.5px] font-black tracking-widest no-underline transition-all duration-200 active:scale-[0.97] hover:-translate-y-[1px]"
+                        style={{background:'rgba(255,255,255,0.035)',color:'rgba(255,255,255,0.45)',border:`1px solid ${BORDER}`}}>
+                        <LucideIcon name="rotate-ccw" size={11} color="rgba(255,255,255,0.35)"/>Reconectar
                       </a>
                       <BotonDesconectar account="personal" aviso="¿DESCONECTAR MI GMAIL PERSONAL?"/>
                     </>
@@ -793,20 +794,21 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
                 )}
               </div>
               {/* flex-wrap: al armarse, «Desconectar» pasa de icono a frase larga y
-                  en móvil ya no cabe en la misma línea que Sync y Reauth. */}
+                  en móvil ya no cabe en la misma línea que Sincronizar y Reconectar. */}
               <div className="flex items-center justify-end gap-2 flex-wrap flex-shrink-0" style={isMobile?{flexBasis:'100%'}:undefined}>
                 {colabsOk ? (
                   <>
-                    <button onClick={syncColabs} disabled={syncingColabs||syncingAll} className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all disabled:opacity-40 hover:opacity-80" style={{background:SURF2,color:syncingColabs?BLU:'rgba(255,255,255,0.4)',border:`1px solid ${BORDER}`}}>
-                      <LucideIcon name="refresh-cw" size={11} color={syncingColabs?BLU:'rgba(255,255,255,0.3)'}/>{syncingColabs?'Sync…':'Sync'}
-                    </button>
+                    <BotonSincronizar onClick={syncColabs} sincronizando={syncingColabs} disabled={syncingAll}/>
                     {/* Conectar colabs es cosa del propietario, igual que desconectarlo: el token
                         se guarda en el perfil de quien conecta, asi que apuntar el buzon de la
                         empresa a un Gmail personal cambia lo que leen los siete. La ruta ya
                         devuelve 403; ocultarlo evita que alguien lo pulse y se coma un error. */}
                     {profile?.role === 'owner' && (
-                      <a href="/api/gmail/connect?account=colabs" className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all hover:opacity-80 no-underline" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.3)',border:`1px solid ${BORDER}`}}>
-                        <LucideIcon name="rotate-ccw" size={10} color="rgba(255,255,255,0.2)"/>Reauth
+                      <a href="/api/gmail/connect?account=colabs"
+                        title="Volver a dar permiso a Google, sin perder nada"
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full font-syne text-[8.5px] font-black tracking-widest no-underline transition-all duration-200 active:scale-[0.97] hover:-translate-y-[1px]"
+                        style={{background:'rgba(255,255,255,0.035)',color:'rgba(255,255,255,0.45)',border:`1px solid ${BORDER}`}}>
+                        <LucideIcon name="rotate-ccw" size={11} color="rgba(255,255,255,0.35)"/>Reconectar
                       </a>
                     )}
                     {/* Solo el propietario. El buzón compartido es infraestructura
@@ -916,9 +918,7 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
             </div>
             <div className="flex-shrink-0">
               {personalOk ? (
-                <button onClick={syncPersonal} disabled={syncing||syncingAll} className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-syne text-[8.5px] font-black transition-all disabled:opacity-40 hover:opacity-80" style={{background:'rgba(167,139,250,0.08)',color:'rgba(167,139,250,0.7)',border:'1px solid rgba(167,139,250,0.15)'}}>
-                  <LucideIcon name="refresh-cw" size={11} color="rgba(167,139,250,0.6)"/>{syncing?'Sync…':'Sync'}
-                </button>
+                <BotonSincronizar onClick={syncPersonal} sincronizando={syncing} disabled={syncingAll} color="#A78BFA"/>
               ) : (
                 <span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.18)'}}>Requiere Gmail Personal</span>
               )}
