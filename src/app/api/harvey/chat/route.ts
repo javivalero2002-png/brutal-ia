@@ -196,7 +196,7 @@ export async function POST(request: NextRequest) {
         // `.lte` con hoy: el calendario del Diario deja PLANIFICAR días futuros
         // a propósito, y sin tope por arriba Harvey leía esos planes y los
         // contaba como trabajo terminado delante de quien preguntara.
-        admin.from('diario').select('dia,user_id,entrada,cierre,cierre_at')
+        admin.from('diario').select('dia,user_id,entrada,cierre,entrada_at,cierre_at,animo')
           .gte('dia', desdeClave).lte('dia', todayKey()),
         admin.from('tasks').select('text,assigned_to,co_assigned_to,completed_at').eq('done', true)
           .gte('completed_at', ventanaDelDia(desdeClave).desde),
@@ -214,9 +214,35 @@ export async function POST(request: NextRequest) {
         // Y un día sin cerrar se dice, en vez de dejar que parezca un cero.
         const porDia = mios.map(d => {
           const objetivos = (d.entrada || '').split('\n').filter(Boolean).join(' / ')
+          // HORAS Y ÁNIMO, que es lo que Fichar guarda desde que se rehízo y Harvey
+          // no estaba viendo. Javi: «lo que hace cada uno en fichar se va a poder
+          // preguntar en Harvey — un jefe pregunta qué ha hecho hoy X persona».
+          //
+          // Sin esto, Harvey contesta QUÉ escribió alguien pero no CUÁNTO estuvo ni
+          // CÓMO le fue, que es media respuesta: «se propuso tres cosas y cerró con
+          // una» significa algo muy distinto si estuvo dos horas o si estuvo nueve.
+          const horas = (() => {
+            if (!d.entrada_at) return null
+            // Sin cierre se dice «lleva», no «estuvo»: el día no ha terminado y dar
+            // un total cerrado sobre algo en curso es afirmar de más.
+            const fin = d.cierre_at ? new Date(d.cierre_at).getTime() : Date.now()
+            const ms = fin - new Date(d.entrada_at).getTime()
+            if (ms <= 0) return null
+            const h = Math.floor(ms / 3_600_000)
+            const m = Math.round((ms % 3_600_000) / 60_000)
+            const dur = h > 0 ? `${h}h${m ? ` ${m}m` : ''}` : `${m}m`
+            return d.cierre_at ? `estuvo ${dur}` : `lleva ${dur} (sin cerrar)`
+          })()
+          const ANIMO: Record<string, string> = {
+            productivo: 'lo calificó de día productivo',
+            normal: 'lo calificó de día normal',
+            bloqueado: 'se marcó BLOQUEADO',
+          }
           const partes = [
             objetivos ? `se propuso: ${objetivos}` : 'no escribió objetivos',
             d.cierre ? `hizo (cierre del día): ${d.cierre}` : (d.cierre_at ? 'cerró el día sin escribir balance' : 'no cerró el día'),
+            ...(horas ? [horas] : []),
+            ...(d.animo && ANIMO[d.animo as string] ? [ANIMO[d.animo as string]] : []),
           ]
           return `    ${d.dia} — ${partes.join(' · ')}`
         })

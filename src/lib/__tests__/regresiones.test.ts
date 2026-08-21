@@ -3501,3 +3501,29 @@ describe('el diseño acierta en el PRIMER render, no en el segundo', () => {
       .toBe(true)
   })
 })
+
+describe('Harvey sabe lo que pasa en Fichar', () => {
+  const R = leerCodigo('src/app/api/harvey/chat/route.ts')
+
+  it('trae las horas y el animo, no solo el texto', () => {
+    // Javi: «lo que hace cada uno en fichar se va a poder preguntar en Harvey — un
+    // jefe pregunta que ha hecho hoy X persona».
+    //
+    // El resumen del equipo ya traia lo que cada uno ESCRIBIO, pero no cuanto
+    // estuvo ni como le fue — y eso es media respuesta: «se propuso tres cosas y
+    // cerro con una» significa algo muy distinto si estuvo dos horas o nueve.
+    const i = R.indexOf("from('diario').select(")
+    expect(i, 'ya no se lee el diario aqui: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const select = R.slice(i, i + 120)
+    expect(/entrada_at/.test(select), 'no trae la hora de entrada: no puede decir cuanto estuvo').toBe(true)
+    expect(/animo/.test(select), 'no trae el animo: un «bloqueado» pasaria desapercibido').toBe(true)
+  })
+
+  it('un dia sin cerrar dice «lleva», no «estuvo»', () => {
+    // El dia no ha terminado: dar un total cerrado sobre algo en curso es afirmar
+    // de mas, y ese numero se lo lee un jefe como si fuera definitivo.
+    expect(/lleva \$\{dur\} \(sin cerrar\)/.test(R),
+      'un dia en curso se reporta como si estuviera cerrado')
+      .toBe(true)
+  })
+})
