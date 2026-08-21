@@ -3272,3 +3272,46 @@ describe('nada mas ancho que la pantalla en el movil de Contenido', () => {
     }
   })
 })
+
+describe('las dos IAs saben lo mismo', () => {
+  // Javi, describiendo para que sirve Memoria: «un apartado donde se guardan todos
+  // los documentos de la empresa… para que la IA sepa que se va haciendo y por
+  // donde se puede tirar en el futuro».
+  //
+  // Habia DOS superficies de IA y solo una la veia: Harvey montaba su contexto en
+  // el cliente e incluia Memoria; `/api/chat` (Brutal.IA) la ignoraba por completo.
+  // Si el brief de un cliente o las tarifas estaban ahi, una lo sabia y la otra no
+  // — y desde fuera parecen la misma IA, asi que no se lee como «dos herramientas»
+  // sino como que la IA a veces finge no saber.
+  const SUPERFICIES = [
+    'src/app/api/chat/route.ts',
+    'src/components/sections/HarveySection.tsx',
+  ]
+
+  it.each(SUPERFICIES)('%s consulta la Memoria', (ruta) => {
+    expect(/memoriaRelevante/.test(leerCodigo(ruta)),
+      'esta IA no mira la Memoria: sabra menos que la otra sobre lo mismo')
+      .toBe(true)
+  })
+
+  it('y las dos eligen las notas con la MISMA funcion', () => {
+    // No dos criterios parecidos: el mismo. Dos formas de elegir «lo relevante»
+    // divergen igual que divergen dos copias de un bucle — y aqui la divergencia
+    // no se ve, porque las dos responden algo plausible.
+    for (const ruta of SUPERFICIES) {
+      expect(/from '@\/lib\/memoriaRelevante'/.test(leerCodigo(ruta)),
+        `${ruta} elige las notas por su cuenta en vez de usar la funcion compartida`)
+        .toBe(true)
+    }
+  })
+
+  it('la Memoria llega al prompt, no solo a la consulta', () => {
+    // Traerla de la base y no metersela al modelo es el fallo silencioso: la
+    // consulta existe, el codigo parece cableado, y el modelo sigue sin verla.
+    const A = leerCodigo('src/lib/ai.ts')
+    expect(/MEMORIA DEL ESTUDIO/.test(A),
+      'el prompt no incluye la Memoria: se consulta y se tira')
+      .toBe(true)
+    expect(/context\.memoria/.test(A), 'el bloque existe pero no usa el dato').toBe(true)
+  })
+})

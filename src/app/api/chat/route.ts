@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { memoriaRelevante, lineasDeMemoria } from '@/lib/memoriaRelevante'
 import { chat } from '@/lib/ai'
 import { checkChatRateLimit } from '@/lib/rate-limit'
 import { logQueryErrors } from '@/lib/queryLog'
@@ -63,6 +64,15 @@ export async function POST(request: NextRequest) {
     // Tabla `content_agenda` (no `agenda`), y sin filtro de usuario: el pipeline
     // de contenido es del estudio entero, no de quien pregunta.
     admin.from('content_agenda').select('id', { count: 'exact', head: true }).neq('status', 'publicado'),
+    // LA MEMORIA. Brutal.IA no la veía y Harvey sí, así que las dos IAs de la misma
+    // app respondían con información distinta: si el brief de un cliente o las
+    // tarifas estaban en Memoria, una lo sabía y la otra no. Desde fuera parecen la
+    // misma cosa, así que eso no se lee como «dos herramientas» — se lee como que
+    // la IA a veces se inventa que no sabe.
+    //
+    // Es para lo que existe la sección: que quede guardado lo que se va haciendo y
+    // que la IA pueda tirar de ello.
+    admin.from('memoria').select('title, category, content').order('created_at', { ascending: false }).limit(120),
   ])
 
   // Aquí murió el bug de la tabla `agenda` durante semanas: supabase-js no lanza,
@@ -71,7 +81,7 @@ export async function POST(request: NextRequest) {
   // que esto registra sin romper la respuesta.
   logQueryErrors('chat', q)
 
-  const [{ data: profile }, { data: clients }, { data: projects }, { data: tasks }, { data: team }, { data: inbox }, { data: history }, { count: contentPipelineCount }] = q
+  const [{ data: profile }, { data: clients }, { data: projects }, { data: tasks }, { data: team }, { data: inbox }, { data: history }, { count: contentPipelineCount }, { data: memoria }] = q
 
   const emailsList = (inbox || []).map((e: any) => ({
     from: e.from_name || '',
@@ -98,6 +108,10 @@ export async function POST(request: NextRequest) {
         teamSize: team?.length || 1,
         todayDate: madridDateLabel({ weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
         contentPipeline: contentPipelineCount ?? 0,
+        // Elegidas con la MISMA función que usa Harvey. Pasarlas todas reventaría el
+        // contexto —hay notas largas— y elegirlas con otro criterio aquí sería
+        // volver a tener dos IAs que saben cosas distintas.
+        memoria: lineasDeMemoria(memoriaRelevante(memoria, message)) || undefined,
       }
     )
     reply = result.reply
