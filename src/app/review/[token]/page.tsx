@@ -228,7 +228,7 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
                           border: `1px solid ${autor === '' ? 'rgba(255,176,32,0.35)' : 'rgba(255,255,255,0.08)'}`,
                           color: autor === '' ? '#FFB020' : 'rgba(255,255,255,0.5)',
                         }}>
-                        Cliente
+                        Sin decir quién
                       </button>
                       {item.equipo.map((p: { name: string; initials: string; color: string }) => (
                         <button key={p.name} onClick={() => setAutor(p.name)}

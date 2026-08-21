@@ -101,7 +101,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     } catch {}
     // Texto de la version anterior: se conserva como una entrada mas en vez de
     // tirarlo, que es lo que hacia el JSON.parse del cliente.
-    return [{ origen: 'cliente', name: 'Cliente', initials: 'CL', color: '#FFB020', note: bruto, at: null }]
+    // `name: 'Sin identificar'` y no «Cliente»: el enlace lo abren los jefes, no
+    // clientes. `origen: 'cliente'` se queda porque es lo que hay GUARDADO en las
+    // filas antiguas y significa «entró por el enlace público», que sigue siendo
+    // cierto — cambiarlo dejaría de casar con lo ya escrito.
+    return [{ origen: 'cliente', name: 'Sin identificar', initials: '··', color: '#FFB020', note: bruto, at: null }]
   })()
 
   // Quién firma. Se VALIDA contra el equipo real: sin esto, cualquiera con el
