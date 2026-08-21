@@ -841,7 +841,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                               portadas={dentro.map(p=>({url:p.cover_url&&!brokenCovers.has(p.cover_url)?p.cover_url:null,color:p.color||BLU}))}
                               alRoto={markCoverBroken}/>
                             <div className="min-w-0 flex-1">
-                              <div className="font-syne text-[10px] font-black truncate" style={{color:'rgba(255,255,255,0.72)'}}>{nombre}</div>
+                              <div className="font-figtree font-bold truncate" style={{fontSize:'14px',color:'rgba(255,255,255,0.82)',letterSpacing:'-0.01em'}}>{nombre}</div>
                               <div className="font-figtree text-[9px]" style={{color:'rgba(255,255,255,0.3)'}}>{dentro.length} {dentro.length===1?'proyecto':'proyectos'}</div>
                             </div>
                             <LucideIcon name={abierta?'chevron-down':'chevron-right'} size={13} color="rgba(255,255,255,0.25)"/>
@@ -894,7 +894,17 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 ) : (
                   <LucideIcon name="layout-grid" size={11} color="rgba(255,255,255,0.16)"/>
                 )}
-                <span className="font-syne text-[8px] font-black tracking-widest uppercase truncate" style={{color:carpeta?'rgba(255,255,255,0.4)':'rgba(255,255,255,0.2)'}}>
+                {/* El nombre de la carpeta, LEGIBLE.
+                    Javi: «el nombre de Clip-Boom dentro de una carpeta tiene que
+                    ser un poco más grande y que se haga notar más».
+                    Estaba a 8px, en versalitas y con espaciado ancho — o sea con el
+                    tratamiento de una ETIQUETA, no de un nombre. Y una carpeta
+                    plegada es justo lo contrario: su nombre es lo ÚNICO que tienes
+                    para decidir si la abres, así que es el contenido, no el rótulo. */}
+                <span className={carpeta ? 'font-figtree font-bold truncate' : 'font-syne text-[8px] font-black tracking-widest uppercase truncate'}
+                  style={carpeta
+                    ? { fontSize: '14px', color: 'rgba(255,255,255,0.82)', letterSpacing: '-0.01em' }
+                    : { color: 'rgba(255,255,255,0.2)' }}>
                   {carpeta || 'Sin carpeta'}
                 </span>
                 {carpeta && (

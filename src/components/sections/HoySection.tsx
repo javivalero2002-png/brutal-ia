@@ -692,15 +692,28 @@ ${memLines||'  sin documentos'}`
               const briefQ = `${greeting}. Dame el briefing del día de Brutal Studios. ${urgMsg} ${inboxMsg} ${calMsg} ¿Cuál es el plan?`
               return (
                 <div className="animate-fadeUp rounded-3xl px-6 py-5 w-full" style={{background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,255,255,0.06)',backdropFilter:'blur(4px)'}}>
-                  <div className="flex items-center gap-2">
-                    <LucideIcon name="sparkles" size={16} color="#6f9bff"/>
-                    <span className="font-figtree" style={{fontSize:'16px',fontWeight:600,color:'rgba(255,255,255,0.9)'}}>Tu briefing</span>
-                    <button onClick={()=>{setHarveySpoken(briefQ);askHarvey(briefQ)}}
-                      className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full font-syne text-[7.5px] font-black tracking-widest transition-all hover:opacity-80 active:scale-95"
-                      style={{background:`${BLU}14`,border:`1px solid ${BLU}30`,color:BLU}}>
-                      <LucideIcon name="volume-2" size={10} color={BLU}/> ESCUCHAR
-                    </button>
-                  </div>
+                  {/* UN botón, no un título y un botón.
+                      Javi: «pone Tu briefing a la izquierda y Escuchar a la derecha;
+                      quiero un único botón que ponga Briefing y que al pulsarlo te
+                      dé el briefing del día».
+                      Tenía razón en algo más de fondo: el título y el botón decían
+                      cosas distintas de lo mismo, y «ESCUCHAR» describe el MEDIO
+                      —que suene— en vez de lo que consigues. Lo que quieres es el
+                      briefing; que además se lea en voz alta es cómo llega. */}
+                  <button onClick={()=>{setHarveySpoken(briefQ);askHarvey(briefQ)}}
+                    className="flex items-center gap-2.5 w-full text-left transition-all hover:opacity-85 active:scale-[0.99] group">
+                    <span className="w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0"
+                      style={{background:`${BLU}16`,border:`1px solid ${BLU}30`}}>
+                      <LucideIcon name="sparkles" size={15} color="#6f9bff"/>
+                    </span>
+                    <span className="font-figtree flex-1 min-w-0" style={{fontSize:'16px',fontWeight:600,color:'rgba(255,255,255,0.9)'}}>
+                      Briefing
+                      <span className="block font-figtree" style={{fontSize:'12px',fontWeight:400,color:'rgba(255,255,255,0.32)'}}>
+                        Púlsalo y te lo cuenta
+                      </span>
+                    </span>
+                    <LucideIcon name="chevron-right" size={14} color="rgba(255,255,255,0.2)"/>
+                  </button>
                   <div className="mt-3 mb-1" style={{height:'1px',background:'rgba(255,255,255,0.06)'}}/>
                   {shown.length>0 ? (
                     <div className="flex flex-col">

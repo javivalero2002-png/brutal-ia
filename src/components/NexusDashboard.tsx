@@ -27,14 +27,45 @@ import PuestaEnMarcha, { olvidarPasoGuardado } from '@/components/PuestaEnMarcha
 // El resto se carga bajo demanda (code splitting). Antes las 14 secciones
 // viajaban en el bundle inicial, así que entrar a "Hoy" descargaba también
 // Reportes, Calendario, Contenido, etc.
+/**
+ * Lo que se ve mientras llega el trozo de una sección.
+ *
+ * Antes era «CARGANDO…» diminuto y centrado sobre el vacío — o sea lo CONTRARIO de
+ * la sección que iba a aparecer: pantalla en blanco con un texto en medio y de
+ * golpe el contenido. Aunque dure 80 ms, el ojo lo lee como un salto, y Javi lo
+ * describió como «un frame bugueado, da sensación de que no funciona».
+ *
+ * Un esqueleto con la FORMA de lo que viene no elimina la espera, pero la vuelve
+ * invisible: el título y los bloques ya están donde van a estar, así que cuando
+ * llega el contenido no se mueve nada. Es la diferencia entre una pausa y un salto.
+ *
+ * Sin animación de entrada a propósito: un fundido añade su propia duración encima
+ * de la espera, que es justo lo que se quiere quitar.
+ */
 const sectionLoader = () => (
-  <div className="h-full w-full flex items-center justify-center">
-    <div className="font-syne text-[9px] font-black tracking-[0.25em]" style={{color:'rgba(255,255,255,0.18)'}}>CARGANDO…</div>
+  <div className="p-8 animate-pulse" aria-busy>
+    <div className="h-2 w-24 rounded-full mb-3" style={{background:'rgba(255,255,255,0.05)'}}/>
+    <div className="h-7 w-56 rounded-lg mb-8" style={{background:'rgba(255,255,255,0.055)'}}/>
+    <div className="grid gap-4" style={{gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))'}}>
+      {[0,1,2,3,4,5].map(i => (
+        <div key={i} className="rounded-2xl" style={{height:'104px',background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.05)'}}/>
+      ))}
+    </div>
   </div>
 )
 const dyn = <T,>(loader: () => Promise<{ default: T }>) =>
   dynamic(loader as any, { loading: sectionLoader, ssr: false }) as any
 
+/**
+ * Precargar el trozo de una sección ANTES de que se pulse.
+ *
+ * El esqueleto de arriba disimula la espera; esto la quita. Al pasar el ratón por
+ * una entrada del menú —o al empezar a tocarla en el móvil— se empieza a descargar
+ * su código. Para cuando el dedo levanta, normalmente ya está.
+ *
+ * Cada import se pide UNA vez: el propio módulo cachea, y el Set evita programar
+ * peticiones repetidas al pasar el ratón varias veces.
+ */
 const InboxSection            = dyn(() => import('@/components/sections/InboxSection'))
 const TareasSection           = dyn(() => import('@/components/sections/TareasSection'))
 const ClientesSection         = dyn(() => import('@/components/sections/ClientesSection'))
@@ -60,21 +91,43 @@ const AjustesSection          = dyn(() => import('@/components/sections/AjustesS
 //
 // Solo con conexión holgada: en 2G/3G o con el ahorro de datos activado, gastarle
 // a alguien su tarifa en secciones que quizá no abra no está justificado.
-const CARGADORES = [
-  () => import('@/components/sections/InboxSection'),
-  () => import('@/components/sections/TareasSection'),
-  () => import('@/components/sections/ClientesSection'),
-  () => import('@/components/sections/ProyectosSection'),
-  () => import('@/components/sections/ContenidoSection'),
-  () => import('@/components/sections/CalendarioSection'),
-  () => import('@/components/sections/MemoriaSection'),
-  () => import('@/components/sections/AutomatizacionesSection'),
-  () => import('@/components/sections/ChatSection'),
-  () => import('@/components/sections/HarveySection'),
-  () => import('@/components/sections/EquipoSection'),
-  () => import('@/components/sections/ReportesSection'),
-  () => import('@/components/sections/AjustesSection'),
-]
+// UNA sola lista, con la clave de cada sección.
+//
+// Antes era un array anónimo que solo servía para la precarga en reposo. Al añadir
+// la precarga al pasar el ratón hacía falta poder pedir UNA sección concreta, y lo
+// primero que escribí fue un segundo mapa — o sea dos listas de las mismas trece
+// secciones, que es exactamente cómo nacen los gemelos aquí: se añade la catorce a
+// una y no a la otra, y nadie se entera hasta que esa tarda.
+const CARGADORES: Record<string, () => Promise<unknown>> = {
+  inbox: () => import('@/components/sections/InboxSection'),
+  tareas: () => import('@/components/sections/TareasSection'),
+  clientes: () => import('@/components/sections/ClientesSection'),
+  proyectos: () => import('@/components/sections/ProyectosSection'),
+  contenido: () => import('@/components/sections/ContenidoSection'),
+  calendario: () => import('@/components/sections/CalendarioSection'),
+  memoria: () => import('@/components/sections/MemoriaSection'),
+  automatizaciones: () => import('@/components/sections/AutomatizacionesSection'),
+  chat: () => import('@/components/sections/ChatSection'),
+  harvey: () => import('@/components/sections/HarveySection'),
+  equipo: () => import('@/components/sections/EquipoSection'),
+  reportes: () => import('@/components/sections/ReportesSection'),
+  ajustes: () => import('@/components/sections/AjustesSection'),
+}
+
+/**
+ * Precargar UNA sección, al pasar el ratón o al empezar a tocarla.
+ *
+ * La precarga en reposo de abajo trae las trece, pero de una en una y con 300 ms
+ * entre medias: son ~4 segundos, y solo con conexión holgada. Quien pulsa Inbox al
+ * segundo de entrar sigue esperando. Esto cubre justo esa ventana, y además vale en
+ * conexiones lentas — porque aquí sí sabemos que esa sección la quiere.
+ */
+const yaPrecargadas = new Set<string>()
+const precargar = (id: string) => {
+  if (yaPrecargadas.has(id) || !CARGADORES[id]) return
+  yaPrecargadas.add(id)
+  CARGADORES[id]().catch(() => yaPrecargadas.delete(id))
+}
 
 function precargarSecciones() {
   const con = (navigator as any).connection
@@ -82,10 +135,15 @@ function precargarSecciones() {
   if (con?.effectiveType && !/4g|5g/.test(con.effectiveType)) return
   // De uno en uno y con hueco entre medias: si se piden los 13 a la vez compiten
   // con las llamadas a la API que la app está haciendo justo al arrancar.
+  const pendientes = Object.keys(CARGADORES)
   let i = 0
   const siguiente = () => {
-    if (i >= CARGADORES.length) return
-    CARGADORES[i++]().catch(() => {}).then(() => setTimeout(siguiente, 300))
+    if (i >= pendientes.length) return
+    const id = pendientes[i++]
+    // Por `precargar` y no llamando al import directamente: así el Set queda al día
+    // y una sección ya traída al pasar el ratón no se vuelve a pedir.
+    precargar(id)
+    setTimeout(siguiente, 300)
   }
   siguiente()
 }
@@ -667,6 +725,11 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
     const sc = NAV_SC[id]
     return (
       <button key={id} onClick={()=>{setSection(id); if (isMobile) setSidebarOpen(false)}}
+        // `pointerenter` cubre ratón Y lápiz; `touchstart` es lo más temprano que
+        // hay en un móvil — entre tocar y levantar el dedo pasan ~100 ms, que es
+        // justo lo que tarda en llegar un trozo pequeño.
+        onPointerEnter={()=>precargar(id)}
+        onTouchStart={()=>precargar(id)}
         className="flex items-center gap-3 w-full py-2.5 px-3 rounded-xl text-left transition-all duration-150 group active:scale-[0.98] active:opacity-80"
         style={{
           background: act ? 'rgba(84,116,232,0.13)' : 'transparent',

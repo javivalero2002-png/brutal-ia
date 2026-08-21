@@ -3373,3 +3373,80 @@ describe('Harvey no espera en serie lo que puede pedir a la vez', () => {
       .toBe(false)
   })
 })
+
+describe('cambiar de seccion no parece roto', () => {
+  const D = leerCodigo('src/components/NexusDashboard.tsx')
+
+  it('lo que se ve mientras carga tiene la FORMA de una seccion', () => {
+    // Javi: «siempre aparece un frame que parece bugueado, da sensacion de lag».
+    // Era «CARGANDO…» diminuto y centrado sobre el vacio — lo contrario de la
+    // seccion que iba a aparecer. Un esqueleto con la forma de lo que viene no
+    // quita la espera, pero la vuelve invisible: nada se mueve al llegar.
+    const i = D.indexOf('const sectionLoader')
+    expect(i, 'ya no existe el cargador: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const cuerpo = D.slice(i, i + 900)
+    expect(/CARGANDO/.test(cuerpo), 'vuelve el texto centrado sobre el vacio').toBe(false)
+    expect(/animate-pulse/.test(cuerpo), 'el cargador ya no es un esqueleto').toBe(true)
+  })
+
+  it('las secciones se precargan al apuntar, no al pulsar', () => {
+    expect(/onPointerEnter=\{\(\)=>precargar\(id\)\}/.test(D),
+      'no se precarga al pasar el raton: la primera vez sigue esperando')
+      .toBe(true)
+    expect(/onTouchStart=\{\(\)=>precargar\(id\)\}/.test(D),
+      'en movil no se precarga: entre tocar y levantar hay ~100ms que se estan tirando')
+      .toBe(true)
+  })
+
+  it('hay UNA lista de secciones, no dos', () => {
+    // Al añadir la precarga por raton lo primero que escribi fue un segundo mapa —
+    // dos listas de las mismas trece secciones. Asi nacen los gemelos aqui: se
+    // añade la catorce a una y no a la otra, y nadie se entera hasta que esa tarda.
+    const listas = [...D.matchAll(/const CARGADORES/g)].length
+    expect(listas, 'hay mas de una lista de cargadores de seccion: divergiran').toBe(1)
+  })
+})
+
+describe('lo que se despliega se puede plegar', () => {
+  it('el calendario de Fichar tiene boton de plegar', () => {
+    // Se abria desde la tira de la semana y solo se cerraba ELIGIENDO un dia — o
+    // sea que para plegarlo tenias que cambiar de dia, un efecto que quiza no
+    // querias. Un panel que se despliega se repliega con el mismo gesto.
+    const D = leerCodigo('src/components/sections/DiarioSection.tsx')
+    const i = D.indexOf('{verCalendario && (')
+    expect(i, 'ya no existe el calendario desplegable: revisa esta regla').toBeGreaterThan(-1)
+    const bloque = D.slice(i, i + 1400)
+
+    // Anclado a un BOTON dedicado, no a que aparezca `setVerCalendario(false)`.
+    // La primera version buscaba esa llamada y daba verde con el boton borrado,
+    // porque la MISMA llamada esta dentro de `onElegirDia` —que cierra el
+    // calendario al elegir dia—. La regla casaba con otra cosa que ya estaba ahi.
+    expect(/onClick=\{\(\) => setVerCalendario\(false\)\}/.test(bloque),
+      'no hay un boton para plegar el calendario: solo se cierra cambiando de dia, que es un efecto que quiza no quieres')
+      .toBe(true)
+  })
+})
+
+describe('el enlace de revision se puede sacar desde el movil', () => {
+  const C = leerCodigo('src/components/sections/ContenidoSection.tsx')
+
+  it('el boton esta definido UNA vez y usado en los DOS paneles', () => {
+    // Estaba escrito solo en el panel de escritorio: desde el telefono no habia
+    // forma de generarlo. Y pedir una revision se hace mas fuera de la oficina que
+    // delante del ordenador.
+    expect([...C.matchAll(/const BotonEnlaceRevision/g)].length,
+      'el boton del enlace no esta definido una sola vez').toBe(1)
+    expect([...C.matchAll(/<BotonEnlaceRevision/g)].length,
+      'el boton del enlace no esta en los dos paneles (movil y escritorio)').toBe(2)
+  })
+
+  it('el enlace sale de rutaApp, no del dominio por el que entraste', () => {
+    // El equipo tiene la PWA instalada desde el dominio viejo: con
+    // `window.location.origin` el mismo boton daba una URL u otra segun quien lo
+    // pulsara, y ese enlace se le manda a otra persona.
+    const i = C.indexOf('const BotonEnlaceRevision')
+    const cuerpo = C.slice(i, i + 900)
+    expect(/rutaApp\(`\/review\//.test(cuerpo), 'el enlace no se construye con rutaApp').toBe(true)
+    expect(/window\.location\.origin/.test(cuerpo), 'usa el origen del navegador: dara dominios distintos').toBe(false)
+  })
+})
