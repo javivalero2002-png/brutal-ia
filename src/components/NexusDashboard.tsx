@@ -30,29 +30,21 @@ import PuestaEnMarcha, { olvidarPasoGuardado } from '@/components/PuestaEnMarcha
 /**
  * Lo que se ve mientras llega el trozo de una sección.
  *
- * Antes era «CARGANDO…» diminuto y centrado sobre el vacío — o sea lo CONTRARIO de
- * la sección que iba a aparecer: pantalla en blanco con un texto en medio y de
- * golpe el contenido. Aunque dure 80 ms, el ojo lo lee como un salto, y Javi lo
- * describió como «un frame bugueado, da sensación de que no funciona».
+ * NADA. Y es a propósito, después de equivocarme dos veces.
  *
- * Un esqueleto con la FORMA de lo que viene no elimina la espera, pero la vuelve
- * invisible: el título y los bloques ya están donde van a estar, así que cuando
- * llega el contenido no se mueve nada. Es la diferencia entre una pausa y un salto.
+ * Primero era «CARGANDO…» centrado sobre el vacío. Lo cambié por un esqueleto con
+ * `animate-pulse` creyendo que el parpadeo era esto, y Javi: «fue peor el remedio
+ * que la enfermedad» — con razón: un bloque que late es MÁS visible que un texto
+ * pequeño, así que convertí un parpadeo en una animación.
  *
- * Sin animación de entrada a propósito: un fundido añade su propia duración encima
- * de la espera, que es justo lo que se quiere quitar.
+ * La causa real era otra (ver `useIsMobile`), y una vez arreglada esto solo se ve
+ * cuando de verdad falta el código de la sección — que con la precarga al apuntar
+ * es casi nunca. Para ese casi nunca, un hueco quieto es lo menos ruidoso: no
+ * llama la atención, no late, y no compite con el contenido que está a punto de
+ * aparecer.
  */
-const sectionLoader = () => (
-  <div className="p-8 animate-pulse" aria-busy>
-    <div className="h-2 w-24 rounded-full mb-3" style={{background:'rgba(255,255,255,0.05)'}}/>
-    <div className="h-7 w-56 rounded-lg mb-8" style={{background:'rgba(255,255,255,0.055)'}}/>
-    <div className="grid gap-4" style={{gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))'}}>
-      {[0,1,2,3,4,5].map(i => (
-        <div key={i} className="rounded-2xl" style={{height:'104px',background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.05)'}}/>
-      ))}
-    </div>
-  </div>
-)
+const sectionLoader = () => <div className="h-full w-full" aria-busy />
+
 const dyn = <T,>(loader: () => Promise<{ default: T }>) =>
   dynamic(loader as any, { loading: sectionLoader, ssr: false }) as any
 
@@ -406,7 +398,14 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   const [chatLoading, setChatLoading] = useState(false)
   const [harveyPreload, setHarveyPreload] = useState<string|null>(null)
   const [masOpen, setMasOpen] = useState(false)
-  const [projView, setProjView] = useState<'board'|'list'>('board')
+  // Nace en la vista que toca, no en 'board' para corregirse después.
+  //
+  // El efecto que la corregía vive en ProyectosSection y corre DESPUÉS de pintar:
+  // en un móvil eso significaba pintar las columnas del kanban un frame y saltar a
+  // la lista al siguiente. Es la otra mitad del parpadeo que veía Javi — la
+  // primera era `useIsMobile`, que arrancaba diciendo «no es móvil».
+  const [projView, setProjView] = useState<'board'|'list'>(() =>
+    typeof window !== 'undefined' && window.matchMedia?.('(max-width: 767px)').matches ? 'list' : 'board')
   const [projStatusFilter, setProjStatusFilter] = useState('Todos')
   const [memFilter, setMemFilter] = useState('Todos')
   const [showShortcuts, setShowShortcuts] = useState(false)
