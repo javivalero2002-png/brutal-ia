@@ -1020,6 +1020,21 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
 
       {verCalendario && (
         <div className="mb-4">
+          {/* Se abre desde la tira de la semana y NO había forma de volver a
+              cerrarlo salvo eligiendo un día — o sea que para plegarlo tenías que
+              cambiar de día, que es un efecto que quizá no querías. Un panel que se
+              despliega tiene que poder replegarse con el mismo gesto. */}
+          <div className="flex items-center justify-between mb-2 px-1">
+            <span className="font-syne text-[8px] font-black tracking-[0.18em]" style={{ color: 'rgba(255,255,255,0.28)' }}>
+              CALENDARIO DEL MES
+            </span>
+            <button onClick={() => setVerCalendario(false)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-widest transition-all hover:opacity-70"
+              style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, color: 'rgba(255,255,255,0.4)' }}>
+              <LucideIcon name="chevron-up" size={11} color="rgba(255,255,255,0.35)" />
+              PLEGAR
+            </button>
+          </div>
           <CalendarioDiario
             diaSeleccionado={dia}
             demo={diasDemo}

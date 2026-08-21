@@ -316,6 +316,37 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
     }
   }, [activeItem, isMobile])
 
+  /**
+   * Copiar el enlace de revisión. UNA definición, dos sitios.
+   *
+   * Estaba escrito solo en el panel de ESCRITORIO, así que desde el móvil no había
+   * forma de generar el enlace — que es justo lo que Javi encontró. Y la revisión
+   * se pide estando fuera de la oficina tanto o más que delante del ordenador.
+   *
+   * `rutaApp` y NO `window.location.origin`: este enlace se le manda a otra
+   * persona, y con `origin` salía el dominio por el que hubiera entrado quien lo
+   * copia. El equipo tiene la PWA instalada desde el dominio viejo, así que el
+   * mismo botón daba una URL u otra según quién lo pulsara.
+   */
+  const BotonEnlaceRevision = ({ id }: { id: string }) => (
+    <button
+      onClick={()=>{
+        const url = rutaApp(`/review/${id}`)
+        navigator.clipboard.writeText(url)
+          // «Para que la revisen» y no «mándaselo al cliente»: el enlace lo abren
+          // los jefes, no clientes. Ver el cambio de concepto de la PR #82.
+          .then(()=>showToast('Enlace de revisión copiado'))
+          // Sin portapapeles —pasa en navegadores móviles sin contexto seguro— se
+          // enseña la URL para poder copiarla a mano, en vez de fallar en silencio.
+          .catch(()=>showToast(url))
+      }}
+      className="w-full py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+      style={{color:'rgba(255,255,255,0.5)',border:`1px solid ${BORDER}`,background:'rgba(255,255,255,0.02)'}}
+    >
+      <LucideIcon name="link" size={11} color="rgba(255,255,255,0.5)"/>COPIAR ENLACE DE REVISIÓN
+    </button>
+  )
+
   const openItem = (item: any) => {
     setActiveItem(item)
     setEditNotes(item.notes||'')
@@ -1148,6 +1179,12 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                   </div>
                 </div>
 
+                {/* El enlace de revisión, TAMBIÉN en el móvil.
+                    Estaba solo en el panel de escritorio, así que desde el teléfono
+                    no había forma de generarlo — y pedir una revisión es de las cosas
+                    que se hacen más fuera de la oficina que delante del ordenador. */}
+                <BotonEnlaceRevision id={activeItem.id}/>
+
                 {/* Save + Delete */}
                 <div className="flex gap-2">
                   <button onClick={saveNotes} disabled={savingNotes} className="flex-1 py-3 rounded-xl font-syne text-[9px] font-black tracking-wide text-white disabled:opacity-40 transition-opacity active:opacity-70" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingNotes?'GUARDANDO…':'GUARDAR'}</button>
@@ -1431,23 +1468,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                     generaba en NINGÚN sitio de la app: era inalcanzable, así que
                     la función de revisión con cliente estaba muerta. El token es
                     el propio id de la pieza. */}
-                <button
-                  onClick={()=>{
-                    // rutaApp y NO window.location.origin: este enlace se le manda a un
-                    // CLIENTE, y con origin salia el dominio por el que hubiera entrado
-                    // quien lo copia. Como el equipo tiene la PWA instalada desde
-                    // brutalstudios-ia.vercel.app y la app vive ahora en brutalia.tech,
-                    // el mismo boton daba una URL u otra segun la persona.
-                    const url = rutaApp(`/review/${activeItem.id}`)
-                    navigator.clipboard.writeText(url)
-                      .then(()=>showToast('Enlace de revisión copiado — mándaselo al cliente'))
-                      .catch(()=>showToast(url))
-                  }}
-                  className="w-full py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all flex items-center justify-center gap-2"
-                  style={{color:'rgba(255,255,255,0.5)',border:`1px solid ${BORDER}`,background:'rgba(255,255,255,0.02)'}}
-                >
-                  <LucideIcon name="link" size={11} color="rgba(255,255,255,0.5)"/>COPIAR ENLACE
-                </button>
+                <BotonEnlaceRevision id={activeItem.id}/>
                 <div className="flex gap-2 pt-1">
                   <button onClick={saveNotes} disabled={savingNotes} className="flex-1 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-wide text-white disabled:opacity-40 transition-opacity" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{savingNotes?'GUARDANDO…':'GUARDAR'}</button>
                   {confirmDeleteContent
