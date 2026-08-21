@@ -21,6 +21,8 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
   const [viewMonth, setViewMonth] = useState(today.getMonth())
   const [viewYear, setViewYear] = useState(today.getFullYear())
   const [selectedDay, setSelectedDay] = useState<Date|null>(today)
+  // Ya nace en 'mes' —es el defecto— así que aquí no había parpadeo. El efecto de
+  // abajo se queda para cuando se GIRA la pantalla estando en vista semana.
   const [calView, setCalView] = useState<'mes'|'semana'>('mes')
   const [syncingCal, setSyncingCal] = useState(false)
   const [calEvents, setCalEvents] = useState<any[]>(data.calendarEvents || [])

@@ -3377,16 +3377,28 @@ describe('Harvey no espera en serie lo que puede pedir a la vez', () => {
 describe('cambiar de seccion no parece roto', () => {
   const D = leerCodigo('src/components/NexusDashboard.tsx')
 
-  it('lo que se ve mientras carga tiene la FORMA de una seccion', () => {
-    // Javi: «siempre aparece un frame que parece bugueado, da sensacion de lag».
-    // Era «CARGANDO…» diminuto y centrado sobre el vacio — lo contrario de la
-    // seccion que iba a aparecer. Un esqueleto con la forma de lo que viene no
-    // quita la espera, pero la vuelve invisible: nada se mueve al llegar.
+  it('lo que se ve mientras carga no llama la atencion', () => {
+    // ESTA REGLA DEFENDIA MI PROPIO ERROR y duro un dia.
+    //
+    // Diagnostiqué el parpadeo como «la descarga del trozo de la seccion» y puse un
+    // esqueleto con `animate-pulse`. Javi: «sigue pasando y encima ahora esta la
+    // animacion; fue peor el remedio que la enfermedad». Tenia razon dos veces: la
+    // causa era otra —`useIsMobile` arrancaba diciendo «no es movil»— y un bloque
+    // que late es MAS visible que un texto pequeño, asi que convertí un parpadeo en
+    // una animacion.
+    //
+    // La pista estaba en el propio sintoma, «SIEMPRE»: descargar un trozo pasa una
+    // vez por sesion; aquello pasaba en cada apertura.
+    //
+    // Lo que la regla protege ahora: que el hueco de carga sea DISCRETO. Ni texto
+    // centrado sobre el vacio, ni nada que se mueva.
     const i = D.indexOf('const sectionLoader')
     expect(i, 'ya no existe el cargador: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
-    const cuerpo = D.slice(i, i + 900)
+    const cuerpo = D.slice(i, i + 400)
     expect(/CARGANDO/.test(cuerpo), 'vuelve el texto centrado sobre el vacio').toBe(false)
-    expect(/animate-pulse/.test(cuerpo), 'el cargador ya no es un esqueleto').toBe(true)
+    expect(/animate-(pulse|spin|bounce|ping)/.test(cuerpo),
+      'el hueco de carga vuelve a moverse: una animacion ahi es mas visible que la espera que tapa')
+      .toBe(false)
   })
 
   it('las secciones se precargan al apuntar, no al pulsar', () => {
@@ -3448,5 +3460,44 @@ describe('el enlace de revision se puede sacar desde el movil', () => {
     const cuerpo = C.slice(i, i + 900)
     expect(/rutaApp\(`\/review\//.test(cuerpo), 'el enlace no se construye con rutaApp').toBe(true)
     expect(/window\.location\.origin/.test(cuerpo), 'usa el origen del navegador: dara dominios distintos').toBe(false)
+  })
+})
+
+describe('el diseño acierta en el PRIMER render, no en el segundo', () => {
+  // LA CAUSA REAL del «frame bugueado» que Javi veia al abrir cualquier seccion.
+  //
+  // `useIsMobile` arrancaba en `useState(false)` —«no es movil»— y se corregia en
+  // un `useEffect`, que corre DESPUES de pintar. En un telefono eso significa que
+  // cada seccion se pintaba una vez entera con el diseño de ESCRITORIO —columnas de
+  // kanban, paneles de 360px, tres columnas— y al frame siguiente saltaba al de
+  // movil.
+  //
+  // Pasaba SIEMPRE, en todas las secciones, y esa palabra era la pista: descargar
+  // el trozo de una seccion pasa UNA vez por sesion; esto pasaba en cada apertura.
+  // Yo lo achaque primero a la descarga y puse un esqueleto animado — empeoro.
+
+  it('useIsMobile no arranca mintiendo', () => {
+    const H = leerCodigo('src/components/shared/hooks.ts')
+    const i = H.indexOf('export function useIsMobile')
+    expect(i, 'ya no existe useIsMobile: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const cuerpo = H.slice(i, i + 700)
+    expect(/useState\(false\)/.test(cuerpo),
+      'useIsMobile vuelve a arrancar en false: cada seccion se pintara un frame con el diseño de escritorio')
+      .toBe(false)
+    expect(/matchMedia/.test(cuerpo.slice(0, cuerpo.indexOf('useEffect'))),
+      'el valor inicial no consulta el ancho real: se corregira despues de pintar')
+      .toBe(true)
+  })
+
+  it('la vista de Proyectos nace en la que toca', () => {
+    // El efecto que la corregia vive en ProyectosSection y corre despues de pintar:
+    // en movil, un frame de columnas de kanban antes de saltar a la lista.
+    const D = leerCodigo('src/components/NexusDashboard.tsx')
+    const i = D.indexOf("const [projView, setProjView]")
+    expect(i, 'ya no existe projView: revisa esta regla').toBeGreaterThan(-1)
+    const decl = D.slice(i, i + 260)
+    expect(/matchMedia/.test(decl),
+      'projView vuelve a nacer en board y a corregirse luego: un frame de kanban en movil')
+      .toBe(true)
   })
 })
