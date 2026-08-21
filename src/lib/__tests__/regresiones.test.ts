@@ -3576,3 +3576,48 @@ describe('abrir la app desde el icono no da escalones de color', () => {
       .toBe(false)
   })
 })
+
+describe('las tipografias no se piden a Google', () => {
+  // ESTE ERA EL PARPADEO AL ABRIR LA APP, y me costo tres diagnosticos llegar.
+  //
+  // Estaban con un `@import` de Google Fonts DENTRO de globals.css. Eso encadena
+  // tres saltos de red antes de que se vea la letra de verdad:
+  //
+  //   HTML (0,65s) → CSS de la app (0,35s) → CSS de Google (0,15s) → 13 ficheros
+  //
+  // El navegador no descubre el `@import` hasta que ha bajado y LEIDO nuestro CSS,
+  // asi que la peticion a Google ni siquiera puede empezar antes. Con `swap`, el
+  // texto se pinta mientras tanto con la fuente del sistema y CAMBIA DE GOLPE al
+  // llegar las buenas. Medido: cae alrededor del segundo — justo donde Javi lo
+  // situaba («clicas, pasa un segundo, ocurre el parpadeo»).
+  //
+  // `next/font` las descarga en el build y las sirve desde nuestro dominio: se van
+  // los dos saltos externos, van en woff2 en vez de .ttf, se precargan, y Next
+  // calcula una fuente de reserva con las metricas ajustadas — que es lo que hace
+  // que el cambio deje de moverse.
+  const CSS = readFileSync('src/app/globals.css', 'utf8')
+  const LAYOUT = readFileSync('src/app/layout.tsx', 'utf8')
+
+  it('no queda ningun @import a Google Fonts', () => {
+    expect(/fonts\.googleapis\.com|fonts\.gstatic\.com/.test(CSS),
+      'vuelve el @import de Google: tres saltos de red y la letra cambiando al segundo')
+      .toBe(false)
+  })
+
+  it('se declaran con next/font, que las sirve desde nuestro dominio', () => {
+    expect(/from 'next\/font\/google'/.test(LAYOUT), 'las fuentes ya no pasan por next/font').toBe(true)
+    // Las variables tienen que llegar al <html>, o el CSS las pide y no existen.
+    expect(/syne\.variable/.test(LAYOUT) && /figtree\.variable/.test(LAYOUT),
+      'las variables de fuente no se cuelgan del <html>: el CSS apuntara a nada')
+      .toBe(true)
+  })
+
+  it('el CSS usa las variables, no el nombre suelto', () => {
+    // Con solo `font-family: Syne` el navegador busca una fuente instalada que no
+    // existe y cae al sistema: se veria mal SIEMPRE, no solo el primer segundo.
+    expect(/\.font-syne \{ font-family: var\(--fuente-syne\)/.test(CSS),
+      '.font-syne no usa la variable de next/font').toBe(true)
+    expect(/\.font-figtree \{ font-family: var\(--fuente-figtree\)/.test(CSS),
+      '.font-figtree no usa la variable de next/font').toBe(true)
+  })
+})
