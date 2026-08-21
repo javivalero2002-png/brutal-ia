@@ -341,6 +341,12 @@ export async function chat(
     userName: string
     todayDate: string
     contentPipeline: number
+    /**
+     * Las notas de Memoria que vienen al caso. Ya vienen ELEGIDAS y formateadas por
+     * `memoriaRelevante`, la misma función que usa Harvey — no una copia con otro
+     * criterio, que es como las dos IAs acabarían sabiendo cosas distintas otra vez.
+     */
+    memoria?: string
   }
 ): Promise<{ reply: string; searched: boolean }> {
   const urgentTasks = context.tasks.filter(t => t.level === 'urgent')
@@ -378,7 +384,11 @@ CONTEXTO DEL NEGOCIO (actualizado al ${context.todayDate}):
 - Pipeline de contenido: ${context.contentPipeline} pieza${context.contentPipeline !== 1 ? 's' : ''} programada${context.contentPipeline !== 1 ? 's' : ''}
 - Tareas urgentes: ${urgentTasks.map(t => t.text).join(', ') || 'ninguna'}
 - Tareas de alta prioridad: ${highTasks.map(t => t.text).join(', ') || 'ninguna'}
-- Tareas totales pendientes: ${context.tasks.length}${emailsBlock}${urgentEmails.length > 0 ? `\n- ⚠️ EMAILS URGENTES: ${urgentEmails.map(e => `"${e.subject}" de ${e.from}`).join(', ')}` : ''}
+- Tareas totales pendientes: ${context.tasks.length}${context.memoria ? `
+
+MEMORIA DEL ESTUDIO (lo que el equipo ha ido guardando: briefs, tarifas, decisiones,
+cómo se hizo algo). Úsala como fuente cuando la pregunta encaje, y di de dónde sale:
+${context.memoria}` : ''}${emailsBlock}${urgentEmails.length > 0 ? `\n- ⚠️ EMAILS URGENTES: ${urgentEmails.map(e => `"${e.subject}" de ${e.from}`).join(', ')}` : ''}
 
 CAPACIDADES Y ACCESO A INTERNET:
 - Tienes acceso a búsqueda web en tiempo real mediante Tavily. Cuando el mensaje del usuario incluye un bloque <web_search_results>, son datos actuales de internet recopilados justo antes de tu respuesta.
