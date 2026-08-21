@@ -539,7 +539,10 @@ describe('sincronizar un buzón · nunca dos a la vez', () => {
     && f !== 'src/app/api/inbox/reanalizar/route.ts')
 
   it('hay ficheros que revisar', () => {
-    expect(ANALIZAN.length).toBeGreaterThan(1)
+    // Era `> 1` cuando sincronizar un buzon personal estaba escrito DOS veces. Al
+    // borrar la copia de /api/gmail/sync —que ahora delega en la libreria— queda
+    // un solo fichero que llama a analyzeEmail, y eso es una mejora, no un fallo.
+    expect(ANALIZAN.length, 'ya nadie analiza correo: revisa esta regla en vez de borrarla').toBeGreaterThan(0)
   })
 
   it('todo el que analiza correo con Claude toma cerrojo', () => {
@@ -557,12 +560,22 @@ describe('sincronizar un buzón · nunca dos a la vez', () => {
   // un buzon personal esta escrito DOS veces —la ruta que dispara el navegador y
   // syncPersonalInbox, que dispara el cron—. Solo se excluyen si usan la MISMA
   // clave. Dos claves distintas es tener cerrojo y seguir teniendo el problema.
-  it('las dos copias del sync personal comparten clave de cerrojo', () => {
+  it('el sync personal se toma el cerrojo en UN solo sitio', () => {
+    // Antes esta regla exigia que las DOS copias usaran la misma clave, porque
+    // sincronizar un buzon personal estaba escrito dos veces. Ya no: la ruta
+    // delega en `syncPersonalInbox`, asi que el cerrojo se pide una vez y la
+    // exclusion es por construccion en vez de por coincidencia de cadenas.
+    //
+    // La regla se queda para vigilar que no vuelva a aparecer una segunda copia:
+    // si alguien reescribe el bucle en la ruta, tendra que pedir cerrojo alli y
+    // esto se pondra rojo.
     const clave = /sync-personal-\$\{[a-zA-Z.]+\}/
     const RUTA = leer('src/app/api/gmail/sync/route.ts')
     const LIB = leer('src/lib/colabsSync.ts')
-    expect(clave.test(RUTA), 'la ruta no usa la clave sync-personal-<id>').toBe(true)
     expect(clave.test(LIB), 'colabsSync no usa la clave sync-personal-<id>').toBe(true)
+    expect(clave.test(RUTA),
+      'la ruta ha vuelto a pedir cerrojo por su cuenta: eso significa que tiene su propia copia del bucle otra vez')
+      .toBe(false)
   })
 
   it('un sync saltado no se cuenta como sincronizado', () => {
@@ -749,7 +762,10 @@ describe('lo que se lee de una API se lee entero', () => {
     // quedo ciega en cuanto uno de los tres bucles paso a llevar indice. Una
     // regla que depende de la sintaxis vigila el estilo, no el invariante.
     const EN_BUCLE = buclesDeSync(TS)
-    expect(EN_BUCLE.length, 'no se encontro ningun bucle de emails').toBeGreaterThan(1)
+    // `> 0` y no `> 1`: eran dos ficheros mientras /api/gmail/sync tenia su propia
+    // copia del bucle. Ahora delega en la libreria y queda uno — con los dos
+    // bucles dentro, el del buzon compartido y el personal.
+    expect(EN_BUCLE.length, 'no se encontro ningun bucle de emails').toBeGreaterThan(0)
     for (const f of EN_BUCLE) {
       const src = leerCodigo(f)
       expect(/plazoRestante\(/.test(src), `${f} no mide el plazo restante`).toBe(true)
@@ -2182,8 +2198,11 @@ describe('el despliegue de produccion no se puede apagar sin querer', () => {
 describe('la criba del correo', () => {
   const CON_ANALISIS = buclesDeSync(TS)
 
-  it('los TRES bucles criban, no dos', () => {
-    expect(CON_ANALISIS.length, 'ya no son los mismos ficheros los que sincronizan: revisa esta regla').toBe(2)
+  it('TODOS los bucles criban, no casi todos', () => {
+    // Eran tres bucles en dos ficheros; ahora son dos bucles en uno, porque la
+    // ruta manual dejo de tener su copia. Lo que la regla protege no cambia: que
+    // ningun bucle analice sin cribar antes.
+    expect(CON_ANALISIS.length, 'ya no son los mismos ficheros los que sincronizan: revisa esta regla').toBe(1)
     const sinCriba = CON_ANALISIS.filter(f => !/triar\(/.test(leerCodigo(f)))
     expect(sinCriba,
       'analiza correo sin cribar: ese buzon seguira pagando el analisis de cada boletin, y nadie lo notara porque los otros si criban')
@@ -2422,8 +2441,11 @@ describe('quedarse sin tiempo aplaza correo, no lo pierde', () => {
   // Regla GENERAL sobre los tres sitios que cortan por tiempo, no sobre uno: el
   // rescate estaba escrito solo en /api/gmail/sync y faltaba en las DOS funciones
   // del cron, que son justo las que corren cada hora sin que nadie mire.
+  // Un solo fichero desde que /api/gmail/sync delega en la libreria en vez de
+  // tener su propia copia del bucle. Los DOS cortes por tiempo que quedan —el del
+  // buzon compartido y el personal— viven aqui dentro, y la regla los cuenta
+  // igual: un rescate por cada corte.
   const SINCRONIZADORES = [
-    'src/app/api/gmail/sync/route.ts',
     'src/lib/colabsSync.ts',
   ]
 
@@ -2683,16 +2705,22 @@ describe('la preferencia de uno no apaga el buzon de los siete', () => {
       .toBe(false)
   })
 
-  it('en la ruta manual, la cuenta de empresa gana a la preferencia', () => {
-    // La misma ruta sincroniza el buzon compartido cuando la cuenta conectada es la
-    // de colaboraciones. Sin el `isCompanyAccount ||`, quien conecte ese buzon
-    // apagaria su analisis para todos con su propio interruptor.
+  it('el buzon compartido no consulta la preferencia personal, venga de donde venga', () => {
+    // Antes esto vigilaba `/api/gmail/sync`, que tenia su propia copia del bucle y
+    // podia sincronizar el buzon compartido si era la cuenta conectada. Esa copia
+    // ya no existe: la ruta delega, y del buzon compartido se encarga
+    // `syncColabsInbox`, que nunca mira preferencias personales.
+    //
+    // La regla se reapunta al sitio donde el invariante sigue vivo, en vez de
+    // borrarse: si alguien vuelve a meter la preferencia personal en el camino del
+    // buzon compartido, uno solo dejaria al equipo sin analisis.
     const R = leerCodigo('src/app/api/gmail/sync/route.ts')
-    const i = R.indexOf('const permitido =')
-    expect(i, 'ya no se calcula el permiso: revisa esta regla').toBeGreaterThan(-1)
-    expect(/isCompanyAccount \|\|/.test(R.slice(i, i + 90)),
-      'la preferencia personal manda tambien sobre el buzon compartido')
+    expect(/syncPersonalInbox\(/.test(R),
+      'la ruta manual ha dejado de delegar: si vuelve a tener su propio bucle, tendra que volver a distinguir el buzon compartido a mano')
       .toBe(true)
+    expect(/analizar_correo\s*!==\s*false/.test(R),
+      'la ruta vuelve a decidir la preferencia por su cuenta en vez de pasarle el perfil a la libreria')
+      .toBe(false)
   })
 
   it('apagar el analisis NO deja de guardar el correo', () => {
@@ -3046,6 +3074,42 @@ describe('el boton de sincronizar es UNO', () => {
     const B = leerCodigo('src/components/shared/BotonSincronizar.tsx')
     expect(/disabled=\{disabled \|\| sincronizando\}/.test(B),
       'el boton sigue pulsable mientras sincroniza: cada clic de mas cuesta dinero')
+      .toBe(true)
+  })
+})
+
+describe('sincronizar un buzon personal esta escrito UNA vez', () => {
+  // Estuvo escrito dos: la ruta que dispara el navegador y `syncPersonalInbox`,
+  // que dispara el cron. El propio fichero lo decia en un comentario y lo dejaba
+  // para «otro dia». Mientras las dos copias hicieron lo mismo, la duplicacion
+  // solo costaba mantenimiento. Dejaron de hacerlo dos veces:
+  //
+  //   · el cron aprendio a recorrer varias cuentas y la ruta se quedo leyendo una
+  //     sola columna — el boton sincronizaba UNA de las dos, sin decirlo;
+  //   · y desde antes, la ruta creaba tareas de reunion y el cron no. Un enlace de
+  //     Meet en tu Gmail personal creaba tarea solo si pulsabas a mano.
+  //
+  // Un gemelo que diverge es peor que uno que no: el primero da resultados
+  // distintos segun por donde entres, y nadie sabe cual es el bueno.
+  const R = leerCodigo('src/app/api/gmail/sync/route.ts')
+
+  it('la ruta manual delega, no reimplementa', () => {
+    expect(/syncPersonalInbox\(/.test(R), 'la ruta no delega en la libreria').toBe(true)
+    // Las señales de tener un bucle propio: si aparecen aqui, la copia ha vuelto.
+    for (const señal of ['analyzeEmail(', 'getEmailsWithRefreshToken(', 'aplazarResto(', 'MEETING_RE']) {
+      expect(R.includes(señal),
+        `la ruta manual vuelve a tener su propia copia del bucle (${señal}): divergira otra vez del cron`)
+        .toBe(false)
+    }
+  })
+
+  it('las tareas de reunion se crean por LOS DOS caminos', () => {
+    // Lo que hacia distinto al gemelo. Ahora vive en la libreria, asi que lo hacen
+    // el cron y el boton por igual — por construccion, no por acordarse.
+    const C = leerCodigo('src/lib/colabsSync.ts')
+    const personal = C.slice(C.indexOf('async function syncPersonalInboxSinCerrojo'))
+    expect(/MEETING_RE\.test\(/.test(personal),
+      'el sync personal no crea tareas de reunion: un enlace de Meet solo la crearia pulsando el boton a mano')
       .toBe(true)
   })
 })
