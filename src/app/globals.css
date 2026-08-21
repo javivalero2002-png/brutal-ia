@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Figtree:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap');
+/* Las tipografías ya NO se piden a Google desde aquí: las sirve `next/font` desde
+   nuestro dominio (ver src/app/layout.tsx). El `@import` que había encadenaba tres
+   saltos de red y hacía que el texto cambiara de letra alrededor del segundo. */
 
 @tailwind base;
 @tailwind components;
@@ -85,8 +87,8 @@ button, a[role="button"], [role="button"] { user-select: none; -webkit-user-sele
 .animate-riseT { animation: riseT 0.25s ease; }
 .animate-scanLine { animation: scanLine 1.4s ease-in-out infinite; }
 
-.font-syne { font-family: 'Syne', sans-serif; }
-.font-figtree { font-family: 'Figtree', system-ui, sans-serif; }
+.font-syne { font-family: var(--fuente-syne), 'Syne', sans-serif; }
+.font-figtree { font-family: var(--fuente-figtree), 'Figtree', system-ui, sans-serif; }
 
 /* Altura de viewport dinámica: la tab bar no salta cuando la barra de URL
    del navegador móvil se colapsa/expande (fallback: h-screen de Tailwind).
@@ -424,11 +426,11 @@ html.theme-light .nx-boot-insignia-clara { display: block; }
 .nx-boot-saliendo { animation: nxBootSale 0.5s cubic-bezier(0.4,0,1,1) both; }
 
 .nx-boot-eyebrow {
-  font-family: Syne, sans-serif; font-size: 8.5px; font-weight: 800;
+  font-family: var(--fuente-syne), Syne, sans-serif; font-size: 8.5px; font-weight: 800;
   letter-spacing: 4px; color: rgba(255,255,255,0.28); margin-bottom: 10px;
 }
 .nx-boot-titulo {
-  font-family: Figtree, sans-serif; font-size: 30px; font-weight: 900;
+  font-family: var(--fuente-figtree), Figtree, sans-serif; font-size: 30px; font-weight: 900;
   letter-spacing: -0.03em; color: #fff; margin-bottom: 8px; line-height: 1.05;
 }
 .nx-boot-sub {
@@ -457,7 +459,7 @@ html.theme-light .nx-boot-insignia-clara { display: block; }
 .nx-boot-opcion:focus-visible img { box-shadow: 0 0 0 3px rgba(27,95,250,0.8), 0 22px 54px rgba(27,95,250,0.3); }
 
 .nx-boot-label {
-  font-family: Syne, sans-serif; font-size: 8.5px; font-weight: 800;
+  font-family: var(--fuente-syne), Syne, sans-serif; font-size: 8.5px; font-weight: 800;
   letter-spacing: 3px; color: rgba(255,255,255,0.32);
 }
 
@@ -476,7 +478,7 @@ html.theme-light .nx-boot-insignia-clara { display: block; }
 
 .nx-boot-estado {
   display: flex; align-items: center; gap: 12px;
-  font-family: Syne, sans-serif; font-size: 8.5px; font-weight: 800;
+  font-family: var(--fuente-syne), Syne, sans-serif; font-size: 8.5px; font-weight: 800;
   letter-spacing: 2.5px; color: rgba(255,255,255,0.26);
 }
 /* El 0.26 esta pensado para fondo oscuro. Al invertirse queda todavia mas flojo
