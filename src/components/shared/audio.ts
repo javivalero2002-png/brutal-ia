@@ -7,6 +7,13 @@ export const getSharedAudio = () => {
     sharedAudioEl.preload = 'auto'
     sharedAudioEl.setAttribute('playsinline', '')
     sharedAudioEl.style.display = 'none'
+    // Cualquier reproducción que llegue a sonar YA demuestra que el audio está
+    // desbloqueado. Sin esto, `__unlocked` solo se ponía si el `play()` del wav
+    // silencioso salía bien —y si fallaba, `unlockAudio` reintentaba en CADA toque
+    // durante el resto de la sesión, para siempre.
+    sharedAudioEl.addEventListener('playing', () => {
+      ;(sharedAudioEl as unknown as { __unlocked?: boolean }).__unlocked = true
+    })
     document.body.appendChild(sharedAudioEl)
   }
   return sharedAudioEl
@@ -55,9 +62,27 @@ export const stopAllVoices = () => {
   if (typeof window !== 'undefined' && window.speechSynthesis) { try { window.speechSynthesis.cancel() } catch {} }
 }
 
+/**
+ * Desbloquear el audio en iOS, SIN pisar lo que esté sonando.
+ *
+ * EL FALLO QUE ARREGLA: esto va enganchado a cada `touchend` y cada `click` de la
+ * app, y ponía `src = SILENT_WAV` en el ÚNICO elemento de audio que hay. La guarda
+ * era `__unlocked`, que solo se pone a `true` si ese primer `play()` sale bien — y
+ * en iOS falla a menudo. Con la guarda en falso, CADA toque metía un wav silencioso
+ * encima de la voz de Harvey. Javi: «mientras está hablando y deslizo, se para».
+ *
+ * Y `touchend` dispara también al terminar un scroll, así que ni siquiera hacía
+ * falta pulsar nada: bastaba con deslizar para leer lo que Harvey iba diciendo.
+ *
+ * Ahora se comprueba si el elemento está OCUPADO antes de tocarlo. Desbloquear es
+ * una optimización; cortar la voz es un fallo. Ante la duda, no se toca.
+ */
 export const unlockAudio = () => {
   const a = getSharedAudio()
   if (!a || (a as any).__unlocked) return
+  // Sonando, o a punto: no se pisa. `paused` es falso mientras reproduce, y
+  // `readyState`/`currentSrc` cubren el hueco entre asignar el src y empezar.
+  if (!a.paused || (a.currentSrc && a.currentSrc !== SILENT_WAV && a.readyState > 0 && !a.ended)) return
   a.setAttribute('playsinline', '')
   a.volume = 1
   a.src = SILENT_WAV

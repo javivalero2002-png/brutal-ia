@@ -118,8 +118,18 @@ describe('Harvey · a quién se asigna una tarea', () => {
     expect(/CON QUIEN ESTAS HABLANDO/.test(R),
       'el prompt no dice quién es el usuario: «para mí» no tiene referente').toBe(true)
     // Del servidor, no del body: el nombre de quien habla no es entrada del cliente.
-    const i = R.indexOf('nombreUsuario')
-    expect(/from\('profiles'\)[\s\S]{0,120}eq\('id', user\.id\)/.test(R.slice(Math.max(0, i - 400), i + 200)),
-      'el nombre no se resuelve desde la sesión en el servidor').toBe(true)
+    //
+    // Esta regla exigía literalmente una consulta `from('profiles')…eq('id', user.id)`.
+    // Eso es la IMPLEMENTACIÓN, no el invariante: al fusionar esa consulta con la de
+    // la plantilla —una sola ida a la base en vez de dos, por latencia— se puso roja
+    // sin que nada fuera mal. Ahora comprueba lo que de verdad importa: que la
+    // identidad salga de `user.id` (la sesión) y NUNCA del cuerpo de la petición.
+    const i = R.indexOf('quienHabla')
+    expect(i, 'ya no se resuelve quién habla: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const ventana = R.slice(Math.max(0, i - 300), i + 300)
+    expect(/user\.id/.test(ventana),
+      'quién habla no se resuelve contra la sesión: podría venir del cliente').toBe(true)
+    expect(/(context|body|message)\s*[.?]\s*(userName|nombre|name)/.test(R),
+      'el nombre de quien habla se coge del cuerpo de la petición: es suplantable').toBe(false)
   })
 })

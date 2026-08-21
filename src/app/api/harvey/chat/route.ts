@@ -102,12 +102,39 @@ export async function POST(request: NextRequest) {
   if (!message?.trim()) return NextResponse.json({ error: 'Empty message' }, { status: 400 })
   if (message.length > 4000) return NextResponse.json({ error: 'Message too long' }, { status: 400 })
 
-  // Web search — run in parallel before calling Anthropic
+  // ── LATENCIA: lo que se puede pedir a la vez, se pide a la vez ──────────────
+  //
+  // Javi: «tarda mucho en responder». Antes de que Anthropic recibiera el primer
+  // byte había una cadena de esperas EN SERIE: la búsqueda web (externa, segundos),
+  // luego una consulta de perfil, luego otra de la plantilla, y solo entonces la
+  // llamada al modelo. Cada eslabón esperaba a que terminara el anterior sin
+  // necesitarlo para nada.
+  //
+  // El comentario que había aquí decía «run in parallel» y el código hacía `await`
+  // justo debajo. No corría en paralelo con nada.
+  //
+  // Ahora la búsqueda se LANZA aquí y se espera abajo, cuando de verdad hace falta
+  // su resultado — con las consultas de la base corriendo mientras tanto.
   const needsSearch = needsWebSearch(String(message))
-  const searchResults = needsSearch ? await webSearch(String(message)) : []
+  const busqueda: Promise<Awaited<ReturnType<typeof webSearch>>> =
+    needsSearch ? webSearch(String(message)) : Promise.resolve([])
 
   // Try Anthropic first if key available
   if (apiKey) {
+    // El equipo ENTERO en UNA consulta, no dos.
+    //
+    // Antes eran dos viajes seguidos a la misma tabla: `quienHabla` (el que
+    // pregunta) y `plantilla` (todos). Con `id, name, role` de todos se sacan las
+    // dos cosas, y quien pregunta se busca en memoria — que cuesta cero.
+    //
+    // Y aquí se espera la búsqueda web, que lleva corriendo desde arriba: si tardó
+    // menos que las consultas, ya está lista y no se espera nada.
+    const [{ data: plantilla }, searchResults] = await Promise.all([
+      admin.from('profiles').select('id, name, role'),
+      busqueda,
+    ])
+    const quienHabla = (plantilla ?? []).find(p => p.id === user.id) ?? null
+
     const userContent = String(message) + formatSearchContextVoice(searchResults)
 
     // El historial se SANEA antes de mandarlo. La API de Anthropic exige que el
@@ -136,8 +163,6 @@ export async function POST(request: NextRequest) {
     //
     // Se resuelve en el SERVIDOR desde la sesion, no desde el cliente: el nombre
     // de quien habla no es algo que deba poder mandarse en el body.
-    const { data: quienHabla } = await admin
-      .from('profiles').select('name, role').eq('id', user.id).maybeSingle()
     const nombreUsuario = (quienHabla?.name || '').trim()
 
     // ── Quién hizo qué, y solo cuando lo preguntan ─────────────────────────
@@ -152,7 +177,6 @@ export async function POST(request: NextRequest) {
     // palabras de balance— y se equivoca por defecto hacia NO incluirlo: si
     // Harvey no lo trae, dice que no lo sabe, que es mejor que inventárselo.
     const pregunta = String(userContent || '').toLowerCase()
-    const { data: plantilla } = await admin.from('profiles').select('id,name')
     const nombraAAlguien = (plantilla ?? []).some(p =>
       p.name && p.name.trim().length > 2 && pregunta.includes(p.name.toLowerCase().split(' ')[0]))
     // Nombrar a alguien ya basta (`nombraAAlguien`), así que «¿en qué anda Paula?»

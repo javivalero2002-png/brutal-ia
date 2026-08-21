@@ -3315,3 +3315,61 @@ describe('las dos IAs saben lo mismo', () => {
     expect(/context\.memoria/.test(A), 'el bloque existe pero no usa el dato').toBe(true)
   })
 })
+
+describe('la voz de Harvey no se corta al tocar la pantalla', () => {
+  const A = leerCodigo('src/components/shared/audio.ts')
+
+  it('unlockAudio no pisa lo que esta sonando', () => {
+    // Javi: «mientras esta hablando y deslizo, se para».
+    //
+    // `unlockAudio` va enganchado a CADA `touchend` y `click` de la app, y ponia
+    // `src = SILENT_WAV` en el UNICO elemento de audio que existe. La guarda era
+    // `__unlocked`, que solo se pone a true si ese primer `play()` sale bien — y en
+    // iOS falla a menudo. Con la guarda en falso, cada toque metia un wav silencioso
+    // encima de la voz. Y `touchend` dispara tambien al terminar un scroll, asi que
+    // bastaba con deslizar para leer lo que Harvey iba diciendo.
+    const i = A.indexOf('export const unlockAudio')
+    expect(i, 'ya no existe unlockAudio: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const cuerpo = A.slice(i, A.indexOf('export const isSRBroken'))
+    const guarda = cuerpo.indexOf('a.src = SILENT_WAV')
+    expect(/!a\.paused/.test(cuerpo.slice(0, guarda)),
+      'unlockAudio asigna el src sin comprobar antes si hay algo sonando')
+      .toBe(true)
+  })
+
+  it('cualquier reproduccion que suene deja el audio desbloqueado', () => {
+    // Sin esto `__unlocked` solo se ponia si el wav silencioso conseguia sonar, y
+    // si fallaba se reintentaba en CADA toque durante el resto de la sesion.
+    expect(/addEventListener\('playing'/.test(A),
+      'nada marca el audio como desbloqueado al sonar de verdad: se reintentara para siempre')
+      .toBe(true)
+  })
+})
+
+describe('Harvey no espera en serie lo que puede pedir a la vez', () => {
+  const R = leerCodigo('src/app/api/harvey/chat/route.ts')
+
+  it('la busqueda web no bloquea el montaje del contexto', () => {
+    // Javi: «tarda mucho en responder». Habia una cadena EN SERIE antes de llamar
+    // al modelo: busqueda web (externa, segundos) → consulta de perfil → consulta
+    // de plantilla → Anthropic. Cada eslabon esperaba al anterior sin necesitarlo.
+    // El comentario decia «run in parallel» y el codigo hacia `await` justo debajo.
+    expect(/const searchResults = needsSearch \? await webSearch/.test(R),
+      'la busqueda web vuelve a bloquear: nada corre mientras tanto')
+      .toBe(false)
+    expect(/Promise\.all\(\[[\s\S]{0,200}busqueda/.test(R),
+      'la busqueda no se espera junto a las consultas de la base')
+      .toBe(true)
+  })
+
+  it('el equipo se pide en UNA consulta, no en dos', () => {
+    // Eran dos viajes seguidos a la misma tabla: quien pregunta y la plantilla.
+    // Con `id, name, role` de todos salen las dos cosas y el que pregunta se busca
+    // en memoria, que cuesta cero.
+    expect(/from\('profiles'\)\.select\('id, name, role'\)/.test(R),
+      'no se pide el equipo entero de una vez').toBe(true)
+    expect(/from\('profiles'\)\.select\('id,name'\)/.test(R),
+      'vuelve a haber una segunda consulta a profiles: un viaje de mas en cada mensaje')
+      .toBe(false)
+  })
+})
