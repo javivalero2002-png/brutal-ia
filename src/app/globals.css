@@ -49,7 +49,17 @@
 @keyframes orbDrift3 { 0% { transform: translate(0,6%) scale(.9) } 50% { transform: translate(-8%,-8%) scale(1.15) } 100% { transform: translate(0,6%) scale(.9) } }
 
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-html, body { height: 100%; overflow: hidden; background: #040409; overscroll-behavior: none; }
+/* EL COLOR DEL ARRANQUE, en un solo sitio.
+   Al abrir la app desde el icono se pintaban TRES negros distintos, uno detrás de
+   otro: #030308 (el splash del sistema, del manifest), #040409 (al llegar el HTML)
+   y #05050B (al montar React y aparecer la pantalla de arranque). Tres repintados
+   en cascada, y en una pantalla OLED esa diferencia se ve como un escalón — que es
+   el parpadeo que Javi nota al abrir desde inicio.
+   Ahora es un único valor. La variable existe para que no puedan volver a
+   separarse: quien cambie el fondo cambia los tres a la vez, y hay una regla que
+   comprueba que el manifest y el `themeColor` sigan diciendo lo mismo. */
+:root { --nx-arranque: #030308; }
+html, body { height: 100%; overflow: hidden; background: var(--nx-arranque); overscroll-behavior: none; }
 button, a[role="button"], [role="button"] { user-select: none; -webkit-user-select: none; touch-action: manipulation; }
 @media (hover: none) and (pointer: coarse) {
   button:not(:disabled):active { transform: scale(0.97); opacity: 0.85; transition: transform 0.08s, opacity 0.08s; }
@@ -374,10 +384,17 @@ html.theme-light [style*="; color: rgba(255, 255, 255, 0.5)"]:not(:has(*))  { co
 .nx-boot {
   position: fixed; inset: 0; z-index: 9999;
   display: flex; align-items: center; justify-content: center;
-  background: #05050B;
+  background: var(--nx-arranque);
   overflow: hidden;
   padding: 24px;
-  animation: nxBootEntra 0.45s cubic-bezier(0.22,1,0.36,1) both;
+  /* SIN fundido de entrada, a propósito.
+     El contenedor se fundía desde opacidad 0 durante 450ms. Eso hacía dos cosas
+     malas: dejaba ver el fondo de debajo mientras subía la opacidad —un escalón de
+     color, que era parte del parpadeo al abrir— y, como el CONTENIDO ya tiene su
+     propia animación (`nxBootSube`), la opacidad se multiplicaba y la insignia
+     tardaba el doble en verse.
+     Ahora el fondo aparece de inmediato y con el color exacto del splash del
+     sistema, así que no hay transición que ver: solo se anima la insignia. */
 }
 /* Cancela la inversión del body (dos inversiones seguidas devuelven el original),
    igual que hace .nx-noinvert. Solo mientras se ELIGE. */
@@ -477,7 +494,6 @@ html.theme-light .nx-boot-barra { background: rgba(255,255,255,0.16); }
   animation: nxBootBarra 1.25s ease-in-out infinite;
 }
 
-@keyframes nxBootEntra { from { opacity: 0 } to { opacity: 1 } }
 @keyframes nxBootSube  { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }
 @keyframes nxBootSale  { to { opacity: 0; transform: scale(1.06) } }
 @keyframes nxBootBarra { 0% { transform: translateX(-100%) } 100% { transform: translateX(285%) } }
