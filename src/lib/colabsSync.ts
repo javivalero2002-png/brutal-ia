@@ -575,6 +575,37 @@ async function syncPersonalInboxSinCerrojo(
       insertFailures++
     } else {
       newCount++
+
+      // Tarea de reunión, IGUAL que en el buzón compartido.
+      //
+      // Esto faltaba aquí y no en la ruta manual, así que un enlace de Meet en tu
+      // Gmail personal creaba tarea SOLO si pulsabas el botón a mano: el cron
+      // horario se la saltaba. Dos caminos que hacen lo mismo con distinto
+      // resultado — el gemelo clásico, y de los silenciosos, porque nadie echa de
+      // menos una tarea que no sabe que debería existir.
+      //
+      // Con la guarda de `analizar`, como en colabs y a diferencia de la ruta
+      // manual: un boletín promocional con un enlace de Zoom no es una reunión
+      // tuya, y crear esa tarea es peor que no crearla.
+      const meetingText = `${email.subject || ''} ${email.body_preview || ''}`
+      if (analizar && MEETING_RE.test(meetingText)) {
+        // localDayKey, no slice: `received_at` viene en UTC y cortarlo da el día
+        // UTC. Un email recibido a las 00:30 de Madrid generaba la tarea con la
+        // fecha de AYER, o sea vencida en el momento de crearse.
+        const day = localDayKey(email.received_at || Date.now())
+        const { error: reunionErr } = await admin.from('tasks').insert({
+          created_by: profile.id,
+          // `assigned_to`: es TU buzón personal, así que la reunión es tuya. En
+          // colabs va sin asignar porque ese correo es de los siete.
+          assigned_to: profile.id,
+          text: `Reunión: ${email.subject || email.from_name || 'sin asunto'}`,
+          level: 'high',
+          due_date: day,
+          source: 'gmail',
+        })
+        if (reunionErr) console.error('[sync personal] no se pudo crear la tarea de reunión:', reunionErr.message)
+      }
+
       if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgent: analysis?.urgency === 'urgent' })
     }
   }
