@@ -488,7 +488,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
           {/* Content search */}
           <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl mb-3" style={{background:SURFACE,border:`1px solid ${BORDER}`,maxWidth:'320px'}}>
             <LucideIcon name="search" size={12} color="rgba(255,255,255,0.2)"/>
-            <input ref={contentSearchInputRef} value={contentSearch} onChange={e=>setContentSearch(e.target.value)} placeholder="Busca por título…" className="flex-1 bg-transparent text-[12px] outline-none" style={{caretColor:BLU,color:'rgba(255,255,255,0.75)'}}/>
+            <input ref={contentSearchInputRef} value={contentSearch} onChange={e=>setContentSearch(e.target.value)} placeholder="Busca por título…" className="flex-1 bg-transparent text-[12px] outline-none" style={{minWidth:0,caretColor:BLU,color:'rgba(255,255,255,0.75)'}}/>
             {contentSearch && <button onClick={()=>setContentSearch('')}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.2)"/></button>}
           </div>
           {/* Platform filter — fila primaria */}
@@ -998,7 +998,16 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
           {/* `scrollPaddingBottom`: al enfocar un campo, el navegador lo desplaza
               justo al borde de lo visible — o sea pegado al teclado y sin sitio
               para ver lo que escribes. Con el margen, queda por encima. */}
-          <div className="flex-1 overflow-y-auto relative z-10" style={{paddingBottom:'env(safe-area-inset-bottom)',scrollPaddingBottom:'96px'}}>
+          {/* `overflow-x-hidden`: el cinturón, además de los `min-w-0` de abajo.
+              Un `<input>` o un `<select>` con `flex-1` NO encoge por debajo de su
+              ancho intrínseco —unos 20 caracteres— salvo que se le ponga
+              `min-width: 0`. Sin eso, una fila se hace más ancha que la pantalla y
+              arrastra el panel ENTERO en horizontal: se ve todo cortado por la
+              izquierda, no solo la fila culpable. Que es justo lo que pasaba con el
+              desplegable de la cuenta.
+              Los `min-w-0` arreglan la causa; esto impide que el siguiente campo
+              que alguien añada vuelva a hacerlo. */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden relative z-10" style={{paddingBottom:'env(safe-area-inset-bottom)',scrollPaddingBottom:'96px'}}>
 
             {/* BOCETO TAB */}
             {mobileTab === 'boceto' && (
@@ -1132,7 +1141,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                         <LucideIcon name="camera" size={9} color="rgba(255,255,255,0.75)"/>
                       </div>
                     </label>
-                    <select value={editAccountName} onChange={e=>setEditAccountName(e.target.value)} className="flex-1 px-3 py-2.5 rounded-xl text-[11px] text-white outline-none appearance-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,colorScheme:'dark'}}>
+                    <select value={editAccountName} onChange={e=>setEditAccountName(e.target.value)} className="flex-1 px-3 py-2.5 rounded-xl text-[11px] text-white outline-none appearance-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,colorScheme:'dark',minWidth:0}}>
                       <option value="">Sin asignar</option>
                       {FIXED_ACCOUNTS.map((acc: string)=><option key={acc} value={acc}>{acc}</option>)}
                     </select>
@@ -1410,7 +1419,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                         <LucideIcon name="camera" size={13} color="white"/>
                       </div>
                     </button>
-                    <select value={editAccountName} onChange={e=>setEditAccountName(e.target.value)} className="flex-1 px-3 py-2.5 rounded-xl text-[12px] text-white outline-none appearance-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,colorScheme:'dark'}}>
+                    <select value={editAccountName} onChange={e=>setEditAccountName(e.target.value)} className="flex-1 px-3 py-2.5 rounded-xl text-[12px] text-white outline-none appearance-none" style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,colorScheme:'dark',minWidth:0}}>
                       <option value="">Sin asignar</option>
                       {FIXED_ACCOUNTS.map((acc: string)=><option key={acc} value={acc}>{acc}</option>)}
                     </select>

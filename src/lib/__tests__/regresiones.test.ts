@@ -3175,3 +3175,100 @@ describe('las carpetas de Proyectos se ven tambien en movil', () => {
     expect(/abreCarpeta/.test(P), 'la lista no pinta cabecera al cambiar de carpeta').toBe(true)
   })
 })
+
+describe('el cronometro de Fichar se ve, y en las dos pantallas', () => {
+  const D = leerCodigo('src/components/sections/DiarioSection.tsx')
+
+  it('no esta escondido detras de !isMobile', () => {
+    // Javi: «sigo sin ver un boton de marcar entrada». Estaba casi todo hecho y no
+    // se veia por dos motivos: el bloque iba detras de `!isMobile` —o sea que en el
+    // movil no existia— y el boton de fichar estaba enterrado al final del panel de
+    // objetivos, visible solo si ya habias escrito alguno.
+    const i = D.indexOf('EN LA OFICINA')
+    expect(i, 'ya no existe el cronometro: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const antes = D.slice(Math.max(0, i - 1400), i)
+    expect(/!isMobile && miEntrada/.test(antes),
+      'el cronometro vuelve a estar oculto en movil, que es donde Javi no lo veia')
+      .toBe(false)
+  })
+
+  it('hay una accion clara en cada estado', () => {
+    // Sin fichar → arrancar. En marcha → terminar. Un cronometro sin boton de
+    // arranque visible no es un cronometro, es un numero.
+    for (const t of ['MARCAR ENTRADA', 'TERMINAR', 'PONER OBJETIVOS']) {
+      expect(D.includes(t), `falta la accion «${t}» del cronometro`).toBe(true)
+    }
+  })
+
+  it('sin objetivos lleva a escribirlos, no da un error', () => {
+    // `fichar('entrada')` exige objetivos —es lo que hace que fichar valga para
+    // algo—. Pulsar y comerse un toast de error es peor que llevar al sitio.
+    const i = D.indexOf('PONER OBJETIVOS')
+    expect(/refObjetivos\.current\?\.scrollIntoView/.test(D.slice(Math.max(0, i - 700), i)),
+      'sin objetivos el boton no lleva a escribirlos')
+      .toBe(true)
+  })
+})
+
+describe('las carpetas de la lista empiezan plegadas', () => {
+  const P = leerCodigo('src/components/sections/ProyectosSection.tsx')
+
+  it('una carpeta cerrada NO pinta sus proyectos', () => {
+    // Javi: salian las tres piezas de cada carpeta en fila y «manchaban toda la
+    // pantalla». Una carpeta que enseña su contenido sin pedirselo no ordena nada:
+    // solo ha puesto un titulo encima del mismo muro.
+    expect(/const plegada = !!carpeta && !carpetasAbiertas\.has\(carpeta\)/.test(P),
+      'ya no se calcula si la carpeta esta plegada').toBe(true)
+    expect(/\{!plegada &&/.test(P),
+      'las filas se pintan aunque la carpeta este cerrada: la carpeta no esconde nada')
+      .toBe(true)
+  })
+
+  it('lo que NO tiene carpeta nunca se pliega', () => {
+    // No es una carpeta: es lo que aun no has colocado. Esconderlo lo haria
+    // desaparecer del todo, y entonces no hay forma de llegar a ello.
+    expect(/const plegada = !!carpeta &&/.test(P),
+      'lo suelto tambien se puede plegar: desapareceria sin forma de recuperarlo')
+      .toBe(true)
+  })
+})
+
+describe('nada mas ancho que la pantalla en el movil de Contenido', () => {
+  const C = leerCodigo('src/components/sections/ContenidoSection.tsx')
+
+  it('el panel no puede desbordar en horizontal', () => {
+    // Un `<input>` o un `<select>` con `flex-1` NO encoge por debajo de su ancho
+    // intrinseco —unos 20 caracteres— salvo `min-width: 0`. Sin eso una fila se
+    // hace mas ancha que la pantalla y arrastra el panel ENTERO: se ve todo
+    // cortado por la izquierda, no solo la fila culpable.
+    // Anclado al contenedor del MODAL MOVIL, que es el que se identifica por su
+    // `scrollPaddingBottom`. Buscar el primer `flex-1 overflow-y-auto` del fichero
+    // encontraba otro contenedor distinto y daba rojo sin fallo — el tropiezo de
+    // anclar al primer `indexOf` que ya ha pasado varias veces en esta suite.
+    const i = C.indexOf('scrollPaddingBottom')
+    expect(i, 'ya no existe el modal movil: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const div = C.slice(Math.max(0, i - 260), i)
+    expect(/overflow-x-hidden/.test(div),
+      'el cuerpo del modal movil puede volver a desbordar en horizontal')
+      .toBe(true)
+  })
+
+  it('los campos que comparten fila pueden encoger', () => {
+    // La causa, no solo el sintoma: `overflow-x-hidden` corta lo que sobra, pero
+    // `min-w-0` hace que no sobre.
+    // POR LINEAS, no con un regex sobre la etiqueta.
+    //
+    // La primera version usaba `/<(?:input|select)[^>]*flex-1[^>]*>/`, y `[^>]*`
+    // cortaba en el `>` de las flechas `e=>` de los `onChange`: no casaba con
+    // NINGUN campo, el bucle se recorria vacio y el test pasaba sin mirar nada.
+    // Lo enseño la verificacion por mutacion —quitar un `minWidth: 0` no ponia
+    // nada rojo—. Un `expect` dentro de un bucle vacio es un test que siempre pasa.
+    const campos = C.split('\n').filter(l => /<(input|select)\b/.test(l) && /flex-1/.test(l))
+    expect(campos.length, 'no se encuentra ningun campo con flex-1: revisa esta regla').toBeGreaterThan(0)
+    for (const linea of campos) {
+      expect(/minWidth:\s*0/.test(linea),
+        `hay un campo con flex-1 y sin minWidth: 0, que no encogera y arrastrara la pantalla:\n${linea.trim().slice(0, 150)}`)
+        .toBe(true)
+    }
+  })
+})
