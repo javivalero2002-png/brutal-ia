@@ -233,6 +233,9 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
    * Tick de 30 s y no de 1 s: se enseña en horas y minutos, así que un segundero
    * sería un `setState` por segundo para repintar el mismo texto 59 veces.
    */
+  /** El panel de objetivos, para llevar la vista allí cuando aún no hay ninguno. */
+  const refObjetivos = useRef<HTMLDivElement | null>(null)
+
   const [ahoraMs, setAhoraMs] = useState<number>(() => Date.now())
   useEffect(() => {
     if (!miEntrada?.entrada_at || miEntrada?.cierre_at) return
@@ -1037,7 +1040,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
           style={{ width: '30%', height: '150%', top: '-25%', right: '22%', borderRadius: '9999px',
                    background: `radial-gradient(closest-side, ${BLU}26, transparent)`, filter: 'blur(30px)' }} />
 
-        <div className="relative flex items-center gap-5 px-6 py-6">
+        <div className={`relative flex items-center gap-5 px-6 py-6 ${isMobile ? 'flex-wrap' : ''}`}>
           <div className="flex-shrink-0" style={{ position: 'relative' }}>
             <ProgressRing pct={pctObjetivos} size={82} stroke={4} color={yaCerrado ? GRN : VIO} />
             <div className="absolute inset-0 flex items-center justify-center">
@@ -1082,28 +1085,69 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
               y la racha son días seguidos con fichaje. No se guarda ningún contador
               — un contador guardado se desincroniza en cuanto alguien cierra la
               pestaña, y entonces miente con mucha precisión. */}
-          {!isMobile && miEntrada?.entrada_at && (
-            <div className="flex-shrink-0 flex items-center gap-6 pl-6" style={{ borderLeft: `1px solid ${BORDER}` }}>
-              <div>
-                <div className="font-syne text-[7.5px] font-black tracking-[0.18em] mb-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                  TIEMPO DE SESIÓN
-                </div>
-                <div className="font-figtree font-black text-white" style={{ fontSize: '26px', letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
-                  {tiempoSesion || '—'}
-                </div>
-                {racha > 1 && (
-                  <div className="font-figtree text-[11px] mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                    🔥 {racha} días seguidos
+          {/* EL CRONÓMETRO. Tres estados y una sola acción en cada uno.
+              Javi: «sigo sin ver un botón de marcar entrada… quiero que sea como un
+              cronómetro del tiempo que hemos estado en la oficina, empieza con lo
+              que me propongo y termina con lo completo».
+              Estaba casi todo hecho y no se veía por dos motivos: el bloque iba
+              detrás de `!isMobile` —o sea que en el móvil no existía— y el botón de
+              fichar estaba enterrado al final del panel de objetivos, visible solo
+              si ya habías escrito alguno.
+              Ahora vive en la cabecera, se ve en las dos pantallas, y dice qué toca
+              hacer ahora: marcar entrada, o terminar. El reloj no se guarda: es
+              `ahora − entrada_at`, así que no hay nada que se pueda desincronizar. */}
+          {esHoy && (
+            <div className={`flex-shrink-0 flex items-center gap-4 ${isMobile ? 'w-full mt-4 pt-4' : 'pl-6'}`}
+              style={isMobile ? { borderTop: `1px solid ${BORDER}` } : { borderLeft: `1px solid ${BORDER}` }}>
+
+              {miEntrada?.entrada_at ? (
+                <>
+                  <div className="min-w-0">
+                    <div className="font-syne text-[7.5px] font-black tracking-[0.18em] mb-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                      {yaCerrado ? 'DÍA COMPLETADO' : 'EN LA OFICINA'}
+                    </div>
+                    <div className="font-figtree font-black text-white" style={{ fontSize: isMobile ? '30px' : '26px', letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+                      {tiempoSesion || '—'}
+                    </div>
+                    <div className="font-figtree text-[11px] mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      desde las {horaCorta(miEntrada.entrada_at)}
+                      {racha > 1 && ` · 🔥 ${racha} días`}
+                    </div>
                   </div>
-                )}
-              </div>
-              {!yaCerrado && (
-                <button onClick={() => fichar('cierre')} disabled={fichando}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-2xl font-syne text-[9px] font-black tracking-widest transition-all hover:opacity-80 disabled:opacity-40"
-                  style={{ background: `${VIO}18`, border: `1px solid ${VIO}42`, color: '#E6DEFF' }}>
-                  <LucideIcon name="square" size={11} color="#E6DEFF" />
-                  FINALIZAR DÍA
-                </button>
+                  {!yaCerrado && (
+                    <button onClick={() => fichar('cierre')} disabled={fichando}
+                      className="flex items-center gap-2 px-4 py-3 rounded-2xl font-syne text-[9px] font-black tracking-widest transition-all hover:opacity-80 disabled:opacity-40 active:scale-[0.97] ml-auto flex-shrink-0"
+                      style={{ background: `${VIO}18`, border: `1px solid ${VIO}42`, color: '#E6DEFF' }}>
+                      <LucideIcon name="square" size={11} color="#E6DEFF" />
+                      TERMINAR
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="min-w-0">
+                    <div className="font-syne text-[7.5px] font-black tracking-[0.18em] mb-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                      SIN FICHAR
+                    </div>
+                    <div className="font-figtree font-black" style={{ fontSize: isMobile ? '30px' : '26px', letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', lineHeight: 1, color: 'rgba(255,255,255,0.2)' }}>
+                      00:00
+                    </div>
+                    <div className="font-figtree text-[11px] mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      {porCrear.length > 0 ? 'El reloj arranca al marcar entrada' : 'Escribe tus objetivos para empezar'}
+                    </div>
+                  </div>
+                  {/* Marcar entrada EXIGE objetivos —es lo que hace que el fichaje
+                      valga para algo— así que sin ellos el botón lleva a
+                      escribirlos en vez de dar un error. */}
+                  <button
+                    onClick={() => { if (porCrear.length > 0) fichar('entrada'); else refObjetivos.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }}
+                    disabled={fichando}
+                    className="flex items-center gap-2 px-4 py-3 rounded-2xl font-syne text-[9px] font-black tracking-widest transition-all hover:opacity-80 disabled:opacity-40 active:scale-[0.97] ml-auto flex-shrink-0"
+                    style={{ background: `${GRN}18`, border: `1px solid ${GRN}45`, color: GRN }}>
+                    <LucideIcon name="play" size={11} color={GRN} />
+                    {porCrear.length > 0 ? 'MARCAR ENTRADA' : 'PONER OBJETIVOS'}
+                  </button>
+                </>
               )}
             </div>
           )}
@@ -1185,7 +1229,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
       <div className={isMobile ? 'flex flex-col gap-3 mb-4' : 'grid gap-3 mb-4'} style={isMobile ? undefined : { gridTemplateColumns: '1fr 1fr' }}>
 
         {/* OBJETIVOS — lista para leer, textarea para editar. */}
-        <div className="rounded-3xl flex flex-col overflow-hidden" style={{ background: SURFACE, border: `1px solid ${BLU}26` }}>
+        <div ref={refObjetivos} className="rounded-3xl flex flex-col overflow-hidden" style={{ background: SURFACE, border: `1px solid ${BLU}26` }}>
           <div className="flex items-center gap-2 px-4 pt-3.5 pb-2.5">
             <LucideIcon name="target" size={14} color={BLU} />
             <div className="font-syne text-[9px] font-black tracking-widest flex-1" style={{ color: BLU }}>¿QUÉ ME PROPONGO?</div>

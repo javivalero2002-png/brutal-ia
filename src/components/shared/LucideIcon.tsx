@@ -56,6 +56,9 @@ const icons: Record<string,string> = {
   'users-2':'M14 19a6 6 0 0 0-12 0M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm3 7a5 5 0 0 0-5-5',
   // Caras del ánimo del día (Fichar). Trazos de Lucide, sin el círculo exterior:
   // el círculo lo pone ya el botón que las envuelve y doblarlo emborrona a 13px.
+  // Arrancar el cronómetro de Fichar. Triángulo macizo, sin círculo: el círculo
+  // lo pone el botón y doblarlo emborrona a 11px.
+  'play':'M6 4l14 8-14 8z',
   'smile':'M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z',
   'meh':'M8 15h8M9 9h.01M15 9h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z',
   'frown':'M16 16s-1.5-2-4-2-4 2-4 2M9 9h.01M15 9h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z',

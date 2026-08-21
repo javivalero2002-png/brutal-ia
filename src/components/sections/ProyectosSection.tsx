@@ -873,10 +873,21 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
             const abreCarpeta = !projSearch.trim() && carpeta !== anterior
             const dentro = carpeta ? arr.filter(x => ((x.carpeta || '').trim() || null) === carpeta) : []
 
+            // Plegadas por defecto: Javi lo pidió al ver que las tres piezas de cada
+            // carpeta salían en fila y «manchaban toda la pantalla». Una carpeta
+            // que enseña su contenido sin pedírselo no está ordenando nada — solo
+            // ha puesto un título encima del mismo muro.
+            //
+            // Lo suelto (`Sin carpeta`) NO se pliega: no es una carpeta, es lo que
+            // aún no has colocado, y esconderlo lo haría desaparecer del todo.
+            const plegada = !!carpeta && !carpetasAbiertas.has(carpeta)
+
             return (
             <Fragment key={p.id}>
             {abreCarpeta && (
-              <div className="flex items-center gap-2.5 px-4 py-2.5" style={{background:'rgba(255,255,255,0.015)',borderBottom:`1px solid ${BORDER}`}}>
+              <div onClick={carpeta ? (e=>{ e.stopPropagation(); setCarpetasAbiertas(prev=>{ const st=new Set(prev); st.has(carpeta)?st.delete(carpeta):st.add(carpeta); return st }) }) : undefined}
+                className="flex items-center gap-2.5 px-4 py-2.5"
+                style={{background:'rgba(255,255,255,0.015)',borderBottom:`1px solid ${BORDER}`,cursor:carpeta?'pointer':'default'}}>
                 {carpeta ? (
                   <Abanico tam={20} alRoto={markCoverBroken}
                     portadas={dentro.map(x=>({url:x.cover_url&&!brokenCovers.has(x.cover_url)?x.cover_url:null,color:x.color||BLU}))}/>
@@ -889,8 +900,12 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 {carpeta && (
                   <span className="font-syne text-[8px] font-black ml-auto flex-shrink-0" style={{color:'rgba(255,255,255,0.18)'}}>{dentro.length}</span>
                 )}
+                {carpeta && (
+                  <LucideIcon name={carpetasAbiertas.has(carpeta)?'chevron-down':'chevron-right'} size={13} color="rgba(255,255,255,0.25)"/>
+                )}
               </div>
             )}
+            {!plegada &&
             <div onClick={()=>onSelect(selectedId===p.id?null:p.id)} className="group cursor-pointer transition-colors" style={{borderBottom:i<arr.length-1?`1px solid ${BORDER}`:'none',background:selectedId===p.id?`${p.color||BLU}08`:'transparent'}}
               onMouseEnter={e=>{ if(selectedId!==p.id)(e.currentTarget.style.background='rgba(255,255,255,0.015)') }}
               onMouseLeave={e=>{ if(selectedId!==p.id)(e.currentTarget.style.background='transparent') }}>
@@ -944,6 +959,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               )}
               </div>{/* end inner flex row */}
             </div>
+            }
             </Fragment>
             )
           })}
