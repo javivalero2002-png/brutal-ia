@@ -3527,3 +3527,52 @@ describe('Harvey sabe lo que pasa en Fichar', () => {
       .toBe(true)
   })
 })
+
+describe('abrir la app desde el icono no da escalones de color', () => {
+  // Javi: «hay otro parpadeo justo cuando abres la app desde inicio».
+  //
+  // Al lanzarla se pintaban TRES negros distintos, uno detrás de otro:
+  //   · el splash del sistema, del `background_color` del manifest
+  //   · el HTML al llegar, del `background` de html/body
+  //   · la pantalla de arranque al montar React, del `.nx-boot`
+  // Tres repintados en cascada. En una pantalla OLED esa diferencia se ve como un
+  // escalón — no es un parpadeo de carga, es de COLOR.
+  const CSS = readFileSync('src/app/globals.css', 'utf8')
+  const MANIFEST = JSON.parse(readFileSync('public/manifest.json', 'utf8')) as { background_color?: string; theme_color?: string }
+  const LAYOUT = readFileSync('src/app/layout.tsx', 'utf8')
+
+  const arranque = (CSS.match(/--nx-arranque:\s*(#[0-9a-fA-F]{6})/) || [])[1]
+
+  it('hay un color de arranque declarado en un solo sitio', () => {
+    expect(arranque, 'no existe --nx-arranque: revisa esta regla en vez de borrarla').toBeTruthy()
+  })
+
+  it('html/body y la pantalla de arranque usan ESE color, no uno suyo', () => {
+    expect(/html, body \{[^}]*background: var\(--nx-arranque\)/.test(CSS),
+      'el fondo del documento vuelve a estar escrito a mano: se separara del splash')
+      .toBe(true)
+    const i = CSS.indexOf('.nx-boot {')
+    expect(/background: var\(--nx-arranque\)/.test(CSS.slice(i, i + 300)),
+      'la pantalla de arranque tiene su propio negro: habra un escalon al montar React')
+      .toBe(true)
+  })
+
+  it('el manifest y el themeColor dicen lo MISMO', () => {
+    // El manifest es lo que pinta el sistema ANTES de que exista la pagina. Si no
+    // coincide, el escalon ocurre antes de que nuestro codigo pueda hacer nada.
+    expect(MANIFEST.background_color?.toLowerCase(),
+      'el splash del sistema no coincide con el fondo de la app').toBe(arranque?.toLowerCase())
+    expect(new RegExp(`themeColor: '${arranque}'`, 'i').test(LAYOUT),
+      'el themeColor no coincide: la barra del navegador dara el escalon').toBe(true)
+  })
+
+  it('la pantalla de arranque no se funde entera', () => {
+    // Fundir el contenedor desde opacidad 0 deja ver el fondo de debajo mientras
+    // sube — y como el CONTENIDO ya tiene su animacion, la opacidad se multiplica y
+    // la insignia tarda el doble en verse.
+    const i = CSS.indexOf('.nx-boot {')
+    expect(/animation: nxBootEntra/.test(CSS.slice(i, i + 400)),
+      'vuelve el fundido del contenedor: se vera el escalon de fondo otra vez')
+      .toBe(false)
+  })
+})
