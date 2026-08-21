@@ -17,6 +17,14 @@
     {
       "path": "/api/cron/backup",
       "schedule": "0 4 * * 3"
+    },
+    {
+      "path": "/api/cron/recordatorio-fichar",
+      "schedule": "0 8 * * 1-5"
+    },
+    {
+      "path": "/api/cron/recordatorio-fichar",
+      "schedule": "0 9 * * 1-5"
     }
   ],
   "git": {

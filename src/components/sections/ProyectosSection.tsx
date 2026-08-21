@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, Fragment} from 'react'
 import { rutaApp } from '@/lib/appUrl'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { Abanico, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, dlLabel, todayKey, estadoDeadline, AMBAR, buscaEnTexto } from '@/components/shared'
@@ -621,10 +621,42 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
   const statusColor = (s: string) => s==='urgente'?RED:s==='activo'?GRN:s==='revisión'?'#A78BFA':s==='completado'?'#22C55E':BLU
   const listProjectsSorted: Project[] = (()=>{
     const baseL = filteredProjects.filter(casaBusqueda)
-    if (projListSort==='progress') return [...baseL].sort((a:Project,b:Project)=>b.progress-a.progress)
-    if (projListSort==='deadline') return [...baseL].sort((a:Project,b:Project)=>{const da=a.deadline&&a.deadline!=='TBD'?dlDate(a.deadline).getTime():Infinity;const db=b.deadline&&b.deadline!=='TBD'?dlDate(b.deadline).getTime():Infinity;return da-db})
-    if (projListSort==='status') return [...baseL].sort((a:Project,b:Project)=>{const o:Record<string,number>={urgente:0,activo:1,'revisión':2,'plan.':3,completado:4};return (o[a.status]??3)-(o[b.status]??3)})
-    return baseL
+    const ordenar = (xs: Project[]) => {
+      if (projListSort==='progress') return [...xs].sort((a:Project,b:Project)=>b.progress-a.progress)
+      if (projListSort==='deadline') return [...xs].sort((a:Project,b:Project)=>{const da=a.deadline&&a.deadline!=='TBD'?dlDate(a.deadline).getTime():Infinity;const db=b.deadline&&b.deadline!=='TBD'?dlDate(b.deadline).getTime():Infinity;return da-db})
+      if (projListSort==='status') return [...xs].sort((a:Project,b:Project)=>{const o:Record<string,number>={urgente:0,activo:1,'revisión':2,'plan.':3,completado:4};return (o[a.status]??3)-(o[b.status]??3)})
+      return xs
+    }
+
+    // ── Las carpetas también en la LISTA, que es la única vista que hay en móvil.
+    //
+    // El tablero agrupa por carpeta desde hace unos días, pero en móvil se fuerza
+    // la vista de lista —las columnas del kanban no caben en 375px— así que desde
+    // el teléfono las carpetas sencillamente no existían. Se archivaba desde el
+    // ordenador y no se veía desde el móvil.
+    //
+    // La carpeta manda sobre el orden elegido, pero solo entre carpetas: DENTRO de
+    // cada una se sigue ordenando por lo que hayas elegido. Al revés —ordenar
+    // primero y agrupar después— parte una carpeta en varios trozos por la pantalla.
+    //
+    // Buscando NO se agrupa, igual que en el tablero: quien escribe quiere
+    // resultados, no carpetas.
+    if (projSearch.trim()) return ordenar(baseL)
+
+    const conCarpeta = new Map<string, Project[]>()
+    const sueltos: Project[] = []
+    for (const p of baseL) {
+      const c = (p.carpeta || '').trim()
+      if (!c) { sueltos.push(p); continue }
+      if (!conCarpeta.has(c)) conCarpeta.set(c, [])
+      conCarpeta.get(c)!.push(p)
+    }
+    // Las carpetas primero y por orden alfabético; lo suelto al final, que es lo
+    // que aún no has colocado y no debe empujar hacia abajo lo ya ordenado.
+    return [
+      ...[...conCarpeta.keys()].sort((a,b)=>a.localeCompare(b,'es')).flatMap(k => ordenar(conCarpeta.get(k)!)),
+      ...ordenar(sueltos),
+    ]
   })()
 
   return (
@@ -831,8 +863,35 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
           {listProjectsSorted.map((p: Project, i: number, arr: Project[])=>{
             // showCover: solo mostramos la banda de cover si existe, no está rota y el proyecto no está expandido
             const showCover = isMobile && !!p.cover_url && !brokenCovers.has(p.cover_url) && selectedId !== p.id
+
+            // Cabecera cuando ARRANCA una carpeta nueva, igual que en Contenido.
+            // En una lista plana no caben carpetas plegables sin inventar otro
+            // patrón: la cabecera al cambiar de grupo dice lo mismo y funciona
+            // igual en móvil, que es donde hacía falta.
+            const carpeta = (p.carpeta || '').trim() || null
+            const anterior = i > 0 ? ((arr[i-1].carpeta || '').trim() || null) : Symbol('inicio')
+            const abreCarpeta = !projSearch.trim() && carpeta !== anterior
+            const dentro = carpeta ? arr.filter(x => ((x.carpeta || '').trim() || null) === carpeta) : []
+
             return (
-            <div key={p.id} onClick={()=>onSelect(selectedId===p.id?null:p.id)} className="group cursor-pointer transition-colors" style={{borderBottom:i<arr.length-1?`1px solid ${BORDER}`:'none',background:selectedId===p.id?`${p.color||BLU}08`:'transparent'}}
+            <Fragment key={p.id}>
+            {abreCarpeta && (
+              <div className="flex items-center gap-2.5 px-4 py-2.5" style={{background:'rgba(255,255,255,0.015)',borderBottom:`1px solid ${BORDER}`}}>
+                {carpeta ? (
+                  <Abanico tam={20} alRoto={markCoverBroken}
+                    portadas={dentro.map(x=>({url:x.cover_url&&!brokenCovers.has(x.cover_url)?x.cover_url:null,color:x.color||BLU}))}/>
+                ) : (
+                  <LucideIcon name="layout-grid" size={11} color="rgba(255,255,255,0.16)"/>
+                )}
+                <span className="font-syne text-[8px] font-black tracking-widest uppercase truncate" style={{color:carpeta?'rgba(255,255,255,0.4)':'rgba(255,255,255,0.2)'}}>
+                  {carpeta || 'Sin carpeta'}
+                </span>
+                {carpeta && (
+                  <span className="font-syne text-[8px] font-black ml-auto flex-shrink-0" style={{color:'rgba(255,255,255,0.18)'}}>{dentro.length}</span>
+                )}
+              </div>
+            )}
+            <div onClick={()=>onSelect(selectedId===p.id?null:p.id)} className="group cursor-pointer transition-colors" style={{borderBottom:i<arr.length-1?`1px solid ${BORDER}`:'none',background:selectedId===p.id?`${p.color||BLU}08`:'transparent'}}
               onMouseEnter={e=>{ if(selectedId!==p.id)(e.currentTarget.style.background='rgba(255,255,255,0.015)') }}
               onMouseLeave={e=>{ if(selectedId!==p.id)(e.currentTarget.style.background='transparent') }}>
               {/* Cover banner – mobile only when cover_url available and not already shown in detail drawer */}
@@ -885,6 +944,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               )}
               </div>{/* end inner flex row */}
             </div>
+            </Fragment>
             )
           })}
           {listProjectsSorted.length===0&&(

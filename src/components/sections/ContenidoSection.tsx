@@ -934,7 +934,16 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
       {/* ── CONTENT MODAL OVERLAY ─────────────────────────────────── */}
       {activeItem && isMobile && (
         /* ── MOBILE MODAL: full-screen with BOCETO / EDITAR tabs ── */
-        <div className="fixed inset-0 z-50 flex flex-col" style={{background:'linear-gradient(160deg,#0E0E20 0%,#07070F 100%)',border:`1px solid ${pc}20`}}>
+        /* `100dvh` en vez de `inset-0`, que es lo que hacía que la pestaña EDITAR
+           se moviera.
+           `inset-0` se resuelve contra el viewport de DISPOSICIÓN, que en un móvil
+           incluye la barra del navegador y no se encoge al abrirse el teclado. La
+           pestaña BOCETO no lo notaba porque no tiene campos; EDITAR está llena, y
+           al tocar uno el teclado tapaba la parte de abajo del formulario —el botón
+           de guardar incluido— sin forma de llegar a ella.
+           El `dvh` es la altura VISIBLE, que sí encoge. La app ya lo usa para el
+           cuerpo (globals.css); este modal se había quedado fuera. */
+        <div className="fixed inset-x-0 top-0 z-50 flex flex-col" style={{height:'100dvh',background:'linear-gradient(160deg,#0E0E20 0%,#07070F 100%)',border:`1px solid ${pc}20`}}>
           {/* Ambient glow */}
           <div className="absolute top-0 left-1/2 -translate-x-1/2 pointer-events-none" style={{width:'90%',height:'120px',background:`radial-gradient(ellipse,${pc}18 0%,transparent 70%)`,filter:'blur(40px)',zIndex:0}}/>
 
@@ -986,7 +995,10 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
           </div>
 
           {/* Scrollable content */}
-          <div className="flex-1 overflow-y-auto relative z-10" style={{paddingBottom:'env(safe-area-inset-bottom)'}}>
+          {/* `scrollPaddingBottom`: al enfocar un campo, el navegador lo desplaza
+              justo al borde de lo visible — o sea pegado al teclado y sin sitio
+              para ver lo que escribes. Con el margen, queda por encima. */}
+          <div className="flex-1 overflow-y-auto relative z-10" style={{paddingBottom:'env(safe-area-inset-bottom)',scrollPaddingBottom:'96px'}}>
 
             {/* BOCETO TAB */}
             {mobileTab === 'boceto' && (
@@ -1498,7 +1510,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                                que un comentario hecho desde dentro con sesión.
                                Confundir las dos cosas sería el fallo. */
                             ? <>
-                                <span className="font-figtree text-[12px] font-bold" style={{color:'rgba(255,255,255,0.8)'}}>{op.name||'Cliente'}</span>
+                                <span className="font-figtree text-[12px] font-bold" style={{color:'rgba(255,255,255,0.8)'}}>{op.name||'Sin identificar'}</span>
                                 <span className="font-syne text-[7px] font-black px-2 py-0.5 rounded-full" style={{background:'rgba(255,176,32,0.12)',color:'rgba(255,176,32,0.8)'}}>POR EL ENLACE</span>
                               </>
                             : <span className="font-figtree text-[12px] font-bold" style={{color:'rgba(255,255,255,0.8)'}}>{op.name}</span>}{op.emoji&&<span className="text-[16px] leading-none">{op.emoji}</span>}<span className="font-syne text-[7px] ml-auto flex-shrink-0" style={{color:'rgba(255,255,255,0.18)'}}>{op.at?new Date(op.at).toLocaleDateString('es-ES',{day:'numeric',month:'short'}):''}</span></div>

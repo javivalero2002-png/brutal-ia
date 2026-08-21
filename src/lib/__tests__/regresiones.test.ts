@@ -3113,3 +3113,65 @@ describe('sincronizar un buzon personal esta escrito UNA vez', () => {
       .toBe(true)
   })
 })
+
+describe('el recordatorio de fichar suena a las 10 de MADRID', () => {
+  const R = leerCodigo('src/app/api/cron/recordatorio-fichar/route.ts')
+
+  it('comprueba la hora de Madrid, no la del servidor', () => {
+    // Los crons de Vercel se programan en UTC. `0 10 * * *` seria las 10:00 de
+    // Madrid solo en invierno: en verano avisaria a las 12:00, dos horas tarde y
+    // todos los dias durante siete meses. La hora se comprueba aqui dentro.
+    expect(/madridHour\(\)/.test(R), 'usa la hora del servidor: en verano avisaria dos horas tarde').toBe(true)
+    expect(/new Date\(\)\.getHours\(\)/.test(R), 'usa getHours() del servidor, que en Vercel es UTC').toBe(false)
+  })
+
+  it('estan programadas LAS DOS horas UTC que pueden ser las 10 en Madrid', () => {
+    // 08:00 UTC en verano y 09:00 UTC en invierno. Con una sola, media año falla.
+    const v = JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons: { path: string; schedule: string }[] }
+    const suyos = v.crons.filter(c => c.path === '/api/cron/recordatorio-fichar').map(c => c.schedule)
+    expect(suyos.length,
+      'falta una de las dos horas: con una sola, medio año el aviso llega a destiempo')
+      .toBe(2)
+    expect(suyos.some(s => s.startsWith('0 8 ')), 'falta la de verano (08:00 UTC)').toBe(true)
+    expect(suyos.some(s => s.startsWith('0 9 ')), 'falta la de invierno (09:00 UTC)').toBe(true)
+  })
+
+  it('no avisa a quien ya ha fichado', () => {
+    // Avisar a quien ya lo hizo es lo que enseña a ignorar los avisos.
+    expect(/conObjetivos\.has\(/.test(R), 'avisa a todo el mundo, hayan fichado o no').toBe(true)
+  })
+})
+
+describe('Harvey sugiere UNA tarea', () => {
+  const T = leerCodigo('src/components/sections/TareasSection.tsx')
+
+  it('se pinta una sola sugerencia', () => {
+    // Javi: «no quiero que sugiera tantas tareas, quiero que sugiera una».
+    expect(/HARVEY_SUGGESTIONS\.map\(/.test(T),
+      'vuelve a pintar la lista entera de sugerencias')
+      .toBe(false)
+    expect(/sugerencia\.map\(/.test(T), 'ya no se pinta la sugerencia elegida: revisa esta regla').toBe(true)
+  })
+
+  it('y no sugiere algo que ya tienes', () => {
+    expect(/yaEstan\.has\(/.test(T),
+      'sugiere sin mirar tus tareas: puede proponerte una que acabas de crear')
+      .toBe(true)
+  })
+})
+
+describe('las carpetas de Proyectos se ven tambien en movil', () => {
+  const P = leerCodigo('src/components/sections/ProyectosSection.tsx')
+
+  it('la vista de LISTA agrupa por carpeta', () => {
+    // En movil se fuerza la vista de lista —el kanban no cabe en 375px— asi que
+    // las carpetas, que solo existian en el tablero, no existian en el telefono.
+    expect(/isMobile\) setProjView\('list'\)/.test(P),
+      'ya no se fuerza la lista en movil: revisa esta regla en vez de borrarla')
+      .toBe(true)
+    const i = P.indexOf('const listProjectsSorted')
+    const cuerpo = P.slice(i, i + 1800)
+    expect(/conCarpeta/.test(cuerpo), 'la lista no agrupa por carpeta: en movil no se veran').toBe(true)
+    expect(/abreCarpeta/.test(P), 'la lista no pinta cabecera al cambiar de carpeta').toBe(true)
+  })
+})

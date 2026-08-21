@@ -59,6 +59,28 @@ function HarveyTaskSuggestions({ data, onOpenModal, onCreateTask }: PropsHarveyT
   const [creating, setCreating] = useState<string|null>(null)
   const [created, setCreated] = useState<Set<string>>(new Set())
 
+  /**
+   * UNA sugerencia, no cuatro.
+   *
+   * Javi: «no quiero que sugiera tantas tareas, quiero que sugiera una».
+   *
+   * Y no la primera de la lista: la primera que NO tengas ya. Sugerir «revisar
+   * mensajes pendientes» a alguien que acaba de crear esa misma tarea no es
+   * ayudar, es ruido — y es lo que hacía enseñándolas las cuatro a la vez, porque
+   * al menos una siempre sobraba.
+   *
+   * Si ya las tienes todas, no se enseña ninguna: el panel entero desaparece. Un
+   * hueco vacío que dice «HARVEY SUGIERE» y no sugiere nada es peor que no estar.
+   */
+  const sugerencia = (() => {
+    const yaEstan = new Set(
+      (data.tasks || [])
+        .filter((t: Task) => !t.done)
+        .map((t: Task) => (t.text || '').trim().toLowerCase()))
+    const libre = HARVEY_SUGGESTIONS.find(s => !yaEstan.has(s.text.toLowerCase()) && !created.has(s.text))
+    return libre ? [libre] : []
+  })()
+
   const handleCreate = async (text: string, level: string) => {
     setCreating(text)
     try {
@@ -75,6 +97,10 @@ function HarveyTaskSuggestions({ data, onOpenModal, onCreateTask }: PropsHarveyT
     }
   }
 
+  // Sin nada que sugerir, no se pinta el panel. Un recuadro que anuncia «HARVEY
+  // SUGIERE» y está vacío ocupa sitio y no dice nada.
+  if (!sugerencia.length) return null
+
   return (
     <div className="rounded-2xl p-6" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
       <div className="flex items-center gap-2 mb-4">
@@ -84,10 +110,10 @@ function HarveyTaskSuggestions({ data, onOpenModal, onCreateTask }: PropsHarveyT
         <span className="font-syne text-[9px] font-black tracking-[0.2em]" style={{color:'rgba(255,255,255,0.28)'}}>HARVEY SUGIERE</span>
       </div>
       <p className="font-figtree text-[13px] mb-5" style={{color:'rgba(255,255,255,0.35)'}}>
-        Empieza con estas tareas o crea las tuyas propias.
+        Por dónde empezar hoy, o crea la tuya.
       </p>
       <div className="flex flex-col gap-2">
-        {HARVEY_SUGGESTIONS.map(s => {
+        {sugerencia.map(s => {
           const done = created.has(s.text)
           const busy = creating === s.text
           const pri = PRIMAP[s.level] || PRIMAP.normal

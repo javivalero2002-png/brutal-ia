@@ -54,9 +54,17 @@ export const AVISOS: Record<CategoriaAviso, Ficha> = {
     desc: 'Cuando entra un email en tu Gmail o en el buzón de colaboraciones.',
     silenciable: true,
   },
+  // La CLAVE se queda en `cliente` a propósito, aunque el concepto sea otro.
+  //
+  // Javi: «el concepto está mal entendido: no será visto por clientes, sino por
+  // nuestros jefes, y las revisiones las darán ellos». Tiene razón y las palabras
+  // estaban mal — pero esta clave viaja guardada en las preferencias de avisos de
+  // cada persona. Renombrarla haría que a quien lo tuviera silenciado se le
+  // reactivara de golpe, sin avisar y sin entender por qué. Se cambia lo que se
+  // lee, que es lo que estaba mal; la clave es un detalle de implementación.
   cliente: {
-    label: 'Respuestas de clientes',
-    desc: 'Cuando un cliente aprueba una pieza o pide cambios desde su enlace de revisión.',
+    label: 'Revisiones de piezas',
+    desc: 'Cuando alguien aprueba una pieza o pide cambios desde el enlace de revisión.',
     silenciable: true,
   },
   automatizacion: {
