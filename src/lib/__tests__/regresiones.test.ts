@@ -3709,3 +3709,93 @@ describe('en Brutal.IA, un titulo es mas grande que su texto', () => {
       .toBe(true)
   })
 })
+
+describe('Harvey · la primera impresion y los estados', () => {
+  const H = leerCodigo('src/components/sections/HarveySection.tsx')
+
+  it('el saludo NO se inyecta como mensaje: el heroe tiene que poder verse', () => {
+    // El saludo se metia en `conversation` nada mas entrar, una vez al dia — y la
+    // condicion del heroe es `conversation.length === 0`, asi que el estado vacio
+    // bonito (orbe grande + saludo) era casi inalcanzable. Justo la primera
+    // impresion de la seccion estrella.
+    const i = H.indexOf('historialCargado.current = true')
+    const carga = H.slice(i, i + 1600)
+    expect(/setConversation\(\[\{role:'harvey',text:g/.test(carga),
+      'el saludo vuelve a inyectarse como mensaje: el heroe no se vera nunca')
+      .toBe(false)
+    // Y el saludo vive en el heroe, personalizado.
+    expect(/Buenos días/.test(H) && /Buenas tardes/.test(H),
+      'el heroe ya no lleva el saludo personalizado')
+      .toBe(true)
+  })
+
+  it('pensar y hablar SE MUEVEN, y distinto', () => {
+    // `thinking` no tenia NINGUN movimiento —justo cuando hace falta ver que Harvey
+    // trabaja— y `speaking` compartia color y quietud con `idle`.
+    expect(/mode==='thinking' && \(\s*<div[^>]*animation:'pls/.test(H),
+      'thinking vuelve a estar quieto: no se ve que Harvey esta trabajando')
+      .toBe(true)
+    expect(/mode==='speaking' && \[/.test(H),
+      'speaking pierde sus ondas: no se distingue de idle con el rabillo del ojo')
+      .toBe(true)
+  })
+
+  it('la linea de estado se lee, y la espera es la pieza compartida', () => {
+    expect(/text-\[7\.5px\][^>]*rgba\(255,255,255,0\.12\)/.test(H),
+      'la linea de estado vuelve a contraste ~1,3:1: invisible donde se explica como usar la seccion')
+      .toBe(false)
+    expect(/mode==='thinking' \? \(\s*<Esperando/.test(H),
+      'la espera de Harvey ya no es la pieza compartida: las tres IAs volveran a esperar distinto')
+      .toBe(true)
+  })
+
+  it('la waveform vive dentro del orbe, no empuja el campo', () => {
+    // Se insertaba en la fila flex al empezar a grabar y el campo de texto se
+    // encogia ~200px de golpe — en el momento exacto en que estas hablando.
+    // La ventana se cierra BUSCANDO DESDE el inicio, no desde 0: el anillo de
+    // `thinking` esta antes en el fichero, y `slice(start, end)` con end < start
+    // devuelve vacio — la regla nacia mirando la nada. Lo enseño su primera pasada.
+    const ini = H.indexOf("mode==='recording' && (")
+    expect(ini, 'ya no existe el bloque de grabacion: revisa esta regla').toBeGreaterThan(-1)
+    const orbe = H.slice(ini, ini + 600)
+    expect(/animate-wave1/.test(orbe), 'la waveform ya no esta dentro del orbe').toBe(true)
+  })
+})
+
+describe('el briefing dice donde mirar', () => {
+  const D = leerCodigo('src/components/sections/DiarioSection.tsx')
+  const R = leerCodigo('src/app/api/diario/briefing/route.ts')
+
+  it('la ruta devuelve el animo y los bloqueos', () => {
+    // `animo` venia en la consulta (`select('*')`) y el mapeo lo tiraba. Un
+    // «bloqueado» enterrado en una columna que no se pinta no avisa a nadie.
+    expect(/animo: e\.animo \?\? null/.test(R), 'el mapeo vuelve a tirar el animo').toBe(true)
+    expect(/bloqueos:/.test(R), 'no se cuentan los bloqueos por persona').toBe(true)
+  })
+
+  it('el total no cuenta dos veces la tarea compartida', () => {
+    // `esTareaDe` casa por asignado O co-asignado: una tarea de dos personas
+    // aparecia en las dos fichas (correcto) y el total la sumaba dos veces
+    // (incorrecto). Respondia «cuantas atribuciones» a la pregunta «cuanto se hizo».
+    expect(/new Set\(activos\.flatMap\(p => p\.tareas\.map\(t => t\.id\)\)\)\.size/.test(R),
+      'el total vuelve a sumar por persona: la tarea compartida cuenta doble')
+      .toBe(true)
+  })
+
+  it('el texto del diario SE PINTA, y el rango esta escrito', () => {
+    // Las `entradas[]` viajaban en la respuesta y no se pintaban NUNCA: la parte
+    // con mas informacion del briefing estaba muerta en el JSON.
+    expect(/se propuso · /.test(D) && /hizo · /.test(D),
+      'el texto del diario vuelve a no pintarse: la mitad del briefing muere en el JSON')
+      .toBe(true)
+    expect(/briefing\.desde === briefing\.hasta/.test(D),
+      'el rango ya no se escribe: «SEMANA» sin fechas obliga a adivinar cual')
+      .toBe(true)
+  })
+
+  it('se ordena por señal, con los bloqueos primero', () => {
+    expect(/sort\(\(a: any, b: any\) =>\s*\(b\.bloqueos - a\.bloqueos\)/.test(D),
+      'el equipo vuelve al orden de la tabla profiles: la fila que importa queda enterrada')
+      .toBe(true)
+  })
+})

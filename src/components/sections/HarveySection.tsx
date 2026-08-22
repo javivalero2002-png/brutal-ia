@@ -6,7 +6,7 @@ import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
 import { parsearAccionHarvey, type AccionHarvey } from '@/lib/harveyAccion'
 import { nivelTarea } from '@/components/shared/helpers'
 import type { NexusData } from '@/types'
-import { BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, AMBAR, mensajeErrorTranscripcion } from '@/components/shared'
+import { Esperando, BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, AMBAR, mensajeErrorTranscripcion } from '@/components/shared'
 import { VIO } from '@/components/shared/design-tokens'
 import type { IrASeccion } from '@/components/shared/secciones'
 
@@ -704,23 +704,15 @@ ${memLines2||'  sin documentos'}`
       }
     } catch {}
     historialCargado.current = true
-    // No saved conv — show greeting once per day
-    const SK = 'harvey_greeted_' + todayKey()
-    if (sessionStorage.getItem(SK)) return
-    sessionStorage.setItem(SK, '1')
-    const nUrgent = (data.tasks||[]).filter((t:any)=>!t.done&&t.level==='urgent').length
-    const nOverdue = (data.projects||[]).filter((p:any)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<new Date()).length
-    const nUnread = (data.inbox||[]).filter((m:any)=>!m.is_read).length
-    const firstName = profile?.name?.split(' ')?.[0]||'Jefe'
-    const h = new Date().getHours()
-    const saludo = h<13?'Buenos días':h<20?'Buenas tardes':'Buenas noches'
-    let g = `${saludo}, ${firstName}.`
-    if (nUrgent>0) g += ` ${nUrgent} tarea${nUrgent>1?'s urgentes':' urgente'}.`
-    if (nOverdue>0) g += ` ${nOverdue} proyecto${nOverdue>1?'s atrasados':' atrasado'}.`
-    if (nUnread>0) g += ` ${nUnread} email${nUnread>1?'s sin leer':' sin leer'}.`
-    if (!nUrgent&&!nOverdue&&!nUnread) g += ' Todo bajo control.'
-    g += ' ¿En qué te ayudo?'
-    setConversation([{role:'harvey',text:g,ts:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}])
+    // El saludo YA NO se inyecta como mensaje de conversación.
+    //
+    // Lo hacía, y eso tenía una consecuencia que nadie decidió: el estado vacío
+    // bonito —el orbe grande con «Pregúntame lo que sea»— era casi inalcanzable,
+    // porque la condición para verlo es `conversation.length === 0` y el saludo
+    // la rompía nada más entrar, una vez al día, justo la primera impresión.
+    //
+    // Ahora el saludo ES el héroe: se calcula al pintar (abajo) y se enseña bajo
+    // el orbe grande. La persistencia del historial no se toca.
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Los cuatro colores salen de los tokens compartidos, incluido el morado (VIO).
@@ -830,9 +822,23 @@ ${memLines2||'  sin documentos'}`
               <LucideIcon name="mic" size={30} color={BLU}/>
             </button>
             <div>
-              <div className="font-figtree text-[17px] font-semibold text-white mb-1.5">Pregúntame lo que sea</div>
-              <div className="text-[12.5px] leading-relaxed max-w-[250px] mx-auto" style={{color:'rgba(255,255,255,0.4)'}}>
-                Conozco tus clientes, proyectos, tareas y correo. Habla o escribe abajo.
+              {/* El saludo personalizado, aquí y no como mensaje inyectado: así el
+                  héroe se ve CADA vez que no hay conversación, no solo si nunca
+                  hubo saludo. Es la primera impresión de la sección estrella. */}
+              <div className="font-figtree font-black text-white mb-2" style={{fontSize:'22px',letterSpacing:'-0.02em'}}>
+                {(() => { const h = new Date().getHours(); const sal = h<13?'Buenos días':h<20?'Buenas tardes':'Buenas noches'; return `${sal}, ${profile?.name?.split(' ')?.[0]||'jefe'}` })()}
+              </div>
+              <div className="font-figtree text-[13px] leading-relaxed max-w-[280px] mx-auto" style={{color:'rgba(255,255,255,0.45)'}}>
+                {(() => {
+                  const nU = (data.tasks||[]).filter((t:any)=>!t.done&&t.level==='urgent').length
+                  const nO = (data.projects||[]).filter((p:any)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<new Date()).length
+                  const nM = (data.inbox||[]).filter((m:any)=>!m.is_read).length
+                  const partes = []
+                  if (nU) partes.push(`${nU} urgente${nU>1?'s':''}`)
+                  if (nO) partes.push(`${nO} proyecto${nO>1?'s':''} atrasado${nO>1?'s':''}`)
+                  if (nM) partes.push(`${nM} sin leer`)
+                  return partes.length ? `Tienes ${partes.join(', ')}. Habla o escribe abajo.` : 'Todo bajo control. Habla o escribe abajo.'
+                })()}
               </div>
             </div>
           </div>
@@ -1001,7 +1007,12 @@ ${memLines2||'  sin documentos'}`
               border: `1.5px solid ${MC[mode]}`,
               boxShadow: isMobile ? `0 0 14px ${MC[mode]}40, 0 0 22px ${MC[mode]}12` : `0 0 20px ${MC[mode]}40, 0 0 40px ${MC[mode]}15`,
             }}>
-            {/* Pulse rings for recording */}
+            {/* CADA ESTADO CON SU MOVIMIENTO, no solo su color.
+                Antes `idle` y `speaking` compartían anillo azul y quietud, y
+                `thinking` no se movía NADA — que es justo cuando hace falta ver
+                que Harvey está trabajando. Grabar late en rojo (ya estaba),
+                pensar respira en violeta, hablar emite ondas azules. Se
+                distinguen con el rabillo del ojo, sin leer la etiqueta. */}
             {mode==='recording' && [80,100].map((sz,ri)=>(
               <div key={ri} className="absolute rounded-full pointer-events-none" style={{
                 width:sz+'px', height:sz+'px',
@@ -1010,20 +1021,34 @@ ${memLines2||'  sin documentos'}`
                 animation:`ping ${0.9+ri*0.4}s cubic-bezier(0,0,0.2,1) infinite`,
               }}/>
             ))}
+            {mode==='thinking' && (
+              <div className="absolute inset-0 rounded-full pointer-events-none"
+                style={{border:`1.5px solid ${VIO}`, animation:'pls 1.6s ease-in-out infinite'}}/>
+            )}
+            {mode==='speaking' && [72,92].map((sz,ri)=>(
+              <div key={ri} className="absolute rounded-full pointer-events-none" style={{
+                width:sz+'px', height:sz+'px',
+                border:`1px solid ${BLU}`,
+                opacity:0.3/(ri+1),
+                animation:`ping ${1.6+ri*0.5}s cubic-bezier(0,0,0.2,1) infinite`,
+              }}/>
+            ))}
             {mode==='idle' && <LucideIcon name="mic" size={20} color="rgba(255,255,255,0.7)"/>}
-            {mode==='recording' && <LucideIcon name="square" size={18} color={RED}/>}
+            {mode==='recording' && (
+              <span className="flex items-center gap-[2.5px]" aria-hidden>
+                {['animate-wave1','animate-wave2','animate-wave3','animate-wave4','animate-wave5'].map((cls,i)=>(
+                  <span key={i} className={`w-[2.5px] rounded-full ${cls}`} style={{background:RED,opacity:0.9,minHeight:'4px'}}/>
+                ))}
+              </span>
+            )}
             {mode==='thinking' && <LucideIcon name="cpu" size={20} color="rgba(139,92,246,0.9)"/>}
             {mode==='speaking' && <LucideIcon name="volume-2" size={20} color="rgba(255,255,255,0.85)"/>}
           </button>
 
-          {/* Waveform — visible during recording */}
-          {mode==='recording' && (
-            <div className="flex items-center gap-[3px] h-8 px-1 flex-shrink-0">
-              {['animate-wave1','animate-wave2','animate-wave3','animate-wave4','animate-wave5'].map((cls,i)=>(
-                <div key={i} className={`w-[3px] rounded-full ${cls}`} style={{background:RED,opacity:0.85,minHeight:'4px'}}/>
-              ))}
-            </div>
-          )}
+          {/* La waveform ya NO va aquí. Se insertaba en la fila flex al empezar a
+              grabar y el campo de texto se encogía ~200px de golpe — un salto de
+              layout en el momento exacto en que estás hablando. Ahora vive DENTRO
+              del orbe, que ya cambia de estado de todas formas. */}
 
           {/* Text input */}
           <form onSubmit={e=>{
@@ -1049,7 +1074,15 @@ ${memLines2||'  sin documentos'}`
 
         {/* Status bar */}
         <div className="flex items-center justify-center mt-2.5">
-          <span className="font-syne text-[7.5px] font-black tracking-[0.25em]" style={{color:mode==='idle'?'rgba(255,255,255,0.12)':mode==='recording'?RED:mode==='thinking'?'rgba(139,92,246,0.7)':BLU}}>{orbLabel[mode]}</span>
+          {/* LEGIBLE. Estaba a 7,5px con opacidad 0,12 en idle — contraste ~1,3:1,
+              o sea invisible justo donde se explica cómo usar la sección. Y en
+              `thinking` ahora es la espera contada, la misma pieza que el chat:
+              las tres pantallas de IA esperan igual. */}
+          {mode==='thinking' ? (
+            <Esperando color={VIO} fases={isSearching ? ['Buscando en internet', 'Leyendo lo encontrado', 'Redactando'] : ['Escuchándote', 'Pensando', 'Redactando']}/>
+          ) : (
+            <span className="font-syne text-[8.5px] font-black tracking-[0.2em]" style={{color:mode==='idle'?'rgba(255,255,255,0.35)':mode==='recording'?RED:BLU}}>{orbLabel[mode]}</span>
+          )}
         </div>
       </div>
 
