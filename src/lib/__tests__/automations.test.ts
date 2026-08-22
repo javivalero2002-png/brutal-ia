@@ -404,3 +404,88 @@ describe('las variables que ofrece el modal son las que rellena el motor', () =>
     }
   })
 })
+
+describe('automatizaciones de control · miran PERSONAS, no cosas', () => {
+  // Javi: «el jefe puede ponerse un aviso de que alguien lleva dos días sin fichar».
+  // Los disparadores que había miraban correos, tareas y proyectos. Ninguno miraba
+  // al equipo, que es la pregunta que un jefe se hace todos los días.
+  const equipo = [{ id: 'p1', name: 'Pablo' }, { id: 'p2', name: 'Claudia' }]
+  const base = { inbox: [], tasks: [], projects: [], clients: [], equipo, diario: [], agenda: [] }
+  const regla = (t: Record<string, unknown>) =>
+    ({ v: 1, trigger: t, action: { type: 'notify_owner' as const, message: 'x' } }) as never
+
+  it('sin_fichar cuenta dias LABORABLES, no naturales', () => {
+    // Sin saltar el fin de semana, un umbral de 2 avisa CADA LUNES de todo el
+    // equipo — y un aviso que salta siempre deja de leerse.
+    // Lunes 2026-08-24: los dos laborables anteriores son viernes 21 y jueves 20,
+    // NO domingo 23 y sabado 22.
+    const lunes = '2026-08-24'
+    const soloPabloElViernes = [{ user_id: 'p1', dia: '2026-08-21', entrada: 'algo' }]
+    const r = evaluateTrigger(regla({ type: 'sin_fichar', threshold: 2 }),
+      { ...base, diario: soloPabloElViernes, hoy: lunes })
+    // Pablo fichó el viernes → le falta uno de los dos, no salta.
+    // Claudia no fichó ninguno de los dos → salta.
+    expect(r.map(m => m.vars.persona)).toEqual(['Claudia'])
+  })
+
+  it('sin_fichar NO cuenta hoy: aun no ha llegado a la oficina', () => {
+    // Avisar a las 8 de la mañana de que alguien «no ha fichado» cuando el dia
+    // acaba de empezar no es control, es ruido — y del que enfada.
+    const martes = '2026-08-25'
+    const ficharonAyer = [
+      { user_id: 'p1', dia: '2026-08-24', entrada: 'x' },
+      { user_id: 'p2', dia: '2026-08-24', entrada: 'x' },
+    ]
+    const r = evaluateTrigger(regla({ type: 'sin_fichar', threshold: 1 }),
+      { ...base, diario: ficharonAyer, hoy: martes })
+    expect(r, 'avisa de que no han fichado HOY, cuando el dia acaba de empezar').toEqual([])
+  })
+
+  it('una entrada VACIA no cuenta como fichar', () => {
+    // Abrir la pantalla y no escribir nada es justo a quien hay que recordarselo.
+    const r = evaluateTrigger(regla({ type: 'sin_fichar', threshold: 1 }),
+      { ...base, diario: [{ user_id: 'p1', dia: '2026-08-24', entrada: '   ' }], hoy: '2026-08-25' })
+    expect(r.map(m => m.vars.persona).sort()).toEqual(['Claudia', 'Pablo'])
+  })
+
+  it('dia_sin_cerrar ignora el dia de HOY, que sigue abierto por definicion', () => {
+    const hoy = '2026-08-25'
+    const r = evaluateTrigger(regla({ type: 'dia_sin_cerrar' }), {
+      ...base, hoy,
+      diario: [
+        { user_id: 'p1', dia: hoy, entrada: 'x', cierre_at: null },          // en curso
+        { user_id: 'p2', dia: '2026-08-24', entrada: 'x', cierre_at: null }, // sin cerrar de verdad
+      ],
+    })
+    expect(r.map(m => m.vars.persona)).toEqual(['Claudia'])
+  })
+
+  it('bloqueado salta con el animo, que es la señal mas urgente', () => {
+    const r = evaluateTrigger(regla({ type: 'bloqueado' }), {
+      ...base,
+      diario: [
+        { user_id: 'p1', dia: '2026-08-24', entrada: 'x', animo: 'productivo' },
+        { user_id: 'p2', dia: '2026-08-24', entrada: 'x', animo: 'bloqueado' },
+      ],
+    })
+    expect(r.map(m => m.vars.persona)).toEqual(['Claudia'])
+  })
+
+  it('proyecto_nuevo y pieza_nueva solo miran lo RECIENTE', () => {
+    // Sin la ventana, activar la regla dispararia una avalancha sobre todo el
+    // historico — el mismo cuidado que ya tienen los disparadores de email.
+    const ahora = new Date().toISOString()
+    const viejo = new Date(Date.now() - 5 * 86400000).toISOString()
+    const p = evaluateTrigger(regla({ type: 'proyecto_nuevo' }), {
+      ...base,
+      projects: [{ id: 'a', name: 'Nuevo', created_at: ahora }, { id: 'b', name: 'Viejo', created_at: viejo }],
+    })
+    expect(p.map(m => m.vars.proyecto)).toEqual(['Nuevo'])
+
+    const c = evaluateTrigger(regla({ type: 'pieza_nueva' }), {
+      ...base,
+      agenda: [{ id: 'x', title: 'Reel', created_at: ahora }, { id: 'y', title: 'Antiguo', created_at: viejo }],
+    })
+    expect(c.map(m => m.vars.pieza)).toEqual(['Reel'])
+  })
+})
