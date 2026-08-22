@@ -3621,3 +3621,24 @@ describe('las tipografias no se piden a Google', () => {
       '.font-figtree no usa la variable de next/font').toBe(true)
   })
 })
+
+describe('la insignia del arranque no aparece de golpe', () => {
+  it('se precarga, y solo la del tema que toca', () => {
+    // La pantalla de arranque pinta DOS <img> —logo oscuro y claro— y el CSS oculta
+    // uno. Pero el navegador descarga los dos, y como son peticiones que solo
+    // arrancan despues del CSS, el circulo se queda vacio hasta que llegan: el logo
+    // aparece de golpe medio segundo despues de pintarse la pantalla.
+    //
+    // El `preload` lo pide a la vez que el HTML. Y solo el que se va a ver: el
+    // servidor ya sabe el tema por la cookie, asi que no hay que adivinar ni bajar
+    // 30 KB del que esta oculto.
+    const L = readFileSync('src/app/layout.tsx', 'utf8')
+    const i = L.indexOf("rel=\"preload\"")
+    expect(i, 'no se precarga la insignia: volvera a aparecer de golpe').toBeGreaterThan(-1)
+    const bloque = L.slice(i, i + 200)
+    expect(/as="image"/.test(bloque), 'el preload no declara que es una imagen').toBe(true)
+    expect(/claro \? '\/logo-claro\.svg' : '\/logo-oscuro\.svg'/.test(bloque),
+      'precarga una insignia fija en vez de la del tema: en modo claro precargaria la que no se ve')
+      .toBe(true)
+  })
+})

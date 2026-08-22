@@ -83,6 +83,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const claro = (await cookies()).get('nx_theme')?.value === 'light'
   return (
     <html lang="es" className={[syne.variable, figtree.variable, claro ? 'theme-light' : ''].filter(Boolean).join(' ')}>
+      <head>
+        {/* La insignia del arranque, PEDIDA YA.
+            La pantalla de arranque pinta dos <img> —el logo oscuro y el claro— y el
+            CSS oculta uno. Pero el navegador descarga LOS DOS, y como son peticiones
+            que solo arrancan después del CSS, el círculo se queda vacío hasta que
+            llegan: el logo aparece de golpe medio segundo después de pintarse la
+            pantalla. Eso es el destello que quedaba.
+            Con el `preload` la petición sale a la vez que el HTML, en paralelo con el
+            CSS en lugar de detrás. Y se precarga SOLO el que se va a ver: el servidor
+            ya sabe el tema por la cookie, así que no hay que adivinarlo ni descargar
+            30 KB del que está oculto. */}
+        <link rel="preload" as="image" type="image/svg+xml"
+          href={claro ? '/logo-claro.svg' : '/logo-oscuro.svg'} />
+      </head>
       <body className="font-figtree bg-nexus-bg text-nexus-white antialiased">
         <ServiceWorkerRegister />
         {children}
