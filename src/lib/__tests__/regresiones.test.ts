@@ -3577,48 +3577,87 @@ describe('abrir la app desde el icono no da escalones de color', () => {
   })
 })
 
-describe('las tipografias no se piden a Google', () => {
-  // ESTE ERA EL PARPADEO AL ABRIR LA APP, y me costo tres diagnosticos llegar.
+describe('la app no nombra ninguna tipografia que no cargue', () => {
+  // ESTUVO ROTO TRECE DIAS Y NO LO VIO NADIE. Eso es lo que lo hace peligroso.
   //
-  // Estaban con un `@import` de Google Fonts DENTRO de globals.css. Eso encadena
-  // tres saltos de red antes de que se vea la letra de verdad:
+  // El 2026-08-09 se anadio la CSP de next.config.ts, con dos directivas:
   //
-  //   HTML (0,65s) → CSS de la app (0,35s) → CSS de Google (0,15s) → 13 ficheros
+  //     style-src 'self' 'unsafe-inline'   ← bloquea el CSS de fonts.googleapis.com
+  //     font-src  'self' data:             ← bloquea los .woff2 de fonts.gstatic.com
   //
-  // El navegador no descubre el `@import` hasta que ha bajado y LEIDO nuestro CSS,
-  // asi que la peticion a Google ni siquiera puede empezar antes. Con `swap`, el
-  // texto se pinta mientras tanto con la fuente del sistema y CAMBIA DE GOLPE al
-  // llegar las buenas. Medido: cae alrededor del segundo — justo donde Javi lo
-  // situaba («clicas, pasa un segundo, ocurre el parpadeo»).
+  // …y globals.css seguia pidiendo Syne y Figtree a Google con un @import. Una
+  // fuente bloqueada NO DA ERROR: cae al siguiente nombre de la pila. Asi que la app
+  // se pinto entera con la del sistema durante casi dos semanas, en silencio.
   //
-  // `next/font` las descarga en el build y las sirve desde nuestro dominio: se van
-  // los dos saltos externos, van en woff2 en vez de .ttf, se precargan, y Next
-  // calcula una fuente de reserva con las metricas ajustadas — que es lo que hace
-  // que el cambio deje de moverse.
-  const CSS = readFileSync('src/app/globals.css', 'utf8')
-  const LAYOUT = readFileSync('src/app/layout.tsx', 'utf8')
+  // El 2026-08-22 se migro a next/font —mismo dominio, o sea 'self'— y Syne aparecio
+  // POR PRIMERA VEZ en meses. Se noto muchisimo: medido en el navegador, «ANALIZAR
+  // CON IA BRUTAL» paso de 527 px a 870 px, un 65% mas ancha. A Javi no le gusto y
+  // se volvio a lo que habia.
+  //
+  // ESTA REGLA NO DEFIENDE ESA DECISION, que es de gusto y puede cambiar manana.
+  // Defiende que lo DECLARADO y lo CARGADO coincidan. Si se recupera Syne con
+  // next/font, la regla sigue valiendo sin tocar una linea.
+  const CSS = leerCodigo('src/app/globals.css')
+  const TW = leerCodigo('tailwind.config.ts')
+  const LAYOUT = leerCodigo('src/app/layout.tsx')
 
-  it('no queda ningun @import a Google Fonts', () => {
-    expect(/fonts\.googleapis\.com|fonts\.gstatic\.com/.test(CSS),
-      'vuelve el @import de Google: tres saltos de red y la letra cambiando al segundo')
+  // Lo que la app CARGA de verdad hoy: lo que importe de next/font.
+  const cargadas = new Set<string>()
+  for (const m of LAYOUT.matchAll(/import \{([^}]+)\} from 'next\/font\/google'/g)) {
+    for (const n of m[1].split(',')) if (n.trim()) cargadas.add(n.trim().toLowerCase())
+  }
+
+  // Nombres que el sistema ya tiene, o palabras clave de CSS: no hace falta cargarlos.
+  const DEL_SISTEMA = new Set([
+    'sans-serif', 'serif', 'monospace', 'cursive', 'fantasy', 'system-ui',
+    'ui-sans-serif', 'ui-serif', 'ui-monospace', 'ui-rounded',
+    'inherit', 'initial', 'unset', 'revert', 'none',
+    '-apple-system', 'blinkmacsystemfont', 'segoe ui', 'roboto',
+    'helvetica', 'helvetica neue', 'arial', 'courier new', 'georgia', 'menlo', 'monaco',
+  ])
+
+  // Todo sitio del repo donde se fija una familia, con su texto tal cual.
+  const declaraciones: { donde: string; valor: string }[] = []
+  for (const m of CSS.matchAll(/font-family:\s*([^;}]+)/g)) declaraciones.push({ donde: 'globals.css', valor: m[1] })
+  const iTW = TW.indexOf('fontFamily')
+  if (iTW > -1) {
+    for (const m of TW.slice(iTW, iTW + 500).matchAll(/(\w+):\s*\[([^\]]+)\]/g)) {
+      declaraciones.push({ donde: `tailwind.config.ts → ${m[1]}`, valor: m[2].replace(/'/g, '') })
+    }
+  }
+  for (const f of TS) {
+    for (const m of leerCodigo(f).matchAll(/fontFamily[:=]\s*['"{]?\s*['"]([^'"]+)['"]/g)) {
+      declaraciones.push({ donde: f, valor: m[1] })
+    }
+  }
+
+  it('nadie vuelve a pedir las fuentes a Google: la CSP lo bloquea EN SILENCIO', () => {
+    expect(/fonts\.googleapis\.com|fonts\.gstatic\.com/.test(CSS + LAYOUT),
+      'vuelve el @import de Google, y la CSP lo tira sin decir nada: la app se pinta con la del sistema y parece que va bien')
       .toBe(false)
   })
 
-  it('se declaran con next/font, que las sirve desde nuestro dominio', () => {
-    expect(/from 'next\/font\/google'/.test(LAYOUT), 'las fuentes ya no pasan por next/font').toBe(true)
-    // Las variables tienen que llegar al <html>, o el CSS las pide y no existen.
-    expect(/syne\.variable/.test(LAYOUT) && /figtree\.variable/.test(LAYOUT),
-      'las variables de fuente no se cuelgan del <html>: el CSS apuntara a nada')
-      .toBe(true)
-  })
-
-  it('el CSS usa las variables, no el nombre suelto', () => {
-    // Con solo `font-family: Syne` el navegador busca una fuente instalada que no
-    // existe y cae al sistema: se veria mal SIEMPRE, no solo el primer segundo.
-    expect(/\.font-syne \{ font-family: var\(--fuente-syne\)/.test(CSS),
-      '.font-syne no usa la variable de next/font').toBe(true)
-    expect(/\.font-figtree \{ font-family: var\(--fuente-figtree\)/.test(CSS),
-      '.font-figtree no usa la variable de next/font').toBe(true)
+  it('ninguna declaracion nombra una familia que la app no carga', () => {
+    expect(declaraciones.length, 'no se encontro ni una declaracion de fuente: la regla no esta mirando nada')
+      .toBeGreaterThan(5)
+    const huerfanas: string[] = []
+    for (const d of declaraciones) {
+      for (const bruto of d.valor.split(',')) {
+        const t = bruto.trim().replace(/^["']|["']$/g, '').toLowerCase()
+        if (!t) continue
+        if (t.startsWith('var(')) {
+          // Una variable solo existe si next/font la crea.
+          const fam = t.replace(/^var\(--fuente-/, '').replace(/\).*$/, '')
+          if (!cargadas.has(fam)) huerfanas.push(`${d.donde}: var de «${fam}» sin next/font que la defina`)
+          continue
+        }
+        if (DEL_SISTEMA.has(t)) continue
+        if (cargadas.has(t)) continue
+        huerfanas.push(`${d.donde}: «${bruto.trim()}» no la carga nadie`)
+      }
+    }
+    expect(huerfanas, `se nombran fuentes que no se cargan — se veran con la del sistema y NADIE se entera:\n  ${huerfanas.join('\n  ')}`)
+      .toEqual([])
   })
 })
 
@@ -3797,41 +3836,6 @@ describe('el briefing dice donde mirar', () => {
     expect(/sort\(\(a: any, b: any\) =>\s*\(b\.bloqueos - a\.bloqueos\)/.test(D),
       'el equipo vuelve al orden de la tabla profiles: la fila que importa queda enterrada')
       .toBe(true)
-  })
-})
-
-describe('la tipografia de la app es la de la app', () => {
-  // EL FALLO: al pasar a `next/font` la familia real deja de llamarse «Syne» —
-  // pasa a ser un nombre generado en el build. `globals.css` sí apuntaba a las
-  // variables, pero `tailwind.config.ts` seguía declarando `['Syne','sans-serif']`
-  // a secas, y las utilidades de Tailwind PESAN MÁS en la cascada. O sea que la app
-  // entera, que usa `font-syne`/`font-figtree` por todas partes, llevaba desde el
-  // cambio con la letra del sistema.
-  //
-  // Javi lo vio enseguida: «no me gusta nada ese tipo de letra que has añadido».
-  // No era un cambio de estilo: era la fuente sin cargar, y yo no lo comprobé.
-  const TW = readFileSync('tailwind.config.ts', 'utf8')
-  const CSS = readFileSync('src/app/globals.css', 'utf8')
-
-  it('Tailwind pide la fuente por su VARIABLE, no por el nombre', () => {
-    const i = TW.indexOf('fontFamily')
-    expect(i, 'ya no se declara fontFamily: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
-    const bloque = TW.slice(i, i + 400)
-    expect(/syne: \['var\(--fuente-syne\)'/.test(bloque),
-      'font-syne vuelve a pedir «Syne» a secas: nadie tiene esa fuente instalada y toda la app caera a la del sistema')
-      .toBe(true)
-    expect(/figtree: \['var\(--fuente-figtree\)'/.test(bloque),
-      'font-figtree vuelve a pedir «Figtree» a secas: misma historia')
-      .toBe(true)
-  })
-
-  it('las dos declaraciones dicen lo mismo', () => {
-    // Tailwind y globals.css declaran las mismas dos clases. Si divergen, gana
-    // Tailwind y la de globals.css no sirve para nada — que es justo lo que pasó.
-    for (const v of ['--fuente-syne', '--fuente-figtree']) {
-      expect(TW.includes(v), `tailwind.config.ts no usa ${v}`).toBe(true)
-      expect(CSS.includes(v), `globals.css no usa ${v}`).toBe(true)
-    }
   })
 })
 

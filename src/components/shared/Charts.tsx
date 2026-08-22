@@ -38,10 +38,10 @@ export function Donut({ segments, size = 132, thickness = 16, centerLabel, cente
       })}
       {(centerLabel || centerSub) && (
         <>
-          <text x={cx} y={cx - (centerSub ? 2 : -5)} textAnchor="middle" fontFamily="Figtree, sans-serif"
+          <text x={cx} y={cx - (centerSub ? 2 : -5)} textAnchor="middle" fontFamily="system-ui, sans-serif"
             fontWeight="900" fontSize={size * 0.26} fill="#fff" letterSpacing="-0.03em">{centerLabel}</text>
           {centerSub && (
-            <text x={cx} y={cx + size * 0.14} textAnchor="middle" fontFamily="Syne, sans-serif"
+            <text x={cx} y={cx + size * 0.14} textAnchor="middle" fontFamily="sans-serif"
               fontWeight="800" fontSize={size * 0.075} fill="rgba(255,255,255,0.32)" letterSpacing="0.15em">{centerSub}</text>
           )}
         </>
@@ -78,10 +78,10 @@ export function Gauge({ value, size = 140, thickness = 14, color = '#22c55e', la
       <circle cx={cx} cy={cx} r={r} fill="none" stroke={`url(#g-${gid})`} strokeWidth={thickness}
         strokeDasharray={`${len} ${C - len}`} strokeLinecap="round"
         transform={`rotate(-90 ${cx} ${cx})`} style={{ transition: 'stroke-dasharray 0.7s ease' }} />
-      <text x={cx} y={cx + 2} textAnchor="middle" fontFamily="Figtree, sans-serif" fontWeight="900"
+      <text x={cx} y={cx + 2} textAnchor="middle" fontFamily="system-ui, sans-serif" fontWeight="900"
         fontSize={size * 0.26} fill="#fff" letterSpacing="-0.04em">{label ?? `${Math.round(v)}%`}</text>
       {sub && (
-        <text x={cx} y={cx + size * 0.16} textAnchor="middle" fontFamily="Syne, sans-serif" fontWeight="800"
+        <text x={cx} y={cx + size * 0.16} textAnchor="middle" fontFamily="sans-serif" fontWeight="800"
           fontSize={size * 0.07} fill="rgba(255,255,255,0.3)" letterSpacing="0.15em">{sub}</text>
       )}
     </svg>

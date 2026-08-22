@@ -203,9 +203,9 @@ export default function ResetPasswordPage() {
     // que pedir otro correo, porque el enlace de recuperación ya se ha consumido.
     page: { height: '100dvh', overflowY: 'auto', display: 'flex', background: '#05050C', padding: '20px 20px max(20px, env(safe-area-inset-bottom))' },
     card: { background: 'linear-gradient(180deg,#0C0C1C 0%,#07070F 100%)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', padding: '32px', width: '100%', maxWidth: '380px' },
-    label: { display: 'block', fontFamily: 'Syne,sans-serif', fontSize: '9px', fontWeight: 700, letterSpacing: '3px', color: 'rgba(240,240,248,0.3)', textTransform: 'uppercase', marginBottom: '8px' },
+    label: { display: 'block', fontFamily: 'sans-serif', fontSize: '9px', fontWeight: 700, letterSpacing: '3px', color: 'rgba(240,240,248,0.3)', textTransform: 'uppercase', marginBottom: '8px' },
     input: { width: '100%', padding: '12px 16px', borderRadius: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(27,95,250,0.2)', color: 'white', fontSize: '14px', marginBottom: '16px', outline: 'none' },
-    btn: { width: '100%', padding: '14px', borderRadius: '12px', background: '#1B5FFA', border: 'none', color: 'white', fontFamily: 'Syne,sans-serif', fontSize: '11px', fontWeight: 800, letterSpacing: '2px', cursor: 'pointer' },
+    btn: { width: '100%', padding: '14px', borderRadius: '12px', background: '#1B5FFA', border: 'none', color: 'white', fontFamily: 'sans-serif', fontSize: '11px', fontWeight: 800, letterSpacing: '2px', cursor: 'pointer' },
     aviso: { padding: '10px 14px', borderRadius: '10px', fontSize: '13px', marginBottom: '16px' },
   }
 
@@ -214,11 +214,11 @@ export default function ResetPasswordPage() {
       <div style={{ margin: 'auto', width: '100%', maxWidth: '380px' }}>
         <div style={{ textAlign: 'center', marginBottom: '36px' }}>
           <img src="/brutal-logo.svg" alt="Brutal Studios" style={{ height: '28px', margin: '0 auto 10px', display: 'block' }} />
-          <div style={{ fontFamily: 'Syne,sans-serif', fontSize: '13px', fontWeight: 900, color: 'white', letterSpacing: '4px' }}>BRUTAL<span style={{ color: '#1B5FFA' }}>.IA</span></div>
+          <div style={{ fontFamily: 'sans-serif', fontSize: '13px', fontWeight: 900, color: 'white', letterSpacing: '4px' }}>BRUTAL<span style={{ color: '#1B5FFA' }}>.IA</span></div>
         </div>
 
         <div style={s.card}>
-          <div style={{ fontFamily: 'Syne,sans-serif', fontSize: '17px', fontWeight: 800, color: 'white', marginBottom: '8px' }}>Elige tu contraseña</div>
+          <div style={{ fontFamily: 'sans-serif', fontSize: '17px', fontWeight: 800, color: 'white', marginBottom: '8px' }}>Elige tu contraseña</div>
           <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.35)', marginBottom: '24px', lineHeight: 1.5 }}>
             Es la que usarás para entrar desde ahora, también en el móvil.
           </div>
