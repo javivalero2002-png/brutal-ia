@@ -3839,6 +3839,60 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('el arranque no se apaga a mitad', () => {
+  // EL PARPADEO AL ABRIR LA APP. Me costo CUATRO diagnosticos, y los tres primeros
+  // fueron mios y equivocados: los tres negros distintos, la insignia que llegaba
+  // tarde, y la tipografia (que ni siquiera podia ser, porque la CSP la bloqueaba y
+  // no llegaba a cargarse nunca). Lo resolvio un video de Javi, mirado frame a
+  // frame a 60 fps.
+  //
+  // La app monta DOS pantallas de arranque seguidas, y son objetos distintos:
+  //
+  //   0,00 s  DashboardClient pinta una — «Comprobando tu sesion…»
+  //   0,60 s  /api/me responde → `listo` pasa a true → esa pantalla SE DESMONTA,
+  //           y NexusDashboard monta OTRA porque sus datos aun no han llegado
+  //   1,58 s  llegan los datos y aparece la app
+  //
+  // Al ser un nodo nuevo, `nxBootSube` (0,6 s, de opacity 0 a 1) vuelve a empezar.
+  // Medido en el video: el brillo del emblema cae de 80,5 a 61,3 en 33 ms y tarda
+  // otros 0,6 s en recuperarse. Y `nxBootLatido` salta a scale(1), por eso el logo
+  // se ve mas pequeno en ese frame.
+  //
+  // La regla no exige que haya UNA sola pantalla —son dos porque son dos estados de
+  // carga distintos, y unificarlos es otra reforma—: exige que la segunda RELEVE a
+  // la primera en vez de entrar de cero.
+  const SITIOS = TS.filter(f => /<NexusBootScreen/.test(leerCodigo(f)))
+  // `preview-boot` es una pagina suelta para mirar la pantalla de eleccion. No
+  // releva a nadie porque no hay nada antes: alli la entrada SI debe verse.
+  const PREVIEW = 'src/app/preview-boot/Cliente.tsx'
+  const RELEVOS = SITIOS.filter(f => f !== PREVIEW)
+
+  it('si hay mas de una pantalla de arranque, todas menos la primera relevan', () => {
+    expect(RELEVOS.length, 'ya no se pinta NexusBootScreen: revisa esta regla en vez de borrarla')
+      .toBeGreaterThan(0)
+    if (RELEVOS.length < 2) return
+    const conContinua = RELEVOS.filter(f =>
+      leerCodigo(f).split('<NexusBootScreen').slice(1)
+        .some(t => /^[^>]*\bcontinua\b/.test(t)))
+    expect(conContinua.length, `hay ${RELEVOS.length} pantallas de arranque y solo ${conContinua.length} relevan: la que entra de cero apaga la que ya se veia\n  ${RELEVOS.join('\n  ')}`)
+      .toBeGreaterThanOrEqual(RELEVOS.length - 1)
+  })
+
+  it('la clase de relevo cancela la ENTRADA y respeta la SALIDA', () => {
+    const CSS = leerCodigo('src/app/globals.css')
+    const i = CSS.indexOf('.nx-boot-continua')
+    expect(i, 'no existe la clase de relevo: `continua` no hace nada').toBeGreaterThan(-1)
+    const regla = CSS.slice(i, CSS.indexOf('}', i) + 1)
+    expect(/animation:\s*none/.test(regla), 'la clase de relevo ya no cancela la animacion de entrada')
+      .toBe(true)
+    // Sin el :not() esta regla gana por especificidad y se lleva por delante TAMBIEN
+    // la animacion de salida. Se vio midiendo `animationName` en el navegador.
+    expect(/:not\(\.nx-boot-saliendo\)/.test(regla),
+      'la clase de relevo pisa la animacion de salida: al elegir tema desapareceria de golpe')
+      .toBe(true)
+  })
+})
+
 describe('lo que llega de fuera no puede ensanchar un panel', () => {
   // Javi, con una captura del movil: «esta pagina no es estatica». El detalle de un
   // correo se podia arrastrar de lado y se salia media pantalla — hasta el boton

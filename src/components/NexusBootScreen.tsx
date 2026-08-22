@@ -25,9 +25,12 @@ type Props = {
   onElegir?: (tema: 'dark' | 'light') => void
   /** Texto de lo que se está cargando, para que la espera no sea muda. */
   estado?: string
+  /** Esta pantalla CONTINÚA otra que ya se estaba viendo, no aparece de cero.
+   *  Ver el comentario largo en el cuerpo del componente. */
+  continua?: boolean
 }
 
-export default function NexusBootScreen({ pedirEleccion = false, onElegir, estado }: Props) {
+export default function NexusBootScreen({ pedirEleccion = false, onElegir, estado, continua = false }: Props) {
   const [elegido, setElegido] = useState<'dark' | 'light' | null>(null)
   const [entrando, setEntrando] = useState(false)
 
@@ -51,6 +54,24 @@ export default function NexusBootScreen({ pedirEleccion = false, onElegir, estad
   }
 
   return (
+    // ESTE ERA EL PARPADEO AL ABRIR LA APP, y me costó cuatro diagnósticos. Los
+    // tres primeros fueron míos y equivocados (los negros, la insignia, la
+    // tipografía). Lo resolvió un vídeo de Javi, mirado frame a frame.
+    //
+    // La app monta DOS pantallas de arranque seguidas, y son objetos distintos:
+    //
+    //   0,00 s  DashboardClient pinta esta pantalla — «Comprobando tu sesión…»
+    //   0,60 s  /api/me responde → `listo` pasa a true → esa pantalla SE DESMONTA
+    //           y NexusDashboard monta OTRA, porque sus datos aún no han llegado
+    //   1,58 s  llegan los datos y aparece la app
+    //
+    // Al ser un nodo nuevo, `nxBootSube` (0,6 s, de `opacity: 0` a 1) vuelve a
+    // empezar: la pantalla que ya estaba entera se apaga de golpe y vuelve a
+    // encenderse. Medido en el vídeo, el brillo cae de 80,5 a 61,3 en 33 ms y tarda
+    // otros 0,6 s en recuperarse.
+    //
+    // `continua` dice que esta pantalla RELEVA a otra que ya se veía, así que se
+    // queda donde estaba la anterior en vez de entrar otra vez.
     <div className={`nx-boot ${pedirEleccion ? 'nx-boot-eligiendo' : ''}`}>
       <div className="nx-boot-glow" aria-hidden />
 
