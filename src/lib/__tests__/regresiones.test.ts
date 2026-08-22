@@ -3799,3 +3799,38 @@ describe('el briefing dice donde mirar', () => {
       .toBe(true)
   })
 })
+
+describe('la tipografia de la app es la de la app', () => {
+  // EL FALLO: al pasar a `next/font` la familia real deja de llamarse «Syne» —
+  // pasa a ser un nombre generado en el build. `globals.css` sí apuntaba a las
+  // variables, pero `tailwind.config.ts` seguía declarando `['Syne','sans-serif']`
+  // a secas, y las utilidades de Tailwind PESAN MÁS en la cascada. O sea que la app
+  // entera, que usa `font-syne`/`font-figtree` por todas partes, llevaba desde el
+  // cambio con la letra del sistema.
+  //
+  // Javi lo vio enseguida: «no me gusta nada ese tipo de letra que has añadido».
+  // No era un cambio de estilo: era la fuente sin cargar, y yo no lo comprobé.
+  const TW = readFileSync('tailwind.config.ts', 'utf8')
+  const CSS = readFileSync('src/app/globals.css', 'utf8')
+
+  it('Tailwind pide la fuente por su VARIABLE, no por el nombre', () => {
+    const i = TW.indexOf('fontFamily')
+    expect(i, 'ya no se declara fontFamily: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const bloque = TW.slice(i, i + 400)
+    expect(/syne: \['var\(--fuente-syne\)'/.test(bloque),
+      'font-syne vuelve a pedir «Syne» a secas: nadie tiene esa fuente instalada y toda la app caera a la del sistema')
+      .toBe(true)
+    expect(/figtree: \['var\(--fuente-figtree\)'/.test(bloque),
+      'font-figtree vuelve a pedir «Figtree» a secas: misma historia')
+      .toBe(true)
+  })
+
+  it('las dos declaraciones dicen lo mismo', () => {
+    // Tailwind y globals.css declaran las mismas dos clases. Si divergen, gana
+    // Tailwind y la de globals.css no sirve para nada — que es justo lo que pasó.
+    for (const v of ['--fuente-syne', '--fuente-figtree']) {
+      expect(TW.includes(v), `tailwind.config.ts no usa ${v}`).toBe(true)
+      expect(CSS.includes(v), `globals.css no usa ${v}`).toBe(true)
+    }
+  })
+})
