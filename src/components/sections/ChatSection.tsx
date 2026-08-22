@@ -338,7 +338,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
                     {unreadEmails.length>0 ? (
                       <div>
                         <div className="font-figtree text-[20px] font-black leading-none mb-1" style={{color:'rgba(234,67,53,0.85)'}}>{unreadEmails.length}</div>
-                        <div className="font-syne text-[9px] leading-tight" style={{color:'rgba(255,255,255,0.4)'}}>{unreadEmails[0]?.from_name||'?'}: {(unreadEmails[0]?.subject||'sin asunto').slice(0,30)}</div>
+                        <div className="font-syne text-[9px] leading-tight break-words" style={{color:'rgba(255,255,255,0.4)'}}>{unreadEmails[0]?.from_name||'?'}: {(unreadEmails[0]?.subject||'sin asunto').slice(0,30)}</div>
                       </div>
                     ) : <div className="font-syne text-[9px]" style={{color:'rgba(255,255,255,0.2)'}}>Inbox al día</div>}
                   </div>
@@ -454,7 +454,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
                     borderTopRightRadius:m.role==='user'?'5px':'16px',
                   }}>
                     {m.role==='user'
-                      ? <span className="text-[13px] leading-relaxed text-white whitespace-pre-wrap">{m.content}</span>
+                      ? <span className="text-[13px] leading-relaxed text-white whitespace-pre-wrap break-words">{m.content}</span>
                       : <MarkdownMsg text={m.content}/>
                     }
                   </div>

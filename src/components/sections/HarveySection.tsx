@@ -867,7 +867,7 @@ ${memLines2||'  sin documentos'}`
                     )}
                   </div>
                 )}
-                <div className="font-figtree text-[13.5px] leading-relaxed whitespace-pre-wrap" style={{color:msg.role==='harvey'?'rgba(255,255,255,0.88)':'rgba(255,255,255,0.7)'}}>{msg.text}</div>
+                <div className="font-figtree text-[13.5px] leading-relaxed whitespace-pre-wrap break-words" style={{color:msg.role==='harvey'?'rgba(255,255,255,0.88)':'rgba(255,255,255,0.7)'}}>{msg.text}</div>
                 {/* Las fuentes NO se dicen: se ofrecen. Harvey citando notas en voz
                     alta convertiría cada respuesta en una bibliografía —y esto se
                     reproduce en audio—. Un botón deja comprobar de dónde salió a

@@ -84,6 +84,27 @@
    comprueba que el manifest y el `themeColor` sigan diciendo lo mismo. */
 :root { --nx-arranque: #030308; }
 html, body { height: 100%; overflow: hidden; background: var(--nx-arranque); overscroll-behavior: none; }
+
+/* PEDIR SCROLL VERTICAL NO ES PEDIR SCROLL HORIZONTAL.
+ *
+ * Javi: «esta página no es estática». El detalle de un correo se deslizaba de
+ * lado y se salía media pantalla — el botón VOLVER quedaba fuera. No era el
+ * documento (`html, body` llevan `overflow: hidden`): era el propio panel.
+ *
+ * El motivo es una regla de CSS que sorprende: si UNO de los dos ejes deja de
+ * ser `visible`, el otro NO puede seguir siéndolo, y el navegador lo computa a
+ * `auto`. O sea que `overflow-y-auto` —44 sitios en esta app— activa también el
+ * desplazamiento horizontal sin que nadie lo haya pedido. Solo 3 lo tapaban.
+ *
+ * Basta un texto que no sepa partirse (un enlace de seguimiento de LinkedIn, de
+ * 300 caracteres sin un espacio) para que el panel entero se pueda arrastrar.
+ *
+ * Esto NO sustituye a arreglar el texto: si algo desborda, aquí se RECORTA, que
+ * es peor que verlo mal. Es la red debajo. Quien quiera los dos ejes de verdad
+ * lo dice con `overflow-x-auto`, y entonces esta regla se aparta. */
+.overflow-y-auto:not(.overflow-x-auto):not(.overflow-x-scroll):not(.overflow-x-visible) {
+  overflow-x: hidden;
+}
 button, a[role="button"], [role="button"] { user-select: none; -webkit-user-select: none; touch-action: manipulation; }
 @media (hover: none) and (pointer: coarse) {
   button:not(:disabled):active { transform: scale(0.97); opacity: 0.85; transition: transform 0.08s, opacity 0.08s; }
@@ -538,7 +559,6 @@ html.theme-light .nx-boot-barra { background: rgba(255,255,255,0.16); }
   .nx-boot, .nx-boot-contenido, .nx-boot-glow, .nx-boot-latido, .nx-boot-barra i { animation: none; }
   .nx-boot-opcion, .nx-boot-opcion img { transition: none; }
 }
-
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Pistas de atajos: legibles, o no son pistas.

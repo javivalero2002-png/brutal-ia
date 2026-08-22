@@ -74,7 +74,7 @@ export default function BocetoPanel({
               </div>
               <span className="text-[18px] leading-none flex-shrink-0 cursor-pointer" style={{color:'rgba(255,255,255,0.35)'}}>···</span>
             </div>
-            <div className="px-3.5 pb-3 text-[13px] leading-relaxed whitespace-pre-wrap" style={{color:'rgba(255,255,255,0.88)'}}>
+            <div className="px-3.5 pb-3 text-[13px] leading-relaxed whitespace-pre-wrap break-words" style={{color:'rgba(255,255,255,0.88)'}}>
               {caption || <span style={{color:'rgba(255,255,255,0.25)'}}>El texto del post aparecerá aquí…</span>}
             </div>
             {media && <img src={media} alt="" className="w-full" style={{maxHeight:'200px',objectFit:'cover'}}/>}
