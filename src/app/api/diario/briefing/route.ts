@@ -84,7 +84,11 @@ export async function GET(request: NextRequest) {
       cerrados: suyas.filter(e => e.cierre_at).length,
       objetivos: objetivos.length,
       completadas: completadas.length,
-      entradas: suyas.map(e => ({ dia: e.dia, entrada: e.entrada, cierre: e.cierre, entrada_at: e.entrada_at, cierre_at: e.cierre_at })),
+      // `animo` incluido: la consulta ya lo trae (`select('*')`) y este mapeo lo
+      // tiraba. Es justo la señal que un jefe necesita ver pronto — un «bloqueado»
+      // enterrado en una columna que no se pinta no avisa a nadie.
+      entradas: suyas.map(e => ({ dia: e.dia, entrada: e.entrada, cierre: e.cierre, entrada_at: e.entrada_at, cierre_at: e.cierre_at, animo: e.animo ?? null })),
+      bloqueos: suyas.filter(e => e.animo === 'bloqueado').length,
       tareas: completadas.map(t => ({ id: t.id, text: t.text, level: t.level })),
     }
   })
@@ -100,7 +104,11 @@ export async function GET(request: NextRequest) {
     sinActividad: porPersona.filter(p => !activos.includes(p)).map(p => p.persona.name),
     total: {
       objetivos: activos.reduce((n, p) => n + p.objetivos, 0),
-      completadas: activos.reduce((n, p) => n + p.completadas, 0),
+      // Por IDS ÚNICOS, no sumando por persona: `esTareaDe` casa por asignado O
+      // co-asignado, así que una tarea compartida entre dos aparecía en las dos
+      // fichas —correcto— y el total la sumaba DOS veces —incorrecto—. El total
+      // respondía «cuántas atribuciones» cuando la pregunta es «cuánto se hizo».
+      completadas: new Set(activos.flatMap(p => p.tareas.map(t => t.id))).size,
       diasCerrados: activos.reduce((n, p) => n + p.cerrados, 0),
     },
   })

@@ -145,6 +145,9 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
   // sección — es una consulta pesada que la mayoría de las visitas no necesita.
   const esJefe = profile?.role === 'owner'
   const [briefing, setBriefing] = useState<any>(null)
+  // Qué ficha del briefing está desplegada. Una cada vez: el acordeón existe para
+  // leer a UNA persona en detalle, no para abrir siete y volver al muro.
+  const [briefAbierto, setBriefAbierto] = useState<string | null>(null)
   const [rango, setRango] = useState<'dia' | 'semana' | 'arranque'>('dia')
   const [cargandoBrief, setCargandoBrief] = useState(false)
   // El día que se está mirando. Hoy por defecto; se puede retroceder para
@@ -1715,32 +1718,61 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
             </div>
           ) : (
             <>
-              {/* El conjunto primero: es la pregunta que se hace un jefe antes de
-                  mirar a nadie en concreto. */}
-              <div className="flex gap-2 px-4 pb-3 flex-wrap">
-                {[
-                  { n: briefing.total?.objetivos ?? 0, l: 'objetivos', c: BLU },
-                  { n: briefing.total?.completadas ?? 0, l: 'completadas', c: GRN },
-                  { n: briefing.total?.diasCerrados ?? 0, l: 'días cerrados', c: VIO },
-                ].map(k => (
-                  <div key={k.l} className="flex items-baseline gap-1.5 px-3 py-1.5 rounded-full"
-                    style={{ background: 'rgba(255,255,255,0.035)', border: `1px solid ${BORDER}` }}>
-                    <span className="font-syne text-[15px] font-black" style={{ color: k.c }}>{k.n}</span>
-                    <span className="font-figtree text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>{k.l}</span>
+              {/* UNA CIFRA DOMINANTE, no tres píldoras iguales.
+                  Tres números del mismo tamaño no dicen qué mirar primero. La
+                  pregunta de un jefe es «¿se está haciendo lo que se prometió?»,
+                  y eso es UNA fracción: hechas de propuestas. Lo demás la apoya.
+                  Y el rango ESCRITO: `desde` y `hasta` viajaban en la respuesta y
+                  no se pintaban en ningún sitio — «SEMANA» sin fechas obliga a
+                  adivinar qué semana. */}
+              <div className="px-4 pb-4">
+                <div className="flex items-end gap-3 flex-wrap">
+                  <div className="font-figtree font-black leading-none" style={{ fontSize: '34px', letterSpacing: '-0.03em', color: '#FFFFFF' }}>
+                    {briefing.total?.completadas ?? 0}
+                    <span style={{ fontSize: '17px', color: 'rgba(255,255,255,0.35)' }}> / {briefing.total?.objetivos ?? 0}</span>
                   </div>
-                ))}
+                  <div className="font-figtree text-[12px] pb-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                    hechas de lo propuesto
+                    <span className="block text-[11px]" style={{ color: 'rgba(255,255,255,0.28)' }}>
+                      {briefing.desde === briefing.hasta ? `hoy, ${briefing.hasta}` : `del ${briefing.desde} al ${briefing.hasta}`}
+                      {' · '}{briefing.total?.diasCerrados ?? 0} {briefing.total?.diasCerrados === 1 ? 'día cerrado' : 'días cerrados'}
+                    </span>
+                  </div>
+                  {/* El bloqueo, arriba y en ámbar: es lo único que pide acción HOY. */}
+                  {(briefing.equipo || []).some((p: any) => p.bloqueos > 0) && (
+                    <span className="ml-auto font-syne text-[8px] font-black tracking-widest px-2.5 py-1.5 rounded-full"
+                      style={{ background: `${AMBAR}14`, border: `1px solid ${AMBAR}38`, color: AMBAR }}>
+                      {(briefing.equipo || []).filter((p: any) => p.bloqueos > 0).map((p: any) => p.persona.name?.split(' ')[0]).join(', ')} CON BLOQUEOS
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="flex flex-col">
-                {(briefing.equipo || []).map((p: any) => (
+                {/* ORDEN POR SEÑAL, no por el orden de la tabla `profiles`.
+                    Primero quien tiene bloqueos —es lo único que pide acción hoy—,
+                    luego quien dejó días sin cerrar, y el resto por lo hecho. Un
+                    listado en el orden de la base le pide al jefe que escanee
+                    siete filas para encontrar la que importa. */}
+                {([...(briefing.equipo || [])].sort((a: any, b: any) =>
+                  (b.bloqueos - a.bloqueos)
+                  || ((b.dias - b.cerrados) - (a.dias - a.cerrados))
+                  || (b.completadas - a.completadas)
+                )).map((p: any) => (
                   <div key={p.persona.id} className="px-4 py-3" style={{ borderTop: `1px solid ${BORDER}` }}>
-                    <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
+                    <div className="flex items-center gap-2.5 mb-1.5 flex-wrap cursor-pointer" onClick={() => setBriefAbierto(briefAbierto === p.persona.id ? null : p.persona.id)}>
                       <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 font-syne text-[8px] font-black"
                         style={{ background: `${p.persona.avatar_color || BLU}22`, color: p.persona.avatar_color || BLU }}>
                         {p.persona.initials || (p.persona.name || '?').slice(0, 2).toUpperCase()}
                       </div>
-                      <div className="font-figtree text-[12px] font-bold text-white flex-1 min-w-0">{p.persona.name}</div>
-                      <div className="font-figtree text-[10px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                      <div className="font-figtree text-[13px] font-bold text-white flex-1 min-w-0">{p.persona.name}</div>
+                      {p.bloqueos > 0 && (
+                        <span className="font-syne text-[7.5px] font-black tracking-widest px-2 py-0.5 rounded-full"
+                          style={{ background: `${AMBAR}14`, border: `1px solid ${AMBAR}38`, color: AMBAR }}>
+                          BLOQUEADO
+                        </span>
+                      )}
+                      <div className="font-figtree text-[11px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
                         {p.completadas} {p.completadas === 1 ? 'completada' : 'completadas'} · {p.cerrados}/{p.dias} {p.dias === 1 ? 'día cerrado' : 'días cerrados'}
                       </div>
                     </div>
@@ -1763,6 +1795,38 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
                     {p.dias > p.cerrados && (
                       <div className="font-figtree text-[10px]" style={{ color: AMBAR }}>
                         {p.dias - p.cerrados} {p.dias - p.cerrados === 1 ? 'día sin cerrar' : 'días sin cerrar'}
+                      </div>
+                    )}
+
+                    {/* EL TEXTO DEL DIARIO, que viajaba en la respuesta y no se
+                        pintaba NUNCA. Es la parte con más información del briefing
+                        —qué se propuso cada uno y qué cuenta que hizo, con sus
+                        palabras— y estaba muerta en el JSON. Al tocar la fila se
+                        despliega, día a día, con el ánimo al lado. */}
+                    {briefAbierto === p.persona.id && (p.entradas || []).length > 0 && (
+                      <div className="mt-2.5 flex flex-col gap-2.5 pl-2" style={{ borderLeft: `2px solid ${(p.persona.avatar_color || BLU)}30` }}>
+                        {(p.entradas || []).map((e: any) => (
+                          <div key={e.dia}>
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="font-syne text-[7.5px] font-black tracking-widest" style={{ color: 'rgba(255,255,255,0.35)' }}>{e.dia}</span>
+                              {e.animo && (
+                                <span className="font-figtree text-[10px]" style={{ color: e.animo === 'bloqueado' ? AMBAR : e.animo === 'productivo' ? GRN : 'rgba(255,255,255,0.35)' }}>
+                                  {e.animo}
+                                </span>
+                              )}
+                            </div>
+                            {e.entrada && (
+                              <div className="font-figtree text-[12px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                                <span style={{ color: 'rgba(255,255,255,0.3)' }}>se propuso · </span>{e.entrada}
+                              </div>
+                            )}
+                            {e.cierre && (
+                              <div className="font-figtree text-[12px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                                <span style={{ color: 'rgba(255,255,255,0.3)' }}>hizo · </span>{e.cierre}
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
