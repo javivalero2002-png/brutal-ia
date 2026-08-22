@@ -74,9 +74,9 @@ export default function LoginPage() {
     // cuando no sobra espacio, así que el contenido se pega arriba y se alcanza todo.
     page: { height: '100dvh', overflowY: 'auto', display: 'flex', padding: '24px 16px max(24px, env(safe-area-inset-bottom))', background: 'radial-gradient(ellipse 900px 600px at 60% 20%, rgba(27,95,250,0.12), transparent 65%), #040409' } as React.CSSProperties,
     card: { background: 'linear-gradient(180deg,#0C0C1C 0%,#07070F 100%)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', padding: '32px', width: '100%', maxWidth: '320px' } as React.CSSProperties,
-    label: { display: 'block', fontFamily: 'Syne,sans-serif', fontSize: '9px', fontWeight: 700, letterSpacing: '3px', color: 'rgba(240,240,248,0.3)', textTransform: 'uppercase', marginBottom: '8px' } as React.CSSProperties,
+    label: { display: 'block', fontFamily: 'sans-serif', fontSize: '9px', fontWeight: 700, letterSpacing: '3px', color: 'rgba(240,240,248,0.3)', textTransform: 'uppercase', marginBottom: '8px' } as React.CSSProperties,
     input: { width: '100%', padding: '12px 16px', borderRadius: '12px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(27,95,250,0.2)', color: 'white', fontSize: '14px', outline: 'none', boxSizing: 'border-box', marginBottom: '16px' } as React.CSSProperties,
-    btn: { width: '100%', padding: '14px', borderRadius: '12px', background: '#1B5FFA', border: 'none', color: 'white', fontFamily: 'Syne,sans-serif', fontSize: '11px', fontWeight: 800, letterSpacing: '2px', cursor: 'pointer', marginTop: '4px' } as React.CSSProperties,
+    btn: { width: '100%', padding: '14px', borderRadius: '12px', background: '#1B5FFA', border: 'none', color: 'white', fontFamily: 'sans-serif', fontSize: '11px', fontWeight: 800, letterSpacing: '2px', cursor: 'pointer', marginTop: '4px' } as React.CSSProperties,
   }
 
   return (
@@ -84,12 +84,12 @@ export default function LoginPage() {
       <div style={{ margin: 'auto', width: '100%', maxWidth: '320px' }}>
         <div style={{ textAlign: 'center', marginBottom: '36px' }}>
           <img src="/brutal-logo.svg" alt="Brutal Studios" style={{ height: '28px', margin: '0 auto 10px', display: 'block' }} />
-          <div style={{ fontFamily: 'Syne,sans-serif', fontSize: '13px', fontWeight: 900, color: 'white', letterSpacing: '4px' }}>BRUTAL<span style={{color:'#1B5FFA'}}>.IA</span></div>
-          <div style={{ fontFamily: 'Syne,sans-serif', fontSize: '9px', letterSpacing: '4px', color: 'rgba(255,255,255,0.2)', marginTop: '4px' }}>INTELIGENCIA ARTIFICIAL</div>
+          <div style={{ fontFamily: 'sans-serif', fontSize: '13px', fontWeight: 900, color: 'white', letterSpacing: '4px' }}>BRUTAL<span style={{color:'#1B5FFA'}}>.IA</span></div>
+          <div style={{ fontFamily: 'sans-serif', fontSize: '9px', letterSpacing: '4px', color: 'rgba(255,255,255,0.2)', marginTop: '4px' }}>INTELIGENCIA ARTIFICIAL</div>
         </div>
 
         <div style={s.card}>
-          <div style={{ fontFamily: 'Syne,sans-serif', fontSize: '17px', fontWeight: 800, color: 'white', marginBottom: '24px' }}>Acceder</div>
+          <div style={{ fontFamily: 'sans-serif', fontSize: '17px', fontWeight: 800, color: 'white', marginBottom: '24px' }}>Acceder</div>
 
           {aviso && (
             <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', color: '#22c55e', fontSize: '13px', marginBottom: '16px' }}>

@@ -4,23 +4,25 @@ const config: Config = {
   content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
   theme: {
     extend: {
-      // POR LA VARIABLE, no por el nombre.
+      // LA FUENTE DEL SISTEMA, Y ES A PROPÓSITO.
       //
-      // Aquí estaba EL fallo de la tipografía. Al pasar a `next/font` la familia
-      // real deja de llamarse «Syne»: pasa a ser un nombre generado en el build.
-      // Estas dos clases seguían pidiendo `Syne` y `Figtree` a secas, y como nadie
-      // tiene esas fuentes instaladas, el navegador caía a la del sistema.
+      // Aquí ponía Syne y Figtree, que es con lo que se diseñó la app. Pero la CSP
+      // de `next.config.ts` (`style-src 'self'` + `font-src 'self'`) lleva desde el
+      // 2026-08-09 bloqueando Google Fonts, mientras `globals.css` seguía pidiéndolas
+      // ahí. Una fuente bloqueada no da error: cae al siguiente nombre de la pila.
+      // Así que la app entera se pintó con la del sistema durante trece días.
       //
-      // Y ganaban: `globals.css` sí apuntaba a las variables, pero las utilidades
-      // de Tailwind pesan más en la cascada. O sea que la app entera —que usa
-      // `font-syne`/`font-figtree` por todas partes— llevaba desde el cambio con la
-      // letra del sistema. Javi lo vio enseguida: «no me gusta nada ese tipo de
-      // letra que has añadido».
+      // Al migrar a `next/font` el 2026-08-22 pasaron a servirse desde nuestro
+      // dominio —o sea `'self'`— y Syne apareció por primera vez en meses. Medido en
+      // el navegador: «ANALIZAR CON IA BRUTAL» pasó de 527 px a 870 px. A Javi no le
+      // gustó, y esto devuelve exactamente lo que había.
       //
-      // No era un cambio de estilo. Era la fuente sin cargar.
+      // Si se recupera alguna, va por `next/font`, NUNCA por el `@import` de Google:
+      // la CSP lo volvería a tirar sin decir nada. Lo vigila una regla de
+      // `regresiones.test.ts` («la app no nombra ninguna tipografia que no cargue»).
       fontFamily: {
-        syne: ['var(--fuente-syne)', 'Syne', 'sans-serif'],
-        figtree: ['var(--fuente-figtree)', 'Figtree', 'system-ui', 'sans-serif'],
+        syne: ['sans-serif'],
+        figtree: ['system-ui', 'sans-serif'],
       },
       colors: {
         nexus: {
