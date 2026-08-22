@@ -4,9 +4,23 @@ const config: Config = {
   content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
   theme: {
     extend: {
+      // POR LA VARIABLE, no por el nombre.
+      //
+      // Aquí estaba EL fallo de la tipografía. Al pasar a `next/font` la familia
+      // real deja de llamarse «Syne»: pasa a ser un nombre generado en el build.
+      // Estas dos clases seguían pidiendo `Syne` y `Figtree` a secas, y como nadie
+      // tiene esas fuentes instaladas, el navegador caía a la del sistema.
+      //
+      // Y ganaban: `globals.css` sí apuntaba a las variables, pero las utilidades
+      // de Tailwind pesan más en la cascada. O sea que la app entera —que usa
+      // `font-syne`/`font-figtree` por todas partes— llevaba desde el cambio con la
+      // letra del sistema. Javi lo vio enseguida: «no me gusta nada ese tipo de
+      // letra que has añadido».
+      //
+      // No era un cambio de estilo. Era la fuente sin cargar.
       fontFamily: {
-        syne: ['Syne', 'sans-serif'],
-        figtree: ['Figtree', 'system-ui', 'sans-serif'],
+        syne: ['var(--fuente-syne)', 'Syne', 'sans-serif'],
+        figtree: ['var(--fuente-figtree)', 'Figtree', 'system-ui', 'sans-serif'],
       },
       colors: {
         nexus: {
