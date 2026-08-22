@@ -760,7 +760,10 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   )
 
   if (data.loading) {
-    return <NexusBootScreen />
+    // `continua` porque DashboardClient ya venia ensenando una: esta la RELEVA.
+    // Sin eso su animacion de entrada arranca de cero y se ve un apagon a los
+    // 0,6 s — el motivo largo esta en NexusBootScreen.
+    return <NexusBootScreen continua />
   }
 
   return (
