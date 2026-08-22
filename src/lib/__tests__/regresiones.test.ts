@@ -3642,3 +3642,70 @@ describe('la insignia del arranque no aparece de golpe', () => {
       .toBe(true)
   })
 })
+
+describe('en Brutal.IA, un titulo es mas grande que su texto', () => {
+  const C = leerCodigo('src/components/sections/ChatSection.tsx')
+
+  const tam = (marca: string) => {
+    const i = C.indexOf(`startsWith('${marca} ')`)
+    if (i === -1) return null
+    const m = C.slice(i, i + 700).match(/fontSize:'([\d.]+)px'/)
+    return m ? Number(m[1]) : null
+  }
+  const cuerpo = (() => {
+    const i = C.indexOf('result.push(<p key={i}')
+    const m = C.slice(i, i + 300).match(/fontSize:'([\d.]+)px'/)
+    return m ? Number(m[1]) : null
+  })()
+
+  it('la escala baja de # a ### y todos por encima del cuerpo', () => {
+    // El `###` se pintaba a 9px en versalitas, MAS PEQUEÑO que el parrafo que
+    // encabeza (13px). Claude estructura con `###` constantemente, asi que cada vez
+    // que lo hacia la respuesta PERDIA jerarquia en vez de ganarla: un bloque gris
+    // uniforme donde no se puede escanear nada.
+    //
+    // Y al arreglarlo lo dejé invertido otra vez —### a 15 por encima de ## a 14—
+    // hasta que lo vi renderizado. Por eso esto se comprueba con numeros y no de
+    // memoria: la escala invertida no duele al leer el codigo, solo al mirarlo.
+    const [h1, h2, h3] = [tam('#'), tam('##'), tam('###')]
+    expect(h1, 'no se encuentra el tamaño de #').toBeTruthy()
+    expect(cuerpo, 'no se encuentra el tamaño del parrafo').toBeTruthy()
+    expect(h1! > h2!, `# (${h1}) deberia ser mayor que ## (${h2})`).toBe(true)
+    expect(h2! > h3!, `## (${h2}) deberia ser mayor que ### (${h3})`).toBe(true)
+    expect(h3! > cuerpo!, `### (${h3}) deberia ser mayor que el cuerpo (${cuerpo})`).toBe(true)
+  })
+
+  it('el contenido no es el texto mas apagado de la pantalla', () => {
+    // Lo que la gente viene a leer iba a opacidad 0,78 mientras los adornos del
+    // estado vacio iban a 20px. En HoySection el contenido va a 0,82-0,9.
+    const i = C.indexOf('result.push(<p key={i}')
+    const m = C.slice(i, i + 300).match(/rgba\(240,240,248,([\d.]+)\)/)
+    expect(m, 'no se encuentra el color del parrafo').toBeTruthy()
+    expect(Number(m![1]),
+      'el texto de la respuesta vuelve a estar mas apagado que el contenido del resto de la app')
+      .toBeGreaterThanOrEqual(0.85)
+  })
+
+  it('la burbuja del usuario no lleva degradado', () => {
+    // El degradado azul de esquina a esquina databa la pantalla, y ademas se rompia
+    // en modo claro: el contrafiltro solo cancela declaraciones `color:`, no fondos,
+    // asi que el body lo invertia y la burbuja salia naranja con texto negro.
+    // Acotado a la BURBUJA, no a todo el fichero: el boton de enviar lleva un
+    // degradado y ahi esta bien —es un boton, no un bloque de texto que el modo
+    // claro va a invertir—. La primera version prohibia el degradado en todo el
+    // fichero y se ponia roja por el boton, que no tenia nada que ver.
+    const i = C.indexOf("background:m.role==='user'")
+    expect(i, 'ya no existe la burbuja: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    expect(/linear-gradient/.test(C.slice(i, i + 160)),
+      'vuelve el degradado en la burbuja: se rompe en modo claro y data la pantalla')
+      .toBe(false)
+  })
+
+  it('el hilo tiene ancho de lectura', () => {
+    // En un monitor ancho el 76% son ~1000px de linea, muy por encima de las 65-75
+    // letras que se siguen sin perder el renglon.
+    expect(/maxWidth:'min\(76%, \d+px\)'/.test(C),
+      'el hilo vuelve a un ancho porcentual: en pantalla ancha la linea se hace ilegible')
+      .toBe(true)
+  })
+})

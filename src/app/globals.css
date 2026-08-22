@@ -17,6 +17,28 @@
 @keyframes indeterminado { 0% { transform: translateX(-120%) } 100% { transform: translateX(320%) } }
 .nx-indeterminado { animation: indeterminado 1.15s ease-in-out infinite }
 
+/* Las fases de la espera: se turnan, una visible cada vez.
+   Van por TIEMPO y no por progreso real — honesto mientras digan cosas que de
+   verdad ocurren (leer el contexto, buscar, redactar) y no prometan un porcentaje,
+   que sería inventarse un dato. Es la lección de la barra del PDF.
+   12s de ciclo con tres fases = 4s cada una, que es lo que tarda en leerse una sin
+   que dé tiempo a aburrirse de ella. */
+.nx-fases { position: relative; display: inline-block; }
+.nx-fases > span {
+  position: absolute; left: 0; top: 0; white-space: nowrap;
+  opacity: 0; animation: nxFase 12s linear infinite;
+}
+.nx-fases > span:first-child { position: relative; }
+@keyframes nxFase {
+  0%, 2%   { opacity: 0 }
+  4%, 30%  { opacity: 1 }
+  33%,100% { opacity: 0 }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nx-fases > span { animation: none; opacity: 0 }
+  .nx-fases > span:first-child { opacity: 1 }
+}
+
 /* Hueco para los controles flotantes (? y ⌘K), que van `fixed` abajo a la derecha.
    Al estar fuera del flujo se posaban encima del contenido — se veía en Inbox, con
    el botón «ABRIR BRUTAL.IA» debajo de ellos. El hueco se reserva una sola vez, en
