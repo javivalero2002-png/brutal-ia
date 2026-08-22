@@ -84,6 +84,12 @@ function fakeSupabase(e: Estado): any {
         select: () => q,
         eq: () => q,
         neq: () => q,
+        // `gte` lo usan las automatizaciones de control, que acotan el diario a
+        // los ultimos 14 dias. Sin encadenarlo aqui, TODAS las pruebas de
+        // runAutomations reventaban con «gte is not a function» — el mock tiene
+        // que parecerse al cliente de verdad, no solo a lo que hoy se llama.
+        gte: () => q,
+        lte: () => q,
         // `.not('name','in',...)` — el filtro de filas de sistema
         // (__push_subscription__, __account_logo__) vive en reglaRows.ts.
         not: () => q,

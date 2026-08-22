@@ -27,6 +27,13 @@ const LOCK_TTL_MS = 90_000
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const AUTO_MARK = '⚙ auto:'
+
+/** Hace N días, en day key de Madrid. Para acotar la ventana del diario. */
+const hace = (n: number) => {
+  const d = new Date(`${todayKey()}T12:00:00`)
+  d.setDate(d.getDate() - n)
+  return localDayKey(d)
+}
 const NOTIFY_THROTTLE_MS = 6 * 60 * 60 * 1000 // 6h entre avisos de la misma regla
 const MAX_MATCHES_PER_RULE = 8                // tope de acciones por regla y ejecución
 
@@ -39,6 +46,16 @@ export type TriggerType =
   | 'many_overdue'             // ≥ N tareas vencidas sin completar (count global)
   | 'high_priority_unassigned' // tareas urgentes/altas sin responsable
   | 'client_followup'          // sin emails del cliente en N días
+  // ── AUTOMATIZACIONES DE CONTROL ──────────────────────────────────────────
+  // Javi: «el jefe puede ponerse un aviso de que alguien lleva dos días sin
+  // fichar». Las de arriba miran COSAS (correos, tareas, proyectos); estas miran
+  // PERSONAS, que es lo que un jefe necesita y no tenía.
+  | 'sin_fichar'               // alguien lleva ≥ N días laborables sin fichar
+  | 'dia_sin_cerrar'           // alguien fichó y no cerró el día
+  | 'bloqueado'                // alguien se marcó BLOQUEADO al cerrar
+  // ── AVISOS DE ALTA ───────────────────────────────────────────────────────
+  | 'proyecto_nuevo'           // se creó un proyecto
+  | 'pieza_nueva'              // se añadió una pieza de contenido
 
 export type ActionType = 'create_task' | 'notify_team' | 'notify_owner'
 
@@ -87,6 +104,11 @@ export function describeRule(cfg: RuleConfig, clientName?: string): { cond: stri
     : t.type === 'email_from_client'      ? `Email de ${t.clientName || clientName || 'cliente'} sin leer`
     : t.type === 'project_deadline'       ? `Proyecto con deadline en < ${t.days ?? 7} días`
     : t.type === 'task_overdue'           ? 'Tarea vencida sin completar'
+    : t.type === 'sin_fichar'             ? `Alguien lleva ${t.threshold ?? 2}+ días sin fichar`
+    : t.type === 'dia_sin_cerrar'         ? 'Alguien fichó y no cerró el día'
+    : t.type === 'bloqueado'              ? 'Alguien se marcó BLOQUEADO'
+    : t.type === 'proyecto_nuevo'         ? 'Se crea un proyecto'
+    : t.type === 'pieza_nueva'            ? 'Se añade una pieza de contenido'
     : t.type === 'unread_pileup'          ? `${t.threshold ?? 10}+ emails sin leer`
     : t.type === 'many_overdue'           ? `${t.threshold ?? 5}+ tareas vencidas`
     : t.type === 'high_priority_unassigned' ? 'Tareas urgentes sin responsable'
@@ -175,6 +197,14 @@ export function evaluateTrigger(cfg: RuleConfig, ctx: {
   inbox: any[]; tasks: any[]; projects: any[]; clients: any[]
   /** Sin leer en el buzón PERSONAL de quien creó la regla. Solo lo usa `unread_pileup`. */
   sinLeerMios?: number
+  /** El equipo y su fichaje reciente. Lo usan las automatizaciones de control. */
+  equipo?: { id: string; name?: string | null }[]
+  /** Filas de `diario` de los últimos días, para saber quién fichó y quién cerró. */
+  diario?: { user_id: string; dia: string; entrada?: string | null; cierre_at?: string | null; animo?: string | null }[]
+  /** Hoy en Madrid, inyectado: la función es pura y los días son días de Madrid. */
+  hoy?: string
+  /** Piezas de contenido, para el aviso de pieza nueva. */
+  agenda?: { id: string; title?: string | null; platform?: string | null; created_at?: string | null }[]
 }): Match[] {
   const t = cfg.trigger
   const out: Match[] = []
@@ -269,6 +299,74 @@ export function evaluateTrigger(cfg: RuleConfig, ctx: {
       out.push({ key: `unassigned:${tk.id}`, projectId: tk.project_id, clientId: tk.client_id, vars: {
         tarea: tk.text || '', asunto: tk.text || '',
       } })
+    }
+  } else if (t.type === 'sin_fichar') {
+    // ── QUIÉN LLEVA N DÍAS SIN FICHAR ──────────────────────────────────────
+    //
+    // Cuenta DÍAS LABORABLES hacia atrás desde ayer, no días naturales, y no
+    // incluye hoy. Dos motivos, y los dos importan:
+    //
+    //  · Sin saltar fin de semana, un umbral de 2 días avisa cada lunes por la
+    //    mañana de todo el equipo. Un aviso que salta siempre deja de leerse.
+    //  · Sin excluir hoy, avisaría a las 8 de la mañana de que alguien «no ha
+    //    fichado» cuando aún no ha llegado a la oficina. Eso no es control, es
+    //    ruido — y del que enfada.
+    const umbral = Math.max(1, t.threshold ?? 2)
+    const hoy = ctx.hoy || todayKey()
+    const fichados = new Set((ctx.diario || [])
+      .filter(d => (d.entrada || '').trim())
+      .map(d => `${d.user_id}|${d.dia}`))
+
+    // Los N últimos días laborables antes de hoy.
+    const laborables: string[] = []
+    const cursor = new Date(`${hoy}T12:00:00`)
+    while (laborables.length < umbral) {
+      cursor.setDate(cursor.getDate() - 1)
+      const dow = cursor.getDay()
+      if (dow === 0 || dow === 6) continue
+      laborables.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`)
+    }
+
+    for (const p of ctx.equipo || []) {
+      const faltan = laborables.filter(d => !fichados.has(`${p.id}|${d}`))
+      if (faltan.length < umbral) continue
+      out.push({
+        // La clave lleva el ÚLTIMO día contado: así el aviso se repite si sigue
+        // sin fichar mañana, pero no se repite hoy por la misma racha.
+        key: `sinfichar:${p.id}:${laborables[0]}`,
+        vars: { persona: p.name || 'alguien', dias: String(umbral) },
+      })
+    }
+  } else if (t.type === 'dia_sin_cerrar') {
+    // Fichó y no cerró. Solo días PASADOS: el de hoy sigue abierto por definición.
+    const hoy = ctx.hoy || todayKey()
+    const nombre = new Map((ctx.equipo || []).map(p => [p.id, p.name || 'alguien']))
+    for (const d of ctx.diario || []) {
+      if (d.dia >= hoy) continue
+      if (!(d.entrada || '').trim() || d.cierre_at) continue
+      out.push({ key: `sincerrar:${d.user_id}:${d.dia}`, vars: { persona: nombre.get(d.user_id) || 'alguien', dia: d.dia } })
+    }
+  } else if (t.type === 'bloqueado') {
+    // Alguien se marcó BLOQUEADO. Es la señal que más rápido debe llegar a un
+    // jefe: es la única que dice «estoy parado y no puedo salir solo».
+    const nombre = new Map((ctx.equipo || []).map(p => [p.id, p.name || 'alguien']))
+    for (const d of ctx.diario || []) {
+      if (d.animo !== 'bloqueado') continue
+      out.push({ key: `bloqueado:${d.user_id}:${d.dia}`, vars: { persona: nombre.get(d.user_id) || 'alguien', dia: d.dia } })
+    }
+  } else if (t.type === 'proyecto_nuevo') {
+    // Proyectos creados en las últimas 24h. El `key` lleva el id, así que cada
+    // proyecto avisa UNA vez aunque el cron pase doce veces.
+    for (const p of ctx.projects) {
+      const creado = (p as { created_at?: string }).created_at
+      if (!creado || Date.now() - new Date(creado).getTime() > 86400000) continue
+      out.push({ key: `proyNuevo:${p.id}`, vars: { proyecto: p.name || 'sin nombre' }, projectId: p.id })
+    }
+  } else if (t.type === 'pieza_nueva') {
+    for (const a of ctx.agenda || []) {
+      const creado = a.created_at
+      if (!creado || Date.now() - new Date(creado).getTime() > 86400000) continue
+      out.push({ key: `piezaNueva:${a.id}`, vars: { pieza: a.title || 'sin título', plataforma: a.platform || '' } })
     }
   } else if (t.type === 'client_followup') {
     const cli = ctx.clients.find(c => c.id === t.clientId)
@@ -407,17 +505,30 @@ async function ejecutarReglas(
     admin.from('tasks').select('id,text,done,due_date,project_id,client_id,notes,level,assigned_to'),
     admin.from('projects').select('id,name,status,deadline,client_id'),
     admin.from('clients').select('id,name'),
+    // ── Lo que miran las automatizaciones de CONTROL ────────────────────────
+    // El comentario de arriba lo dice y vale también aquí: un snapshot que no trae
+    // lo que el evaluador mira es un fallo MUDO —no hay error, solo cero
+    // coincidencias para siempre—. Estas tres consultas son las que hacen que
+    // `sin_fichar`, `dia_sin_cerrar` y `bloqueado` puedan saltar alguna vez.
+    admin.from('profiles').select('id,name'),
+    // Dos semanas: cubre de sobra un umbral de días laborables sin traerse el
+    // histórico entero cada hora.
+    admin.from('diario').select('user_id,dia,entrada,cierre_at,animo').gte('dia', hace(14)),
+    admin.from('content_agenda').select('id,title,platform,created_at').order('created_at', { ascending: false }).limit(50),
   ])
   // Si una consulta falla, su lista queda vacía y el motor decide sobre datos
   // incompletos — p. ej. "0 tareas vencidas" cuando en realidad no pudo leerlas.
   logQueryErrors('automations', snapshot)
-  const [{ data: inbox }, { data: personales }, { data: tasks }, { data: projects }, { data: clients }] = snapshot
+  const [{ data: inbox }, { data: personales }, { data: tasks }, { data: projects }, { data: clients }, { data: equipo }, { data: diario }, { data: agenda }] = snapshot
   // Cuántos sin leer tiene cada uno en su buzón personal.
   const sinLeerPorPersona = new Map<string, number>()
   for (const m of personales || []) {
     if (m.user_id) sinLeerPorPersona.set(m.user_id, (sinLeerPorPersona.get(m.user_id) || 0) + 1)
   }
-  const ctx = { inbox: inbox || [], tasks: tasks || [], projects: projects || [], clients: clients || [] }
+  const ctx = {
+    inbox: inbox || [], tasks: tasks || [], projects: projects || [], clients: clients || [],
+    equipo: equipo || [], diario: diario || [], agenda: agenda || [], hoy: todayKey(),
+  }
 
   // Marcas de dedup ya existentes en tareas creadas por el motor
   const existingMarks = new Set<string>()

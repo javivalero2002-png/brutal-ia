@@ -3834,3 +3834,44 @@ describe('la tipografia de la app es la de la app', () => {
     }
   })
 })
+
+describe('el motor de automatizaciones recibe lo que mira', () => {
+  it('todo campo que lee evaluateTrigger viene cargado en el snapshot', () => {
+    // EL FALLO MUDO que el propio fichero documenta: «un snapshot que no trae lo
+    // que el evaluador mira es un fallo mudo — no hay error, solo cero
+    // coincidencias para siempre». Ya pasó una vez con `level` y `assigned_to`, y
+    // la regla «urgentes sin asignar» no saltó UNA VEZ desde que existía.
+    //
+    // Al añadir las automatizaciones de control volvió a estar a un descuido: si
+    // `ctx` no llevara `diario`, `sin_fichar` no saltaría jamás y nadie lo notaría.
+    // Verificado vaciándolo: ningún test se ponía rojo. Ahora sí.
+    const A = leerCodigo('src/lib/automations.ts')
+
+    const ini = A.indexOf('export function evaluateTrigger')
+    const fin = A.indexOf('export async function runAutomations')
+    expect(ini, 'ya no existe evaluateTrigger: revisa esta regla').toBeGreaterThan(-1)
+    expect(fin, 'ya no existe runAutomations: revisa esta regla').toBeGreaterThan(ini)
+
+    // Qué campos de `ctx` lee el evaluador…
+    const leidos = new Set(
+      [...A.slice(ini, fin).matchAll(/\bctx\.([a-zA-Z_][a-zA-Z0-9_]*)/g)].map(m => m[1]))
+    expect(leidos.size, 'el evaluador no lee nada de ctx: revisa esta regla').toBeGreaterThan(3)
+
+    // …y cuáles construye runAutomations.
+    // Se mira en LOS DOS sitios donde se puede aportar un campo: el objeto `ctx`
+    // y la propia llamada a `evaluateTrigger`, que hace `{ ...ctx, sinLeerMios }`.
+    // Mirar solo el primero daba un falso positivo con ese campo — el dato SÍ
+    // llegaba, solo que por la otra vía.
+    const i = A.indexOf('const ctx = {', fin)
+    expect(i, 'ya no se construye ctx en runAutomations: revisa esta regla').toBeGreaterThan(-1)
+    const construido = A.slice(i, A.indexOf('\n  }', i) + 4)
+    const j = A.indexOf('evaluateTrigger(cfg', fin)
+    const enLlamada = j === -1 ? '' : A.slice(j, A.indexOf(')', j) + 1)
+
+    const faltan = [...leidos].filter(k =>
+      !new RegExp(`\\b${k}\\s*:`).test(construido) && !new RegExp(`\\b${k}\\b`).test(enLlamada))
+    expect(faltan,
+      'el evaluador lee campos que el snapshot no carga: esos disparadores no saltaran NUNCA y no habra ningun error')
+      .toEqual([])
+  })
+})

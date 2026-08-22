@@ -283,6 +283,25 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: PropsAuto
             <div className="text-center text-[12px] mb-6" style={{color:'rgba(255,255,255,0.2)'}}>Sin reglas · empieza con una plantilla</div>
             <div className="space-y-2">
               {[
+                // ── DE CONTROL, primero ─────────────────────────────────────
+                // Javi: «el jefe puede ponerse un aviso de que alguien lleva dos
+                // días sin fichar». Las de abajo miran COSAS —correos, tareas,
+                // proyectos—; estas miran PERSONAS, que es lo que un jefe necesita
+                // y no había. Van arriba porque son las que él pidió y las que
+                // responden a la pregunta que se hace todos los días.
+                {name:'Alguien lleva 2 días sin fichar', cond:'2 días laborables sin fichar', act:'Avisarme a mí',
+                 config:{v:1,trigger:{type:'sin_fichar',threshold:2},action:{type:'notify_owner',message:'{persona} lleva {dias} días sin fichar'}}},
+                {name:'Alguien se ha marcado bloqueado', cond:'Se marca BLOQUEADO al cerrar el día', act:'Avisarme a mí',
+                 config:{v:1,trigger:{type:'bloqueado'},action:{type:'notify_owner',message:'{persona} se marcó bloqueado el {dia}'}}},
+                {name:'Día fichado y sin cerrar', cond:'Fichó y no cerró el día', act:'Avisarme a mí',
+                 config:{v:1,trigger:{type:'dia_sin_cerrar'},action:{type:'notify_owner',message:'{persona} no cerró el día {dia}'}}},
+
+                // ── DE ALTA ─────────────────────────────────────────────────
+                {name:'Nuevo proyecto añadido', cond:'Se crea un proyecto', act:'Notificar al equipo',
+                 config:{v:1,trigger:{type:'proyecto_nuevo'},action:{type:'notify_team',message:'Nuevo proyecto: {proyecto}'}}},
+                {name:'Nueva pieza de contenido', cond:'Se añade una pieza', act:'Notificar al equipo',
+                 config:{v:1,trigger:{type:'pieza_nueva'},action:{type:'notify_team',message:'Nueva pieza: {pieza}'}}},
+
                 {name:'Seguimiento de emails urgentes', cond:'Email urgente sin leer', act:'Crear tarea (alta)',
                  config:{v:1,trigger:{type:'email_urgent'},action:{type:'create_task',taskText:'Responder a {remitente} sobre {asunto}',level:'high'}}},
                 {name:'Alerta de deadline próximo', cond:'Deadline en < 7 días', act:'Notificar al equipo',
