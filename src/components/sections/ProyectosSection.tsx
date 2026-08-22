@@ -1388,7 +1388,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                       <div ref={pdfScrollRef} className="px-4 py-3 space-y-2.5 overflow-y-auto" style={{maxHeight:'220px'}}>
                         {pdfChat.map((m,i)=>(
                           <div key={i} className={m.role==='user'?'flex justify-end':'flex justify-start'}>
-                            <div className="px-3 py-2 rounded-xl font-figtree text-[12px] leading-relaxed whitespace-pre-wrap" style={m.role==='user'?{maxWidth:'85%',background:`${BLU}18`,color:'rgba(255,255,255,0.85)'}:{maxWidth:'85%',background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.7)'}}>{m.content}</div>
+                            <div className="px-3 py-2 rounded-xl font-figtree text-[12px] leading-relaxed whitespace-pre-wrap break-words" style={m.role==='user'?{maxWidth:'85%',background:`${BLU}18`,color:'rgba(255,255,255,0.85)'}:{maxWidth:'85%',background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.7)'}}>{m.content}</div>
                           </div>
                         ))}
                         {pdfChatBusy && <div className="flex gap-1.5 px-1 py-1">{[0,1,2].map(i=><div key={i} className="w-1.5 h-1.5 rounded-full" style={{background:BLU,animation:`pulse ${0.6+i*0.1}s ease-in-out ${i*0.1}s infinite alternate`}}/>)}</div>}
@@ -1460,7 +1460,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                         <span className="font-syne text-[7.5px] font-black" style={{color:'rgba(255,255,255,0.35)'}}>{n.user_name||'Usuario'}</span>
                         <span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.18)'}}>{new Date(n.created_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
                       </div>
-                      <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap" style={{color:'rgba(255,255,255,0.65)'}}>{n.content}</p>
+                      <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap break-words" style={{color:'rgba(255,255,255,0.65)'}}>{n.content}</p>
                     </div>
                     <button onClick={()=>deleteNote(n.id)} title="Eliminar nota" aria-label="Eliminar esta nota" className="opacity-50 md:opacity-0 md:group-hover:opacity-50 transition-opacity flex-shrink-0 mt-0.5">
                       <LucideIcon name="trash" size={11} color={RED}/>

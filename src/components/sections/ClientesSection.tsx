@@ -496,7 +496,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
         {selected.notes && (
           <div className="mb-6 px-5 py-4 rounded-2xl" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${BORDER}`}}>
             <div className="font-syne text-[8px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>NOTAS INTERNAS</div>
-            <p className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{color:'rgba(255,255,255,0.5)'}}>{selected.notes}</p>
+            <p className="text-[13px] leading-relaxed whitespace-pre-wrap break-words" style={{color:'rgba(255,255,255,0.5)'}}>{selected.notes}</p>
           </div>
         )}
 
@@ -533,7 +533,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
                   <div className="flex-shrink-0 mt-1.5 w-2 h-2 rounded-full" style={{background:m.ai_urgency==='urgent'?RED:m.ai_urgency==='high'?'rgba(255,176,32,0.8)':BLU}}/>
                   <div className="flex-1 min-w-0">
                     <div className="font-figtree text-[13px] font-semibold truncate" style={{color:m.is_read?'rgba(255,255,255,0.5)':'rgba(255,255,255,0.88)'}}>{m.subject||'Sin asunto'}</div>
-                    <div className="text-[11px] mt-0.5" style={{color:'rgba(255,255,255,0.28)'}}>{m.from_name} · {relTime(m.received_at)}</div>
+                    <div className="text-[11px] mt-0.5 break-words" style={{color:'rgba(255,255,255,0.28)'}}>{m.from_name} · {relTime(m.received_at)}</div>
                   </div>
                   {!m.is_read && <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5" style={{background:BLU}}/>}
                 </div>

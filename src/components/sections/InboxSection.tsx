@@ -47,7 +47,7 @@ function EmailBodyBlock({preview, gmailId}: {preview:string; gmailId?:string}) {
         )}
       </div>
       <div className="p-5">
-        <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap" style={{color:'rgba(255,255,255,0.42)'}}>
+        <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap break-words" style={{color:'rgba(255,255,255,0.42)'}}>
           {expanded ? preview : short}{needsMore&&!expanded&&'…'}
         </p>
         {needsMore && (
@@ -925,14 +925,14 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                     <div className="w-1.5 h-1.5 rounded-full" style={{background:RED}}/>URGENTE
                   </span>
                 )}
-                <h2 className="font-figtree text-[20px] font-black text-white leading-tight" style={{letterSpacing:'-0.025em'}}>{selected.subject||selected.from_phone||'Sin asunto'}</h2>
+                <h2 className="font-figtree text-[20px] font-black text-white leading-tight break-words" style={{letterSpacing:'-0.025em'}}>{selected.subject||selected.from_phone||'Sin asunto'}</h2>
               </div>
               <div className="flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                   <div className="w-8 h-8 rounded-full flex items-center justify-center font-syne text-[10px] font-black flex-shrink-0" style={{background:selected.source==='internal'?'rgba(255,176,32,0.12)':strColor(selected.from_name||'?')+'20',color:selected.source==='internal'?'rgba(255,176,32,0.75)':strColor(selected.from_name||'?')}}>{(selected.from_name||'?').slice(0,2).toUpperCase()}</div>
-                  <span className="text-[13px] font-semibold" style={{color:'rgba(255,255,255,0.75)'}}>{selected.from_name||'Desconocido'}</span>
+                  <span className="text-[13px] font-semibold break-words min-w-0" style={{color:'rgba(255,255,255,0.75)'}}>{selected.from_name||'Desconocido'}</span>
                 </div>
-                {selected.from_email && <span className="text-[11px]" style={{color:'rgba(255,255,255,0.28)'}}>{selected.from_email}</span>}
+                {selected.from_email && <span className="text-[11px] break-all min-w-0" style={{color:'rgba(255,255,255,0.28)'}}>{selected.from_email}</span>}
                 <span className="ml-auto text-[11px]" style={{color:'rgba(255,255,255,0.22)'}}>{new Date(selected.received_at).toLocaleDateString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
               </div>
             </div>
@@ -982,7 +982,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
 
                 <div className="p-5 space-y-4" style={{background:'rgba(0,0,0,0.18)'}}>
                   {selected.ai_summary && (
-                    <p className="text-[13.5px] leading-relaxed" style={{color:'rgba(235,235,250,0.82)'}}>{selected.ai_summary}</p>
+                    <p className="text-[13.5px] leading-relaxed break-words" style={{color:'rgba(235,235,250,0.82)'}}>{selected.ai_summary}</p>
                   )}
 
                   {/* Action cards */}

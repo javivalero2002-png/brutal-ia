@@ -705,7 +705,7 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
                 <div key={msg.id} className={`flex ${isSent?'justify-end':'justify-start'}`}>
                   <div className="max-w-[75%]">
                     <div className="px-4 py-3 rounded-2xl" style={{background:isSent?`linear-gradient(135deg,${BLU},#1440CC)`:'rgba(255,255,255,0.06)',borderBottomRightRadius:isSent?'4px':'16px',borderBottomLeftRadius:isSent?'16px':'4px'}}>
-                      <p className="text-[13px] leading-relaxed" style={{color:isSent?'white':'rgba(255,255,255,0.8)'}}>{msg.body_preview}</p>
+                      <p className="text-[13px] leading-relaxed break-words" style={{color:isSent?'white':'rgba(255,255,255,0.8)'}}>{msg.body_preview}</p>
                     </div>
                     <div className={`text-[10px] mt-1 px-1 ${isSent?'text-right':''}`} style={{color:'rgba(255,255,255,0.2)'}}>
                       {relTime(msg.received_at)}

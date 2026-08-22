@@ -3839,6 +3839,100 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('lo que llega de fuera no puede ensanchar un panel', () => {
+  // Javi, con una captura del movil: «esta pagina no es estatica». El detalle de un
+  // correo se podia arrastrar de lado y se salia media pantalla — hasta el boton
+  // VOLVER quedaba fuera. Las dos barras fijas seguian en su sitio, que es lo que
+  // delataba que no era el documento (`html, body` llevan `overflow: hidden`) sino
+  // el propio panel.
+  //
+  // LA CAUSA es una regla de CSS que sorprende: si UNO de los dos ejes deja de ser
+  // `visible`, el otro no puede seguir siendolo y el navegador lo computa a `auto`.
+  // O sea que `overflow-y-auto` activa TAMBIEN el eje horizontal sin que nadie lo
+  // pida. Medido en el navegador: un div con solo `overflow-y:auto` da
+  // `overflowX: "auto"` y 3231 px de contenido en 200 px de caja.
+  //
+  // Habia 44 contenedores asi en la app y solo 3 tapaban el eje X. Bastaba un texto
+  // que no supiera partirse —un enlace de seguimiento de LinkedIn, 300 caracteres
+  // sin un espacio— para poder arrastrar el panel entero.
+  const CSS = leerCodigo('src/app/globals.css')
+
+  it('la guarda de CSS existe y NO vive dentro de un @media', () => {
+    const i = CSS.indexOf('.overflow-y-auto:not(')
+    expect(i, 'se fue la guarda: cualquier texto largo vuelve a mover el panel de lado')
+      .toBeGreaterThan(-1)
+    // Estuvo a punto de colarse dentro del bloque movil, y el fallo pasa igual en
+    // escritorio: la lista de correos mide 360 px y desborda con lo mismo.
+    // Profundidad de llaves hasta la guarda. A nivel raiz es 0; dentro de un
+    // @media es 1. `leerCodigo` ya quito los comentarios de bloque, asi que las
+    // llaves que se cuentan son todas de CSS de verdad.
+    const antes = CSS.slice(0, i)
+    const profundidad = (antes.split('{').length - 1) - (antes.split('}').length - 1)
+    expect(profundidad, 'la guarda quedo dentro de un @media: solo protege a esas pantallas')
+      .toBe(0)
+    expect(/overflow-x:\s*hidden/.test(CSS.slice(i, i + 200)),
+      'la guarda ya no tapa el eje horizontal').toBe(true)
+    // Y tiene que apartarse de quien pide los dos ejes a proposito.
+    expect(/:not\(\.overflow-x-auto\)/.test(CSS.slice(i, i + 200)),
+      'la guarda pisa a quien pide scroll horizontal aposta').toBe(true)
+  })
+
+  // Que sepa partir un token sin espacios: da igual si es clase de Tailwind o
+  // estilo inline. `overflowWrap: 'anywhere'` hace exactamente el mismo trabajo.
+  const PARTE = /break-words|break-all|truncate|line-clamp|overflowWrap|wordBreak/
+
+  it('`whitespace-pre-wrap` siempre va con algo que sepa partir un token largo', () => {
+    // `pre-wrap` respeta los saltos y parte por espacios, pero una URL de 300
+    // caracteres NO tiene espacios: estira el contenedor y ya no hay vuelta atras.
+    const malos: string[] = []
+    for (const f of CLIENTE) {
+      // Sobre el fichero ENTERO y no sobre leerCodigo(), para que el numero de linea
+      // que se reporta sea el de verdad: quitar comentarios de bloque lo desplaza.
+      // Aqui un comentario solo puede provocar un falso POSITIVO, que se ve y se
+      // corrige; el peligroso es el simetrico, y ese no cabe en esta forma.
+      leer(f).split('\n').forEach((l, i) => {
+        if (!/whitespace-pre-wrap/.test(l)) return
+        if (/^\s*(\/\/|\*|\{\/\*)/.test(l)) return
+        if (PARTE.test(l)) return
+        malos.push(`${f}:${i + 1}`)
+      })
+    }
+    expect(malos, `texto preformateado sin forma de partirse — un enlace largo ensancha el panel:\n  ${malos.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('el texto que viene del correo se pinta con algo que sepa partirlo', () => {
+    // Solo cuando es el CONTENIDO de un elemento. Pasarlo como prop no cuenta: ahi
+    // decide el componente que lo recibe.
+    const DE_FUERA = /\{[^{}]*\.(from_email|from_name|subject|ai_summary|body_preview)\b[^{}]*\}/g
+    // Las iniciales del avatar: DOS caracteres en un circulo de 32 px. No pueden
+    // desbordar nada, y ponerles break-words seria ruido.
+    const INICIALES = /\.slice\(0, ?2\)/
+    const malos: string[] = []
+    for (const f of CLIENTE) {
+      const src = leerCodigo(f)
+      for (const m of src.matchAll(DE_FUERA)) {
+        if (src[m.index! - 1] === '=') continue          // es una prop
+        if (src[m.index! - 1] !== '>') continue          // no es el texto del elemento
+        const abre = src.lastIndexOf('<', m.index!)
+        if (abre < 0) continue
+        const etiqueta = src.slice(abre, m.index!)
+        if (!/^<[a-z]/.test(etiqueta)) continue          // <Componente/>, no un tag
+        if (PARTE.test(etiqueta)) continue
+        if (INICIALES.test(m[0])) continue
+        // El numero de linea, sobre el fichero real: src viene sin comentarios de
+        // bloque y eso corre el conteo.
+        const orig = leer(f)
+        const j = orig.indexOf(m[0])
+        const linea = j < 0 ? 0 : orig.slice(0, j).split('\n').length
+        malos.push(`${f}:${linea} → ${m[0].slice(0, 46)}`)
+      }
+    }
+    expect(malos, `texto de fuera sin forma de partirse — una direccion o un asunto largo mueve el panel:\n  ${malos.join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
 describe('el motor de automatizaciones recibe lo que mira', () => {
   it('todo campo que lee evaluateTrigger viene cargado en el snapshot', () => {
     // EL FALLO MUDO que el propio fichero documenta: «un snapshot que no trae lo
