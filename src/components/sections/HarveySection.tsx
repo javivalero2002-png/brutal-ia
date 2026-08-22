@@ -742,13 +742,24 @@ ${memLines2||'  sin documentos'}`
   const overdueProjectsH = (data.projects||[]).filter((p:any)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<new Date())
   const todayCalEvtsH = ((data.calendarEvents||[]) as any[]).filter((e:any)=>e.start?.slice(0,10)===todayStrH)
   const urgentUnread = unreadEmails.filter((m:any)=>m.ai_urgency==='urgent')
+  // HEX, no rgba(), aunque hoy nadie les concatene opacidad.
+  //
+  // Eran `rgba(234,67,53,0.8)` y `rgba(193,53,132,0.9)`. En cuanto alguien escriba
+  // `a.c + '12'` para teñir un fondo —que es el patrón de toda la app— el navegador
+  // DESCARTA la declaración entera, sin error y sin nada en consola: el elemento se
+  // pinta sin fondo. Ha pasado nueve veces en este repo (ver CLAUDE.md).
+  //
+  // Los valores son los mismos colores mezclados sobre el fondo (#0B0B12), así que
+  // se ven idénticos a antes; lo único que cambia es que ahora se les puede pegar
+  // un alfa detrás sin romper nada.
+
   const quickActions = [
     ...(urgentTasks.length>0 ? [{t:`Prioriza mis ${urgentTasks.length} tareas urgentes`, icon:'zap', c:RED}] : []),
-    ...(urgentUnread.length>0 ? [{t:`Tengo ${urgentUnread.length} email${urgentUnread.length>1?'s':''} urgente${urgentUnread.length>1?'s':''}, ¿qué hago?`, icon:'mail', c:RED}] : unreadEmails.length>0 ? [{t:`Resume los ${unreadEmails.length} emails sin leer`, icon:'mail', c:'rgba(234,67,53,0.8)'}] : []),
+    ...(urgentUnread.length>0 ? [{t:`Tengo ${urgentUnread.length} email${urgentUnread.length>1?'s':''} urgente${urgentUnread.length>1?'s':''}, ¿qué hago?`, icon:'mail', c:RED}] : unreadEmails.length>0 ? [{t:`Resume los ${unreadEmails.length} emails sin leer`, icon:'mail', c:'#BD382E'}] : []),
     ...(overdueProjectsH.length>0 ? [{t:`¿Cómo recuperamos "${overdueProjectsH[0]?.name}"?`, icon:'alert-circle', c:AMBAR}] : []),
     ...(todayCalEvtsH.length>0 ? [{t:`Prepárame para "${todayCalEvtsH[0]?.title}"`, icon:'calendar', c:'#A78BFA'}] : []),
     ...(urgentTasks.length===0&&urgentUnread.length===0 ? [{t:'¿Cómo está Brutal Studios hoy?', icon:'bar-chart-2', c:GRN}] : []),
-    ...(pipeline.length>0 ? [{t:`Crea una pieza para Instagram`, icon:'film', c:'rgba(193,53,132,0.9)'}] : []),
+    ...(pipeline.length>0 ? [{t:`Crea una pieza para Instagram`, icon:'film', c:'#AF3179'}] : []),
     {t:'Crea una tarea urgente', icon:'plus-circle', c:BLU},
   ].slice(0,4)
 

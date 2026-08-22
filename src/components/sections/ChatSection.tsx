@@ -1,5 +1,6 @@
 'use client'
 import React, { useState, useEffect, useRef } from 'react'
+import { Esperando } from '@/components/shared'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { Task, Project, NexusData} from '@/types'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, useIsMobile, dlDate, LucideIcon, todayKey } from '@/components/shared'
@@ -127,13 +128,21 @@ function MarkdownMsg({ text }: { text: string }) {
       } else if (trimmed.startsWith('> ')) {
         result.push(<div key={i} className="pl-3 py-0.5 my-1 text-[12.5px] leading-relaxed" style={{borderLeft:`2px solid ${BLU}40`,color:'rgba(200,210,255,0.6)'}}>{formatInline(trimmed.slice(2))}</div>)
       } else if (trimmed.startsWith('# ')) {
-        result.push(<div key={i} className="font-figtree text-[16px] font-black mt-4 mb-1.5 leading-tight" style={{color:'rgba(255,255,255,0.95)',letterSpacing:'-0.02em'}}>{trimmed.slice(2)}</div>)
+        result.push(<div key={i} className="font-figtree font-black mt-5 mb-2 leading-tight" data-nivel="1" style={{fontSize:'19px',letterSpacing:'-0.025em',color:'rgba(255,255,255,0.97)'}}>{trimmed.slice(2)}</div>)
       } else if (trimmed.startsWith('## ')) {
-        result.push(<div key={i} className="font-figtree text-[14px] font-black mt-3 mb-1" style={{color:'rgba(255,255,255,0.9)'}}>{trimmed.slice(3)}</div>)
+        result.push(<div key={i} className="font-figtree font-black mt-4 mb-1.5" data-nivel="2" style={{fontSize:'16.5px',letterSpacing:'-0.02em',color:'rgba(255,255,255,0.95)'}}>{trimmed.slice(3)}</div>)
       } else if (trimmed.startsWith('### ')) {
-        result.push(<div key={i} className="font-syne text-[9px] font-black tracking-widest mt-3 mb-1" style={{color:'rgba(255,255,255,0.45)'}}>{trimmed.slice(4).toUpperCase()}</div>)
+        // 13,5px en Figtree, no 9px en versalitas: el `###` se pintaba MÁS PEQUEÑO
+        // que el párrafo que encabeza (13px), así que cada vez que Claude
+        // estructuraba con `###` —constantemente— la respuesta PERDÍA jerarquía en
+        // vez de ganarla, y quedaba un bloque gris imposible de escanear.
+        result.push(<div key={i} className="font-figtree font-bold mt-4 mb-1.5" style={{fontSize:'15px',color:'rgba(255,255,255,0.95)',letterSpacing:'-0.015em'}}>{trimmed.slice(4)}</div>)
       } else {
-        result.push(<p key={i} className="text-[13px] leading-relaxed" style={{color:'rgba(240,240,248,0.78)'}}>{formatInline(trimmed)}</p>)
+        // 14px / 0,88 y no 13px / 0,78. Lo que la gente viene a leer —la respuesta—
+        // era el texto MÁS pequeño y MÁS apagado de la pantalla, mientras los
+        // adornos del estado vacío iban a 20px. En HoySection el contenido va a
+        // 13,5-16px con opacidad 0,82-0,9; al lado, esto se leía como una nota al pie.
+        result.push(<p key={i} className="leading-relaxed" style={{fontSize:'14px',color:'rgba(240,240,248,0.88)'}}>{formatInline(trimmed)}</p>)
       }
     }
   })
@@ -241,26 +250,25 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className={`flex-shrink-0 ${isMobile?'px-4':'px-6'} py-5`} style={{borderBottom:`1px solid ${BORDER}`}}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0 overflow-hidden p-1.5" style={{background:'rgba(27,95,250,0.1)',border:'1px solid rgba(27,95,250,0.2)'}}>
-              <img src="/brutal-logo.svg" className="w-full opacity-80" alt=""/>
-            </div>
-            <div>
-              <div className="font-figtree text-[16px] font-black text-white leading-none" style={{letterSpacing:'-0.025em'}}>BRUTAL<span style={{color:BLU}}>.IA</span></div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.3)'}}>ASISTENTE CON CONTEXTO COMPLETO</span>
-                {!isMobile && <>
-                <span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
-                <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>N ESCRIBIR</span>
-                <span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.07)'}}>·</span>
-                <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>1-6 PROMPTS</span>
-                </>}
-              </div>
-            </div>
+      {/* CABECERA CANÓNICA — la misma que las otras once secciones.
+          Antes era logotipo + nombre + tres micro-etiquetas de 7px a opacidad 0,07
+          (que no se leían: eran textura gris) + una fila de cinco chips de recuento.
+          Eso hacía que al saltar desde Proyectos o Tareas la sección pareciera un
+          widget incrustado y no parte de Nexus — y es buena parte de lo que Javi
+          llama «anticuada».
+          Los recuentos se van enteros: son los mismos que acabas de ver en Hoy, y
+          abrir el asistente para encontrarte otra vez los mismos contadores no
+          invita a preguntar nada. */}
+      <div className={`flex-shrink-0 ${isMobile?'px-5':'px-8'} pt-7 pb-5`} style={{borderBottom:`1px solid ${BORDER}`}}>
+        <div className="flex items-end justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>IA</div>
+            <h1 className="font-figtree font-black text-white leading-none" style={{fontSize:isMobile?'22px':'26px',letterSpacing:'-0.03em'}}>
+              Brutal.IA
+            </h1>
           </div>
-          {!isEmpty && (
+          <div className="flex items-center gap-2">
+            {!isEmpty && (
             confirmClear
               ? <div className="flex items-center gap-1">
                   {/* Deshabilitado mientras Claude responde: el DELETE se ejecutaba
@@ -272,20 +280,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
                 </div>
               : <button onClick={()=>setConfirmClear(true)} className="font-syne text-[8px] font-black tracking-widest px-3 py-1.5 rounded-xl transition-all hover:bg-white/5" style={{color:'rgba(255,255,255,0.2)',border:`1px solid ${BORDER}`}}>LIMPIAR</button>
           )}
-        </div>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {[
-            {n:data.clients?.length||0, l:'clientes'},
-            {n:data.tasks?.filter((t:any)=>!t.done).length||0, l:'tareas activas'},
-            {n:data.projects?.filter((p:any)=>p.status==='activo').length||0, l:'proyectos'},
-            {n:data.inbox?.filter((m:any)=>!m.is_read).length||0, l:'sin leer'},
-            ...(data.chatMessages?.length > 0 ? [{n:data.chatMessages.length, l:'mensajes'}] : []),
-          ].map((c,i)=>(
-            <span key={i} className="font-syne text-[7.5px] font-black px-2 py-1 rounded-lg" style={{background:SURF2,color:'rgba(255,255,255,0.28)'}}>
-              <span style={{color:'rgba(255,255,255,0.75)'}}>{c.n}</span> {c.l}
-            </span>
-          ))}
-          <span className="font-syne text-[7px] font-black tracking-widest px-2 py-1 rounded-lg" style={{background:'rgba(27,95,250,0.08)',color:BLU}}>SONNET 4.6</span>
+          </div>
         </div>
       </div>
 
@@ -439,10 +434,21 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
                     <img src="/brutal-logo.svg" className="w-full opacity-80" alt=""/>
                   </div>
                 )}
-                <div className="max-w-[76%] relative" style={{display:'flex',flexDirection:'column',alignItems:m.role==='user'?'flex-end':'flex-start'}}>
+                {/* Ancho de LECTURA, no porcentaje. En un monitor ancho el 76%
+                    son ~1000px de línea, muy por encima de las 65-75 letras que se
+                    siguen sin perder el renglón — y hacía que la sección se viera
+                    distinta en cada pantalla, que es lo contrario de «diseñado». */}
+                <div className="relative" style={{maxWidth:'min(76%, 680px)',display:'flex',flexDirection:'column',alignItems:m.role==='user'?'flex-end':'flex-start'}}>
                   <div className="px-4 py-3" style={{
-                    background:m.role==='user'?`linear-gradient(135deg,${BLU},#1440CC)`:'rgba(12,12,22,0.95)',
-                    border:m.role==='ai'?`1px solid ${BORDER}`:'none',
+                    // El degradado azul de esquina a esquina era el gesto que más
+                    // databa la pantalla —mensajería de 2015— y además se rompía en
+                    // modo claro: el contrafiltro de globals.css solo cancela
+                    // declaraciones `color:`, no fondos, así que el body invertía el
+                    // degradado y la burbuja salía naranja con texto negro.
+                    // Un tinte plano del azul de marca dice lo mismo —«esto lo has
+                    // escrito tú»— sin gritar, y con hex para que el alfa concatene.
+                    background:m.role==='user'?`${BLU}1A`:'rgba(12,12,22,0.95)',
+                    border:m.role==='user'?`1px solid ${BLU}38`:`1px solid ${BORDER}`,
                     borderRadius:'16px',
                     borderTopLeftRadius:m.role==='ai'?'5px':'16px',
                     borderTopRightRadius:m.role==='user'?'5px':'16px',
@@ -475,10 +481,17 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
                 <div className="w-7 h-7 rounded-xl flex items-center justify-center overflow-hidden p-1" style={{background:'rgba(27,95,250,0.12)',border:'1px solid rgba(27,95,250,0.2)'}}>
                   <img src="/brutal-logo.svg" className="w-full opacity-80" alt=""/>
                 </div>
-                <div className="flex gap-1 px-4 py-3.5 rounded-2xl" style={{background:'rgba(12,12,22,0.95)',border:`1px solid ${BORDER}`}}>
-                  <div className="w-1.5 h-1.5 rounded-full animate-dot1" style={{background:BLU}}/>
-                  <div className="w-1.5 h-1.5 rounded-full animate-dot2" style={{background:BLU}}/>
-                  <div className="w-1.5 h-1.5 rounded-full animate-dot3" style={{background:BLU}}/>
+                {/* LA ESPERA, CONTADA.
+                    Eran tres puntos de 6px durante una espera que puede acercarse
+                    al minuto —la búsqueda web ocurre ANTES de llamar al modelo—.
+                    Una pantalla que no dice nada durante cuarenta segundos se lee
+                    como rota, y es lo primero que envejece un chat. Harvey ya
+                    distinguía «BUSCANDO EN WEB…» con el mismo motor detrás.
+                    Las fases van por tiempo, no por progreso real. Es honesto
+                    mientras digan cosas que de verdad pasan y no prometan un
+                    porcentaje — la lección de la barra del PDF. */}
+                <div className="px-4 py-3.5 rounded-2xl" style={{background:'rgba(12,12,22,0.95)',border:`1px solid ${BORDER}`}}>
+                  <Esperando fases={['Leyendo tu contexto', 'Buscando lo que haga falta', 'Redactando']} color={BLU}/>
                 </div>
               </div>
             )}
