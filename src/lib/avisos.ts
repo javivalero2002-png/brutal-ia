@@ -22,6 +22,7 @@ export type CategoriaAviso =
   | 'mensaje'
   | 'correo'
   | 'cliente'
+  | 'fichaje'
   | 'automatizacion'
   | 'averia'
   | 'prueba'
@@ -67,6 +68,14 @@ export const AVISOS: Record<CategoriaAviso, Ficha> = {
     desc: 'Cuando alguien aprueba una pieza o pide cambios desde el enlace de revisión.',
     silenciable: true,
   },
+  fichaje: {
+    label: 'Fichar y cerrar el día',
+    desc: 'A las 10:00 si no has fichado, y a las 20:00 si empezaste el día y no lo cerraste. Solo de lunes a viernes.',
+    // Silenciable: Javi lo pidió expresamente —«no que sea obligatorio»— aunque
+    // también dijo que es vital. Por eso viene ACTIVADO de fábrica (ausente = sí,
+    // ver `quiereAviso`) y se apaga con un toque, en vez de al revés.
+    silenciable: true,
+  },
   automatizacion: {
     label: 'Automatizaciones',
     desc: 'Cuando salta una de las reglas que habéis configurado.',
@@ -89,7 +98,7 @@ export const AVISOS: Record<CategoriaAviso, Ficha> = {
 
 /** El orden en que se pintan. Lo más frecuente arriba, la avería al final. */
 export const ORDEN_AVISOS: CategoriaAviso[] = [
-  'tarea', 'correo', 'cliente', 'mensaje', 'automatizacion', 'averia',
+  'tarea', 'fichaje', 'correo', 'cliente', 'mensaje', 'automatizacion', 'averia',
 ]
 
 /**

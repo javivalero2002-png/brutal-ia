@@ -25,6 +25,14 @@
     {
       "path": "/api/cron/recordatorio-fichar",
       "schedule": "0 9 * * 1-5"
+    },
+    {
+      "path": "/api/cron/recordatorio-cerrar",
+      "schedule": "0 18 * * 1-5"
+    },
+    {
+      "path": "/api/cron/recordatorio-cerrar",
+      "schedule": "0 19 * * 1-5"
     }
   ],
   "git": {
