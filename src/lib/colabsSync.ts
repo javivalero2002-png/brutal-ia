@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { cuentaCompartida, cuentasDe, quitarCuenta } from '@/lib/gmailCuentas'
 import { aplazarResto } from '@/lib/aplazarCorreos'
+import { insertarEnInbox } from '@/lib/inboxInsert'
 import { triar, remitentesConocidos, dominiosPropios } from '@/lib/inboxTriage'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { esTokenMuerto, esConexionRota, avisarConexionCaida } from '@/lib/gmailAuth'
@@ -100,16 +101,21 @@ async function syncColabsInboxSinCerrojo(
   // atribuir los correos. Venga de la tabla o de las columnas viejas, un solo
   // nombre — si no, cada uso de abajo tendría que preguntar de dónde salió.
   let duenoConexion: string | null = compartida?.profile_id ?? null
+  // La direccion, para poder decir DE QUE BUZON entro cada correo. Se resuelve
+  // aqui junto al token porque los dos caminos —tabla nueva y columnas viejas—
+  // tienen que dejar el mismo nombre puesto.
+  let correoCuenta: string | null = compartida?.email ?? null
   if (!token) {
     const { data: owner } = await admin
       .from('profiles')
-      .select('id, gmail_colabs_refresh_token')
+      .select('id, gmail_colabs_refresh_token, gmail_colabs_account')
       .not('gmail_colabs_refresh_token', 'is', null)
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle()
     token = owner?.gmail_colabs_refresh_token as string | undefined
     duenoConexion = owner?.id ?? null
+    correoCuenta = (owner?.gmail_colabs_account as string | undefined) || 'colaboraciones@brutalstudios.es'
     if (token) console.warn('[colabs] usando el token de profiles: ¿falta correr 20260820_gmail_cuentas.sql?')
   }
   if (!token) return { ok: false, error: 'Colaboraciones not connected' }
@@ -242,7 +248,7 @@ async function syncColabsInboxSinCerrojo(
     // iteraciones al día, retención corta en Hobby): se agrega al final.
     if (analysis?.degraded) aiFailures++
 
-    const { error: insertError } = await admin.from('inbox_messages').insert({
+    const { error: insertError } = await insertarEnInbox(admin, {
       user_id: ownerId,
       source: 'gmail',
       gmail_id: email.gmail_id,
@@ -263,6 +269,7 @@ async function syncColabsInboxSinCerrojo(
       is_unread: email.is_unread,
       received_at: email.received_at,
       shared: true,
+      cuenta: correoCuenta,
       attachments: email.attachments?.length ? email.attachments : [],
     })
 
@@ -309,7 +316,7 @@ async function syncColabsInboxSinCerrojo(
     const aplazados = await aplazarResto(
       admin,
       emails.slice(corte).filter(e => !colabsKnown.has(e.gmail_id)),
-      { userId: ownerId, shared: true, etiqueta: 'colabs' },
+      { userId: ownerId, shared: true, etiqueta: 'colabs', cuenta: correoCuenta },
     )
     if (aplazados) console.log('[colabs] aplazados', aplazados, 'correos para la siguiente pasada')
   }
@@ -542,7 +549,7 @@ async function syncPersonalInboxSinCerrojo(
     }
     if (analysis?.degraded) aiFailures++
 
-    const { error: insertError } = await admin.from('inbox_messages').insert({
+    const { error: insertError } = await insertarEnInbox(admin, {
       user_id: profile.id,
       source: 'gmail',
       gmail_id: email.gmail_id,
@@ -563,6 +570,7 @@ async function syncPersonalInboxSinCerrojo(
       is_unread: email.is_unread,
       received_at: email.received_at,
       shared: false,
+      cuenta: correoCuenta || null,
       attachments: email.attachments?.length ? email.attachments : [],
     })
     if (insertError) {
@@ -616,7 +624,7 @@ async function syncPersonalInboxSinCerrojo(
     const aplazados = await aplazarResto(
       admin,
       emails.slice(corte).filter(e => !personalKnown.has(e.gmail_id)),
-      { userId: profile.id, shared: false, etiqueta: 'sync personal' },
+      { userId: profile.id, shared: false, etiqueta: 'sync personal', cuenta: correoCuenta || null },
     )
     if (aplazados) console.log('[sync personal] aplazados', aplazados, 'correos para la siguiente pasada')
   }

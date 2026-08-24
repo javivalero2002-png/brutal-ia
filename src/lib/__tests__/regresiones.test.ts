@@ -3839,6 +3839,73 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('todo correo que entra dice por que buzon entro', () => {
+  // Javi: «no se si estan entrando los Gmail de ambos correos». Y no habia forma de
+  // saberlo: `inbox_messages` guarda `user_id` y `shared`, pero no la DIRECCION del
+  // buzon. Con dos cuentas personales conectadas —lo que permite `gmail_cuentas`
+  // desde el 2026-08-20— las dos escriben `shared = false` y son la misma casilla.
+  //
+  // La columna `cuenta` (migracion 20260824_inbox_cuenta.sql) lo arregla, pero solo
+  // sirve si la escriben TODOS los caminos de entrada. Y son tres, no uno: el sync
+  // del buzon compartido, el personal, y la cola de aplazados de `aplazarCorreos`.
+  // Olvidar uno no da error: esos correos salen «sin identificar» y el selector de
+  // buzones deja de verlos. Justo el fallo mudo que persigue el resto del fichero.
+  const RUTAS_DE_ENTRADA = ['src/lib/colabsSync.ts', 'src/lib/aplazarCorreos.ts']
+
+  it('nadie inserta en inbox_messages por su cuenta: todos pasan por insertarEnInbox', () => {
+    // La puerta unica es lo que hace que la comprobacion de abajo sea suficiente.
+    // Tambien es donde vive el reintento sin la columna, que es lo que impide que
+    // desplegar antes de correr la migracion deje al equipo sin correo.
+    const sueltos: string[] = []
+    for (const f of RUTAS_DE_ENTRADA) {
+      if (/\.from\('inbox_messages'\)\s*\.insert\(/.test(leerCodigo(f))) sueltos.push(f)
+    }
+    expect(sueltos, `insertan en inbox_messages sin pasar por insertarEnInbox, asi que se saltan la columna «cuenta» y el reintento:\n  ${sueltos.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('cada fila de correo que se construye lleva su `cuenta`', () => {
+    // La regla mira la FORMA DE LA FILA y no la llamada. La primera version miraba
+    // el objeto pegado a `insertarEnInbox(`, y daba un falso positivo en
+    // `aplazarCorreos`, que construye la cola arriba y pasa la variable. Un falso
+    // positivo se ve y se corrige; el simetrico —dar por buena una fila sin cuenta
+    // porque el objeto estaba en otra linea— habria sido el fallo grave.
+    //
+    // Firma de una fila de inbox: lleva `user_id` y `gmail_id`. No hay otra cosa en
+    // estos ficheros con esas dos claves juntas.
+    const sinCuenta: string[] = []
+    for (const f of RUTAS_DE_ENTRADA) {
+      const src = leerCodigo(f)
+      let vistas = 0
+      for (const m of src.matchAll(/\{[^{}]*\buser_id:[^{}]*\}/g)) {
+        if (!/\bgmail_id:/.test(m[0])) continue
+        vistas++
+        if (!/\bcuenta:/.test(m[0])) {
+          // La linea, sobre el fichero REAL: `src` viene sin comentarios de bloque
+          // y eso corre el conteo. Ya paso una vez en este mismo fichero.
+          const orig = leer(f)
+          const j = orig.indexOf(m[0].slice(0, 40))
+          sinCuenta.push(`${f}:${j < 0 ? '?' : orig.slice(0, j).split('\n').length}`)
+        }
+      }
+      expect(vistas, `${f} ya no construye filas de inbox: revisa esta regla en vez de borrarla`)
+        .toBeGreaterThan(0)
+    }
+    expect(sinCuenta, `correos que entran sin decir de que buzon vienen — saldran «sin identificar» y el selector no los vera:\n  ${sinCuenta.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('la cola de aplazados EXIGE la cuenta en el tipo, no la deja opcional', () => {
+    // Sin esto la regla de arriba pasa en verde el dia que alguien anada un cuarto
+    // camino: `cuenta` seria opcional y omitirla compilaria. Que sea obligatoria en
+    // la firma es lo que hizo que tsc cazara los dos sitios al escribir esto.
+    const src = leerCodigo('src/lib/aplazarCorreos.ts')
+    expect(/destino: \{[^}]*cuenta: string \| null[^}]*\}/.test(src),
+      'aplazarResto ya no exige `cuenta` en su destino: omitirla vuelve a compilar')
+      .toBe(true)
+  })
+})
+
 describe('el arranque no se apaga a mitad', () => {
   // EL PARPADEO AL ABRIR LA APP. Me costo CUATRO diagnosticos, y los tres primeros
   // fueron mios y equivocados: los tres negros distintos, la insignia que llegaba
