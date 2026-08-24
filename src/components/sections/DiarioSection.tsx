@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { BLU, GRN, AMBAR, RED, VIO, SURFACE, SURF2, BORDER } from '@/components/shared/design-tokens'
+import ActivarAvisos from '@/components/shared/ActivarAvisos'
 import { LucideIcon, useIsMobile, plural, ProgressRing, todayKey, localDayKey } from '@/components/shared'
 import type { NexusData, Profile } from '@/types'
 import type { IrASeccion } from '@/components/shared/secciones'
@@ -1045,6 +1046,12 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
           />
         </div>
       )}
+
+      {/* Solo se pinta si los avisos NO estan activados. Aqui y no en Operativa
+          porque es donde esta el habito: el recordatorio de las 20:00 no sirve de
+          nada a quien nunca dio permiso al navegador, y ese permiso vivia a cuatro
+          toques de aqui. */}
+      <ActivarAvisos motivo="Te avisamos a las 10:00 si no has fichado y a las 20:00 si no cerraste el día." />
 
       {/* ── HÉROE: EL ESTADO DEL DÍA ───────────────────────────────────── */}
       <div className="relative rounded-3xl mb-4 overflow-hidden"

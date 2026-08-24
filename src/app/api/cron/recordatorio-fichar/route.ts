@@ -93,7 +93,10 @@ export async function GET(request: NextRequest) {
         body: 'Pulsa fichar y escribe los objetivos que te propones para hoy.',
         url: '/dashboard?s=diario',
         tag: 'recordatorio-fichar',
-        categoria: 'tarea',
+        // 'fichaje' y no 'tarea': quien silencie los avisos de tareas no debe
+          // perder el recordatorio de fichar, que es otra cosa. Estaba mal
+          // clasificado desde el principio.
+          categoria: 'fichaje',
       })
       avisados++
     } catch (err) {

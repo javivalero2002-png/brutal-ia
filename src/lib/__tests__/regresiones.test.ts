@@ -3839,6 +3839,82 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('los recordatorios de fichar saltan cuando toca', () => {
+  // Javi: «a las 8 de la tarde, si no has cerrado el dia y lo has empezado, te
+  // tiene que mandar una notificacion... es vital».
+  //
+  // Un aviso que deja de saltar NO DA ERROR: nadie recibe nada y todo el mundo
+  // supone que es que no habia a quien avisar. Es el mismo modo de fallo mudo que
+  // el resto del fichero persigue, y aqui es peor porque el sintoma —silencio— es
+  // identico al funcionamiento normal.
+  const CERRAR = 'src/app/api/cron/recordatorio-cerrar/route.ts'
+  const FICHAR = 'src/app/api/cron/recordatorio-fichar/route.ts'
+  const VERCEL = JSON.parse(leer('vercel.json')) as { crons: { path: string; schedule: string }[] }
+
+  it('cada recordatorio esta registrado DOS veces, por el cambio de hora', () => {
+    // Los crons de Vercel van en UTC y Espana cambia de hora. Con una sola entrada,
+    // medio ano el aviso cae a las 19:00 o a las 21:00 de Madrid — o no cae, porque
+    // la ruta comprueba `madridHour()` y se descarta a si misma. Con dos, una de las
+    // dos acierta siempre y la otra se descarta sola.
+    for (const ruta of ['/api/cron/recordatorio-fichar', '/api/cron/recordatorio-cerrar']) {
+      const horas = VERCEL.crons.filter(c => c.path === ruta).map(c => c.schedule)
+      expect(horas.length, `${ruta} no esta registrado dos veces: media ano saltara a la hora equivocada`)
+        .toBe(2)
+      // Y tienen que ser dos horas CONSECUTIVAS, no la misma repetida.
+      const h = horas.map(x => Number(x.split(' ')[1])).sort((a, b) => a - b)
+      expect(h[1] - h[0], `${ruta}: las dos entradas no son horas consecutivas (${horas.join(' y ')})`)
+        .toBe(1)
+    }
+  })
+
+  it('la hora se comprueba en Madrid, no en la del servidor', () => {
+    for (const f of [CERRAR, FICHAR]) {
+      const src = leerCodigo(f)
+      expect(/madridHour\(\)/.test(src), `${f} no usa madridHour(): el servidor va en UTC y el aviso caeria a otra hora`)
+        .toBe(true)
+      expect(/todayKey\(\)/.test(src), `${f} no usa todayKey(): miraria el dia de UTC, que a partir de las 22:00 de Madrid ya es otro`)
+        .toBe(true)
+    }
+  })
+
+  it('el de las 20:00 exige las DOS condiciones: empezado y sin cerrar', () => {
+    // Saltarse una lo convierte en ruido. Sin «empezado», regana por la tarde a
+    // quien ya recibio el aviso de las 10:00; sin «sin cerrar», avisa a quien ya
+    // cerro. Un aviso que salta cuando no toca se deja de leer, y entonces tampoco
+    // sirve cuando toca.
+    const src = leerCodigo(CERRAR)
+    const i = src.indexOf('pendientes')
+    expect(i, 'ya no se calculan los pendientes: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const bloque = src.slice(i, i + 320)
+    expect(/entrada[^\n]*trim\(\)\.length > 0/.test(bloque),
+      'el aviso de las 20:00 ya no exige haber EMPEZADO el dia: regana a quien no ficho, que ya fue avisado a las 10:00')
+      .toBe(true)
+    expect(/!d\.cierre_at/.test(bloque),
+      'el aviso de las 20:00 ya no exige que el dia siga SIN CERRAR: avisaria a quien ya cerro')
+      .toBe(true)
+  })
+
+  it('los dos avisos van en la categoria `fichaje`, que se puede silenciar', () => {
+    // Iban como 'tarea', asi que quien silenciaba las tareas perdia tambien el
+    // recordatorio de fichar sin haberlo pedido. Y `fichaje` es silenciable a
+    // proposito: Javi pidio que no fuera obligatorio.
+    for (const f of [CERRAR, FICHAR]) {
+      expect(/categoria: 'fichaje'/.test(leerCodigo(f)),
+        `${f} no manda el aviso en la categoria 'fichaje': se mezcla con otra cosa y se silencia sin querer`)
+        .toBe(true)
+    }
+    const avisos = leerCodigo('src/lib/avisos.ts')
+    const j = avisos.indexOf('fichaje: {')
+    expect(j, 'ya no existe la categoria fichaje').toBeGreaterThan(-1)
+    expect(/silenciable: true/.test(avisos.slice(j, avisos.indexOf('},', j))),
+      'la categoria fichaje dejo de ser silenciable: Javi pidio que no fuera obligatorio')
+      .toBe(true)
+    expect(/'fichaje'/.test(avisos.slice(avisos.indexOf('ORDEN_AVISOS'), avisos.indexOf('ORDEN_AVISOS') + 200)),
+      'fichaje no sale en ORDEN_AVISOS: existe pero no se puede tocar desde la pantalla')
+      .toBe(true)
+  })
+})
+
 describe('la pantalla no lee campos que la API no manda', () => {
   // EL BUG: el «Pulso del equipo» de Fichar ensenaba 0 y 0% a TODO EL MUNDO, todos
   // los dias, desde que se escribio.
