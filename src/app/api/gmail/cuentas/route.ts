@@ -49,10 +49,23 @@ export async function GET() {
     conteo.set(k, c)
   }
 
+  // Los que entraron ANTES de que se guardara la cuenta. No son un fallo: la
+  // migración solo atribuyó lo que se podía saber sin adivinar, y quien tiene dos
+  // cuentas personales se quedó con todo a NULL. Se cuentan para poder DECIRLO en
+  // vez de que parezca que esas cuentas no reciben nada.
+  const { count: sinIdentificar } = await admin
+    .from('inbox_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('source', 'gmail')
+    .eq('shared', false)
+    .is('cuenta', null)
+
   return NextResponse.json({
     // `medido: false` es la diferencia entre «esta cuenta no recibe nada» y «no he
     // podido mirarlo». La pantalla las pinta distinto a propósito.
     medido: !error,
+    sinIdentificar: sinIdentificar ?? 0,
     cuentas: cuentas.map(c => ({
       email: c.email,
       compartida: c.compartida,

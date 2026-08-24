@@ -90,6 +90,11 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
   // qué buzones hay y cuánto ha entrado por cada uno.
   const [cuentas, setCuentas] = useState<CuentaBuzon[] | null>(null)
   const [cuentasMedidas, setCuentasMedidas] = useState(true)
+  // Los que entraron antes de que se guardara el buzón. Se enseñan a propósito:
+  // sin decirlo, las cuentas personales aparecen a cero y parece que no llega
+  // nada — que es justo el susto que se quiere evitar.
+  const [sinIdent, setSinIdent] = useState(0)
+  const [identificando, setIdentificando] = useState(false)
   const [selected, setSelected] = useState<any>(null)
   const [confirmMarkAll, setConfirmMarkAll] = useState(false)
   useBackClosable(!!selected, () => setSelected(null))
@@ -120,6 +125,8 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
         setCuentas(Array.isArray(j.cuentas) ? j.cuentas : [])
 
         setCuentasMedidas(j.medido !== false)
+
+        setSinIdent(Number(j.sinIdentificar) || 0)
 
       })
 
@@ -503,7 +510,8 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                       <div className="font-figtree text-[11px] mt-0.5 break-words" style={{color:'rgba(255,255,255,0.32)'}}>Conéctalos en Operativa para que empiece a entrar el correo</div>
                     </div>
                   </button>
-                ) : cuentas.map(c => {
+                ) : (<>
+                  {cuentas.map(c => {
                   const act = filter === `cuenta:${c.email}`
                   const col = c.compartida ? GRN : '#EA4335'
                   // Sin `medido` no se afirma nada: pintar «0 correos» porque la
@@ -529,7 +537,48 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                       )}
                     </button>
                   )
-                })}
+                  })}
+
+                  {/* ── LOS QUE ENTRARON ANTES DE QUE SE GUARDARA EL BUZÓN ──────
+                      Sin esta fila, las cuentas personales salen a cero y parece
+                      que no llega nada — exactamente el susto que Javi quería
+                      quitarse. La migración solo atribuyó lo que se podía saber
+                      sin adivinar, y con dos cuentas personales eso es nada.
+
+                      Se arregla preguntándole a cada cuenta qué identificadores
+                      tiene: un `gmail_id` es del buzón que lo devuelve, así que
+                      es exacto y no una suposición. */}
+                  {sinIdent > 0 && (
+                    <div className="flex items-center gap-3 rounded-2xl px-4 py-3"
+                      style={{background:`${AMBAR}0D`,border:`1px solid ${AMBAR}2E`}}>
+                      <LucideIcon name="alert-circle" size={16} color={AMBAR}/>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-figtree text-[12.5px] font-bold break-words" style={{color:'rgba(255,255,255,0.78)'}}>
+                          {plural(sinIdent,'correo sin identificar','correos sin identificar')}
+                        </div>
+                        <div className="font-figtree text-[11px] mt-0.5 break-words" style={{color:'rgba(255,255,255,0.34)'}}>
+                          Entraron antes de que se guardara el buzón. No se adivinó cuál era; se puede preguntar a Gmail.
+                        </div>
+                      </div>
+                      <button disabled={identificando}
+                        onClick={async ()=>{
+                          setIdentificando(true)
+                          try {
+                            const r = await fetch('/api/inbox/identificar', { method:'POST' })
+                            if (!r.ok) throw new Error(String(r.status))
+                            const j = await r.json()
+                            setSinIdent(Number(j.pendientes) || 0)
+                            showToast(j.identificados ? `${plural(j.identificados,'correo identificado','correos identificados')} — recarga para verlos` : 'No se pudo identificar ninguno')
+                          } catch { showToast('No se pudieron identificar') }
+                          setIdentificando(false)
+                        }}
+                        className="font-syne text-[8.5px] font-black tracking-widest px-3.5 py-2 rounded-xl flex-shrink-0 transition-all active:scale-95 disabled:opacity-50"
+                        style={{background:`${AMBAR}22`,border:`1px solid ${AMBAR}55`,color:AMBAR}}>
+                        {identificando ? 'MIRANDO…' : 'IDENTIFICAR'}
+                      </button>
+                    </div>
+                  )}
+                </>)}
               </div>
             </div>
           ) : (
