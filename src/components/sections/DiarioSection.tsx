@@ -1476,7 +1476,16 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
             <div className="px-2 pb-2">
               {porPersona.map(p => {
                 const objetivos = (p.entrada?.entrada || '').split('\n').filter(l => l.trim()).length
-                const hechas = p.tareas.filter(t => (t as { done?: boolean }).done).length
+                // TODAS las de `p.tareas` estan hechas: /api/diario las trae con
+                // `.eq('done', true)`, acotadas al dia de Madrid y ya atribuidas a esta
+                // persona. Aqui habia un `.filter(t => (t as {done?:boolean}).done)` — y el
+                // `select` de esa consulta NO trae la columna `done`, asi que el filtro daba
+                // 0 SIEMPRE: el «Pulso del equipo» ensenaba 0 y 0% a todo el mundo, todos
+                // los dias, desde que se escribio.
+                //
+                // Lo tapaba el `as`. Es el mismo patron que CLAUDE.md ya senala con `as any`
+                // en HoySection: el cast no arregla el tipo, apaga al unico que iba a avisar.
+                const hechas = p.tareas.length
                 const pct = objetivos ? Math.min(100, Math.round((hechas / objetivos) * 100)) : 0
                 const cerrado = !!p.entrada?.cierre_at
                 const estado = cerrado ? { l: 'Todo completado', c: GRN }

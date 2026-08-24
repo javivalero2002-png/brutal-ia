@@ -3839,6 +3839,68 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('la pantalla no lee campos que la API no manda', () => {
+  // EL BUG: el «Pulso del equipo» de Fichar ensenaba 0 y 0% a TODO EL MUNDO, todos
+  // los dias, desde que se escribio.
+  //
+  // `/api/diario` trae las tareas del dia con `.eq('done', true)` —o sea que TODAS
+  // estan hechas— pero su `select` NO incluye la columna `done`. Y la pantalla hacia
+  // `p.tareas.filter(t => (t as {done?:boolean}).done).length`, que sobre unos
+  // objetos sin ese campo da 0 siempre.
+  //
+  // Lo tapaba el `as`: sin el, TypeScript habria dicho que `done` no existe. Mismo
+  // mecanismo que CLAUDE.md documenta con `as any` en HoySection — el cast no
+  // arregla el tipo, apaga al unico que iba a avisar.
+  //
+  // Y lo delataba la propia pantalla: mas abajo, el acordeon calcula lo MISMO con
+  // `p.tareas.length` y decia «3 HECHAS» mientras la barra decia 0 y 0%. Dos
+  // gemelos, uno bien y otro mal, contradiciendose a la vista.
+  const API = leerCodigo('src/app/api/diario/route.ts')
+  const UI = leerCodigo('src/components/sections/DiarioSection.tsx')
+
+  /** El cuerpo del parentesis que abre en `desde`, con los parentesis emparejados. */
+  const cuerpo = (src: string, desde: number) => {
+    let prof = 0
+    for (let i = desde; i < src.length; i++) {
+      if (src[i] === '(') prof++
+      else if (src[i] === ')') { prof--; if (!prof) return src.slice(desde, i) }
+    }
+    return src.slice(desde)
+  }
+
+  it('los campos que la pantalla lee de una tarea del dia vienen en el select', () => {
+    const m = API.match(/from\('tasks'\)[\s\S]{0,80}?\.select\('([^']+)'\)/)
+    expect(m, 'ya no se consultan las tareas del dia en /api/diario: revisa esta regla en vez de borrarla')
+      .toBeTruthy()
+    const columnas = new Set(m![1].split(',').map(c => c.trim().split(':')[0]))
+
+    const leidos = new Set<string>()
+    let sitios = 0
+    for (const uso of UI.matchAll(/\bp\.tareas\s*\.\s*(?:map|filter|find|some|every|flatMap)\s*\(/g)) {
+      sitios++
+      const b = cuerpo(UI, uso.index! + uso[0].length - 1)
+      const par = b.match(/^\(\s*\(?\s*(\w+)/)
+      if (!par) continue
+      for (const c of b.matchAll(new RegExp('\\b' + par[1] + '\\s*\\??\\.(\\w+)', 'g'))) leidos.add(c[1])
+    }
+    expect(sitios, 'la pantalla ya no recorre p.tareas: revisa esta regla en vez de borrarla')
+      .toBeGreaterThan(0)
+
+    const fantasmas = [...leidos].filter(c => !columnas.has(c))
+    expect(fantasmas, `la pantalla lee de una tarea campos que /api/diario NO manda — saldran undefined y la cifra saldra mal SIN dar error:\n  ${fantasmas.join(', ')}\n  (el select trae: ${[...columnas].join(', ')})`)
+      .toEqual([])
+  })
+
+  it('nadie vuelve a filtrar por `done` unas tareas que ya vienen todas hechas', () => {
+    expect(/\bp\.tareas[^\n]*\bdone\b/.test(UI),
+      'se vuelve a filtrar p.tareas por `done`: esas tareas YA vienen todas hechas de la API')
+      .toBe(false)
+    expect(/\.eq\('done', true\)/.test(API),
+      '/api/diario ya no acota a las hechas: entonces la pantalla SI tendria que filtrar, y esta regla sobra')
+      .toBe(true)
+  })
+})
+
 describe('todo correo que entra dice por que buzon entro', () => {
   // Javi: «no se si estan entrando los Gmail de ambos correos». Y no habia forma de
   // saberlo: `inbox_messages` guarda `user_id` y `shared`, pero no la DIRECCION del
