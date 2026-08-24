@@ -411,3 +411,43 @@ function findPart(parts: any[], mimeType: string): string | null {
   }
   return null
 }
+
+/**
+ * Los IDENTIFICADORES de los mensajes de un buzón, sin descargar los mensajes.
+ *
+ * Existe para una cosa muy concreta: hasta el 2026-08-24 `inbox_messages` no
+ * guardaba de qué cuenta venía cada correo, así que los 754 anteriores de quien
+ * tiene DOS cuentas personales se quedaron sin atribuir — y adivinarlo habría
+ * sido peor que dejar el hueco.
+ *
+ * Un `gmail_id` es de SU buzón: si la cuenta A lo devuelve en su lista, el correo
+ * entró por A. Eso es exacto, no una heurística.
+ *
+ * `messages.list` sin `format` devuelve solo ids: 500 por llamada y sin coste de
+ * cuota apreciable. Se recorre de lo más nuevo a lo más viejo y se PARA en cuanto
+ * ya no queda nada por resolver — de ahí `pendientes`, que evita pasear un buzón
+ * de 40.000 correos para atribuir 754.
+ */
+export async function listarIdsDeMensajes(
+  refreshToken: string,
+  pendientes: Set<string>,
+  maxPaginas = 20,
+): Promise<Set<string>> {
+  const oauth2Client = getOAuthClient()
+  oauth2Client.setCredentials({ refresh_token: refreshToken })
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
+
+  const encontrados = new Set<string>()
+  let pageToken: string | undefined
+  for (let i = 0; i < maxPaginas; i++) {
+    const res = await gmail.users.messages.list({ userId: 'me', maxResults: 500, pageToken })
+    for (const m of res.data.messages || []) {
+      if (m.id && pendientes.has(m.id)) encontrados.add(m.id)
+    }
+    // Ya está todo resuelto, o no hay más páginas.
+    if (encontrados.size >= pendientes.size) break
+    pageToken = res.data.nextPageToken || undefined
+    if (!pageToken) break
+  }
+  return encontrados
+}

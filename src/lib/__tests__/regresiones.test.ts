@@ -3839,6 +3839,72 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('identificar correos viejos no adivina de que buzon vienen', () => {
+  // La migracion 20260824 dejo 754 de 809 correos sin atribuir, y eso fue A
+  // PROPOSITO: quien tiene dos cuentas personales no puede saber cual fue sin
+  // preguntar. Una etiqueta equivocada es peor que un hueco — el hueco se ve.
+  //
+  // Esta ruta lo resuelve de la unica forma exacta: un `gmail_id` pertenece al
+  // buzon que lo devuelve en su lista. Lo que la regla protege es que siga siendo
+  // exacta y que no pueda tocar lo que ya estaba bien.
+  const RUTA = 'src/app/api/inbox/identificar/route.ts'
+  const src = leerCodigo(RUTA)
+
+  it('solo toca lo que sigue SIN identificar, nunca lo ya atribuido', () => {
+    // Sin `.is('cuenta', null)` en el UPDATE, una segunda pasada podria reescribir
+    // un buzon correcto con otro — y no habria forma de notarlo.
+    const i = src.indexOf('.update(')
+    expect(i, 'ya no se actualiza nada: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const bloque = src.slice(i, i + 340)
+    expect(/\.is\('cuenta', null\)/.test(bloque),
+      'el UPDATE ya no se limita a los que estan sin identificar: puede pisar una atribucion correcta')
+      .toBe(true)
+    expect(/\.eq\('user_id', user\.id\)/.test(bloque),
+      'el UPDATE no se limita al usuario de la sesion: podria tocar el correo de otro')
+      .toBe(true)
+  })
+
+  it('las cuentas salen de la sesion, no de lo que pida el cliente', () => {
+    expect(/cuentasDe\(admin, user\.id\)/.test(src),
+      'las cuentas ya no salen de la sesion: se podria pedir que se recorra el buzon de otro')
+      .toBe(true)
+    expect(/auth\.getUser\(\)/.test(src), 'no se resuelve al usuario antes de usar el admin client')
+      .toBe(true)
+  })
+
+  it('una cuenta que falla no tumba a las demas, y se dice cual', () => {
+    // Con un token caducado de una de las dos, sin esto la mitad se quedaria sin
+    // identificar y la respuesta diria que todo fue bien.
+    // La LLAMADA, no el import. Anclar en el nombre a secas cogia la linea del
+    // `import` y la ventana caia sobre codigo que no era: la regla pasaba en verde
+    // mirando otra cosa. Es la trampa que CLAUDE.md llama «acota la regla al sitio».
+    const i = src.indexOf('await listarIdsDeMensajes(')
+    expect(i, 'ya no se llama a listarIdsDeMensajes: revisa esta regla').toBeGreaterThan(-1)
+    const bloque = src.slice(i, i + 420)
+    expect(/catch/.test(bloque) && /continue/.test(bloque),
+      'un fallo listando una cuenta corta el proceso entero en vez de seguir con la siguiente')
+      .toBe(true)
+    expect(/console\.error[^\n]*c\.email/.test(bloque),
+      'el fallo de una cuenta no dice CUAL fallo: quedaria invisible')
+      .toBe(true)
+  })
+
+  it('el recorrido del buzon esta acotado', () => {
+    // Un buzon de 40.000 correos son 80 paginas. Sin tope, la funcion se cuelga y
+    // Vercel la mata sin respuesta — el modo de fallo que CLAUDE.md documenta para
+    // los fetch sin `signal`.
+    const gmail = leerCodigo('src/lib/gmail.ts')
+    const i = gmail.indexOf('export async function listarIdsDeMensajes')
+    expect(i, 'ya no existe listarIdsDeMensajes').toBeGreaterThan(-1)
+    const cuerpo = gmail.slice(i, i + 1200)
+    expect(/maxPaginas/.test(cuerpo), 'el recorrido del buzon ya no tiene tope de paginas')
+      .toBe(true)
+    expect(/encontrados\.size >= pendientes\.size/.test(cuerpo),
+      'ya no se para al resolver todo: pasearia el buzon entero para atribuir cuatro correos')
+      .toBe(true)
+  })
+})
+
 describe('un fallo nunca se convierte en un juicio sobre alguien', () => {
   // El panel de equipo y el texto de la IA hablan del TRABAJO DE PERSONAS REALES, y
   // los lee su jefe. Eso cambia el coste de los modos de fallo mudos que el resto
