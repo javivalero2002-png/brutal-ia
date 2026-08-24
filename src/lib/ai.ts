@@ -510,3 +510,85 @@ Responde SOLO con JSON válido, sin explicación:
     return []
   }
 }
+
+/** Un día de trabajo de alguien, tal y como lo ha dejado escrito. */
+export type DiaDeTrabajo = {
+  dia: string
+  entrada: string | null
+  cierre: string | null
+  horas: string | null
+  animo: string | null
+  hechas: string[]
+}
+
+/**
+ * «¿Qué tal va esta persona?», en prosa.
+ *
+ * Javi: «no formato tarea, sino un texto generado por IA si pulsas el botón que
+ * te dice qué tal va el trabajador».
+ *
+ * La app ya sabe enseñar listas —objetivos, tareas hechas, horas— y eso es justo
+ * lo que un jefe NO puede leer de seis personas a la vez. Lo que hace falta es que
+ * alguien las haya leído por ti y te diga lo que importa en tres frases.
+ *
+ * Dos cosas que hacen que esto no sea un adorno:
+ *
+ *   · Se le prohíbe puntuar y comparar. Un número inventado sobre el trabajo de
+ *     una persona real es peor que no decir nada, y aquí lo leería su jefe.
+ *   · Si no hay material, lo DICE en vez de rellenar. «No cerró ningún día» es
+ *     una respuesta útil; una valoración construida sobre nada, no.
+ */
+export async function comoVaLaPersona(
+  nombre: string,
+  dias: DiaDeTrabajo[],
+  plazoMs?: number,
+): Promise<{ texto: string; degraded: boolean }> {
+  const conAlgo = dias.filter(d => d.entrada || d.cierre || d.hechas.length)
+  if (!conAlgo.length) {
+    // Sin llamar al modelo: no hay nada que resumir y el hueco ya es la respuesta.
+    return { texto: `No hay nada escrito de ${nombre} en este tramo: ni objetivos, ni cierres, ni tareas completadas.`, degraded: false }
+  }
+
+  const parte = conAlgo.map(d => [
+    `— ${d.dia}${d.horas ? ` (${d.horas})` : ''}${d.animo ? ` · se marcó ${d.animo}` : ''}`,
+    d.entrada ? `  se propuso: ${sanitize(d.entrada).slice(0, 600)}` : null,
+    d.cierre ? `  contó al cerrar: ${sanitize(d.cierre).slice(0, 600)}` : '  (no cerró el día)',
+    d.hechas.length ? `  tareas completadas: ${d.hechas.map(t => sanitize(t)).join(' · ').slice(0, 500)}` : null,
+  ].filter(Boolean).join('\n')).join('\n\n')
+
+  let msg: Awaited<ReturnType<typeof anthropic.messages.create>>
+  try {
+    msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 420,
+      messages: [{
+        role: 'user',
+        content: `Esto es lo que ${sanitize(nombre)} ha dejado escrito en su parte de trabajo, en un estudio de vídeo de 7 personas:
+
+"""
+${parte.slice(0, 6000)}
+"""
+
+Escribe para su jefe, en español de España, CÓMO LE VA. Reglas:
+- Tres o cuatro frases. Prosa corrida, sin listas ni viñetas ni títulos.
+- Concreto: nombra el trabajo real que aparece, no generalidades («ha avanzado bien»).
+- Di lo que NO cuadre: días sin cerrar, objetivos que se repiten sin resolverse, bloqueos.
+- NO puntúes, no pongas notas ni porcentajes, y no lo compares con nadie.
+- No inventes nada que no esté en el texto. Si hay poco, dilo en una frase y para.
+- Habla de la persona en tercera persona, por su nombre.
+
+Responde solo con el texto, sin comillas ni preámbulo.`,
+      }],
+    }, plazoMs ? { timeout: Math.min(TIMEOUT_MS, Math.max(1_000, plazoMs)), maxRetries: 0 } : undefined)
+  } catch (err: any) {
+    console.error('[equipo] no se pudo redactar el estado:', err?.status ?? '', err?.message ?? err)
+    // `degraded` y no un texto inventado: la pantalla dice que no pudo, en vez de
+    // enseñar una valoración que nadie ha escrito. Es la misma regla que el
+    // análisis de correos, donde el fallback inventado sacaba correos del filtro.
+    return { texto: '', degraded: true }
+  }
+
+  const texto = (textOf(msg) || '').trim()
+  if (!texto) return { texto: '', degraded: true }
+  return { texto, degraded: false }
+}

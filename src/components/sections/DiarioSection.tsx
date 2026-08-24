@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { BLU, GRN, AMBAR, RED, VIO, SURFACE, SURF2, BORDER } from '@/components/shared/design-tokens'
 import ActivarAvisos from '@/components/shared/ActivarAvisos'
+import PanelEquipo from '@/components/sections/PanelEquipo'
 import { LucideIcon, useIsMobile, plural, ProgressRing, todayKey, localDayKey } from '@/components/shared'
 import type { NexusData, Profile } from '@/types'
 import type { IrASeccion } from '@/components/shared/secciones'
@@ -154,6 +155,9 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
   // El día que se está mirando. Hoy por defecto; se puede retroceder para
   // consultar lo que hizo el equipo cualquier otro día — el diario es un
   // histórico que se va llenando, no solo la pantalla de hoy.
+  // La vista del propietario. `mi` de fabrica: quien entra a fichar viene a
+  // fichar, no a supervisar. El equipo esta a un toque.
+  const [vista, setVista] = useState<'mi' | 'equipo'>('mi')
   const [dia, setDia] = useState<string>(() => todayKey())
   const esHoy = dia === todayKey()
   // Tres tiempos, y no se comportan igual:
@@ -1052,6 +1056,33 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
           nada a quien nunca dio permiso al navegador, y ese permiso vivia a cuatro
           toques de aqui. */}
       <ActivarAvisos motivo="Te avisamos a las 10:00 si no has fichado y a las 20:00 si no cerraste el día." />
+
+      {/* ── DOS VISTAS, PARA EL PROPIETARIO ─────────────────────────────────
+          Javi: «los propietarios tienen que tener mayor acceso a lo que estan
+          haciendo sus trabajadores... una dashboard de trabajo general».
+
+          No va como seccion nueva del menu lateral A PROPOSITO: hay una decision
+          escrita en NexusDashboard de no meter ahi lo de vez en cuando, para que
+          el menu no deje de ser recorrible. Fichar YA esta en el menu y es donde
+          viven estos datos, asi que la puerta existe y solo faltaba que el equipo
+          no estuviera al final de la pagina, por debajo del diario de uno mismo —
+          que es justo por lo que no se usaba.
+
+          Un miembro no ve el selector: para el, Fichar es lo de siempre. */}
+      {esJefe && (
+        <div className="flex items-center gap-1 p-1 rounded-2xl mb-4 w-fit"
+          style={{ background: 'rgba(255,255,255,0.035)', border: `1px solid ${BORDER}` }}>
+          {([['mi', 'MI DÍA'], ['equipo', 'EL EQUIPO']] as const).map(([k, l]) => (
+            <button key={k} onClick={() => setVista(k)}
+              className="font-syne text-[8.5px] font-black tracking-widest px-4 py-2 rounded-xl transition-all"
+              style={{ background: vista === k ? BLU : 'transparent', color: vista === k ? '#fff' : 'rgba(255,255,255,0.4)' }}>
+              {l}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {esJefe && vista === 'equipo' ? <PanelEquipo profile={profile} /> : (<>
 
       {/* ── HÉROE: EL ESTADO DEL DÍA ───────────────────────────────────── */}
       <div className="relative rounded-3xl mb-4 overflow-hidden"
@@ -1973,6 +2004,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
         </div>
       )}
 
+      </>)}
       <div className="h-16" />
     </div>
   )

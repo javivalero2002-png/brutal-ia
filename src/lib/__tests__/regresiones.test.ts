@@ -3839,6 +3839,65 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('un fallo nunca se convierte en un juicio sobre alguien', () => {
+  // El panel de equipo y el texto de la IA hablan del TRABAJO DE PERSONAS REALES, y
+  // los lee su jefe. Eso cambia el coste de los modos de fallo mudos que el resto
+  // del fichero persigue: aqui una consulta caida que se pinta como «no ha hecho
+  // nada» no es un hueco, es una acusacion.
+  //
+  // Tres sitios donde eso podia pasar, y los tres se cierran a proposito.
+  const RUTA = 'src/app/api/equipo/resumen/route.ts'
+  const PANEL = 'src/components/sections/PanelEquipo.tsx'
+  const AI = leerCodigo('src/lib/ai.ts')
+
+  it('solo el propietario puede pedir el texto de una persona', () => {
+    const src = leerCodigo(RUTA)
+    expect(/role !== 'owner'/.test(src) && /403/.test(src),
+      'cualquiera del equipo puede pedir una valoracion de un companero: eso cambia lo que es la herramienta')
+      .toBe(true)
+    // Y el rol sale del servidor, no de lo que diga el cliente.
+    expect(/getAuthCtx\(\)/.test(src), 'el rol no se resuelve en el servidor con getAuthCtx')
+      .toBe(true)
+  })
+
+  it('si la IA falla, la ruta lo DICE en vez de devolver un texto vacio con 200', () => {
+    // Un 200 con texto vacio se pinta como «no hay nada que contar», que es una
+    // respuesta legitima y distinta. La pantalla tiene que poder separarlas.
+    const src = leerCodigo(RUTA)
+    expect(/degraded/.test(src) && /503/.test(src),
+      'un fallo de la IA se devuelve como respuesta buena: la pantalla dira que no hay nada que contar')
+      .toBe(true)
+  })
+
+  it('comoVaLaPersona no inventa un texto cuando la llamada se cae', () => {
+    const i = AI.indexOf('export async function comoVaLaPersona')
+    expect(i, 'ya no existe comoVaLaPersona: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const cuerpo = AI.slice(i, i + 4200)
+    const catchs = [...cuerpo.matchAll(/catch[^{]*\{([^}]*)\}/g)].map(m => m[1])
+    expect(catchs.length, 'la llamada al modelo ya no tiene catch').toBeGreaterThan(0)
+    for (const c of catchs) {
+      expect(/degraded: true/.test(c),
+        'el catch de comoVaLaPersona devuelve algo que NO es `degraded`: seria un juicio que nadie ha escrito')
+        .toBe(true)
+    }
+  })
+
+  it('el panel distingue «no se pudo leer» de «nadie ficho»', () => {
+    // Sin esto, una consulta caida pinta seis filas vacias y parece que el equipo
+    // no ha trabajado. Es el mismo fallo que `logQueryErrors` persigue en el
+    // servidor, pero con consecuencias sobre personas.
+    const src = leerCodigo(PANEL)
+    expect(/setFallo\(true\)/.test(src) && /if \(fallo\)/.test(src),
+      'el panel no tiene estado de fallo: una consulta caida se vera igual que un equipo que no ha fichado')
+      .toBe(true)
+    // Y el mensaje tiene que decirlo con todas las letras, no solo pintar distinto.
+    const i = src.indexOf('if (fallo)')
+    expect(/No es que nadie/.test(src.slice(i, i + 700)),
+      'el aviso de fallo no aclara que NO es que nadie haya fichado')
+      .toBe(true)
+  })
+})
+
 describe('los recordatorios de fichar saltan cuando toca', () => {
   // Javi: «a las 8 de la tarde, si no has cerrado el dia y lo has empezado, te
   // tiene que mandar una notificacion... es vital».
