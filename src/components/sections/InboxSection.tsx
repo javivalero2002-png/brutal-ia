@@ -565,11 +565,35 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                           setIdentificando(true)
                           try {
                             const r = await fetch('/api/inbox/identificar', { method:'POST' })
-                            if (!r.ok) throw new Error(String(r.status))
+                            if (!r.ok) {
+                              // EL MENSAJE DICE QUE PASO. Antes todo caia en el mismo
+                              // «no se pudieron identificar», y eso convirtio en un
+                              // misterio lo que era un despliegue a medias: Javi pulso
+                              // el boton antes de que la ruta existiera, se comio un
+                              // 404 disfrazado de fallo, y dio por hecho que ya estaba.
+                              showToast(r.status === 404
+                                ? 'Todavía no está disponible — espera un minuto y reinténtalo'
+                                : r.status === 401 ? 'Se ha cerrado la sesión'
+                                : `No se pudo (error ${r.status})`)
+                              setIdentificando(false)
+                              return
+                            }
                             const j = await r.json()
                             setSinIdent(Number(j.pendientes) || 0)
-                            showToast(j.identificados ? `${plural(j.identificados,'correo identificado','correos identificados')} — recarga para verlos` : 'No se pudo identificar ninguno')
-                          } catch { showToast('No se pudieron identificar') }
+                            if (j.identificados) {
+                              // Se vuelven a pedir las cuentas: sin esto, los recuentos
+                              // de cada buzon se quedan como estaban y la pantalla
+                              // contradice al mensaje que acaba de salir.
+                              fetch('/api/gmail/cuentas')
+                                .then(x => (x.ok ? x.json() : null))
+                                .then(x => { if (x) { setCuentas(x.cuentas || []); setSinIdent(Number(x.sinIdentificar) || 0) } })
+                                .catch(() => {})
+                              data.reloadInbox?.()
+                              showToast(plural(j.identificados,'correo identificado','correos identificados'))
+                            } else {
+                              showToast('Gmail no reconocio ninguno de estos correos')
+                            }
+                          } catch { showToast('Sin conexión con el servidor') }
                           setIdentificando(false)
                         }}
                         className="font-syne text-[8.5px] font-black tracking-widest px-3.5 py-2 rounded-xl flex-shrink-0 transition-all active:scale-95 disabled:opacity-50"

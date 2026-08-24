@@ -3839,6 +3839,41 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('un boton que falla dice POR QUE', () => {
+  // PASO DE VERDAD, y costo un diagnostico entero. Javi pulso IDENTIFICAR mientras
+  // Vercel todavia desplegaba: la ruta no existia aun, devolvio 404, y el `catch`
+  // de la pantalla lo convirtio en «no se pudieron identificar». Con ese mensaje,
+  // un despliegue a medias es indistinguible de un fallo real — y Javi dio por
+  // hecho que ya estaba hecho, que es lo peor de todo.
+  //
+  // La regla no exige un texto concreto: exige que la respuesta del servidor SE
+  // MIRE. Tragarse el `status` es lo que convierte un problema de dos minutos en
+  // media hora de diagnostico.
+  const UI = leerCodigo('src/components/sections/InboxSection.tsx')
+
+  it('la llamada a identificar distingue los fallos por su codigo', () => {
+    const i = UI.indexOf("fetch('/api/inbox/identificar'")
+    expect(i, 'ya no se llama a identificar: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const bloque = UI.slice(i, i + 1400)
+    expect(/r\.status === 404/.test(bloque),
+      'un 404 vuelve a caer en el mensaje generico: un despliegue a medias parecera un fallo de verdad')
+      .toBe(true)
+    expect(/error \$\{r\.status\}|\$\{r\.status\}/.test(bloque),
+      'el codigo de error no llega al usuario: no habra forma de saber que fallo')
+      .toBe(true)
+  })
+
+  it('al identificar se refrescan los recuentos, no solo el aviso', () => {
+    // Sin esto la pantalla dice «753 correos identificados» y sigue enseñando los
+    // buzones a cero: el mensaje y lo que se ve se contradicen.
+    const i = UI.indexOf("fetch('/api/inbox/identificar'")
+    const bloque = UI.slice(i, i + 1400)
+    expect(/fetch\('\/api\/gmail\/cuentas'\)/.test(bloque),
+      'no se vuelven a pedir las cuentas tras identificar: los recuentos se quedan como estaban')
+      .toBe(true)
+  })
+})
+
 describe('identificar correos viejos no adivina de que buzon vienen', () => {
   // La migracion 20260824 dejo 754 de 809 correos sin atribuir, y eso fue A
   // PROPOSITO: quien tiene dos cuentas personales no puede saber cual fue sin
