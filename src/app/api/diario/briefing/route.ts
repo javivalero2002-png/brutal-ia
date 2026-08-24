@@ -89,7 +89,10 @@ export async function GET(request: NextRequest) {
       // enterrado en una columna que no se pinta no avisa a nadie.
       entradas: suyas.map(e => ({ dia: e.dia, entrada: e.entrada, cierre: e.cierre, entrada_at: e.entrada_at, cierre_at: e.cierre_at, animo: e.animo ?? null })),
       bloqueos: suyas.filter(e => e.animo === 'bloqueado').length,
-      tareas: completadas.map(t => ({ id: t.id, text: t.text, level: t.level })),
+      // `completed_at` incluido: sin el, el panel de equipo no puede agrupar las
+      // tareas POR DIA y al pulsar un dia de la semana saldrian las de toda ella.
+      // La consulta ya lo trae; solo faltaba dejarlo salir.
+      tareas: completadas.map(t => ({ id: t.id, text: t.text, level: t.level, completed_at: t.completed_at })),
     }
   })
   // Quien no ha fichado ni cerrado nada no ensucia el panel, pero se cuenta aparte.
