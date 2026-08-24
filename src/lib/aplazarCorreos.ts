@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { insertarEnInbox } from '@/lib/inboxInsert'
 
 /**
  * Lo que queda detrás del corte por tiempo SE GUARDA, marcado como pendiente.
@@ -35,7 +36,9 @@ export type CorreoAplazable = {
 export async function aplazarResto(
   admin: SupabaseClient,
   resto: CorreoAplazable[],
-  destino: { userId: string; shared: boolean; etiqueta: string },
+  /** `cuenta` es la dirección del buzón por el que entró. Sin ella los correos
+ *  aplazados aparecen sin atribuir y el selector de buzones no los ve. */
+  destino: { userId: string; shared: boolean; etiqueta: string; cuenta: string | null },
 ): Promise<number> {
   if (!resto.length) return 0
   const cola = resto.map(e => ({
@@ -50,12 +53,13 @@ export async function aplazarResto(
     is_unread: e.is_unread,
     received_at: e.received_at,
     shared: destino.shared,
+    cuenta: destino.cuenta,
     attachments: e.attachments?.length ? e.attachments : [],
     ai_estado: 'pendiente',
   }))
   // `gmail_id` es UNIQUE, así que esto es idempotente: si la pasada siguiente los
   // vuelve a traer, el insert rebota entero y no duplica.
-  const { error } = await admin.from('inbox_messages').insert(cola)
+  const { error } = await insertarEnInbox(admin, cola)
   if (error) {
     // Se registra y no se lanza: perder el aplazamiento es malo, pero tumbar la
     // sync entera por ello es peor — lo ya guardado en esta pasada se queda.
