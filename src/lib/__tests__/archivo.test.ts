@@ -121,3 +121,39 @@ describe('isOwnStorageUrl · qué deja pasar de verdad', () => {
     }
   })
 })
+
+describe('isOwnStorageUrl ata el BUCKET, no solo el prefijo', () => {
+  // El prefijo suelto (`/storage/v1/object/`) aceptaba tambien el bucket `copias`.
+  // Y `/api/archivo` pide sesion pero NO rol, y firma con el service role —que se
+  // salta que el bucket sea privado— y redirige 307 a una URL valida doce horas:
+  // cualquiera de los siete, sin ser propietario, se descargaba la copia entera de
+  // la base fabricando la URL a mano. El nombre es `AAAA-MM-DD.json.gz`, o sea que
+  // no habia nada que adivinar.
+  //
+  // Enfrente, `/api/admin/backup` corta con `role !== 'owner'` y el motivo esta
+  // escrito al lado: «quien cobra cuanto, que se habla de cada cliente, el diario
+  // de cada uno». Lo que de verdad escapaba es lo que la app filtra POR PERSONA:
+  // `inbox_messages` (el correo personal de los siete) y `chat_messages` (las
+  // conversaciones privadas con Harvey).
+  const H = 'ejemplo.supabase.co'
+  beforeAll(() => { process.env.NEXT_PUBLIC_SUPABASE_URL = `https://${H}` })
+
+  it('el bucket de copias NO pasa', async () => {
+    const { isOwnStorageUrl } = await import('@/lib/safeFetch')
+    expect(isOwnStorageUrl(`https://${H}/storage/v1/object/public/copias/2026-08-19.json.gz`)).toBe(false)
+    expect(isOwnStorageUrl(`https://${H}/storage/v1/object/sign/copias/2026-08-19.json.gz?token=x`)).toBe(false)
+  })
+
+  it('ningun otro bucket inventado pasa', async () => {
+    const { isOwnStorageUrl } = await import('@/lib/safeFetch')
+    for (const b of ['avatars', 'privado', 'copias-viejas', 'content-videos-backup']) {
+      expect(isOwnStorageUrl(`https://${H}/storage/v1/object/public/${b}/x.png`), b).toBe(false)
+    }
+  })
+
+  it('el bucket de contenido SI pasa, publico y firmado', async () => {
+    const { isOwnStorageUrl } = await import('@/lib/safeFetch')
+    expect(isOwnStorageUrl(`https://${H}/storage/v1/object/public/content-videos/a/b.mp4`)).toBe(true)
+    expect(isOwnStorageUrl(`https://${H}/storage/v1/object/sign/content-videos/a/b.mp4?token=x`)).toBe(true)
+  })
+})

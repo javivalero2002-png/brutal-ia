@@ -34,5 +34,23 @@ export function isOwnStorageUrl(raw: unknown): raw is string {
   // Supabase convierte un enlace de brutalia.tech en un salto a la API de Supabase
   // — que es justo lo que hace creible un phishing, y encima con nuestro dominio
   // delante. A 7 personas con sesion es menor; cuesta una linea.
-  return u.pathname.startsWith('/storage/v1/object/')
+  // Y EL BUCKET, no solo el prefijo. Aqui faltaba, y con el prefijo suelto la
+  // comprobacion aceptaba tambien `/storage/v1/object/public/copias/…`.
+  //
+  // Lo que eso abria: `/api/archivo` pide sesion pero NO rol, y firma con el
+  // service role —que se salta que el bucket sea privado— y redirige 307 a una URL
+  // valida doce horas. O sea que cualquiera de los siete, sin ser propietario, se
+  // descargaba la copia entera de la base fabricando la URL a mano; y el nombre del
+  // fichero es `AAAA-MM-DD.json.gz`, o sea que no hay nada que adivinar.
+  //
+  // Enfrente, `/api/admin/backup` corta con `role !== 'owner'` y el motivo esta
+  // escrito al lado: «quien cobra cuanto, que se habla de cada cliente, el diario
+  // de cada uno». La mitad de eso ya lo ve un miembro por la API normal, pero
+  // `inbox_messages` (el correo personal de los siete) y `chat_messages` (las
+  // conversaciones privadas con Harvey) no: esas la app las filtra por persona.
+  //
+  // `content-videos` es el unico bucket donde vive contenido de usuario. Los tres
+  // sitios que usan esta funcion —el visor de archivos, el analisis de PDF y el de
+  // documentos— solo tienen que alcanzar ese.
+  return /^\/storage\/v1\/object\/(public|sign)\/content-videos\//.test(u.pathname)
 }
