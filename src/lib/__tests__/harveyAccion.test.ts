@@ -19,7 +19,7 @@ describe('parsearAccionHarvey', () => {
   it('separa la frase hablada del comando', () => {
     const { texto, accion } = parsearAccionHarvey('Te la creo. [ACCION:tarea|Llamar a Nocilla|high|Pablo]')
     expect(texto).toBe('Te la creo.')
-    expect(accion).toEqual({ type: 'tarea', text: 'Llamar a Nocilla', level: 'high', assigneeName: 'Pablo' })
+    expect(accion).toEqual({ type: 'tarea', text: 'Llamar a Nocilla', level: 'high', assigneeName: 'Pablo', projectName: '' })
   })
 
   it('sin comando devuelve la frase entera y ninguna acción', () => {
@@ -61,7 +61,7 @@ describe('parsearAccionHarvey', () => {
 
   it('recorta los espacios que el modelo deja alrededor de las barras', () => {
     const { accion } = parsearAccionHarvey('[ACCION:tarea| Revisar contrato | urgente | Marta ]')
-    expect(accion).toEqual({ type: 'tarea', text: 'Revisar contrato', level: 'urgent', assigneeName: 'Marta' })
+    expect(accion).toEqual({ type: 'tarea', text: 'Revisar contrato', level: 'urgent', assigneeName: 'Marta', projectName: '' })
   })
 
   it('lee los cinco tipos con sus campos', () => {
@@ -295,5 +295,71 @@ describe('cerrar el dia por voz no pisa lo escrito', () => {
     expect(ok).toBe(false)
     expect(escrito, 'ha escrito sin saber que habia debajo').toEqual([])
     expect(dichos.join(' ')).toMatch(/no he podido leer/i)
+  })
+})
+
+describe('una tarea dictada puede pertenecer a un proyecto', () => {
+  // Sin esto, lo que se creaba por voz no pertenecia a ningun sitio: Proyectos no
+  // reflejaba nada de lo dictado aunque el usuario hubiera dicho de cual era.
+  // EL COMPLETADO VA PRIMERO a proposito. Con el activo delante, `find` lo cogia
+  // igual y la prueba pasaba en verde con el filtro quitado: no comprobaba nada.
+  const proyectos = [
+    { id: 'p2', name: 'Spot verano Mango 2025', status: 'completado' },
+    { id: 'p1', name: 'Spot verano Mango', status: 'activo' },
+    { id: 'p3', name: 'Web Nocilla', status: 'activo' },
+  ]
+
+  function deps() {
+    const creadas: Record<string, unknown>[] = []
+    const dichos: string[] = []
+    return {
+      creadas, dichos,
+      deps: {
+        data: {
+          projects: proyectos, team: [], clients: [],
+          createTask: async (t: Record<string, unknown>) => { creadas.push(t); return t },
+        } as never,
+        perfil: { id: 'u1', name: 'Javi' },
+        showToast: (m: string) => { dichos.push(m) },
+      },
+    }
+  }
+
+  it('engancha la tarea al proyecto que se ha dicho', async () => {
+    const { creadas, deps: d } = deps()
+    await ejecutarAccionHarvey({ type: 'tarea', text: 'Montar el teaser', projectName: 'Spot verano Mango' }, d)
+    expect(creadas[0].project_id).toBe('p1')
+  })
+
+  it('no la mete en un proyecto COMPLETADO', async () => {
+    // Un proyecto cerrado que aun se llama parecido casaria primero, y la tarea se
+    // iria a un sitio donde ya no mira nadie.
+    const { creadas, deps: d } = deps()
+    await ejecutarAccionHarvey({ type: 'tarea', text: 'Retoque', projectName: 'Spot verano Mango 2025' }, d)
+    expect(creadas[0].project_id).toBe('p1')
+  })
+
+  it('si no reconoce el proyecto la crea suelta Y LO DICE', async () => {
+    // Engancharla al proyecto equivocado no es recuperable: nadie sabe que hay que
+    // ir a buscarla. Crearla suelta si, pero solo si el aviso lo cuenta — «creada»
+    // a secas deja al usuario creyendo que esta dentro.
+    const { creadas, dichos, deps: d } = deps()
+    const ok = await ejecutarAccionHarvey({ type: 'tarea', text: 'Algo', projectName: 'Proyecto que no existe' }, d)
+    expect(ok).toBe(true)
+    expect(creadas[0].project_id).toBeUndefined()
+    expect(dichos.join(' ')).toMatch(/fuera de proyecto/i)
+  })
+
+  it('sin proyecto dicho, ni lo menciona', async () => {
+    const { creadas, dichos, deps: d } = deps()
+    await ejecutarAccionHarvey({ type: 'tarea', text: 'Algo suelto' }, d)
+    expect(creadas[0].project_id).toBeUndefined()
+    expect(dichos.join(' ')).not.toMatch(/proyecto/i)
+  })
+
+  it('el parser recoge el cuarto campo', () => {
+    const { accion } = parsearAccionHarvey('Hecho. [ACCION:tarea|Montar el teaser|high|Paula|Spot verano Mango]')
+    expect(accion?.projectName).toBe('Spot verano Mango')
+    expect(accion?.assigneeName).toBe('Paula')
   })
 })
