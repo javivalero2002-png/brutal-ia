@@ -115,7 +115,16 @@ export async function quitarCuenta(
   const { data: perfil } = await admin
     .from('profiles').select('gmail_account, gmail_colabs_account').eq('id', profileId).maybeSingle()
   if (perfil?.gmail_account?.toLowerCase().trim() === correo) {
-    await admin.from('profiles').update({ gmail_connected: false, gmail_refresh_token: null, gmail_account: null }).eq('id', profileId)
+    // SI QUEDA OTRA PERSONAL, SE ASCIENDE. Vaciar las columnas a ciegas dejaba
+    // «desconectado» a quien todavía tenía otra cuenta puesta: la pantalla de
+    // Sincronización, el estado del equipo y las guardas del calendario leen
+    // esas columnas, así que la app entera decía que no había Gmail mientras
+    // el sync seguía trayendo correo de la que quedaba.
+    const otra = (await cuentasDe(admin, profileId)).find(c => !c.compartida)
+    await admin.from('profiles').update(otra
+      ? { gmail_connected: true, gmail_refresh_token: otra.refresh_token, gmail_account: otra.email }
+      : { gmail_connected: false, gmail_refresh_token: null, gmail_account: null }
+    ).eq('id', profileId)
   }
   if (perfil?.gmail_colabs_account?.toLowerCase().trim() === correo) {
     await admin.from('profiles').update({ gmail_colabs_connected: false, gmail_colabs_refresh_token: null, gmail_colabs_account: null }).eq('id', profileId)
@@ -140,4 +149,53 @@ export async function quitarCuentaTodas(
   if (criterio.profileId) q = q.eq('profile_id', criterio.profileId)
   const { error } = await q
   return error?.message ?? null
+}
+
+/**
+ * El token del buzón por el que entró ALGO, no el de «la última cuenta conectada».
+ *
+ * Existe porque `profiles.gmail_refresh_token` es UNA RANURA que el callback pisa
+ * en cada conexión. Con dos cuentas personales, esa columna deja de significar «tu
+ * Gmail» y pasa a significar «la última que tocaste» — que no es nada.
+ *
+ * Se vio de la peor forma: Javi tiene 749 correos que entraron por una cuenta y 48
+ * por otra, y los adjuntos de los 749 se pedían con el token de la otra. Gmail no
+ * encuentra ese identificador en ese buzón y devuelve un error genérico: parecía
+ * un problema de red.
+ *
+ * `correo` es la dirección guardada en la fila (`inbox_messages.cuenta`). Si no la
+ * hay —los mensajes anteriores a esa columna— se cae a la cuenta personal MÁS
+ * ANTIGUA, que es la que esa persona conectó primero, y solo después a la columna
+ * vieja. Nunca a «la última», que es lo que no significa nada.
+ */
+export async function tokenParaCorreo(
+  admin: SupabaseClient,
+  profileId: string,
+  correo: string | null,
+): Promise<{ token: string | null; email: string | null; exacto: boolean }> {
+  const cuentas = await cuentasDe(admin, profileId)
+
+  if (correo) {
+    const c = cuentas.find(x => x.email.toLowerCase().trim() === correo.toLowerCase().trim())
+    if (c) return { token: c.refresh_token, email: c.email, exacto: true }
+  }
+
+  // `cuentasDe` ordena por `creada_at` ascendente, así que la primera personal es
+  // la que conectó primero. Es una suposición, y por eso viaja `exacto: false`:
+  // quien la use puede decirlo en vez de fingir que lo sabe.
+  const personal = cuentas.find(c => !c.compartida)
+  if (personal) return { token: personal.refresh_token, email: personal.email, exacto: false }
+
+  const { data: perfil } = await admin
+    .from('profiles')
+    .select('gmail_refresh_token, gmail_account')
+    .eq('id', profileId)
+    .maybeSingle()
+  const token = (perfil?.gmail_refresh_token as string | null) || null
+  return { token, email: (perfil?.gmail_account as string | null) || null, exacto: false }
+}
+
+/** Las cuentas personales de alguien, para lo que hay que mirar en TODAS. */
+export async function personalesDe(admin: SupabaseClient, profileId: string) {
+  return (await cuentasDe(admin, profileId)).filter(c => !c.compartida)
 }

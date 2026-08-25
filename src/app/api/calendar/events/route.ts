@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { tokenParaCorreo, personalesDe } from '@/lib/gmailCuentas'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCalendarEvents, createCalendarEvent } from '@/lib/gmail'
 
@@ -35,7 +36,11 @@ export async function GET() {
     )
   }
 
-  if (!profile?.gmail_refresh_token || !profile?.gmail_connected) {
+  const hayCuenta = profile?.gmail_refresh_token && profile?.gmail_connected
+    // La columna vieja se vacía al desconectar una cuenta aunque queden otras, así
+    // que preguntarle solo a ella dejaba sin calendario a quien sí lo tenía.
+    || (await personalesDe(admin, user.id)).length > 0
+  if (!hayCuenta) {
     return NextResponse.json([])
   }
 
@@ -47,14 +52,30 @@ export async function GET() {
     return code === 403 || code === 401 || reason === 'insufficientPermissions' || reason === 'forbidden' || reason === 'invalid_grant'
   }
 
-  let personalEvents: any[] = []
-  let personalNoScope = false
-  try {
-    personalEvents = await getCalendarEvents(profile.gmail_refresh_token, 3)
-  } catch (err: any) {
-    if (isNoScope(err)) { personalNoScope = true }
-    else { console.error('Calendar GET personal error:', err?.message) }
-  }
+    // TODAS LAS CUENTAS PERSONALES, no «la última conectada».
+    //
+    // Aquí se usaba `profile.gmail_refresh_token`, que es UNA ranura que el
+    // callback pisa en cada conexión. Con dos cuentas personales, a Javi le
+    // enseñaba la agenda de la SEGUNDA que conectó y la suya no salía por ningún
+    // lado — sin error y sin hueco: un calendario que era el de otro.
+    //
+    // Se piden en paralelo: en serie, dos cuentas tardan el doble en una de las
+    // rutas más lentas del arranque. Y una que falle no se lleva a las demás, que
+    // es lo que hacía el `try` único de antes.
+    const personales = await personalesDe(admin, user.id)
+    const personalEvents: any[] = []
+    let personalNoScope = personales.length > 0
+    const resultados = await Promise.allSettled(
+      personales.map(c => getCalendarEvents(c.refresh_token, 3)))
+    resultados.forEach((r, i) => {
+      if (r.status === 'fulfilled') { personalEvents.push(...r.value); personalNoScope = false; return }
+      const err: any = r.reason
+      if (isNoScope(err)) return
+      personalNoScope = false
+      // Se dice CUÁL falló: con dos cuentas, «Calendar GET personal error» no
+      // permite saber cuál de las dos hay que reconectar.
+      console.error('Calendar GET falló para', personales[i]?.email, '—', err?.message)
+    })
 
   let colabsEvents: any[] = []
   if (coProfile?.gmail_colabs_refresh_token && coProfile?.gmail_colabs_connected) {
@@ -100,7 +121,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No se pudo comprobar tu conexión con Google Calendar' }, { status: 500 })
   }
 
-  if (!profile?.gmail_refresh_token || !profile?.gmail_connected) {
+  const hayCuenta = profile?.gmail_refresh_token && profile?.gmail_connected
+    // La columna vieja se vacía al desconectar una cuenta aunque queden otras, así
+    // que preguntarle solo a ella dejaba sin calendario a quien sí lo tenía.
+    || (await personalesDe(admin, user.id)).length > 0
+  if (!hayCuenta) {
     return NextResponse.json({ error: 'Gmail no conectado' }, { status: 400 })
   }
 
@@ -150,7 +175,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const event = await createCalendarEvent(profile.gmail_refresh_token, {
+    const event = await createCalendarEvent((await tokenParaCorreo(admin, user.id, null)).token!, {
       title, date, time, description,
       attendees: Array.isArray(attendees) ? attendees.filter((a: any) => typeof a === 'string' && a.includes('@')) : undefined,
     })
