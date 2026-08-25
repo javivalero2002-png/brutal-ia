@@ -3771,6 +3771,50 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('el orden de tareas cambia lo que se ve', () => {
+  // Javi: «con estos 2 botones en tareas no pasa nada». Y era verdad, aunque el
+  // codigo del orden estaba BIEN: `filtered` se ordenaba por prioridad o por fecha
+  // segun el boton, correctamente.
+  //
+  // Lo que pasaba es que en la pestana «Todas» la lista no se pinta en plano: se
+  // reparte en ATRASADAS / HOY / PROXIMAS / SIN FECHA. Esos cuatro cajones SON una
+  // ordenacion por fecha, asi que se comian cualquier otra — una tarea urgente para
+  // el mes que viene seguia cayendo en PROXIMAS, debajo de todo.
+  //
+  // Es un modo de fallo que no da error y que ademas ENGANA al que lee el codigo:
+  // el orden se calcula, el estado se guarda, el boton se ilumina. Todo funciona
+  // menos lo unico que importa.
+  const UI = leerCodigo('src/components/sections/TareasSection.tsx')
+
+  it('el agrupado por fecha se apaga al ordenar por prioridad', () => {
+    const i = UI.indexOf('const grouped = useMemo(')
+    expect(i, 'ya no se agrupan las tareas: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const cuerpo = UI.slice(i, i + 1200)
+    expect(/if \(taskSort==='prioridad'\) return null/.test(cuerpo),
+      'el agrupado por fecha vuelve a mandar siempre: el boton de prioridad se ilumina y no cambia nada de lo que se ve')
+      .toBe(true)
+  })
+
+  it('el memo del agrupado depende del orden elegido', () => {
+    // Sin `taskSort` en las dependencias, React devuelve el agrupado anterior y el
+    // boton vuelve a no hacer nada — con el codigo de arriba correcto.
+    const i = UI.indexOf('const grouped = useMemo(')
+    const cierre = UI.indexOf('}, [', i)
+    const deps = UI.slice(cierre, UI.indexOf(']', cierre) + 1)
+    expect(/taskSort/.test(deps),
+      `el memo del agrupado no depende de taskSort: se quedara cacheado y el boton no hara nada — deps: ${deps.trim()}`)
+      .toBe(true)
+  })
+
+  it('los dos botones existen y llevan estados distintos', () => {
+    const i = UI.indexOf("id:'prioridad'")
+    expect(i, 'ya no existe el selector de orden').toBeGreaterThan(-1)
+    const bloque = UI.slice(i, i + 400)
+    expect(/id:'fecha'/.test(bloque), 'falta la opcion de fecha').toBe(true)
+    expect(/setTaskSort\(s\.id\)/.test(UI), 'los botones ya no cambian el orden').toBe(true)
+  })
+})
+
 describe('el calendario escribe en la cuenta de la que salio el evento', () => {
   // La mitad que faltaba del arreglo de hoy: la LECTURA paso a unir todas las
   // cuentas personales, y la ESCRITURA se quedo usando una sola. Un evento de la
