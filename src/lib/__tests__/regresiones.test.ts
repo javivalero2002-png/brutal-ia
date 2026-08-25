@@ -158,9 +158,22 @@ describe('fechas · ningún deadline se mide restando timestamps', () => {
   it('el día de hoy nunca se saca en UTC para lógica de negocio', () => {
     // `new Date().toISOString().slice(0,10)` da el día en UTC: a partir de las
     // ~22:00 de Madrid salta al día siguiente. Para eso está todayKey().
+    //
+    // SE PROHÍBE EL DERIVADO, NO UNA FORMA DE ESCRIBIRLO. La versión anterior solo
+    // buscaba `.slice(0,10)`, así que `.split('T')[0]` y `.substring(0,10)` pasaban
+    // las dos reglas — y `.split('T')[0]` no es una forma rebuscada: ya es un idioma
+    // de este repo, está escrito en cuatro sitios, así que es lo que sale solo al
+    // escribir la línea siguiente.
+    //
+    // Lo que se busca es un `toISOString()` de la fecha de AHORA seguido de
+    // cualquier forma de quedarse con los diez primeros caracteres.
+    const CORTES = String.raw`(?:\.slice\(\s*0\s*,\s*10\s*\)|\.substring\(\s*0\s*,\s*10\s*\)|\.substr\(\s*0\s*,\s*10\s*\)|\.split\('T'\)\[0\]|\.split\("T"\)\[0\])`
+    const patron = new RegExp(String.raw`new Date\(\)\.toISOString\(\)\s*` + CORTES)
     const malas = TS.flatMap(f => leer(f).split('\n').map((l, i) => ({ f, i: i + 1, l })))
-      .filter(({ l }) => /new Date\(\)\.toISOString\(\)\.slice\(\s*0\s*,\s*10\s*\)/.test(l) && !/^\s*(\/\/|\*)/.test(l))
-    expect(malas.map(u => `${u.f}:${u.i}`), 'Día en UTC: usa todayKey() de shared/helpers').toEqual([])
+      .filter(({ l }) => patron.test(l) && !/^\s*(\/\/|\*)/.test(l))
+    expect(malas.map(u => `${u.f}:${u.i}`),
+      'Día en UTC: a partir de las ~22:00 de Madrid da el día de MAÑANA. Usa todayKey() de shared/helpers')
+      .toEqual([])
   })
 })
 
@@ -1191,13 +1204,35 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
   // co-responsable y el Diario, el briefing y Harvey no. Una tarea compartida
   // sumaba en un comprobador y no en el otro.
   it('los cuatro sitios cuentan igual de quien es una tarea', () => {
+    // SE INVIERTE LA REGLA. La version anterior miraba solo `api/(diario|harvey)` y
+    // buscaba el literal exacto `assigned_to === p.id`, asi que se saltaba dos
+    // cosas: `resumenEquipo.ts` —el fichero al que se MUDO este codigo, y que es lo
+    // que leen las dos IAs para contestar «¿como va Pablo?»— y cualquier variable
+    // que no se llame `p`.
+    //
+    // Si ese fichero volviera a contar solo `assigned_to`, las tareas donde alguien
+    // es CO-responsable desaparecerian de la respuesta de la IA mientras Reportes
+    // —que si usa `esTareaDe`— las sigue contando: la IA le dice al jefe que Pablo
+    // cerro 2 y la seccion dice 4, la misma tarde.
+    //
+    // Ahora se listan los ficheros que hablan de tareas por persona y se prohibe la
+    // comparacion a pelo en TODOS, con cualquier nombre de variable.
     const infractores: string[] = []
     for (const ruta of TS) {
-      if (!/api\/(diario|harvey)/.test(ruta)) continue
-      if (/assigned_to === p\.id/.test(leerCodigo(ruta))) infractores.push(ruta)
+      if (ruta.startsWith('src/lib/__tests__/')) continue
+      const c = leerCodigo(ruta)
+      // Solo los ficheros que ya conocen el ayudante: son los que cuentan tareas
+      // por persona. Prohibirlo en todo el repo daria falsos positivos en las
+      // rutas que legitimamente filtran por `assigned_to` en una consulta.
+      if (!/\besTareaDe\b/.test(c)) continue
+      for (const m of c.matchAll(/\.assigned_to\s*===\s*(\w+(?:\.\w+)*)/g)) {
+        // Dentro de la propia definicion de esTareaDe, la comparacion es correcta.
+        if (ruta.endsWith('shared/helpers.ts')) continue
+        infractores.push(`${ruta}: .assigned_to === ${m[1]}`)
+      }
     }
     expect(infractores,
-      'compara assigned_to a pelo en vez de esTareaDe(): las tareas con co-responsable se cuentan distinto que en Reportes')
+      `compara assigned_to a pelo en vez de esTareaDe(): las tareas con co-responsable se cuentan distinto segun quien pregunte, y la IA y Reportes daran numeros distintos el mismo dia:\n  ${infractores.join('\n  ')}`)
       .toEqual([])
   })
 
@@ -4052,6 +4087,363 @@ describe('todos los buscadores de la app buscan igual', () => {
   })
 })
 
+describe('dos contadores que subian solos', () => {
+  it('«completadas esta semana» se cuenta por completed_at', () => {
+    // Se contaba por `updated_at`: retocar el texto de una tarea vieja ya terminada
+    // le cambia el `updated_at` y la hacia contar como completada ESTA semana. El
+    // contador del panel de equipo subia sin que nadie hubiera terminado nada.
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (!ruta.startsWith('src/components/')) continue
+      const c = leerCodigo(ruta)
+      for (const m of c.matchAll(/t\.done\s*&&[^\n]*new Date\(t\.updated_at/g)) {
+        infractores.push(`${ruta}: ${m[0].slice(0, 70)}`)
+      }
+    }
+    expect(infractores, `vuelve a contarse una tarea como terminada esta semana por su ultima EDICION:\n  ${infractores.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('la ficha se rehace tambien al EDITAR y al BORRAR una nota', () => {
+    // `fichaDesfasada` pedia `updated_at` y luego usaba solo `created_at`, asi que
+    // editar una nota no rehacia la ficha NUNCA: cambiar una tarifa o corregir un
+    // brief no llegaba a las IAs, que siguen leyendo la ficha vieja como la verdad
+    // permanente del estudio. Y borrar bajaba el recuento, la resta salia negativa
+    // y la ficha se quedaba citando algo que ya no existe.
+    const F = leerCodigo('src/lib/fichaEstudio.ts')
+    const i = F.indexOf('export async function fichaDesfasada')
+    expect(i, 'ya no existe fichaDesfasada: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = F.slice(i, F.indexOf('\nexport ', i + 10))
+    expect(/reciente\?\.updated_at/.test(cuerpo),
+      'vuelve a mirarse solo `created_at`: editar una nota no rehara la ficha').toBe(true)
+    expect(/notas < Number\(ficha\.notas/.test(cuerpo),
+      'borrar una nota vuelve a no rehacer la ficha: se queda citando lo que ya no existe').toBe(true)
+  })
+})
+
+describe('«supabase-js NO lanza» por fin tiene regla', () => {
+  // CLAUDE.md lo pone como una de las trampas que ya han mordido —«en un
+  // Promise.all que desestructura solo `data`, un fallo es indistinguible de "no
+  // hay filas" — un bug asi vivio semanas»— y NO habia ninguna regla que lo
+  // vigilara. Habia dos sitios vivos:
+  //
+  //   · `fichaEstudio.ts`: si falla la lectura de `clients`, la ficha se escribia
+  //     con «CLIENTES DADOS DE ALTA AHORA MISMO (0): ninguno» y el prompt dice
+  //     justo debajo que eso MANDA sobre los documentos. Y la ficha se PERSISTE:
+  //     a partir de ahi las dos IAs contestan «no tenemos ningun cliente» con
+  //     autoridad. Por eso ahi no basta con registrar — se aborta la regeneracion.
+  //   · `harvey-draft`: un fallo al leer la memoria salia como «no hay nada
+  //     relevante» y el borrador se escribia sobre menos contexto del que hay.
+  it('ningun Promise.all de consultas tira los errores', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (ruta.startsWith('src/lib/__tests__/')) continue
+      const c = leerCodigo(ruta)
+      for (const m of c.matchAll(/(?:const|let)\s+(\[[^\]]*\]|\w+)\s*=\s*await Promise\.all\(\[/g)) {
+        const abre = c.indexOf('[', m.index! + m[0].length - 1)
+        // El array de promesas: de `Promise.all([` a su `])`.
+        let n = 0, fin = abre
+        for (let i = abre; i < c.length; i++) {
+          if (c[i] === '[') n++
+          else if (c[i] === ']') { n--; if (n === 0) { fin = i; break } }
+        }
+        const promesas = c.slice(abre, fin)
+        if (!/\b(admin|supabase)\.from\(/.test(promesas)) continue
+
+        const destino = m[1]
+        // Vale cualquiera de las dos: nombrar `error` al desestructurar, o pasar el
+        // resultado entero por `logQueryErrors`.
+        const nombraError = /\berror\b/.test(destino)
+        const despues = c.slice(fin, fin + 400)
+        const registra = /logQueryErrors\(/.test(despues) || /\.some\(r => r\.error\)/.test(despues)
+        if (!nombraError && !registra) {
+          infractores.push(`${ruta}: ${destino.replace(/\s+/g, ' ').slice(0, 80)}`)
+        }
+      }
+    }
+    expect(infractores,
+      `un Promise.all de consultas desestructura solo \`data\`. supabase-js NO lanza, asi que un fallo de lectura se vuelve indistinguible de «no hay filas» — y en la ficha eso se PERSISTE y las dos IAs lo repiten con autoridad. Nombra \`error\` o pasa el resultado por logQueryErrors():\n  ${infractores.join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
+describe('tres afirmaciones mas que no se sostenian', () => {
+  it('ninguna PANTALLA saca la hora de un evento cortando el ISO', () => {
+    // La regla hermana cubre los constructores de contexto de las dos IAs. Estas
+    // dos pantallas seguian cortando: Google devuelve cada evento en el desfase del
+    // calendario donde vive (+01:00 el personal, +02:00 el compartido), asi que la
+    // misma reunion salia a las 10:30 en un panel y a las 11:30 en Calendario.
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (!ruta.startsWith('src/components/')) continue
+      for (const m of leerCodigo(ruta).matchAll(/\w*[Ss]tart\w*\.slice\(\s*11\s*,\s*16\s*\)/g)) {
+        infractores.push(`${ruta}: ${m[0]}`)
+      }
+    }
+    expect(infractores, `una pantalla vuelve a sacar la hora cortando el ISO: dira una hora distinta de la que enseña Calendario, y solo para algunos calendarios:\n  ${infractores.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('el panel de procesos vigila TODOS los crons que hay', () => {
+    // El panel dice «TODO LO AUTOMÁTICO, AL DÍA» y `CADENCIA` solo listaba dos de
+    // los cuatro: los dos recordatorios podian llevar dias sin correr y aqui salia
+    // todo verde. Un panel que afirma mas de lo que mira es peor que no tenerlo,
+    // porque se deja de comprobar a mano.
+    const crons = new Set(
+      (JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons?: { path: string }[] }).crons
+        ?.map(c => c.path.split('/').pop()!) || [])
+    expect(crons.size, 'no hay crons en vercel.json: revisa esta regla').toBeGreaterThan(1)
+    const L = leerCodigo('src/app/api/admin/latido/route.ts')
+    const m = L.match(/const CADENCIA: Record<string, number> = \{([\s\S]*?)\n\}/)
+    expect(m, 'ya no existe CADENCIA: revisa esta regla en vez de borrarla').toBeTruthy()
+    // `backup` late como `copia`: el cron y el nombre del latido no coinciden.
+    const ALIAS: Record<string, string> = { backup: 'copia' }
+    const sinVigilar = [...crons].map(c => ALIAS[c] || c).filter(c => !new RegExp(`['"]?${c}['"]?\\s*:`).test(m![1]))
+    expect(sinVigilar, `hay crons que el panel de procesos no vigila, y aun asi dice «todo al dia»:\n  ${sinVigilar.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('«fichó y no cerró» se decide por el fichaje, no por el texto', () => {
+    // Con el texto, quien abre Fichar, escribe dos palabras y se va —sin llegar a
+    // fichar— salia acusado de «ficho y no cerro». Es una afirmacion falsa sobre el
+    // trabajo de alguien, y le llega a un jefe.
+    const A = leerCodigo('src/lib/automations.ts')
+    const i = A.indexOf("sincerrar:")
+    expect(i, 'ya no existe el disparador sin_fichar: revisa esta regla').toBeGreaterThan(-1)
+    const bloque = A.slice(Math.max(0, i - 400), i)
+    expect(/haFichado\(/.test(bloque),
+      'vuelve a decidirse por el texto: acusara de no cerrar a quien nunca ficho').toBe(true)
+    expect(/!\(d\.entrada \|\| ''\)\.trim\(\)/.test(bloque),
+      'vuelve el criterio del texto').toBe(false)
+  })
+})
+
+describe('la CSP deja incrustar lo que la app sabe incrustar', () => {
+  // `videoEmbed()` genera iframes de YouTube, Vimeo, Drive e Instagram; `frame-src`
+  // solo listaba los dos primeros. Drive e Instagram los bloqueaba la CSP: caja
+  // negra vacia, sin error visible en la pantalla — que es exactamente el sintoma
+  // que los dos commits que añadieron ese soporte dicen haber arreglado («pegabas
+  // el enlace y no se veia nada»).
+  //
+  // La lista se saca de la FUNCION, no se escribe aqui: añadir un quinto proveedor
+  // sin tocar la CSP tiene que ponerse rojo solo.
+  it('todo dominio que videoEmbed produce esta en frame-src', () => {
+    const H = leerCodigo('src/components/shared/helpers.ts')
+    const i = H.indexOf('export const videoEmbed')
+    expect(i, 'ya no existe videoEmbed: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const fin = H.indexOf('\nexport ', i + 10)
+    const cuerpo = H.slice(i, fin > i ? fin : i + 1500)
+    const dominios = [...new Set([...cuerpo.matchAll(/https:\/\/([a-z0-9.-]+)\//g)].map(m => m[1]))]
+    expect(dominios.length, 'no se reconoce ningun dominio de embed').toBeGreaterThan(2)
+
+    const csp = leerCodigo('next.config.ts')
+    const m = csp.match(/"frame-src ([^"]*)"/)
+    expect(m, 'ya no hay frame-src: sin el, `default-src self` bloquea TODOS los iframes').toBeTruthy()
+    const faltan = dominios.filter(d => !m![1].includes(d))
+    expect(faltan, `videoEmbed genera iframes de dominios que la CSP bloquea. El usuario ve una caja negra vacia y ni un error:\n  ${faltan.join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
+describe('«no lo he podido leer» no se pinta como «no tienes nada»', () => {
+  // Las preferencias de avisos se leian con un `.catch(() => {})` que dejaba `prefs`
+  // en `{}`. Como el pintado es `prefs[cat] !== false`, los OCHO interruptores
+  // salian encendidos: la pantalla afirmaba que no tienes nada silenciado sin
+  // haberlo comprobado.
+  //
+  // Y lo grave venia despues: al pulsar cualquiera se manda el objeto ENTERO
+  // (`{...prefs, [cat]: valor}`), asi que el primer toque escribia `{}` mas esa
+  // clave encima del servidor. Un fallo de red al abrir la pestaña te borraba todo
+  // lo que llevabas silenciado, en silencio.
+  it('las preferencias distinguen cargando, listo y error', () => {
+    const N = leerCodigo('src/components/sections/NotificacionesTab.tsx')
+    expect(/estadoPrefs/.test(N),
+      'vuelve a haber un solo estado: un fallo de lectura se pintara como «nada silenciado»').toBe(true)
+    expect(/'cargando' \| 'listo' \| 'error'/.test(N), 'los tres estados ya no estan').toBe(true)
+    // Y la escritura tiene que estar cerrada mientras no se hayan leido.
+    const i = N.indexOf('const cambiarPref')
+    expect(i, 'ya no existe cambiarPref: revisa esta regla').toBeGreaterThan(-1)
+    expect(/estadoPrefs !== 'listo'/.test(N.slice(i, i + 500)),
+      'se puede escribir sin haber leido: el PUT manda el objeto entero y borra lo que no se llego a leer')
+      .toBe(true)
+  })
+})
+
+describe('el trabajo de alguien no desaparece por no haber fichado', () => {
+  // `/api/equipo/resumen` mapeaba sobre `diario` y colgaba las tareas DENTRO de
+  // cada dia, asi que un dia trabajado sin fichar no existia — y con el, todas las
+  // tareas cerradas ese dia.
+  //
+  // MEDIDO contra produccion con una tarea completada el 23 de agosto (un dia sin
+  // fila de diario), preguntando «¿que tal va Javi?»:
+  //   antes → «No hay nada escrito de Javi en este tramo: ni objetivos, ni
+  //            cierres, NI TAREAS COMPLETADAS.»
+  //   ahora → «Javi ha completado el montaje del teaser el veintitres de agosto,
+  //            pero no cerro ese dia de trabajo.»
+  // Lo primero es una afirmacion, y es falsa, y la lee un jefe sobre el trabajo de
+  // alguien. El primer caso de prueba que escribi uso «ayer» y NO aislaba el bug,
+  // porque ese dia si tenia fila de diario: el caso tiene que ejercitar la decision.
+  it('los dias salen del diario Y de las tareas, no solo del diario', () => {
+    const R = leerCodigo('src/app/api/equipo/resumen/route.ts')
+    expect(/new Set\(\[\.\.\.conDiario\.keys\(\), \.\.\.conTareas\]\)/.test(R),
+      'la lista de dias vuelve a salir solo de `diario`: el trabajo de quien cerro tareas sin fichar desaparece, y el texto que lee el jefe dice «ni tareas completadas»')
+      .toBe(true)
+    // Y que no se vuelva a mapear directamente sobre el diario.
+    expect(/const dias: DiaDeTrabajo\[\] = \(diario \|\| \[\]\)\.map/.test(R),
+      'se vuelve a construir la lista de dias mapeando sobre `diario`').toBe(false)
+  })
+})
+
+describe('una funcion memorizada no lee estado congelado del primer render', () => {
+  // `sendChatMessage` era un `useCallback` con deps `[]` que leia `calendarEvents`
+  // de la clausura. Con deps vacias la funcion es SIEMPRE la del primer render, y
+  // en ese render el estado vale su valor inicial: `[]`. Resultado — el cuerpo que
+  // salia hacia `/api/chat` llevaba `eventos: []` en todos los mensajes, toda la
+  // sesion, para siempre. Brutal.IA no vio la agenda ni una vez.
+  //
+  // Y era la peor version del fallo: el servidor distingue a proposito «lista
+  // vacia» de «no mandado» para que el modelo no diga que no tiene calendario.
+  // Recibiendo `[]` contestaba «no tienes nada esta semana» — una afirmacion, y
+  // falsa. Un bug de React convertido en una mentira de la IA.
+  //
+  // Se mira `useNexusData.ts` porque es el sitio donde vive el estado de la app: 18
+  // `useState` y las funciones que los consumen. La solucion cuando hace falta el
+  // valor de ahora sin cambiar la identidad de la funcion es un ref, que este mismo
+  // fichero ya usaba para `onNewInboxMessage`.
+  it('ningun useCallback con deps vacias lee un useState de este hook', () => {
+    const H = leerCodigo('src/hooks/useNexusData.ts')
+
+    // Los nombres de estado declarados con useState (no los setters).
+    const estados = [...H.matchAll(/const \[(\w+), set\w+\] = useState/g)].map(m => m[1])
+    expect(estados.length, 'no se reconoce ningun useState: revisa esta regla en vez de borrarla').toBeGreaterThan(8)
+
+    // EL FINAL DE CADA useCallback SE ENCUENTRA CONTANDO PARENTESIS.
+    //
+    // La primera version buscaba el siguiente `}, [])` con un `indexOf` y saltaba
+    // el callback si por el camino aparecia otro `useCallback(`. Como el `}, [])`
+    // mas cercano casi siempre pertenece a OTRO callback varias funciones mas
+    // abajo, la condicion se cumplia SIEMPRE: se saltaban los 34 y la regla no
+    // comprobaba absolutamente nada. Paso en verde con el bug reintroducido.
+    const cuerpoDe = (desde: number): { cuerpo: string; deps: string } | null => {
+      const abre = H.indexOf('(', desde)
+      if (abre === -1) return null
+      let n = 0
+      for (let i = abre; i < H.length; i++) {
+        if (H[i] === '(') n++
+        else if (H[i] === ')') {
+          n--
+          if (n === 0) {
+            const dentro = H.slice(abre + 1, i)
+            const coma = dentro.lastIndexOf(',')
+            if (coma === -1) return null
+            return { cuerpo: dentro.slice(0, coma), deps: dentro.slice(coma + 1).trim() }
+          }
+        }
+      }
+      return null
+    }
+
+    const revisados: string[] = []
+    const infractores: string[] = []
+    for (const m of H.matchAll(/const (\w+) = useCallback/g)) {
+      const t = cuerpoDe(m.index! + m[0].length)
+      if (!t) continue
+      revisados.push(m[1])
+      if (t.deps !== '[]') continue                 // solo las de dependencias vacias
+      // Fuera las cadenas literales antes de comparar: `apiFetch('/api/tasks')`
+      // contiene la palabra `tasks` y no es leer el estado `tasks`. Los `${...}`
+      // de las plantillas se conservan, que ahi si puede haber una lectura real.
+      const cuerpo = t.cuerpo
+        .replace(/'[^']*'/g, "''")
+        .replace(/"[^"]*"/g, '""')
+        // De las plantillas se conserva SOLO lo interpolado: `/api/tasks/${id}`
+        // contiene la palabra `tasks` y no es leer el estado `tasks`, pero
+        // `${calendarEvents.length}` si lo seria.
+        .replace(/`(?:[^`\\]|\\.)*`/g, lit =>
+          [...lit.matchAll(/\$\{([^{}]*)\}/g)].map(x => x[1]).join(' '))
+      for (const e of estados) {
+        // El nombre del estado, pero NO cuando es `xRef.current` ni el setter.
+        if (new RegExp(`(?<![\\w.])${e}(?!\\w)`).test(cuerpo)) {
+          infractores.push(`${m[1]}() tiene deps [] y lee el estado ${e}`)
+        }
+      }
+    }
+    expect(revisados.length, 'no se reconoce ningun useCallback: la regla no esta mirando nada').toBeGreaterThan(20)
+    expect(infractores,
+      `una funcion memorizada con deps vacias lee estado del componente: se queda con el valor del PRIMER render para siempre, y nadie lo ve porque no falla — simplemente manda el valor inicial. Usa un ref (como onNewInboxRef) o pon la dependencia:\n  ${infractores.join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
+describe('un select trae las columnas que el codigo va a leer', () => {
+  // EL FALLO MAS CARO DE LA AUDITORIA, y no daba error de ninguna clase.
+  //
+  // `recordatorio-cerrar` —el aviso de las 20:00 que Javi llama vital— pedia
+  // `select('user_id, entrada, cierre_at')` y luego filtraba con `haFichado()`, que
+  // lee `entrada_at`. PostgREST devuelve SOLO las columnas que le pides, asi que
+  // `entrada_at` no venia ni como clave: `undefined`, `haFichado` false siempre,
+  // lista de avisados SIEMPRE vacia. El aviso no se envio nunca a nadie.
+  //
+  // Y el cron contestaba `{ok:true, avisados:0}`, que es indistinguible de «hoy
+  // todo el mundo habia cerrado su dia». Ni un error, ni un log, ni un latido rojo.
+  //
+  // El gemelo de al lado, `recordatorio-fichar`, SI pedia la columna.
+  //
+  // Las columnas se sacan del CUERPO del ayudante, no de una lista escrita aqui:
+  // si mañana `diarioTieneAlgo` empieza a mirar otra columna, esta regla lo exige
+  // sola sin que nadie se acuerde de actualizarla.
+  const H = leerCodigo('src/components/shared/helpers.ts')
+  const columnasQueLee = (nombre: string): string[] => {
+    const i = H.indexOf(`export const ${nombre} =`)
+    expect(i, `ya no existe ${nombre}: revisa esta regla en vez de borrarla`).toBeGreaterThan(-1)
+    const fin = H.indexOf('\nexport ', i + 10)
+    const cuerpo = H.slice(i, fin > i ? fin : i + 900)
+    return [...new Set([...cuerpo.matchAll(/\bd\??\.(\w+)/g)].map(m => m[1]))]
+  }
+
+  // ACOTADA AL SITIO, no al fichero — que es el error que CLAUDE.md avisa y que
+  // esta regla cometio en su primera version. `POST /api/diario` lee
+  // `select('entrada_at, cierre_at')` para NO pisar la hora de fichaje al editar
+  // por segunda vez, y ese resultado no pasa por ningun ayudante. Es un select
+  // legitimo en un fichero que ademas usa `diarioTieneAlgo` en otra consulta.
+  const EXCEPCIONES: Record<string, string> = {
+    "src/app/api/diario/route.ts::entrada_at, cierre_at":
+      'POST lee la fila previa solo para conservar entrada_at/cierre_at al reescribir; no lo filtra con nada',
+  }
+
+  it('quien filtra con haFichado o diarioTieneAlgo pide esas columnas', () => {
+    const AYUDANTES = ['haFichado', 'diarioTieneAlgo'] as const
+    const usadas = new Set<string>()
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (ruta.startsWith('src/lib/__tests__/') || ruta.endsWith('shared/helpers.ts')) continue
+      const c = leerCodigo(ruta)
+      for (const ayudante of AYUDANTES) {
+        if (!new RegExp(`\\b${ayudante}\\(`).test(c)) continue
+        const necesita = columnasQueLee(ayudante)
+        // Todos los `select` sobre `diario` de ese fichero.
+        for (const m of c.matchAll(/from\('diario'\)\s*(?:\.\w+\([^)]*\)\s*)*?\.select\(\s*'([^']*)'/g)) {
+          const pedidas = m[1]
+          if (pedidas.includes('*')) continue     // `select('*')` lo trae todo
+          const faltan = necesita.filter(col => !new RegExp(`\\b${col}\\b`).test(pedidas))
+          const clave = `${ruta}::${pedidas}`
+          if (EXCEPCIONES[clave]) { usadas.add(clave); continue }
+          if (faltan.length) {
+            infractores.push(`${ruta}: filtra con ${ayudante}() y su select('${pedidas}') no trae ${faltan.join(', ')}`)
+          }
+        }
+      }
+    }
+    expect(infractores,
+      `un select no trae una columna que el codigo va a leer despues. PostgREST devuelve SOLO lo pedido, asi que el valor sera undefined, el filtro dara false para todo el mundo y la lista saldra vacia — SIN error, SIN log, y sin forma de distinguirlo de «no habia nadie»:\n  ${infractores.join('\n  ')}`)
+      .toEqual([])
+
+    // Una excepcion que ya no existe se nota sola, como todas las de este fichero.
+    const sobran = Object.keys(EXCEPCIONES).filter(k => !usadas.has(k))
+    expect(sobran, `hay excepciones que ya no hacen falta: quitalas\n  ${sobran.join('\n  ')}`).toEqual([])
+  })
+})
+
 describe('los tres sitios que cuentan dias del diario usan el mismo criterio', () => {
   // Habia CUATRO filas de diario en la base que no eran nada —`entrada: ''` y todo
   // lo demas a null— y las tres cuentas de dias las contaban. El briefing decia «1
@@ -5576,6 +5968,66 @@ describe('el motor de automatizaciones recibe lo que mira', () => {
 
     const faltan = declaradas.filter(c => !pedidas.has(c))
     expect(faltan, `el tipo de ctx.diario promete columnas que el snapshot NO pide — el evaluador vera undefined para siempre y ninguna regla saltara:\n  faltan: ${faltan.join(', ')}\n  pide: ${[...pedidas].join(', ')}`)
+      .toEqual([])
+  })
+
+  it('cada lista del snapshot trae las COLUMNAS que el evaluador le lee', () => {
+    // La regla de al lado comprueba que la LISTA llegue (`ctx.projects` existe). No
+    // comprueba que esa lista traiga las columnas que se leen de sus elementos, y
+    // por ahi se colo «Nuevo proyecto añadido»: el evaluador hace `p.created_at` y
+    // el select era `'id,name,status,deadline,client_id'`. Sin la columna,
+    // `created_at` es undefined, el `continue` se ejecuta siempre y el disparador
+    // NO PUEDE SALTAR NUNCA — sin error, sin log, cero coincidencias para siempre.
+    // Es el mismo fallo mudo que este fichero ya documenta con `level`.
+    const A = leerCodigo('src/lib/automations.ts')
+    const ini = A.indexOf('export function evaluateTrigger')
+    const fin = A.indexOf('export async function runAutomations')
+    const evaluador = A.slice(ini, fin)
+
+    const bucles = [...evaluador.matchAll(/for \(const (\w+) of \(?ctx\.(\w+)/g)]
+    expect(bucles.length, 'no se reconoce ningun bucle sobre ctx: revisa esta regla').toBeGreaterThan(2)
+
+    // Los select DEL SNAPSHOT, no los del fichero entero: hay mas consultas sueltas
+    // (contadores, por ejemplo `select('user_id')`) y quedarse con la ultima daba
+    // ocho falsos positivos de golpe.
+    const iSnap = A.indexOf('const snapshot = await Promise.all([')
+    expect(iSnap, 'ya no se construye el snapshot con Promise.all: revisa esta regla').toBeGreaterThan(-1)
+    const bloqueSnap = A.slice(iSnap, A.indexOf('])', iSnap) + 2)
+    // UNION de columnas por tabla: una misma tabla se consulta varias veces en el
+    // snapshot (`inbox_messages` va completa para la lista y con `select('user_id')`
+    // para un contador). Quedarse con la ultima daba ocho falsos positivos.
+    const selects: Record<string, string> = {}
+    for (const m of bloqueSnap.matchAll(/from\('(\w+)'\)\.select\('([^']*)'/g)) {
+      selects[m[1]] = (selects[m[1]] ? selects[m[1]] + ',' : '') + m[2]
+    }
+
+    const TABLA: Record<string, string> = {
+      projects: 'projects', tasks: 'tasks', clients: 'clients', agenda: 'content_agenda',
+      inbox: 'inbox_messages', diario: 'diario', team: 'profiles',
+    }
+    const DE_ARRAY = ['length', 'map', 'filter', 'find', 'some', 'every', 'slice', 'push', 'join']
+
+    const faltan: string[] = []
+    for (const [, variable, lista] of bucles) {
+      const sel = selects[TABLA[lista]]
+      if (!sel || sel.includes('*')) continue
+      // Las dos formas de leer una columna, porque este fichero usa las dos:
+      // `p.created_at` y `(p as { created_at?: string }).created_at`. Mirando solo
+      // la primera, la regla pasaba en verde con el bug reintroducido — el acceso
+      // real de `proyecto_nuevo` lleva el cast por delante.
+      const cols = new Set([
+        ...[...evaluador.matchAll(new RegExp(`\\b${variable}\\.(\\w+)`, 'g'))].map(m => m[1]),
+        ...[...evaluador.matchAll(new RegExp(`\\(\\s*${variable}\\s+as\\s+[^)]*\\)\\.(\\w+)`, 'g'))].map(m => m[1]),
+      ])
+      for (const c of cols) {
+        if (DE_ARRAY.includes(c)) continue
+        if (!new RegExp(`\\b${c}\\b`).test(sel)) {
+          faltan.push(`ctx.${lista}: se lee ${variable}.${c} y select('${sel}') no lo trae`)
+        }
+      }
+    }
+    expect([...new Set(faltan)],
+      `el evaluador lee columnas que el snapshot no pide. PostgREST devuelve SOLO lo pedido, asi que el valor es undefined y ese disparador no salta NUNCA — sin error y sin log:\n  ${[...new Set(faltan)].join('\n  ')}`)
       .toEqual([])
   })
 

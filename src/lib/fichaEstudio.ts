@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { logQueryErrors } from '@/lib/queryLog'
 import Anthropic from '@anthropic-ai/sdk'
 
 /**
@@ -65,7 +66,10 @@ export async function leerFicha(admin: SupabaseClient): Promise<string> {
 export async function fichaDesfasada(admin: SupabaseClient): Promise<{ hace: boolean; notas: number; ultima: string | null }> {
   const [{ count, error: errC }, { data: reciente, error: errR }, { data: ficha, error: errF }] = await Promise.all([
     admin.from('memoria').select('id', { count: 'exact', head: true }),
-    admin.from('memoria').select('updated_at, created_at').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    // Se ordena por `updated_at`: la nota que se acaba de EDITAR es la que importa
+    // para saber si la ficha se quedó vieja, y ordenando por `created_at` esa nota
+    // podía estar la penúltima y no verse nunca.
+    admin.from('memoria').select('updated_at, created_at').order('updated_at', { ascending: false }).limit(1).maybeSingle(),
     admin.from('memoria_ficha').select('notas, ultima_nota, texto').eq('id', 1).maybeSingle(),
   ])
   if (errC || errR || errF) {
@@ -73,11 +77,19 @@ export async function fichaDesfasada(admin: SupabaseClient): Promise<{ hace: boo
     return { hace: false, notas: 0, ultima: null }
   }
   const notas = count ?? 0
-  const ultima = (reciente?.created_at as string | null) || null
+  // LA MÁS RECIENTE DE LAS DOS FECHAS. Se pedía `updated_at` y luego se usaba solo
+  // `created_at`, así que EDITAR una nota no rehacía la ficha nunca: cambiar una
+  // tarifa o corregir un brief no llegaba a las IAs, que siguen leyendo la ficha
+  // vieja como la verdad permanente del estudio.
+  const ultima = [reciente?.created_at, reciente?.updated_at]
+    .filter((x): x is string => typeof x === 'string' && !!x)
+    .sort().pop() || null
   if (!notas) return { hace: false, notas: 0, ultima: null }
   // Sin ficha escrita todavía, se hace en cuanto haya algo que resumir.
   if (!ficha || !((ficha.texto as string | null) || '').trim()) return { hace: true, notas, ultima }
-  const crecio = notas - Number(ficha.notas || 0) >= NOTAS_PARA_REHACER
+  // Crecer o MENGUAR. Borrar una nota bajaba el recuento, la resta salía negativa y
+  // la ficha se quedaba citando algo que ya no existe.
+  const crecio = notas - Number(ficha.notas || 0) >= NOTAS_PARA_REHACER || notas < Number(ficha.notas || 0)
   const hayMasNueva = !!ultima && (!ficha.ultima_nota || ultima > String(ficha.ultima_nota))
   return { hace: crecio || hayMasNueva, notas, ultima }
 }
@@ -124,10 +136,27 @@ export async function regenerarFicha(admin: SupabaseClient): Promise<{ ok: boole
   // ficha y tuvo que añadir un aviso de su cosecha diciendo que el contexto
   // operativo decia lo contrario. Una IA que avisa de que sus dos fuentes se
   // contradicen es una IA en la que se deja de confiar.
-  const [{ data: clientesVivos }, { data: proyectosVivos }] = await Promise.all([
+  //
+  // Y LOS ERRORES SE MIRAN, con una consecuencia mas dura que en otros sitios:
+  // supabase-js NO lanza, asi que si la lectura de `clients` falla —un error
+  // pasajero, un 42703 tras un cambio de columna— `clientesVivos` queda a null, la
+  // ficha se escribe con «CLIENTES DADOS DE ALTA AHORA MISMO (0): ninguno», y el
+  // prompt dice justo debajo que eso MANDA sobre lo que digan los documentos.
+  //
+  // Como la ficha se PERSISTE, a partir de ahi las dos IAs contestan «no tenemos
+  // ningun cliente» con autoridad, y seguiran haciendolo hasta la siguiente
+  // regeneracion. Por eso aqui no basta con registrar el fallo: se aborta. Una
+  // ficha vieja es peor que una nueva; una ficha FALSA es peor que las dos.
+  const vivos = await Promise.all([
     admin.from('clients').select('name, status'),
     admin.from('projects').select('name, status'),
   ])
+  logQueryErrors('ficha', vivos)
+  if (vivos.some(r => r.error)) {
+    console.error('[ficha] no se pudo leer el estado vivo — no se reescribe la ficha')
+    return { ok: false, motivo: 'estado vivo' }
+  }
+  const [{ data: clientesVivos }, { data: proyectosVivos }] = vivos
   const activos = (proyectosVivos || []).filter(p => p.status !== 'completado')
   const estado = [
     `CLIENTES DADOS DE ALTA AHORA MISMO (${(clientesVivos || []).length}): ${(clientesVivos || []).map(c => c.name).join(', ') || 'ninguno'}`,

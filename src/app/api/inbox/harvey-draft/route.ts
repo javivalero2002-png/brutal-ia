@@ -80,7 +80,11 @@ export async function POST(request: NextRequest) {
   // ── EL CONTEXTO ─────────────────────────────────────────────────────────
   // Lo mismo que ven las otras dos IAs, más una cosa que solo tiene sentido
   // aquí: lo que ya se habló con este remitente.
-  const [ficha, { data: notas }, { data: clientes }, { data: anteriores }] = await Promise.all([
+  // Los errores SE NOMBRAN. supabase-js no lanza, asi que sin esto un fallo al
+  // leer la memoria o los clientes se cuela como «no hay nada relevante» y el
+  // borrador sale escrito sobre menos contexto del que hay — sin que nadie lo sepa.
+  // El borrador se hace igual (es util aunque le falte algo), pero queda anotado.
+  const [ficha, { data: notas, error: eNotas }, { data: clientes, error: eCli }, { data: anteriores, error: eAnt }] = await Promise.all([
     leerFicha(admin),
     admin.from('memoria').select('title, category, content').order('created_at', { ascending: false }).limit(200),
     admin.from('clients').select('name, industry, status, notes').limit(100),
@@ -91,8 +95,17 @@ export async function POST(request: NextRequest) {
           .select('subject, ai_summary, received_at')
           .eq('from_email', correo.from_email).neq('id', correo.id)
           .order('received_at', { ascending: false }).limit(5)
-      : Promise.resolve({ data: [] as { subject: string | null; ai_summary: string | null; received_at: string }[] }),
+      : Promise.resolve({
+          data: [] as { subject: string | null; ai_summary: string | null; received_at: string }[],
+          // `error: null` en la rama que no consulta: sin el, los dos lados del
+          // ternario tienen forma distinta y `error` no existe en el tipo union.
+          error: null as { message: string } | null,
+        }),
   ])
+  if (eNotas || eCli || eAnt) {
+    console.error('[harvey-draft] contexto incompleto —',
+      eNotas?.message || '', eCli?.message || '', eAnt?.message || '')
+  }
 
   // La memoria se elige con el ASUNTO Y EL CUERPO como pregunta: es lo que hay
   // para emparejar. Con la pregunta vacía devolvería siempre las mismas notas.

@@ -346,7 +346,12 @@ export function evaluateTrigger(cfg: RuleConfig, ctx: {
     const nombre = new Map((ctx.equipo || []).map(p => [p.id, p.name || 'alguien']))
     for (const d of ctx.diario || []) {
       if (d.dia >= hoy) continue
-      if (!(d.entrada || '').trim() || d.cierre_at) continue
+      // `haFichado` y NO el texto. Con el texto, quien abre Fichar, escribe dos
+      // palabras y se va —sin llegar a fichar— salía acusado de «fichó y no
+      // cerró»: una afirmación falsa sobre el trabajo de alguien, y le llega a un
+      // jefe. Es el mismo criterio que ya usa el recordatorio de las 20:00, donde
+      // está escrito al lado: «haFichado y no el texto».
+      if (!haFichado(d as { entrada_at?: string | null }) || d.cierre_at) continue
       out.push({ key: `sincerrar:${d.user_id}:${d.dia}`, vars: { persona: nombre.get(d.user_id) || 'alguien', dia: d.dia } })
     }
   } else if (t.type === 'bloqueado') {
@@ -506,7 +511,11 @@ async function ejecutarReglas(
     // Un snapshot que no trae lo que el evaluador mira es un fallo mudo: no hay
     // error, solo cero coincidencias para siempre.
     admin.from('tasks').select('id,text,done,due_date,project_id,client_id,notes,level,assigned_to'),
-    admin.from('projects').select('id,name,status,deadline,client_id'),
+    // `created_at` VA EN EL SELECT: el disparador «Nuevo proyecto añadido» lo lee
+    // (`Date.now() - new Date(p.created_at)`) y sin la columna es `undefined`, el
+    // `continue` se ejecuta siempre y la automatizacion NO PUEDE SALTAR NUNCA.
+    // Mismo fallo mudo que este fichero ya documenta con `level` y `assigned_to`.
+    admin.from('projects').select('id,name,status,deadline,client_id,created_at'),
     admin.from('clients').select('id,name'),
     // ── Lo que miran las automatizaciones de CONTROL ────────────────────────
     // El comentario de arriba lo dice y vale también aquí: un snapshot que no trae

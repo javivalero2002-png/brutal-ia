@@ -302,7 +302,10 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
             const teamOverdue = data.tasks.filter((t: Task)=>!t.done&&tieneResponsable(t)&&!!t.due_date&&new Date(t.due_date+'T23:59:59')<new Date()).length
             const teamUrgent = data.tasks.filter((t: Task)=>!t.done&&tieneResponsable(t)&&t.level==='urgent').length
             const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate()-7); weekAgo.setHours(0,0,0,0)
-            const teamCompletedWeek = data.tasks.filter((t: Task)=>t.done&&tieneResponsable(t)&&new Date(t.updated_at||t.created_at)>=weekAgo).length
+            // `completed_at` y no `updated_at`: retocar el texto de una tarea vieja ya
+              // terminada le cambia el `updated_at` y la hacía contar como completada
+              // ESTA semana. El contador subía sin que nadie hubiera terminado nada.
+              const teamCompletedWeek = data.tasks.filter((t: Task)=>t.done&&tieneResponsable(t)&&!!t.completed_at&&new Date(t.completed_at)>=weekAgo).length
             if (teamPending === 0 && teamCompletedWeek === 0) return null
             return (
               <div className="flex items-center gap-3">

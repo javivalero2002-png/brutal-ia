@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { horaMadrid } from '@/lib/ventanaCalendario'
 import { BotonSincronizar } from '@/components/shared'
 import { AvisoGoogle } from '@/components/shared'
 import { rutaApp } from '@/lib/appUrl'
@@ -1072,7 +1073,11 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
               {nextEvents.map((e:any,i:number)=>{
                 const hasTime = e.start && e.start.includes('T')
                 const dateStr = (e.start||'').slice(5,10)
-                const timeStr = hasTime ? e.start.slice(11,16) : ''
+                // `horaMadrid` y no cortar el ISO: Google devuelve cada evento en el desfase
+                // del calendario donde vive (+01:00 el personal, +02:00 el compartido), así
+                // que el texto cortado da una hora distinta segun el calendario. Medido: la
+                // misma reunion salia a las 10:30 aqui y a las 11:30 en Calendario.
+                const timeStr = hasTime ? horaMadrid(e.start) : ''
                 const isToday = (e.start||'').slice(0,10) === todayKey()
                 return (
                   <div key={i} className="flex items-center gap-3 px-4 py-2.5" style={{borderTop:`1px solid ${BORDER}`}}>

@@ -60,7 +60,18 @@ export async function GET(request: NextRequest) {
   // hay nadie a quien avisar», que es la confusión que este repo persigue.
   const { data: dias, error } = await admin
     .from('diario')
-    .select('user_id, entrada, cierre_at')
+    // `entrada_at` VA EN EL SELECT. Faltaba, y ese es el fallo entero: PostgREST
+    // devuelve SOLO las columnas que le pides, así que `d.entrada_at` era
+    // `undefined` en todas las filas, `haFichado()` daba false siempre y
+    // `pendientes` salía vacío. El aviso de las 20:00 —el que Javi llama vital—
+    // no se ha enviado NUNCA a nadie desde que se escribió.
+    //
+    // Y no fallaba: el cron contestaba `{ok:true, avisados:0}` tan tranquilo, que
+    // es indistinguible de «hoy todo el mundo había cerrado su día».
+    //
+    // El gemelo de al lado, `recordatorio-fichar`, sí la pide. La misma idea
+    // escrita dos veces y una de las dos mal.
+    .select('user_id, entrada, entrada_at, cierre_at')
     .eq('dia', dia)
 
   if (error) {
