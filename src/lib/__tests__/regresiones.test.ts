@@ -1769,6 +1769,54 @@ describe('el esquema se puede reconstruir desde el repo', () => {
       .toEqual([])
   })
 
+  it('el repo crea TODAS las columnas vivas, y en SU tabla', () => {
+    // La regla de abajo es deliberadamente floja —lo dice ella misma: comprueba que
+    // el NOMBRE exista en algun sitio del DDL, no en su tabla— y solo mira los
+    // `.select('literal')`. Por esos dos huecos colaban dos columnas reales:
+    //
+    //   · `projects.cover_url`, que se escribe por `pick()` y no por select, y cuyo
+    //     nombre existe en `content_agenda`: los CINCO proyectos de produccion
+    //     tienen portada y en una instancia nueva subirla revienta con 42703.
+    //   · `tasks.notes`, igual, con el nombre existiendo en `clients`.
+    //
+    // Esta compara contra el esquema VIVO de produccion, POR TABLA. La instantanea
+    // se regenera con `probes/esquema.probe.ts` (necesita red y credenciales); el
+    // test compara contra el fichero, asi que corre en CI sin nada.
+    const vivo = JSON.parse(readFileSync('supabase/esquema-vivo.json', 'utf8')) as {
+      tablas: Record<string, { columnas: string[] }>
+    }
+    expect(Object.keys(vivo.tablas).length, 'la instantanea del esquema esta vacia: regenerala').toBeGreaterThan(15)
+
+    // Columnas por tabla que el repo SI sabe crear: del cuerpo del CREATE TABLE y
+    // de los ALTER TABLE ADD COLUMN (incluido el multicolumna separado por comas,
+    // que es como esta escrito `migration_gmail_colabs.sql`).
+    const porTabla: Record<string, Set<string>> = {}
+    const anade = (t: string, c: string) => { (porTabla[t] ??= new Set()).add(c.toLowerCase()) }
+    for (const m of ddl.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?([a-z_][a-z0-9_]*)\s*\(([\s\S]*?)\n\s*\)\s*;/gi)) {
+      for (const linea of m[2].split('\n')) {
+        const l = linea.trim().replace(/,$/, '')
+        if (!l || /^(primary|foreign|unique|constraint|check|exclude)\b/i.test(l)) continue
+        const c = l.match(/^"?([a-z_][a-z0-9_]*)"?\s/i)
+        if (c) anade(m[1].toLowerCase(), c[1])
+      }
+    }
+    for (const m of ddl.matchAll(/alter\s+table\s+(?:if\s+exists\s+)?(?:public\.)?([a-z_][a-z0-9_]*)\s+([\s\S]*?);/gi)) {
+      for (const a of m[2].matchAll(/add\s+column\s+(?:if\s+not\s+exists\s+)?"?([a-z_][a-z0-9_]*)/gi)) {
+        anade(m[1].toLowerCase(), a[1])
+      }
+    }
+
+    const faltan: string[] = []
+    for (const [tabla, info] of Object.entries(vivo.tablas)) {
+      for (const col of info.columnas) {
+        if (!porTabla[tabla]?.has(col.toLowerCase())) faltan.push(`${tabla}.${col}`)
+      }
+    }
+    expect(faltan,
+      `produccion tiene columnas que este repo NO sabe crear en su tabla. Una instancia nueva arranca, compila, y revienta con 42703 al usarlas:\n  ${faltan.join('\n  ')}`)
+      .toEqual([])
+  })
+
   it('toda COLUMNA que el codigo lee tiene su DDL aqui', () => {
     // La regla hermana comparaba TABLAS, y por eso decia «cerrado» sobre un riesgo
     // que seguia abierto: `tasks.co_assigned_to` y `projects.pdf_url` se habian

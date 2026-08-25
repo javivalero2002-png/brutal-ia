@@ -1,0 +1,482 @@
+{
+  "_comentario": "Instantanea del esquema VIVO de produccion, sacada del OpenAPI que publica PostgREST. NO se edita a mano: se regenera con `npx vitest run --config probes/vitest.probe.mts probes/esquema.probe.ts`. La regla de regresiones compara el SQL del repo contra esto POR TABLA.",
+  "_generada": "2026-08-25",
+  "_tablas": 23,
+  "_columnas": 211,
+  "tablas": {
+    "chat_messages": {
+      "columnas": [
+        "content",
+        "created_at",
+        "id",
+        "role",
+        "user_id"
+      ],
+      "obligatorias": [
+        "content",
+        "created_at",
+        "id",
+        "role",
+        "user_id"
+      ]
+    },
+    "client_comments": {
+      "columnas": [
+        "body",
+        "client_id",
+        "created_at",
+        "id",
+        "profile_id"
+      ],
+      "obligatorias": [
+        "body",
+        "client_id",
+        "created_at",
+        "id",
+        "profile_id"
+      ]
+    },
+    "clients": {
+      "columnas": [
+        "archived_at",
+        "color",
+        "created_at",
+        "created_by",
+        "id",
+        "industry",
+        "initials",
+        "name",
+        "notes",
+        "revenue",
+        "status",
+        "updated_at"
+      ],
+      "obligatorias": [
+        "color",
+        "created_at",
+        "id",
+        "industry",
+        "initials",
+        "name",
+        "revenue",
+        "status",
+        "updated_at"
+      ]
+    },
+    "content_agenda": {
+      "columnas": [
+        "account_name",
+        "carpeta",
+        "client_id",
+        "content_type",
+        "cover_url",
+        "created_at",
+        "created_by",
+        "feedback",
+        "id",
+        "notes",
+        "platform",
+        "publish_date",
+        "publish_time",
+        "status",
+        "title",
+        "updated_at",
+        "video_url"
+      ],
+      "obligatorias": [
+        "content_type",
+        "created_at",
+        "id",
+        "platform",
+        "status",
+        "title",
+        "updated_at"
+      ]
+    },
+    "diario": {
+      "columnas": [
+        "animo",
+        "cierre",
+        "cierre_at",
+        "created_at",
+        "dia",
+        "entrada",
+        "entrada_at",
+        "id",
+        "updated_at",
+        "user_id"
+      ],
+      "obligatorias": [
+        "created_at",
+        "dia",
+        "id",
+        "updated_at",
+        "user_id"
+      ]
+    },
+    "errores": {
+      "columnas": [
+        "clave",
+        "contexto",
+        "donde",
+        "gravedad",
+        "id",
+        "primera_at",
+        "que",
+        "resuelto_at",
+        "ultima_at",
+        "veces"
+      ],
+      "obligatorias": [
+        "clave",
+        "donde",
+        "gravedad",
+        "id",
+        "primera_at",
+        "que",
+        "ultima_at",
+        "veces"
+      ]
+    },
+    "gmail_cuentas": {
+      "columnas": [
+        "compartida",
+        "creada_at",
+        "email",
+        "id",
+        "profile_id",
+        "refresh_token"
+      ],
+      "obligatorias": [
+        "compartida",
+        "creada_at",
+        "email",
+        "id",
+        "profile_id",
+        "refresh_token"
+      ]
+    },
+    "inbox_messages": {
+      "columnas": [
+        "ai_action",
+        "ai_client",
+        "ai_estado",
+        "ai_motivo",
+        "ai_summary",
+        "ai_urgency",
+        "attachments",
+        "body_preview",
+        "created_at",
+        "cuenta",
+        "from_email",
+        "from_name",
+        "from_phone",
+        "from_user_id",
+        "gmail_id",
+        "id",
+        "is_read",
+        "is_unread",
+        "raw_data",
+        "received_at",
+        "shared",
+        "source",
+        "subject",
+        "user_id"
+      ],
+      "obligatorias": [
+        "ai_estado",
+        "created_at",
+        "from_name",
+        "id",
+        "is_read",
+        "is_unread",
+        "received_at",
+        "source",
+        "user_id"
+      ]
+    },
+    "job_locks": {
+      "columnas": [
+        "acquired_at",
+        "expires_at",
+        "holder",
+        "key"
+      ],
+      "obligatorias": [
+        "acquired_at",
+        "expires_at",
+        "holder",
+        "key"
+      ]
+    },
+    "memoria": {
+      "columnas": [
+        "category",
+        "client_id",
+        "content",
+        "created_at",
+        "created_by",
+        "id",
+        "source",
+        "title",
+        "updated_at"
+      ],
+      "obligatorias": [
+        "category",
+        "content",
+        "created_at",
+        "id",
+        "title",
+        "updated_at"
+      ]
+    },
+    "memoria_ficha": {
+      "columnas": [
+        "actualizada_at",
+        "id",
+        "notas",
+        "texto",
+        "ultima_nota"
+      ],
+      "obligatorias": [
+        "actualizada_at",
+        "id",
+        "notas",
+        "texto"
+      ]
+    },
+    "notification_log": {
+      "columnas": [
+        "body",
+        "created_at",
+        "id",
+        "read",
+        "tag",
+        "title",
+        "url",
+        "user_id"
+      ],
+      "obligatorias": [
+        "created_at",
+        "id",
+        "read",
+        "title",
+        "user_id"
+      ]
+    },
+    "profiles": {
+      "columnas": [
+        "analizar_correo",
+        "avatar_color",
+        "created_at",
+        "email",
+        "gmail_account",
+        "gmail_colabs_account",
+        "gmail_colabs_connected",
+        "gmail_colabs_refresh_token",
+        "gmail_connected",
+        "gmail_refresh_token",
+        "id",
+        "initials",
+        "name",
+        "onboarding_at",
+        "role",
+        "updated_at",
+        "ver_colabs"
+      ],
+      "obligatorias": [
+        "analizar_correo",
+        "avatar_color",
+        "created_at",
+        "email",
+        "gmail_connected",
+        "id",
+        "initials",
+        "name",
+        "role",
+        "updated_at",
+        "ver_colabs"
+      ]
+    },
+    "project_milestones": {
+      "columnas": [
+        "created_at",
+        "done",
+        "due_date",
+        "id",
+        "name",
+        "project_id",
+        "sort_order"
+      ],
+      "obligatorias": [
+        "id",
+        "name",
+        "project_id"
+      ]
+    },
+    "project_notes": {
+      "columnas": [
+        "content",
+        "created_at",
+        "id",
+        "project_id",
+        "user_id",
+        "user_name"
+      ],
+      "obligatorias": [
+        "content",
+        "id",
+        "project_id"
+      ]
+    },
+    "projects": {
+      "columnas": [
+        "carpeta",
+        "client_id",
+        "color",
+        "cover_url",
+        "created_at",
+        "created_by",
+        "deadline",
+        "id",
+        "name",
+        "pdf_analysis",
+        "pdf_url",
+        "progress",
+        "status",
+        "updated_at"
+      ],
+      "obligatorias": [
+        "color",
+        "created_at",
+        "deadline",
+        "id",
+        "name",
+        "progress",
+        "status",
+        "updated_at"
+      ]
+    },
+    "push_rate_limits": {
+      "columnas": [
+        "last_sent",
+        "scope"
+      ],
+      "obligatorias": [
+        "last_sent",
+        "scope"
+      ]
+    },
+    "rate_limits": {
+      "columnas": [
+        "count",
+        "key",
+        "window_start"
+      ],
+      "obligatorias": [
+        "count",
+        "key",
+        "window_start"
+      ]
+    },
+    "reglas": {
+      "columnas": [
+        "action_text",
+        "active",
+        "condition_text",
+        "created_at",
+        "created_by",
+        "description",
+        "id",
+        "last_triggered_at",
+        "name",
+        "trigger_count"
+      ],
+      "obligatorias": [
+        "active",
+        "created_at",
+        "id",
+        "name",
+        "trigger_count"
+      ]
+    },
+    "task_attachments": {
+      "columnas": [
+        "created_at",
+        "created_by",
+        "id",
+        "mime_type",
+        "name",
+        "size",
+        "task_id",
+        "url"
+      ],
+      "obligatorias": [
+        "created_at",
+        "id",
+        "name",
+        "task_id",
+        "url"
+      ]
+    },
+    "task_subtasks": {
+      "columnas": [
+        "created_at",
+        "done",
+        "id",
+        "sort_order",
+        "task_id",
+        "text"
+      ],
+      "obligatorias": [
+        "id",
+        "task_id",
+        "text"
+      ]
+    },
+    "tasks": {
+      "columnas": [
+        "assigned_to",
+        "client_id",
+        "co_assigned_to",
+        "completed_at",
+        "created_at",
+        "created_by",
+        "diario_dia",
+        "diario_objetivo",
+        "done",
+        "due_date",
+        "id",
+        "level",
+        "notes",
+        "project_id",
+        "source",
+        "text",
+        "updated_at"
+      ],
+      "obligatorias": [
+        "created_at",
+        "done",
+        "id",
+        "level",
+        "text",
+        "updated_at"
+      ]
+    },
+    "whatsapp_sessions": {
+      "columnas": [
+        "context",
+        "created_at",
+        "id",
+        "last_message_at",
+        "phone",
+        "user_id"
+      ],
+      "obligatorias": [
+        "created_at",
+        "id",
+        "phone"
+      ]
+    }
+  }
+}
