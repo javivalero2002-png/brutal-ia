@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { parsearAccionHarvey } from '@/lib/harveyAccion'
+import { parsearAccionHarvey, etiquetaAccion, TIPOS_ACCION } from '@/lib/harveyAccion'
+import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // El comando [ACCION:...] de Harvey.
@@ -131,5 +132,107 @@ describe('Harvey · a quién se asigna una tarea', () => {
       'quién habla no se resuelve contra la sesión: podría venir del cliente').toBe(true)
     expect(/(context|body|message)\s*[.?]\s*(userName|nombre|name)/.test(R),
       'el nombre de quien habla se coge del cuerpo de la petición: es suplantable').toBe(false)
+  })
+})
+
+describe('completar una tarea por voz', () => {
+  // La contraria de 'tarea', y faltaba: Harvey te leía en voz alta lo que tenías
+  // pendiente y no podía tachar nada.
+  //
+  // Lo que se prueba aquí no es que llame a `toggleTask` —eso es una línea—, sino
+  // A CUÁL. Marcar hecha la tarea equivocada es el error que nadie ve: desaparece
+  // de la lista, y se descubre cuando ya cuenta como trabajo terminado de alguien.
+  const tareas = [
+    { id: '1', text: 'Guion del spot', done: false },
+    { id: '2', text: 'Guion del spot — versión corta', done: false },
+    { id: '3', text: 'Montaje del teaser', done: false },
+    { id: '4', text: 'Guion del spot', done: true },
+  ]
+
+  function deps(over: Partial<{ tasks: unknown[] }> = {}) {
+    const tocadas: string[] = []
+    const dichos: string[] = []
+    return {
+      tocadas, dichos,
+      deps: {
+        data: { tasks: over.tasks ?? tareas, toggleTask: async (id: string) => { tocadas.push(id) } } as never,
+        perfil: { id: 'u1', name: 'Javi' },
+        showToast: (m: string) => { dichos.push(m) },
+      },
+    }
+  }
+
+  it('una coincidencia exacta gana a la que solo la contiene', async () => {
+    // «Guion del spot» está dentro de «Guion del spot — versión corta». Sin capas,
+    // el `includes` elegía la primera que apareciera.
+    const { tocadas, deps: d } = deps()
+    const ok = await ejecutarAccionHarvey({ type: 'completar', text: 'Guion del spot' }, d)
+    expect(ok).toBe(true)
+    expect(tocadas).toEqual(['1'])
+  })
+
+  it('con varias candidatas NO elige: pregunta cuál', async () => {
+    const { tocadas, dichos, deps: d } = deps()
+    const ok = await ejecutarAccionHarvey({ type: 'completar', text: 'guion' }, d)
+    expect(ok, 'devolver true descartaría la tarjeta sin haber hecho nada').toBe(false)
+    expect(tocadas, 'ha marcado una tarea sin saber cuál').toEqual([])
+    expect(dichos.join(' ')).toMatch(/cuál|cual/i)
+  })
+
+  it('ignora las que ya están hechas', async () => {
+    // La cuarta es idéntica a la primera pero `done`. Si entrara, «Guion del spot»
+    // sería ambigua para siempre y no se podría cerrar nunca por voz.
+    const { tocadas, deps: d } = deps()
+    await ejecutarAccionHarvey({ type: 'completar', text: 'Guion del spot' }, d)
+    expect(tocadas).toEqual(['1'])
+  })
+
+  it('los acentos y los signos no cuentan', async () => {
+    // Se dicta en voz alta y se transcribe: «guión» y «guion» son la misma tarea.
+    const { tocadas, deps: d } = deps({ tasks: [{ id: '9', text: '¡Guión del spot!', done: false }] })
+    const ok = await ejecutarAccionHarvey({ type: 'completar', text: 'guion del spot' }, d)
+    expect(ok).toBe(true)
+    expect(tocadas).toEqual(['9'])
+  })
+
+  it('si no existe, lo dice y no toca nada', async () => {
+    const { tocadas, dichos, deps: d } = deps()
+    const ok = await ejecutarAccionHarvey({ type: 'completar', text: 'llamar al banco' }, d)
+    expect(ok).toBe(false)
+    expect(tocadas).toEqual([])
+    expect(dichos.join(' ')).toMatch(/no encuentro/i)
+  })
+
+  it('sin texto no adivina', async () => {
+    const { tocadas, deps: d } = deps()
+    expect(await ejecutarAccionHarvey({ type: 'completar', text: '' }, d)).toBe(false)
+    expect(tocadas).toEqual([])
+  })
+})
+
+describe('la tarjeta de confirmacion dice la verdad', () => {
+  // Es lo UNICO que el usuario lee antes de confirmar algo que no puede deshacer,
+  // y estaba escrita cuatro veces —HoySection y HarveySection, cada una en su
+  // variante de movil y escritorio— con dos mapas distintos entre si. Un tipo
+  // nuevo habia que darlo de alta en cuatro sitios o salia con el icono de
+  // «cliente» y el boton decia CREANDO.
+  it('ningun tipo se queda sin etiqueta', () => {
+    for (const t of TIPOS_ACCION) {
+      const e = etiquetaAccion(t)
+      expect(e?.icono, `${t} sin icono`).toBeTruthy()
+      expect(e?.titulo, `${t} sin titulo`).toBeTruthy()
+      expect(e?.tituloLargo, `${t} sin titulo largo`).toBeTruthy()
+      expect(e?.enCurso, `${t} sin texto de «en curso»`).toBeTruthy()
+    }
+  })
+
+  it('completar no dice que esta creando nada', () => {
+    // No anade nada: tacha. Llamarlo «CREAR» en el unico sitio donde el usuario
+    // puede parar la accion es la clase de mentira pequena que hace que se
+    // confirme sin leer.
+    const e = etiquetaAccion('completar')
+    expect(e.enCurso).not.toMatch(/crea/i)
+    expect(e.tituloLargo).not.toMatch(/crear/i)
+    expect(e.tituloLargo).toMatch(/marcar/i)
   })
 })

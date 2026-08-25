@@ -3448,6 +3448,24 @@ describe('el diseño acierta en el PRIMER render, no en el segundo', () => {
   })
 })
 
+describe('la tarjeta de Harvey no vuelve a tener su propio mapa', () => {
+  // Estaba escrita CUATRO veces y con dos mapas distintos entre si: `nota` salia
+  // con el icono de «cliente» en dos de ellas, y el boton decia CREANDO al marcar
+  // una tarea como hecha. Ahora sale de `etiquetaAccion()`, que es exhaustiva por
+  // tipo — o sea que un tipo nuevo sin etiqueta ya no compila.
+  it('las secciones no llevan su propia tabla de iconos ni de titulos', () => {
+    const infractores = TS.filter(r => /sections\/(Hoy|Harvey)Section/.test(r) &&
+      /(iconMap|labelMap)\s*:\s*Record<string,\s*string>/.test(leerCodigo(r)))
+    expect(infractores, `vuelve a haber un mapa de etiquetas a mano:\n  ${infractores.join('\n  ')}`).toEqual([])
+  })
+
+  it('el boton de confirmar no dice «CREANDO» a pelo', () => {
+    const infractores = TS.filter(r => /sections\/(Hoy|Harvey)Section/.test(r) &&
+      /confirmingAction\s*\?\s*'CREANDO/.test(leerCodigo(r)))
+    expect(infractores, `el boton vuelve a decir CREANDO para todo, incluido marcar una tarea como hecha:\n  ${infractores.join('\n  ')}`).toEqual([])
+  })
+})
+
 describe('el ejecutor no lee campos que el parser nunca rellena', () => {
   // El caso `pieza` leia el cliente y la fecha de la accion, y el parser no los
   // pone: eran `undefined` SIEMPRE. No fallaba nada —y por eso vivio— pero quien
