@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { construirContexto } from '@/lib/contextoHarvey'
 import { memoriaRelevante as elegirMemoria } from '@/lib/memoriaRelevante'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
@@ -195,80 +196,13 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
   // la versión buena y en HoySection la rota, que es cómo nacen los gemelos.
   const memoriaRelevante = (pregunta?: string) => elegirMemoria(data.memoria as any, pregunta)
 
-  const buildContext = (pregunta?: string) => {
-    const tasks = (data.tasks||[]) as any[]
-    const projects = (data.projects||[]) as any[]
-    const clients = (data.clients||[]) as any[]
-    const agenda = (data.agenda||[]) as any[]
-    const inbox = (data.inbox||[]) as any[]
-    const calEvents = (data.calendarEvents||[]) as any[]
-    const urgentTasks = tasks.filter(t=>!t.done&&t.level==='urgent')
-    const highTasks = tasks.filter(t=>!t.done&&t.level==='high')
-    // `estadoDeadline` y no una resta de instantes. Comparar `dlDate(p.deadline) <
-      // new Date()` marca como ATRASADO algo que vence HOY a partir de las 00:00, y
-      // entonces Harvey le contesta al fundador sobre un retraso que no existe
-      // mientras la pantalla dice «vence hoy». Es el bug de las 02:00 que CLAUDE.md
-      // documenta, arreglado en el gemelo de HoySection y vivo aquí.
-      const overdueProjects = projects.filter(p=>p.status!=='completado'&&estadoDeadline(p.deadline)?.vencido)
-    const activeProjects = projects.filter(p=>p.status!=='completado')
-    const activeClients = clients.filter(c=>c.status==='Activo')
-    const pipeline = agenda.filter((a:any)=>a.status!=='publicado')
-    const todayStr = todayKey()
-    // Incluye los no leídos + los urgentes/altos recibidos HOY aunque ya se hayan
-    // leído: si acabas de abrir un email importante, Harvey debe seguir sabiéndolo.
-    // El recuento REAL, aparte de la lista que se le ensena a Harvey.
-    //
-    // `unreadEmails` de abajo NO es "los sin leer": lleva .slice(0,8) e incluye a
-    // proposito urgentes de hoy ya leidos. Etiquetar su .length como «sin leer»
-    // hacia que Harvey dijera SIEMPRE exactamente 8 en cuanto hubiera mas de 8 —
-    // y ese es el estado normal, porque gmail/sync copia el estado de Gmail y la
-    // retencion del cron solo borra leidos. El numero correcto esta en la MISMA
-    // pantalla, en el badge de INBOX. El gemelo de HoySection ya usaba el real.
-    const nSinLeer = inbox.filter((m:any)=>!m.is_read).length
-    const unreadEmails = inbox.filter((m:any)=>
-      // localDayKey, no slice(0,10): el ISO viene en UTC y todayStr es el dia de
-      // Madrid. De 00:00 a 02:00 no son el mismo dia y el email de hoy no contaba.
-      !m.is_read || ((m.ai_urgency==='urgent'||m.ai_urgency==='high') && localDayKey(m.received_at)===todayStr)
-    ).slice(0, 8)
-    const completedToday = tasks.filter(t=>t.done&&localDayKey(t.completed_at||t.updated_at||t.created_at)===todayStr).length
-    const nextEvents = calEvents.filter((e:any)=>e.start>=todayStr).slice(0,5)
-    const todayTasks = tasks.filter(t=>!t.done&&t.due_date===todayStr)
+  // UNO SOLO, compartido con el otro Harvey. Estaba escrito dos veces con
 
-    const emailLines = unreadEmails.map((m:any) => {
-      const urg = m.ai_urgency==='urgent'?'[URGENTE]':m.ai_urgency==='high'?'[ALTA]':'[NORMAL]'
-      const colabs = m.shared ? '[COLABS]' : '[PERSONAL]'
-      const summary = m.ai_summary ? ` → "${m.ai_summary}"` : ''
-      const action = !m.ai_summary && m.ai_action&&m.ai_action!=='Ninguna acción requerida'?` → ${m.ai_action}`:''
-      return `  • ${m.from_name||'?'}: "${m.subject||'Sin asunto'}" ${urg}${colabs}${summary||action}`
-    }).join('\n')
+  // once diferencias entre ambos — arreglos hechos a una copia y no a la
 
-    const eventLines = nextEvents.map((e:any) => {
-      const hasTime = e.start && e.start.includes('T')
-      const timeStr = hasTime ? ` a las ${e.start.slice(11,16)}` : ''
-      return `${e.title} (${e.start?.slice(0,10)||'?'}${timeStr})`
-    }).join(' · ')
+  // otra. El motivo largo esta en src/lib/contextoHarvey.ts.
 
-    const memLines2 = memoriaRelevante(pregunta).map((m:any)=>`  - ${m.title}${m.category?` [${m.category}]`:''}: ${(m.content||'').replace(/\s+/g,' ').slice(0,400)}`).join('\n')
-
-    return `BRUTAL STUDIOS — ${madridDateLabel()}
-
-TAREAS: ${tasks.filter(t=>!t.done).length} pendientes | ${completedToday} completadas hoy
-URGENTES (${urgentTasks.length}): ${urgentTasks.slice(0,5).map((t:any)=>t.text).join(' · ')||'ninguna'}
-ALTA PRIORIDAD (${highTasks.length}): ${highTasks.slice(0,3).map((t:any)=>t.text).join(' · ')||'ninguna'}
-${todayTasks.length>0?`VENCEN HOY (${todayTasks.length}): ${todayTasks.map((t:any)=>t.text).join(' · ')}\n`:''}
-PROYECTOS ACTIVOS (${activeProjects.length}): ${activeProjects.slice(0,6).map((p:any)=>`${p.name} ${p.progress}%${overdueProjects.find((op:any)=>op.id===p.id)?' [ATRASADO]':''}`).join(' | ')||'ninguno'}
-CLIENTES ACTIVOS (${activeClients.length}): ${activeClients.map((c:any)=>c.name).join(', ')||'ninguno'}
-EQUIPO: ${((data.team||[]) as any[]).map((m:any)=>m.name).filter(Boolean).join(', ')||'sin datos'}
-PIPELINE CONTENIDO: ${pipeline.length} piezas pendientes
-
-INBOX — ${nSinLeer} sin leer (${unreadEmails.length} mostrados):
-${emailLines||'  (inbox vacío)'}
-
-CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}
-
-DOCUMENTOS Y CONOCIMIENTO (memoria — úsalo si es relevante):
-${memLines2||'  sin documentos'}`
-  }
+  const buildContext = (pregunta?: string) => construirContexto(data as never, pregunta)
 
   const stopAudio = () => {
     voiceRunRef.current++

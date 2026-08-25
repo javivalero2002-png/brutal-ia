@@ -1071,10 +1071,18 @@ describe('la interfaz no dice cosas que no son', () => {
   })
 
   it('Harvey no confunde «los que enseño» con «los que hay»', () => {
-    const H = leerCodigo('src/components/sections/HarveySection.tsx')
-    expect(/nSinLeer/.test(H), 'vuelve a etiquetar la lista recortada como «sin leer»').toBe(true)
-    expect(/INBOX — \$\{unreadEmails\.length\} sin leer:/.test(H),
-      'la lista lleva .slice(0,8): con más de 8 diría siempre exactamente 8').toBe(false)
+    // El contexto vive ahora en UN solo sitio: estaba escrito dos veces con once
+    // diferencias. La regla se muda con el código, no se borra.
+    const C = leerCodigo('src/lib/contextoHarvey.ts')
+    expect(/const sinLeer = inbox\.filter\(m => !m\.is_read\)\.length/.test(C),
+      'vuelve a etiquetar la lista recortada como «sin leer»: la lista lleva tope y mete urgentes ya leidos, asi que su longitud NO es «sin leer»')
+      .toBe(true)
+    // Y el total tampoco se inventa. `data.inbox` esta topado a 100 por /api/inbox:
+    // decir «(N total)» con 865 correos en la base era un numero falso presentado
+    // como el conjunto entero.
+    expect(/de \$\{inbox\.length\} cargados/.test(C),
+      'el contexto vuelve a llamar «total» a lo que solo esta cargado: Harvey afirmara 100 con 865 correos')
+      .toBe(true)
   })
 
   // La tarjeta de confirmación es la última red antes de mandar invitaciones por
@@ -3771,6 +3779,61 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('el contexto de Harvey se escribe UNA vez', () => {
+  // Estaba escrito DOS veces —`buildCtx` en HoySection y `buildContext` en
+  // HarveySection— con ONCE diferencias. Y no eran variantes a proposito: eran
+  // arreglos que se le hicieron a una copia y no a la otra.
+  //
+  // Lo demuestran los propios comentarios: cada fichero llevaba escrito el arreglo
+  // que recibio EL, diciendo «el gemelo de X ya lo hacia bien» — y el gemelo, a su
+  // vez, decia lo mismo de otro arreglo distinto. Cada uno se creia el corregido.
+  //
+  // Lo que divergia: uno veia que vence hoy y el otro no; uno ponia el responsable
+  // de las urgentes y el otro no; uno listaba los proyectos atrasados por nombre
+  // —cosa que el SERVIDOR parsea en su respuesta de emergencia, asi que desde el
+  // otro ese numero era siempre 0— y el otro solo los marcaba; 8 correos frente a
+  // 10; 6 proyectos frente a 8; y una tercera copia a mano del formateador de
+  // memoria que ya existia compartido.
+  const HOY = leerCodigo('src/components/sections/HoySection.tsx')
+  const HAR = leerCodigo('src/components/sections/HarveySection.tsx')
+
+  it('ninguna pantalla se escribe su propio contexto', () => {
+    // La firma delata al gemelo: si una pantalla vuelve a componer el texto, tendra
+    // que armar el bloque de INBOX o el de PROYECTOS por su cuenta.
+    const malos: string[] = []
+    for (const [nombre, src] of [['HoySection', HOY], ['HarveySection', HAR]] as const) {
+      if (/BRUTAL STUDIOS — \$\{madridDateLabel\(\)\}/.test(src)) malos.push(`${nombre}: vuelve a componer la cabecera del contexto`)
+      if (/PROYECTOS ACTIVOS \(/.test(src)) malos.push(`${nombre}: vuelve a componer el bloque de proyectos`)
+      if (/INBOX — /.test(src)) malos.push(`${nombre}: vuelve a componer el bloque de inbox`)
+    }
+    expect(malos, `el contexto vuelve a escribirse por duplicado — es como nacieron las once diferencias:\n  ${malos.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('las dos piden el contexto al mismo sitio', () => {
+    for (const [nombre, src] of [['HoySection', HOY], ['HarveySection', HAR]] as const) {
+      expect(/from '@\/lib\/contextoHarvey'/.test(src),
+        `${nombre} ya no usa el constructor compartido`)
+        .toBe(true)
+    }
+  })
+
+  it('las dos mandan el hilo de la conversacion', () => {
+    // El orbe de Hoy mandaba solo `{message, context}`: cada pregunta empezaba de
+    // cero. Si Harvey preguntaba «¿para que fecha?» y respondias «el jueves», esa
+    // frase le llegaba suelta. HarveySection lo tiene medido: sin historial crea la
+    // tarea 1 de cada 3 veces; con historial, 3 de 3.
+    for (const [nombre, src] of [['HoySection', HOY], ['HarveySection', HAR]] as const) {
+      const i = src.indexOf("'/api/harvey/chat'")
+      expect(i, `${nombre} ya no habla con Harvey: revisa esta regla`).toBeGreaterThan(-1)
+      const bloque = src.slice(i, i + 500)
+      expect(/history:/.test(bloque),
+        `${nombre} habla con Harvey sin mandarle el hilo: olvidara lo que acaba de preguntar`)
+        .toBe(true)
+    }
+  })
+})
+
 describe('lo que se le oculta a alguien no se le cuela por detras', () => {
   // `ver_colabs` es el interruptor de «quiero ver el buzon del equipo». Se
   // respetaba en `/api/inbox` y en `/api/chat`, y el comentario de chat/route.ts lo
@@ -4328,17 +4391,27 @@ describe('la memoria llega entera a las dos IAs', () => {
       .toBe(true)
   })
 
-  it('quien elige memoria lo hace CON la pregunta', () => {
-    // El gemelo: Harvey lo hacia bien y Hoy no.
-    for (const [nombre, src] of [['HoySection', HOY], ['HarveySection', leerCodigo('src/components/sections/HarveySection.tsx')]] as const) {
-      const usos = [...src.matchAll(/memoriaRelevante\(([^)]*)\)/g)].map(m => m[1].trim())
-      expect(usos.length, `${nombre} ya no elige memoria: revisa esta regla`).toBeGreaterThan(0)
-      // Una llamada es mala cuando pasa SOLO la lista y ninguna pregunta. En
-      // HarveySection `memoriaRelevante` es un envoltorio local que recibe la
-      // pregunta como unico argumento, asi que exigir una coma daba un falso
-      // positivo: la forma correcta alli es `memoriaRelevante(texto)`.
-      const sinPregunta = usos.filter(u => /^data\.memoria( as any)?$/.test(u))
-      expect(sinPregunta, `${nombre} elige memoria sin pasar la pregunta: devolvera siempre las mismas notas\n  ${sinPregunta.join('\n  ')}`)
+  it('la pregunta llega hasta quien elige la memoria', () => {
+    // Antes esto exigia que CADA pantalla llamara a `memoriaRelevante` con la
+    // pregunta. Ahora las dos delegan en `contextoHarvey`, asi que la cadena tiene
+    // tres eslabones y el invariante es que la pregunta los cruce enteros: si se
+    // pierde en cualquiera, `memoriaRelevante` no puede emparejar nada y devuelve
+    // siempre las mismas notas, preguntes lo que preguntes.
+    const C = leerCodigo('src/lib/contextoHarvey.ts')
+    expect(/export function construirContexto\(data: DatosContexto, pregunta\?: string\)/.test(C),
+      'el constructor de contexto ya no recibe la pregunta')
+      .toBe(true)
+    expect(/memoriaRelevante\(\(data\.memoria \|\| \[\]\) as never, pregunta\)/.test(C),
+      'el constructor no le pasa la pregunta a memoriaRelevante: devolvera siempre las mismas notas')
+      .toBe(true)
+
+    for (const f of ['HoySection', 'HarveySection']) {
+      const src = leerCodigo(`src/components/sections/${f}.tsx`)
+      const usos = [...src.matchAll(/construirContexto\(([^)]*)\)/g)].map(m => m[1])
+      expect(usos.length, `${f} ya no construye contexto: revisa esta regla en vez de borrarla`)
+        .toBeGreaterThan(0)
+      const sinPregunta = usos.filter(u => !u.includes(','))
+      expect(sinPregunta, `${f} construye el contexto sin pasar la pregunta:\n  ${sinPregunta.join('\n  ')}`)
         .toEqual([])
     }
   })
