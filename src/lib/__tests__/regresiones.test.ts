@@ -3902,6 +3902,28 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('la IA no se declara incapaz de lo que la app sabe hacer', () => {
+  // El caso REAL, hablando con ella: sin eventos cargados, «¿que reuniones tengo
+  // esta semana?» se contestaba con «no tengo acceso a tu calendario, miralo en
+  // Google Calendar». Y SI lo tiene — leer el calendario es una de las cosas que la
+  // app hace, y encima acababa de arreglarse la ventana para que trajera 15 meses.
+  //
+  // Una IA que se declara incapaz de algo que sabe hacer no se vuelve a usar para
+  // eso, y eso no se ve en ningun log: el usuario simplemente deja de preguntar.
+  it('distingue «no hay nada» de «no lo he podido leer»', () => {
+    const A = leerCodigo('src/lib/ai.ts')
+    expect(/no se ha podido cargar la agenda/.test(A),
+      'vuelve a haber un solo estado: sin eventos, el modelo concluye que no tiene calendario').toBe(true)
+    expect(/NO digas que no tienes acceso/.test(A),
+      'no se le dice explicitamente que no niegue tener acceso').toBe(true)
+    // Y el servidor tiene que CONSERVAR la diferencia: si convierte «no mandado» en
+    // «lista vacia», el prompt ya no puede distinguirlos por mucho que lo intente.
+    const C = leerCodigo('src/app/api/chat/route.ts')
+    expect(/Array\.isArray\(body\?\.eventos\) \? undefined/.test(C),
+      'el servidor vuelve a convertir «no mandado» en lista vacia: la distincion se pierde antes de llegar al prompt').toBe(true)
+  })
+})
+
 describe('lo que se dice de las cuentas de Gmail sale de la tabla nueva', () => {
   // `profiles.gmail_account` es la columna VIEJA: UNA ranura que el callback pisa
   // en cada conexion. Con tres cuentas conectadas, Sincronizacion decia «Conectado

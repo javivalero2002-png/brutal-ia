@@ -455,14 +455,24 @@ export async function chat(
     .sort((a, b) => a.start.localeCompare(b.start))
     .slice(0, 8)
   const variasCuentas = new Set((context.eventos || []).map(e => e.cuenta).filter(Boolean)).size > 1
-  const lineasAgenda = proximos.length
-    // En hora de MADRID. Cortar el ISO daba la hora del desfase de cada
-    // calendario, que no es la misma en todos: medido, una hora de diferencia
-    // entre lo que decía la IA y lo que enseñaba la pantalla.
-    ? `\nCALENDARIO PRÓXIMO:\n${proximos.map(e =>
-        `  · ${cuandoEnMadrid(e.start)} — ${e.title}${variasCuentas && e.cuenta ? ` (${e.cuenta})` : ''}`,
-      ).join('\n')}`
-    : ''
+  // TRES estados, no dos. Sin esta distinción el modelo llegaba a la peor
+  // conclusión posible: preguntándole «¿qué reuniones tengo esta semana?» sin
+  // eventos cargados contestaba «no tengo acceso a tu calendario, míralo en Google
+  // Calendar». Y SÍ lo tiene — es una de las cosas que la app hace.
+  //
+  // Una IA que se declara incapaz de algo que sabe hacer no se vuelve a usar para
+  // eso. Y «no hay nada» tampoco es «no lo he podido leer»: lo primero es un dato,
+  // lo segundo un fallo.
+  const lineasAgenda = !context.eventos
+    ? '\nCALENDARIO: no se ha podido cargar la agenda ahora mismo. Dilo así si preguntan; NO digas que no tienes acceso al calendario.'
+    : proximos.length === 0
+      ? '\nCALENDARIO PRÓXIMO: ninguno. La agenda se ha leído bien y no hay nada por delante.'
+      // En hora de MADRID. Cortar el ISO daba la hora del desfase de cada
+      // calendario, que no es la misma en todos: medido, una hora de diferencia
+      // entre lo que decía la IA y lo que enseñaba la pantalla.
+      : `\nCALENDARIO PRÓXIMO:\n${proximos.map(e =>
+          `  · ${cuandoEnMadrid(e.start)} — ${e.title}${variasCuentas && e.cuenta ? ` (${e.cuenta})` : ''}`,
+        ).join('\n')}`
 
   const systemPrompt = `Eres Brutal.IA, la inteligencia artificial de Brutal Studios, una agencia creativa española especializada en marketing digital, contenido y estrategia de marca.
 

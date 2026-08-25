@@ -29,7 +29,11 @@ export async function POST(request: NextRequest) {
   // segundos de Google en cada mensaje. Pero llegar del cliente no la hace de
   // fiar: se valida la forma, se acota y el texto se limpia de caracteres de
   // control (que además rompen la API de Anthropic). Nada de esto se guarda.
-  const eventos = (Array.isArray(body?.eventos) ? body.eventos : [])
+  // `undefined` si el cliente NO manda el campo, `[]` si lo manda vacío. La
+  // diferencia importa: sin ella el prompt no puede distinguir «no tienes nada» de
+  // «no he podido leer la agenda», y el modelo llegaba a la peor conclusión de las
+  // tres — decir que no tiene acceso al calendario.
+  const eventos = !Array.isArray(body?.eventos) ? undefined : (body.eventos as unknown[])
     .slice(0, 60)
     .filter((e: any) => e && typeof e.title === 'string' && typeof e.start === 'string')
     .map((e: any) => ({
