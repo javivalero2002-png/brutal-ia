@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { haFichado } from '@/components/shared/helpers'
 import { todayKey } from '@/components/shared/helpers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
   const admin = await createAdminClient()
   const { data, error } = await admin
     .from('diario')
-    .select('dia, user_id, entrada, cierre_at, autor:profiles!user_id(id,name,initials,avatar_color)')
+    .select('dia, user_id, entrada, entrada_at, cierre_at, autor:profiles!user_id(id,name,initials,avatar_color)')
     // `like` sobre 'YYYY-MM-%' en vez de un rango de fechas: la columna es texto
     // y el orden lexicográfico de un ISO coincide con el cronológico, así que el
     // prefijo basta y no hay que calcular el último día del mes.
@@ -36,7 +37,10 @@ export async function GET(request: NextRequest) {
   for (const fila of data ?? []) {
     const d = fila.dia as string
     if (!porDia[d]) porDia[d] = { personas: [], objetivos: 0, cerrados: 0 }
-    porDia[d].personas.push(fila.autor)
+    // SOLO QUIEN FICHÓ DE VERDAD. Antes entraba cualquier fila, y el guardado
+    // automático del borrador deja filas vacías con solo abrir la sección: la
+    // racha contaba 3 días seguidos sobre cero días fichados.
+    if (haFichado(fila as { entrada_at?: string | null })) porDia[d].personas.push(fila.autor)
     porDia[d].objetivos += (fila.entrada || '').split('\n').filter((l: string) => l.trim()).length
     if (fila.cierre_at) porDia[d].cerrados++
   }

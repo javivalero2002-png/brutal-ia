@@ -381,3 +381,26 @@ export function mensajeErrorTranscripcion(status: number, delServidor?: string |
   // usuario repita la grabación creyendo que habla mal.
   return 'El servicio de transcripción falló — inténtalo en un momento'
 }
+
+/**
+ * ¿Esta persona FICHÓ ese día? Una sola respuesta para toda la app.
+ *
+ * Javi: «aquí me pone 3 seguidos y en verdad no completé ningún día de fichar». Y
+ * tenía razón: su diario tenía CUATRO filas —25, 24, 22 y 21 de agosto— y las
+ * cuatro completamente vacías. Ni hora de entrada, ni cierre, ni una palabra.
+ * Filas fantasma que deja el guardado automático del borrador con solo abrir la
+ * sección.
+ *
+ * `/api/diario/mes` contaba CUALQUIER fila como «fichó ese día», así que la racha
+ * decía 3 (salta los fines de semana: 25, 24, y 21) sobre cero días fichados.
+ *
+ * LA MARCA ES `entrada_at`, y no el texto, porque es lo único que significa
+ * exactamente esto: el servidor la sella solo cuando guardas de verdad —no un
+ * borrador— y en un día que no es futuro. Escribir texto en un borrador es estar
+ * escribiendo; planificar el jueves que viene es planificar. Fichar es otra cosa.
+ *
+ * Había TRES criterios distintos repartidos por la app para la misma pregunta.
+ * Este es el único.
+ */
+export const haFichado = (d: { entrada_at?: string | null } | null | undefined) =>
+  !!d?.entrada_at

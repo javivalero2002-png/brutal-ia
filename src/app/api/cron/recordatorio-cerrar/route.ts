@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
+import { haFichado } from '@/components/shared/helpers'
 import { sendPushToUser, canSendPush } from '@/lib/push'
 import { todayKey, madridHour } from '@/components/shared/helpers'
 import { NextRequest, NextResponse } from 'next/server'
@@ -67,8 +68,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  // `haFichado` y no el texto: un borrador con algo escrito no es haber empezado
+  // el dia, y avisar a esa persona de que «cierre» algo que no abrio es ruido.
   const pendientes = (dias || []).filter(d =>
-    ((d.entrada as string | null) || '').trim().length > 0 && !d.cierre_at)
+    haFichado(d as { entrada_at?: string | null }) && !d.cierre_at)
 
   let avisados = 0
   for (const d of pendientes) {

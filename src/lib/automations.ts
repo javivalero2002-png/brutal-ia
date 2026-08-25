@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { haFichado } from '@/components/shared/helpers'
 import { sendPushToAll, sendPushToUser, canSendPush, type PushPayload } from '@/lib/push'
 import { todayKey, localDayKey, rotuloNivel } from '@/components/shared/helpers'
 import { logQueryErrors } from '@/lib/queryLog'
@@ -200,7 +201,7 @@ export function evaluateTrigger(cfg: RuleConfig, ctx: {
   /** El equipo y su fichaje reciente. Lo usan las automatizaciones de control. */
   equipo?: { id: string; name?: string | null }[]
   /** Filas de `diario` de los últimos días, para saber quién fichó y quién cerró. */
-  diario?: { user_id: string; dia: string; entrada?: string | null; cierre_at?: string | null; animo?: string | null }[]
+  diario?: { user_id: string; dia: string; entrada?: string | null; entrada_at?: string | null; cierre_at?: string | null; animo?: string | null }[]
   /** Hoy en Madrid, inyectado: la función es pura y los días son días de Madrid. */
   hoy?: string
   /** Piezas de contenido, para el aviso de pieza nueva. */
@@ -314,7 +315,9 @@ export function evaluateTrigger(cfg: RuleConfig, ctx: {
     const umbral = Math.max(1, t.threshold ?? 2)
     const hoy = ctx.hoy || todayKey()
     const fichados = new Set((ctx.diario || [])
-      .filter(d => (d.entrada || '').trim())
+      // Mismo criterio que el resto de la app: la marca es `entrada_at`, no el
+      // texto. Un borrador con algo escrito no es un fichaje.
+      .filter(d => haFichado(d as { entrada_at?: string | null }))
       .map(d => `${d.user_id}|${d.dia}`))
 
     // Los N últimos días laborables antes de hoy.
@@ -513,7 +516,7 @@ async function ejecutarReglas(
     admin.from('profiles').select('id,name'),
     // Dos semanas: cubre de sobra un umbral de días laborables sin traerse el
     // histórico entero cada hora.
-    admin.from('diario').select('user_id,dia,entrada,cierre_at,animo').gte('dia', hace(14)),
+    admin.from('diario').select('user_id,dia,entrada,entrada_at,cierre_at,animo').gte('dia', hace(14)),
     admin.from('content_agenda').select('id,title,platform,created_at').order('created_at', { ascending: false }).limit(50),
   ])
   // Si una consulta falla, su lista queda vacía y el motor decide sobre datos

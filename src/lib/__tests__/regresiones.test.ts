@@ -3771,6 +3771,56 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('fichar significa una sola cosa en toda la app', () => {
+  // Javi: «aqui me pone 3 seguidos y en verdad no complete ningun dia de fichar».
+  //
+  // Tenia razon, y la racha estaba BIEN calculada: salta fines de semana, asi que
+  // con filas el 25, el 24 y el 21 daba 3. El fallo era que esas filas estaban
+  // COMPLETAMENTE VACIAS —ni hora de entrada, ni cierre, ni una palabra—: fantasmas
+  // que deja el guardado automatico del borrador con solo abrir la seccion. Y
+  // `/api/diario/mes` contaba cualquier fila como «ficho ese dia».
+  //
+  // Debajo habia algo peor: TRES criterios distintos para la misma pregunta. El
+  // calendario contaba filas, los recordatorios miraban el TEXTO de `entrada`, y el
+  // panel de equipo miraba `entrada_at`. Tres respuestas para «¿ficho?».
+  //
+  // La marca es `entrada_at` porque es lo unico que significa exactamente eso: el
+  // servidor la sella solo al guardar de verdad —no un borrador— y en un dia que no
+  // es futuro. Escribir en un borrador es estar escribiendo; planificar el jueves
+  // que viene es planificar.
+  const CONSUMIDORES = [
+    'src/app/api/diario/mes/route.ts',
+    'src/app/api/cron/recordatorio-fichar/route.ts',
+    'src/app/api/cron/recordatorio-cerrar/route.ts',
+    'src/lib/automations.ts',
+  ]
+
+  it('existe UNA definicion y es la que se usa', () => {
+    expect(/export const haFichado/.test(leerCodigo('src/components/shared/helpers.ts')),
+      'ya no existe haFichado: cada sitio volvera a decidir por su cuenta que es fichar')
+      .toBe(true)
+    const sinUsar = CONSUMIDORES.filter(f => !/haFichado\(/.test(leerCodigo(f)))
+    expect(sinUsar, `deciden por su cuenta si alguien ficho, en vez de usar haFichado:\n  ${sinUsar.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('nadie vuelve a contar una fila vacia como un fichaje', () => {
+    // El bug exacto: contar la existencia de la fila. Con el borrador
+    // autoguardandose, eso es contar «abrio la seccion».
+    const MES = leerCodigo('src/app/api/diario/mes/route.ts')
+    const i = MES.indexOf('personas.push')
+    expect(i, 'ya no se agrupan personas por dia: revisa esta regla').toBeGreaterThan(-1)
+    const linea = MES.slice(MES.lastIndexOf('\n', i) + 1, MES.indexOf('\n', i))
+    expect(/haFichado\(/.test(linea),
+      `el calendario vuelve a contar cualquier fila como un fichaje: la racha mentira otra vez — «${linea.trim().slice(0, 80)}»`)
+      .toBe(true)
+    // Y la columna tiene que viajar, o `haFichado` mira undefined siempre.
+    expect(/entrada_at/.test(MES.match(/\.select\('[^']*'\)/)?.[0] || ''),
+      'el select de /api/diario/mes no trae entrada_at: haFichado mirara undefined y NADIE contara como fichado')
+      .toBe(true)
+  })
+})
+
 describe('el orden de tareas cambia lo que se ve', () => {
   // Javi: «con estos 2 botones en tareas no pasa nada». Y era verdad, aunque el
   // codigo del orden estaba BIEN: `filtered` se ordenaba por prioridad o por fecha
@@ -4515,7 +4565,7 @@ describe('los recordatorios de fichar saltan cuando toca', () => {
     const i = src.indexOf('pendientes')
     expect(i, 'ya no se calculan los pendientes: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
     const bloque = src.slice(i, i + 320)
-    expect(/entrada[^\n]*trim\(\)\.length > 0/.test(bloque),
+    expect(/haFichado\(/.test(bloque),
       'el aviso de las 20:00 ya no exige haber EMPEZADO el dia: regana a quien no ficho, que ya fue avisado a las 10:00')
       .toBe(true)
     expect(/!d\.cierre_at/.test(bloque),
@@ -4822,6 +4872,36 @@ describe('lo que llega de fuera no puede ensanchar un panel', () => {
 })
 
 describe('el motor de automatizaciones recibe lo que mira', () => {
+  it('las COLUMNAS que el tipo de ctx declara se piden en el select', () => {
+    // La regla de abajo mira los campos de PRIMER NIVEL de `ctx` —que llegue
+    // `diario`, que llegue `tasks`— y eso deja fuera las columnas de dentro: el
+    // snapshot puede traer `diario` y no traer `entrada_at`, y el evaluador se
+    // queda mirando `undefined` para siempre. Sin error.
+    //
+    // PASÓ HOY, y por eso existe esta segunda regla. Al unificar el criterio de
+    // «fichó» en `haFichado(entrada_at)`, el select seguía pidiendo
+    // `user_id,dia,entrada,cierre_at,animo`. Nadie habría contado como fichado
+    // NUNCA, y «lleva 2 días sin fichar» habría saltado para todo el equipo, todos
+    // los días. La regla de abajo pasó en verde: el campo se lee a través de un
+    // ayudante, no como `d.entrada_at`, así que su regex no lo veía.
+    //
+    // Esta no mira cómo se lee, sino lo que el TIPO PROMETE. Eso no se puede
+    // esquivar con un ayudante ni con un cast.
+    const A = leerCodigo('src/lib/automations.ts')
+    const m = A.match(/diario\?: \{ ([^}]*) \}\[\]/)
+    expect(m, 'ya no se declara el tipo de ctx.diario: revisa esta regla en vez de borrarla').toBeTruthy()
+    const declaradas = m![1].split(';').map(c => c.trim().split(/[?:]/)[0].trim()).filter(Boolean)
+    expect(declaradas.length, 'el tipo de ctx.diario no declara columnas').toBeGreaterThan(2)
+
+    const sel = A.match(/from\('diario'\)\.select\('([^']+)'\)/)
+    expect(sel, 'el snapshot ya no consulta el diario').toBeTruthy()
+    const pedidas = new Set(sel![1].split(',').map(c => c.trim()))
+
+    const faltan = declaradas.filter(c => !pedidas.has(c))
+    expect(faltan, `el tipo de ctx.diario promete columnas que el snapshot NO pide — el evaluador vera undefined para siempre y ninguna regla saltara:\n  faltan: ${faltan.join(', ')}\n  pide: ${[...pedidas].join(', ')}`)
+      .toEqual([])
+  })
+
   it('todo campo que lee evaluateTrigger viene cargado en el snapshot', () => {
     // EL FALLO MUDO que el propio fichero documenta: «un snapshot que no trae lo
     // que el evaluador mira es un fallo mudo — no hay error, solo cero

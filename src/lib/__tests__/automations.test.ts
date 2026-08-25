@@ -420,7 +420,7 @@ describe('automatizaciones de control · miran PERSONAS, no cosas', () => {
     // Lunes 2026-08-24: los dos laborables anteriores son viernes 21 y jueves 20,
     // NO domingo 23 y sabado 22.
     const lunes = '2026-08-24'
-    const soloPabloElViernes = [{ user_id: 'p1', dia: '2026-08-21', entrada: 'algo' }]
+    const soloPabloElViernes = [{ user_id: 'p1', dia: '2026-08-21', entrada: 'algo', entrada_at: '2026-08-21T09:00:00Z' }]
     const r = evaluateTrigger(regla({ type: 'sin_fichar', threshold: 2 }),
       { ...base, diario: soloPabloElViernes, hoy: lunes })
     // Pablo fichó el viernes → le falta uno de los dos, no salta.
@@ -433,8 +433,8 @@ describe('automatizaciones de control · miran PERSONAS, no cosas', () => {
     // acaba de empezar no es control, es ruido — y del que enfada.
     const martes = '2026-08-25'
     const ficharonAyer = [
-      { user_id: 'p1', dia: '2026-08-24', entrada: 'x' },
-      { user_id: 'p2', dia: '2026-08-24', entrada: 'x' },
+      { user_id: 'p1', dia: '2026-08-24', entrada: 'x', entrada_at: '2026-08-24T09:00:00Z' },
+      { user_id: 'p2', dia: '2026-08-24', entrada: 'x', entrada_at: '2026-08-24T09:00:00Z' },
     ]
     const r = evaluateTrigger(regla({ type: 'sin_fichar', threshold: 1 }),
       { ...base, diario: ficharonAyer, hoy: martes })
@@ -453,8 +453,8 @@ describe('automatizaciones de control · miran PERSONAS, no cosas', () => {
     const r = evaluateTrigger(regla({ type: 'dia_sin_cerrar' }), {
       ...base, hoy,
       diario: [
-        { user_id: 'p1', dia: hoy, entrada: 'x', cierre_at: null },          // en curso
-        { user_id: 'p2', dia: '2026-08-24', entrada: 'x', cierre_at: null }, // sin cerrar de verdad
+        { user_id: 'p1', dia: hoy, entrada: 'x', entrada_at: `${hoy}T09:00:00Z`, cierre_at: null },          // en curso
+        { user_id: 'p2', dia: '2026-08-24', entrada: 'x', entrada_at: '2026-08-24T09:00:00Z', cierre_at: null }, // sin cerrar de verdad
       ],
     })
     expect(r.map(m => m.vars.persona)).toEqual(['Claudia'])
@@ -464,8 +464,8 @@ describe('automatizaciones de control · miran PERSONAS, no cosas', () => {
     const r = evaluateTrigger(regla({ type: 'bloqueado' }), {
       ...base,
       diario: [
-        { user_id: 'p1', dia: '2026-08-24', entrada: 'x', animo: 'productivo' },
-        { user_id: 'p2', dia: '2026-08-24', entrada: 'x', animo: 'bloqueado' },
+        { user_id: 'p1', dia: '2026-08-24', entrada: 'x', entrada_at: '2026-08-24T09:00:00Z', animo: 'productivo' },
+        { user_id: 'p2', dia: '2026-08-24', entrada: 'x', entrada_at: '2026-08-24T09:00:00Z', animo: 'bloqueado' },
       ],
     })
     expect(r.map(m => m.vars.persona)).toEqual(['Claudia'])
