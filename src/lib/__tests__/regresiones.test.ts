@@ -3839,6 +3839,70 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('un cliente es uno de la tabla, no lo que escriba el modelo', () => {
+  // Javi: «en el inbox los clientes los revisa mal, saca clientes de donde no
+  // son». Tenia 57 de 100 correos marcados como cliente — Amazon, AliExpress,
+  // Facebook, idealista, Hostinger. El prompt de `analyzeEmail` solo pide «nombre
+  // del cliente si se identifica», y el modelo identifica EMPRESAS, que no es lo
+  // mismo que un cliente de Brutal Studios.
+  //
+  // Por que se cuela: `ai_client` se guarda crudo porque su columna NO tiene
+  // CHECK, al reves que su vecina `ai_urgency`, que si lo tiene — y por eso esa se
+  // normaliza en la frontera con `nivelTarea`. Sin CHECK nada rebota: el dato
+  // falso entra y la pantalla lo cuenta como bueno. Es la version silenciosa de la
+  // trampa que CLAUDE.md ya documenta.
+  //
+  // La regla NO pide validar al guardar —lo que el modelo creyo ver es informacion
+  // util para pintar el nombre— sino al CONTAR y al FILTRAR, que es donde una
+  // cadena inventada se convierte en una cifra falsa.
+  const UI = leerCodigo('src/components/sections/InboxSection.tsx')
+
+  it('el filtro y el contador de Clientes se validan contra la tabla clients', () => {
+    // Acotado a CONTAR y FILTRAR. La primera version prohibia la comparacion con
+    // «Desconocido» en todo el fichero, y eso tumbaba dos sitios legitimos: los que
+    // PINTAN el nombre que el modelo creyo ver, que es informacion util. Contar y
+    // pintar no son lo mismo — una cadena inventada como rotulo se lee y se
+    // descarta; como cifra, se cree.
+    const contador = UI.match(/const fromClients = [^\n]*/)?.[0] || ''
+    expect(contador, 'ya no existe fromClients: revisa esta regla en vez de borrarla').toBeTruthy()
+    expect(/esDeCliente/.test(contador),
+      `el contador de Clientes vuelve a contar lo que diga el modelo: ${contador.slice(0, 90)}`)
+      .toBe(true)
+
+    const filtro = UI.match(/if \(filter==='Clientes'\) return [^\n]*/)?.[0] || ''
+    expect(filtro, 'ya no existe el filtro Clientes: revisa esta regla').toBeTruthy()
+    expect(/esDeCliente/.test(filtro),
+      `el filtro de Clientes vuelve a filtrar por lo que diga el modelo: ${filtro.slice(0, 90)}`)
+      .toBe(true)
+    expect(/const esDeCliente = [^\n]*matchClientByName\(data\.clients/.test(UI),
+      'el predicado de cliente ya no empareja contra data.clients: cualquier cadena del modelo volvera a contar')
+      .toBe(true)
+  })
+
+  it('el emparejador que ya existia se usa, en vez de escribir otro', () => {
+    // Habia TRES implementaciones del mismo predicado en la app (dos en Clientes,
+    // una aqui) y ninguna compartida. La cuarta no ayuda.
+    const i = UI.indexOf('const esDeCliente')
+    expect(i, 'ya no existe esDeCliente: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const cuerpo = UI.slice(i, UI.indexOf('\n', i))
+    expect(/matchClientByName/.test(cuerpo),
+      'esDeCliente dejo de usar matchClientByName y hace su propia comparacion')
+      .toBe(true)
+  })
+
+  it('crear una tarea desde un correo con el teclado pide confirmacion', () => {
+    // Javi vio una tarea que no recordaba haber escrito. La `t` la creaba de una
+    // sola pulsacion, sin confirmar y sin deshacer — y esta pegada a `j`/`k`, que
+    // son las de pasar correos.
+    const i = UI.indexOf("e.key === 't'")
+    expect(i, 'ya no existe el atajo de crear tarea: revisa esta regla').toBeGreaterThan(-1)
+    const bloque = UI.slice(i, i + 900)
+    expect(/confirmarTarea/.test(bloque),
+      'la tecla `t` vuelve a crear la tarea de una sola pulsacion: apareceran tareas que nadie recuerda haber escrito')
+      .toBe(true)
+  })
+})
+
 describe('un boton que falla dice POR QUE', () => {
   // PASO DE VERDAD, y costo un diagnostico entero. Javi pulso IDENTIFICAR mientras
   // Vercel todavia desplegaba: la ruta no existia aun, devolvio 404, y el `catch`
@@ -3849,7 +3913,7 @@ describe('un boton que falla dice POR QUE', () => {
   // La regla no exige un texto concreto: exige que la respuesta del servidor SE
   // MIRE. Tragarse el `status` es lo que convierte un problema de dos minutos en
   // media hora de diagnostico.
-  const UI = leerCodigo('src/components/sections/InboxSection.tsx')
+  const UI = leerCodigo('src/components/sections/SincronizacionSection.tsx')
 
   it('la llamada a identificar distingue los fallos por su codigo', () => {
     const i = UI.indexOf("fetch('/api/inbox/identificar'")
@@ -3868,7 +3932,7 @@ describe('un boton que falla dice POR QUE', () => {
     // buzones a cero: el mensaje y lo que se ve se contradicen.
     const i = UI.indexOf("fetch('/api/inbox/identificar'")
     const bloque = UI.slice(i, i + 1400)
-    expect(/fetch\('\/api\/gmail\/cuentas'\)/.test(bloque),
+    expect(/cargarCuentas\(\)/.test(bloque),
       'no se vuelven a pedir las cuentas tras identificar: los recuentos se quedan como estaban')
       .toBe(true)
   })
