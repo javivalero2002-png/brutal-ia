@@ -276,6 +276,8 @@ ${ficha}
           const readable = new ReadableStream({
             async start(controller) {
               const dec = new TextDecoder()
+              // La pone `message_delta`; se lee justo antes de cerrar el stream.
+              let truncada = false
               let buf = ''
               try {
                 while (true) {
@@ -297,7 +299,14 @@ ${ficha}
                     // la respuesta a medias se servía como si estuviera completa.
                     if (ev.type === 'error') throw new Error(ev.error?.message || 'error de la API a mitad del stream')
                     if (ev.type === 'message_delta' && ev.delta?.stop_reason === 'max_tokens') {
+                      // El aviso iba SOLO a la consola del servidor, o sea a nadie.
+                      // El `[ACCION:...]` va al FINAL de la respuesta, así que es lo
+                      // primero que se pierde al truncar — y entonces pasa justo lo
+                      // que este repo no tolera: Harvey dice en voz alta «te creo la
+                      // tarea», la etiqueta se quedó cortada, no se crea nada, y el
+                      // usuario se entera dentro de tres días.
                       console.warn('[harvey] respuesta truncada por max_tokens — el [ACCION:...] del final puede haberse perdido')
+                      truncada = true
                     }
                     if (ev.type === 'content_block_delta' && ev.delta?.text) {
                       controller.enqueue(encoder.encode(ev.delta.text))
@@ -316,6 +325,15 @@ ${ficha}
                 console.error('[harvey] el stream se cortó a mitad:', err?.message ?? err)
                 controller.error(err)
                 return
+              }
+              if (truncada) {
+                // Se dice al final y en su voz, que es como llega: el stream es
+                // texto plano que se lee en voz alta, así que no hace falta ningún
+                // canal nuevo ni tocar el cliente. Se afirma solo lo que se sabe
+                // —que la respuesta se cortó— y se da la salida, en vez de dejar
+                // que el silencio parezca un trabajo hecho.
+                controller.enqueue(encoder.encode(
+                  ' Me he quedado sin espacio y he cortado la respuesta. Si te he dicho que iba a crear algo, no ha llegado a crearse: pídemelo otra vez.'))
               }
               controller.close()
             },

@@ -107,7 +107,17 @@ export async function ejecutarAccionHarvey(
       }
 
       case 'pieza': {
-        const cliente = buscarCliente(accion.clientName)
+        // SIN cliente y SIN fecha, y no es un olvido: el contrato del prompt son
+        // tres campos a proposito —«NO preguntes por el cliente, la fecha ni mas
+        // detalles: con el tema y la plataforma basta»—, porque esto se dicta en
+        // voz alta y un interrogatorio de cuatro preguntas para apuntar un reel no
+        // lo usa nadie. El resto se edita luego en el pipeline.
+        //
+        // Aqui se leian ademas el cliente y la fecha de la accion. El parser no
+        // rellena ninguno de los dos para una pieza, asi que eran siempre
+        // `undefined`: no fallaban, PARECIAN una funcion. Quien leyera el ejecutor
+        // daba por hecho que una pieza dictada se enlaza con su cliente, y no pasa.
+        // Codigo muerto que miente es peor que codigo muerto.
         await data.createAgenda({
           title: accion.text,
           // Normalizadas: una plataforma que no esta en la lista no casa ningun color
@@ -115,8 +125,6 @@ export async function ejecutarAccionHarvey(
           platform: plataformaContenido(accion.platform),
           content_type: tipoContenido(accion.contentType),
           status: 'borrador',
-          publish_date: accion.date || undefined,
-          client_id: cliente?.id,
         })
         showToast('Pieza añadida al pipeline de contenido')
         return true

@@ -3448,6 +3448,74 @@ describe('el diseño acierta en el PRIMER render, no en el segundo', () => {
   })
 })
 
+describe('el ejecutor no lee campos que el parser nunca rellena', () => {
+  // El caso `pieza` leia el cliente y la fecha de la accion, y el parser no los
+  // pone: eran `undefined` SIEMPRE. No fallaba nada —y por eso vivio— pero quien
+  // leyera el ejecutor daba por hecho que una pieza dictada se enlaza con su
+  // cliente. Codigo muerto que parece una funcion es peor que codigo muerto.
+  //
+  // El contrato de `pieza` son tres campos A PROPOSITO: se dicta en voz alta y un
+  // interrogatorio de cuatro preguntas para apuntar un reel no lo usa nadie. O
+  // sea que la solucion no era rellenarlos, era dejar de leerlos.
+  it('cada campo que se lee en un case, el parser lo pone en ese mismo case', () => {
+    const EJ = leerCodigo('src/lib/harveyEjecutar.ts')
+    const PA = leerCodigo('src/lib/harveyAccion.ts')
+
+    // Lo que el parser SI rellena, por tipo.
+    const rellena: Record<string, Set<string>> = {}
+    for (const m of PA.matchAll(/case '(\w+)':[\s\S]{0,600}?type: '\1'([\s\S]{0,400}?)\}\s*\}/g)) {
+      rellena[m[1]] = new Set([...m[2].matchAll(/(\w+):/g)].map(x => x[1]))
+    }
+    expect(Object.keys(rellena).length, 'no se reconocio ningun case del parser: revisa esta regla en vez de borrarla')
+      .toBeGreaterThan(3)
+
+    // Lo que el ejecutor LEE, por tipo. Cada case va de `case 'x': {` al siguiente.
+    const casos = [...EJ.matchAll(/case '(\w+)': \{/g)]
+    const huerfanos: string[] = []
+    casos.forEach((c, i) => {
+      const tipo = c[1]
+      if (!rellena[tipo]) return   // un case que el parser no conoce ya lo cubre otra regla
+      const cuerpo = EJ.slice(c.index!, casos[i + 1]?.index ?? EJ.length)
+      for (const l of cuerpo.matchAll(/accion\.(\w+)/g)) {
+        // `type` y `text` los pone el parser en todos.
+        if (l[1] === 'type' || l[1] === 'text') continue
+        if (!rellena[tipo].has(l[1])) huerfanos.push(`${tipo}.${l[1]}`)
+      }
+    })
+    expect([...new Set(huerfanos)],
+      `el ejecutor lee campos que el parser NUNCA rellena para ese tipo: son undefined siempre, no fallan, y parecen una funcion que no existe:\n  ${[...new Set(huerfanos)].join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
+describe('una respuesta cortada no se sirve como entera', () => {
+  // Las dos IAs tienen tope de tokens y las dos se lo tragaban. Harvey lo avisaba
+  // con un `console.warn` —o sea a NADIE— y ahi es peor que en Brutal.IA: el
+  // `[ACCION:...]` va al FINAL, asi que es lo primero que se pierde al truncar.
+  // Harvey decia en voz alta «te creo la tarea», la etiqueta se quedaba cortada,
+  // no se creaba nada, y el usuario se enteraba tres dias despues.
+  it('las dos miran stop_reason y se lo dicen a quien esta mirando', () => {
+    // OJO A LA FORMA. La primera version buscaba el texto de aviso «por ahi cerca»
+    // de la bandera, y PASO EN VERDE con las dos mutaciones puestas: desactivar la
+    // rama (`if (false)`, `false ? ...`) no borra el literal, que sigue en el
+    // fichero sin que nadie lo emita nunca. Hay que exigir que la bandera y el
+    // mensaje esten UNIDOS en la misma expresion.
+    for (const [ruta, ata] of [
+      // Harvey: stream de texto plano que se lee en voz alta. Se encola al cerrar.
+      ['src/app/api/harvey/chat/route.ts', /if \(truncada\)\s*\{[\s\S]{0,400}?cortado la respuesta/],
+      // Brutal.IA: no hay stream, se pega al final de la respuesta que devuelve.
+      ['src/lib/ai.ts', /truncada\s*\?[\s\S]{0,200}?cortado aqui|truncada\s*\?[\s\S]{0,200}?cortado aquí/],
+    ] as const) {
+      const c = leerCodigo(ruta)
+      expect(/stop_reason === 'max_tokens'/.test(c),
+        `${ruta} ya no mira si el modelo corto la respuesta`).toBe(true)
+      expect(ata.test(c),
+        `${ruta} detecta el truncamiento y no se lo dice a quien esta mirando. Que lo MIRE no basta: antes lo miraba y lo escribia en la consola del servidor, que es donde no lo lee nadie.`)
+        .toBe(true)
+    }
+  })
+})
+
 describe('las dos IAs saben lo mismo del equipo', () => {
   // Harvey contestaba «¿que hizo Pablo ayer?» y Brutal.IA no: la misma pregunta,
   // en la misma app, con dos respuestas segun a cual de las dos le hablaras. Desde

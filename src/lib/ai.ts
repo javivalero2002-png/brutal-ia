@@ -494,7 +494,19 @@ Responde siempre en español. Sé directo, concreto y profesional. Formato markd
   }, { timeout: 45_000, maxRetries: 0 })
 
   const reply = textOf(msg) || 'No pude procesar tu mensaje.'
-  return { reply, searched: shouldSearch && results.length > 0 }
+  // 1200 tokens dan de sobra casi siempre, pero «casi siempre» es justo cuando
+  // esto muerde: si piden «dame 30 influencers» la respuesta se corta a mitad de
+  // la 24 y se servía como si estuviera entera. Nadie lo notaba, porque una lista
+  // que acaba sin más parece una lista que acaba.
+  //
+  // Se dice en la propia respuesta, que es donde el usuario está mirando, y no en
+  // la consola del servidor, que es donde estaba el aviso de Harvey — o sea en
+  // ningún sitio.
+  const truncada = (msg as { stop_reason?: string | null }).stop_reason === 'max_tokens'
+  return {
+    reply: truncada ? `${reply}\n\n_(Se me ha cortado aquí por longitud. Pídeme la continuación y sigo.)_` : reply,
+    searched: shouldSearch && results.length > 0,
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
