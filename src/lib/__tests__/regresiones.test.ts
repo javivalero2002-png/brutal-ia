@@ -1204,7 +1204,10 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
   // El calendario del Diario deja PLANIFICAR dias futuros a proposito. Sin tope
   // por arriba, Harvey leia esos planes y los contaba como trabajo hecho.
   it('harvey no lee dias del diario que aun no han pasado', () => {
-    const C = leerCodigo('src/app/api/harvey/chat/route.ts')
+    // El bloque se mudó a `resumenEquipo.ts` cuando Brutal.IA necesitó lo mismo.
+    // La regla lo detectó sola —se puso roja— y por eso se reapunta en vez de
+    // borrarse: la que se borra al mudar el código es la que deja de proteger.
+    const C = leerCodigo('src/lib/resumenEquipo.ts')
     const i = C.indexOf("from('diario')")
     expect(i, 'harvey ya no lee el diario: revisa esta regla').toBeGreaterThan(-1)
     const consulta = C.slice(i, i + 260)
@@ -1322,7 +1325,10 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
   // el modelo recita los titulos de las tareas uno por uno — medido: 130 palabras
   // y los 5 titulos literales, con listas y emojis, en algo que se lee EN VOZ ALTA.
   it('harvey resume el trabajo de alguien en vez de recitarlo', () => {
-    const H = leerCodigo('src/app/api/harvey/chat/route.ts')
+    // Las instrucciones viven pegadas al dato en `resumenEquipo.ts`
+    // (`COMO_LEER_EL_DIARIO`): separarlas es como se acaba mandando el diario sin
+    // decirle al modelo que lo de «se propuso» es un plan y no un hecho.
+    const H = leerCodigo('src/lib/resumenEquipo.ts')
     expect(/CÓMO SE CUENTA LO QUE HA HECHO ALGUIEN/.test(H),
       'se quitó la instrucción de sintetizar: Harvey volvera a leer la lista entera en voz alta').toBe(true)
     expect(/MUESTRA, no la lista completa/.test(H),
@@ -3442,8 +3448,39 @@ describe('el diseño acierta en el PRIMER render, no en el segundo', () => {
   })
 })
 
+describe('las dos IAs saben lo mismo del equipo', () => {
+  // Harvey contestaba «¿que hizo Pablo ayer?» y Brutal.IA no: la misma pregunta,
+  // en la misma app, con dos respuestas segun a cual de las dos le hablaras. Desde
+  // fuera no son dos herramientas —son «la IA»—, y eso no se lee como una
+  // limitacion: se lee como que la IA a veces se inventa que no sabe.
+  it('las dos rutas de chat tiran del mismo modulo', () => {
+    for (const ruta of ['src/app/api/harvey/chat/route.ts', 'src/app/api/chat/route.ts']) {
+      expect(/resumenDelEquipo\(/.test(leerCodigo(ruta)),
+        `${ruta} ya no usa resumenDelEquipo(): o se quedo sin diario de equipo, o tiene su propia copia — que es el gemelo de siempre`)
+        .toBe(true)
+    }
+  })
+
+  it('nadie se ha vuelto a escribir el bloque por su cuenta', () => {
+    // Se mira la PROSA, no la consulta. Un `from('diario')` no es una copia: el
+    // motor de automatizaciones lee el diario de 14 dias para disparar avisos, y
+    // `/api/equipo/resumen` lo lee para la valoracion que solo ve un propietario.
+    // Lo que no puede haber dos veces son las frases del bloque — «se propuso»,
+    // «hizo (cierre del dia)» —, porque son el CONTRATO con el modelo: el prompt
+    // le explica como leerlas, y una segunda copia con otras palabras es una copia
+    // que el prompt no sabe interpretar.
+    // Y la PAREJA de frases, no cualquiera de las dos: `comoVaLaPersona` (la
+    // valoracion que redacta la IA para el panel de equipo, solo propietario)
+    // tambien escribe «se propuso», y comparte ese vocabulario a proposito — pero
+    // cierra con «conto al cerrar» y alimenta otro prompt. No es una copia.
+    const sobran = TS.filter(r => r !== 'src/lib/resumenEquipo.ts' && (c =>
+      /se propuso:/.test(c) && /hizo \(cierre del d/.test(c))(leerCodigo(r)))
+    expect(sobran, `vuelve a haber una copia del bloque de diario fuera del modulo:\n  ${sobran.join('\n  ')}`).toEqual([])
+  })
+})
+
 describe('Harvey sabe lo que pasa en Fichar', () => {
-  const R = leerCodigo('src/app/api/harvey/chat/route.ts')
+  const R = leerCodigo('src/lib/resumenEquipo.ts')
 
   it('trae las horas y el animo, no solo el texto', () => {
     // Javi: «lo que hace cada uno en fichar se va a poder preguntar en Harvey — un

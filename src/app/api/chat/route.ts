@@ -3,6 +3,7 @@ import { memoriaRelevante, lineasDeMemoria } from '@/lib/memoriaRelevante'
 import { leerFicha } from '@/lib/fichaEstudio'
 import { chat } from '@/lib/ai'
 import { checkChatRateLimit } from '@/lib/rate-limit'
+import { resumenDelEquipo } from '@/lib/resumenEquipo'
 import { logQueryErrors } from '@/lib/queryLog'
 import { NextRequest, NextResponse } from 'next/server'
 import { madridDateLabel } from '@/components/shared/helpers'
@@ -19,9 +20,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Demasiadas solicitudes. Espera un momento.' }, { status: 429 })
   }
 
-  const { message } = await request.json()
+  const body = await request.json()
+  const { message } = body
   if (!message?.trim()) return NextResponse.json({ error: 'Empty message' }, { status: 400 })
   if (message.length > 4000) return NextResponse.json({ error: 'Message too long' }, { status: 400 })
+
+  // LA AGENDA LLEGA DEL CLIENTE, que ya la tiene cargada — pedirla aquí serían
+  // segundos de Google en cada mensaje. Pero llegar del cliente no la hace de
+  // fiar: se valida la forma, se acota y el texto se limpia de caracteres de
+  // control (que además rompen la API de Anthropic). Nada de esto se guarda.
+  const eventos = (Array.isArray(body?.eventos) ? body.eventos : [])
+    .slice(0, 60)
+    .filter((e: any) => e && typeof e.title === 'string' && typeof e.start === 'string')
+    .map((e: any) => ({
+      title: e.title.replace(/[\x00-\x1F\x7F]/g, ' ').slice(0, 120).trim(),
+      start: /^\d{4}-\d{2}-\d{2}/.test(e.start) ? e.start.slice(0, 25) : '',
+      cuenta: typeof e.cuenta === 'string' ? e.cuenta.slice(0, 80) : undefined,
+    }))
+    .filter((e: any) => e.title && e.start)
+
 
   const admin = await createAdminClient()
 
@@ -41,7 +58,11 @@ export async function POST(request: NextRequest) {
     admin.from('clients').select('name'),
     admin.from('projects').select('name,status,deadline'),
     admin.from('tasks').select('text,level,assignee:profiles!assigned_to(name)').eq('done', false),
-    admin.from('profiles').select('id'),
+    // `id, name`: se pedía solo `id` para contar. El prompt decía «Equipo: 7
+    // personas» y ya está, así que Brutal.IA no podía contestar quién puede
+    // encargarse de algo ni reconocer un nombre que le dijeras — y Harvey, con los
+    // mismos datos delante, sí.
+    admin.from('profiles').select('id, name'),
     // Fetch emails with content so Brutal IA and Harvey know what they're about
     //
     // El buzón compartido entra aquí SOLO si esta persona lo ve en la Bandeja.
@@ -64,7 +85,11 @@ export async function POST(request: NextRequest) {
     admin.from('chat_messages').select('role, content').eq('user_id', user.id).order('created_at', { ascending: false }).limit(20),
     // Tabla `content_agenda` (no `agenda`), y sin filtro de usuario: el pipeline
     // de contenido es del estudio entero, no de quien pregunta.
-    admin.from('content_agenda').select('id', { count: 'exact', head: true }).neq('status', 'publicado'),
+    // Con TÍTULO, no un `head: true`. El recuento exacto se conserva (`count`)
+    // porque es lo que se dice en la primera línea; lo que faltaba era de qué van
+    // las piezas: «3 piezas programadas» solo contesta cuántas hay.
+    admin.from('content_agenda').select('id,title,platform,status,publish_date', { count: 'exact' })
+      .neq('status', 'publicado').order('publish_date', { ascending: true, nullsFirst: false }).limit(10),
     // LA MEMORIA. Brutal.IA no la veía y Harvey sí, así que las dos IAs de la misma
     // app respondían con información distinta: si el brief de un cliente o las
     // tarifas estaban en Memoria, una lo sabía y la otra no. Desde fuera parecen la
@@ -93,7 +118,7 @@ export async function POST(request: NextRequest) {
   // que esto registra sin romper la respuesta.
   logQueryErrors('chat', q)
 
-  const [{ data: profile }, { data: clients }, { data: projects }, { data: tasks }, { data: team }, { data: inbox }, { data: history }, { count: contentPipelineCount }, { data: curadas }, { data: documentos }] = q
+  const [{ data: profile }, { data: clients }, { data: projects }, { data: tasks }, { data: team }, { data: inbox }, { data: history }, { data: contenido, count: contentPipelineCount }, { data: curadas }, { data: documentos }] = q
 
   const emailsList = (inbox || []).map((e: any) => ({
     from: e.from_name || '',
@@ -118,8 +143,16 @@ export async function POST(request: NextRequest) {
         unreadInbox: (inbox || []).filter((e: any) => !e.is_read).length,
         emails: emailsList,
         teamSize: team?.length || 1,
+        team: (team || []).map((m: any) => m.name).filter(Boolean),
         todayDate: madridDateLabel({ weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
         contentPipeline: contentPipelineCount ?? 0,
+        contenido: (contenido || []).map((c: any) => ({
+          title: c.title, platform: c.platform, status: c.status, publish_date: c.publish_date,
+        })).filter((c: any) => c.title),
+        eventos,
+        // El diario del equipo, con el MISMO módulo que Harvey. Se decide dentro
+        // si la pregunta lo pide: la mayoría no, y son cientos de tokens.
+        diarioEquipo: await resumenDelEquipo(admin, (team || []) as any, message) || undefined,
         // Elegidas con la MISMA función que usa Harvey. Pasarlas todas reventaría el
         // contexto —hay notas largas— y elegirlas con otro criterio aquí sería
         // volver a tener dos IAs que saben cosas distintas.

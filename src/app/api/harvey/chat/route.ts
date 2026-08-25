@@ -1,10 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
 import { leerFicha } from '@/lib/fichaEstudio'
-import { todayKey, localDayKey, ventanaDelDia, esTareaDe } from '@/components/shared/helpers'
+import { todayKey } from '@/components/shared/helpers'
 import { webSearch, needsWebSearch, formatSearchContextVoice } from '@/lib/ai'
 import { checkHarveyRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
 import { sanearHistorial } from '@/lib/historialIA'
+import { resumenDelEquipo, COMO_LEER_EL_DIARIO } from '@/lib/resumenEquipo'
 
 // Chat + búsqueda web + reintentos de modelo pueden superar los 10s por defecto
 export const maxDuration = 60
@@ -175,118 +176,17 @@ export async function POST(request: NextRequest) {
 
     // ── Quién hizo qué, y solo cuando lo preguntan ─────────────────────────
     //
-    // «¿Qué hizo Pablo ayer?» o «¿cómo ha ido la semana del equipo?» no se pueden
-    // contestar sin este dato, y Harvey no lo tenía: su contexto lo arma el
-    // cliente y ahí no está el diario.
-    //
-    // Va CONDICIONADO a propósito. Son ~7 personas × 7 días: metido en cada
-    // mensaje serían cientos de tokens pagados en las preguntas que no van de
-    // esto, que son la mayoría. El disparador es tosco —nombres del equipo o
-    // palabras de balance— y se equivoca por defecto hacia NO incluirlo: si
-    // Harvey no lo trae, dice que no lo sabe, que es mejor que inventárselo.
-    const pregunta = String(userContent || '').toLowerCase()
-    const nombraAAlguien = (plantilla ?? []).some(p =>
-      p.name && p.name.trim().length > 2 && pregunta.includes(p.name.toLowerCase().split(' ')[0]))
-    // Nombrar a alguien ya basta (`nombraAAlguien`), así que «¿en qué anda Paula?»
-    // entra por ahí. Esto cubre las de equipo SIN nombre. Se amplía con lo que un
-    // jefe dice de verdad —«cómo anda el equipo», «dame el parte», «quién está
-    // liado»— y no con palabras corrientes como «hoy» o «tarea», que dispararían
-    // en la mayoría de preguntas y se pagan en tokens cada vez.
-    const preguntaPorTrabajo = /\b(hizo|hicieron|hecho|hiciste|avanz|complet|equipo|semana|ayer|diario|fich|anda|liad|parte|trabaj|progres|rendimiento|objetiv)/.test(pregunta)
-
-    let resumenEquipo = ''
-    if (nombraAAlguien || preguntaPorTrabajo) {
-      const desde = new Date(`${todayKey()}T12:00:00Z`)
-      desde.setUTCDate(desde.getUTCDate() - 6)
-      const desdeClave = localDayKey(desde)
-
-      const [{ data: diarios }, { data: hechas }] = await Promise.all([
-        // `.lte` con hoy: el calendario del Diario deja PLANIFICAR días futuros
-        // a propósito, y sin tope por arriba Harvey leía esos planes y los
-        // contaba como trabajo terminado delante de quien preguntara.
-        admin.from('diario').select('dia,user_id,entrada,cierre,entrada_at,cierre_at,animo')
-          .gte('dia', desdeClave).lte('dia', todayKey()),
-        admin.from('tasks').select('text,assigned_to,co_assigned_to,completed_at').eq('done', true)
-          .gte('completed_at', ventanaDelDia(desdeClave).desde),
-      ])
-
-      const lineasEquipo = (plantilla ?? []).map(p => {
-        const mios = (diarios ?? []).filter(d => d.user_id === p.id)
-        const tareas = (hechas ?? []).filter(t =>
-          esTareaDe(t, p) && t.completed_at && localDayKey(t.completed_at) >= desdeClave)
-        if (!mios.length && !tareas.length) return null
-        // Las dos mitades van ETIQUETADAS y son cosas opuestas: `entrada` es lo
-        // que alguien SE PROPUSO (el esquema lo dice: «lo que voy a hacer hoy») y
-        // `cierre` lo que HIZO. Iban las dos seguidas bajo una cabecera que decía
-        // «DIARIO DEL EQUIPO», así que Harvey leía los planes como resultados.
-        // Y un día sin cerrar se dice, en vez de dejar que parezca un cero.
-        const porDia = mios.map(d => {
-          const objetivos = (d.entrada || '').split('\n').filter(Boolean).join(' / ')
-          // HORAS Y ÁNIMO, que es lo que Fichar guarda desde que se rehízo y Harvey
-          // no estaba viendo. Javi: «lo que hace cada uno en fichar se va a poder
-          // preguntar en Harvey — un jefe pregunta qué ha hecho hoy X persona».
-          //
-          // Sin esto, Harvey contesta QUÉ escribió alguien pero no CUÁNTO estuvo ni
-          // CÓMO le fue, que es media respuesta: «se propuso tres cosas y cerró con
-          // una» significa algo muy distinto si estuvo dos horas o si estuvo nueve.
-          const horas = (() => {
-            if (!d.entrada_at) return null
-            // Sin cierre se dice «lleva», no «estuvo»: el día no ha terminado y dar
-            // un total cerrado sobre algo en curso es afirmar de más.
-            const fin = d.cierre_at ? new Date(d.cierre_at).getTime() : Date.now()
-            const ms = fin - new Date(d.entrada_at).getTime()
-            if (ms <= 0) return null
-            const h = Math.floor(ms / 3_600_000)
-            const m = Math.round((ms % 3_600_000) / 60_000)
-            const dur = h > 0 ? `${h}h${m ? ` ${m}m` : ''}` : `${m}m`
-            return d.cierre_at ? `estuvo ${dur}` : `lleva ${dur} (sin cerrar)`
-          })()
-          const ANIMO: Record<string, string> = {
-            productivo: 'lo calificó de día productivo',
-            normal: 'lo calificó de día normal',
-            bloqueado: 'se marcó BLOQUEADO',
-          }
-          const partes = [
-            objetivos ? `se propuso: ${objetivos}` : 'no escribió objetivos',
-            d.cierre ? `hizo (cierre del día): ${d.cierre}` : (d.cierre_at ? 'cerró el día sin escribir balance' : 'no cerró el día'),
-            ...(horas ? [horas] : []),
-            ...(d.animo && ANIMO[d.animo as string] ? [ANIMO[d.animo as string]] : []),
-          ]
-          return `    ${d.dia} — ${partes.join(' · ')}`
-        })
-        // Se recorta a 5 y se dice el TOTAL aparte: lo que se pide cuando alguien
-        // pregunta «qué ha hecho X» es un juicio, no un inventario. Con la lista
-        // entera delante, el modelo tiende a recitarla — y una respuesta que se lee
-        // en voz alta con veinte títulos de tarea no la escucha nadie.
-        const lista = tareas.slice(0, 5).map(t => t.text).join(' · ')
-        const mas = tareas.length > 5 ? ` y ${tareas.length - 5} más` : ''
-        return `  ${p.name}: ${tareas.length} tarea(s) completada(s) en 7 días${lista ? ` (ejemplos: ${lista}${mas})` : ''}\n${porDia.join('\n')}`
-      }).filter(Boolean)
-
-      if (lineasEquipo.length) {
-        resumenEquipo = `\n\nDIARIO DEL EQUIPO (últimos 7 días, desde ${desdeClave}):\n${lineasEquipo.join('\n')}`
-      }
-    }
+    // Vive en `resumenEquipo.ts` desde que Brutal.IA necesitó lo mismo: era esto
+    // exactamente lo que hacía que la misma pregunta tuviera dos respuestas según
+    // a cuál de las dos IAs se la hicieras. El disparador (para no pagar el bloque
+    // en las preguntas que no van de esto) y el formato están allí.
+    const resumenEquipo = await resumenDelEquipo(admin, plantilla ?? [], String(userContent || ''))
 
     const systemPrompt = `Eres Harvey, la inteligencia artificial ejecutiva de Brutal Studios.
 
 CON QUIEN ESTAS HABLANDO AHORA: ${nombreUsuario || 'un miembro del equipo'}.${resumenEquipo}
 
-Lo que va tras «se propuso» es un PLAN, no un hecho: no lo cuentes como trabajo
-terminado. Lo hecho es lo que va tras «hizo (cierre del día)» y las tareas completadas.
-
-CÓMO SE CUENTA LO QUE HA HECHO ALGUIEN. El bloque de arriba son datos en bruto para
-que TÚ los interpretes, no un guion que leer. Nunca los recites.
-- Di el TITULAR primero: cuánto ha cerrado y en qué ha estado centrado. Dos frases.
-- Agrupa por tema o cliente («casi todo Mango»), no enumeres tarea por tarea.
-- Nombra como mucho dos ejemplos concretos, y solo si aportan algo.
-- Señala lo que llama la atención: un día sin cerrar, algo que se repite sin
-  terminarse, una diferencia grande entre lo que se propuso y lo que hizo.
-- Si te preguntan por VARIAS personas, una frase por persona y nada más.
-- Los ejemplos que te doy son una MUESTRA, no la lista completa: no digas «solo ha
-  hecho estas» ni des a entender que es todo lo que hay.
-Si te preguntan qué ha hecho alguien y NO aparece en el diario de arriba, dilo:
-«no tengo su diario de esos días». No lo deduzcas de las tareas ni te lo inventes.
+${COMO_LEER_EL_DIARIO.trim()}
 Cuando diga "para mi", "asignamela", "me lo apunto" o hable en primera persona sin
 nombrar a nadie, se refiere a esta persona. Tu voz es serena, precisa y con autoridad. Como JARVIS para una agencia creativa.
 
