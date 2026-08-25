@@ -307,14 +307,17 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
       const res = await fetch('/api/inbox/harvey-draft', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fromName: m.from_name,
-          fromEmail: m.from_email,
-          subject: m.subject,
-          summary: m.ai_summary,
-          aiAction: m.ai_action,
-          senderLanguage: 'español',
-        }),
+        // SOLO EL ID. Antes se mandaban seis campos elegidos por el navegador, y
+        // eso tenia dos problemas: el servidor no podia comprobar nada —ni que ese
+        // correo fuera tuyo— y el modelo recibia lo que el cliente decidiera
+        // contarle. Entre otras cosas, `senderLanguage: 'español'` escrito A MANO,
+        // asi que a un correo en ingles se le decia que el remitente escribia en
+        // español y se le respondia en español.
+        //
+        // Ahora el servidor lee la fila, comprueba que puedes verla, y compone el
+        // contexto el: ficha del estudio, memoria, el cliente si lo es, y los
+        // correos anteriores de esa direccion.
+        body: JSON.stringify({ id: m.id }),
       })
       const json = await res.json().catch(()=>({}))
       if (turno !== borradorRef.current) return   // ha ganado otra peticion mas nueva

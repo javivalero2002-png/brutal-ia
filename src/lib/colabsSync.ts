@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { leerFicha } from '@/lib/fichaEstudio'
 import { anotarError } from '@/lib/errores'
 import { cuentaCompartida, cuentasDe, quitarCuenta } from '@/lib/gmailCuentas'
 import { aplazarResto } from '@/lib/aplazarCorreos'
@@ -126,6 +127,9 @@ async function syncColabsInboxSinCerrojo(
 
   const { data: clientsData } = await admin.from('clients').select('name')
   const knownClients = (clientsData || []).map((c: { name: string }) => c.name)
+  // La ficha, UNA vez por pasada y no por correo: es la misma para todos y
+  // pedirla veinte veces seria pagar veinte lecturas por el mismo texto.
+  const fichaEstudio = await leerFicha(admin)
 
   // T0 arranca AQUI, no junto al bucle: el fetch de Gmail y sus consultas tambien
   // gastan del minuto de la funcion. Medirlo desde despues era contar solo una
@@ -248,7 +252,7 @@ async function syncColabsInboxSinCerrojo(
       const plazo = Math.min(plazoRestante(T0, 60), TOPE_COLABS_MS - (Date.now() - T0))
       if (plazo < MINIMO_UTIL_MS) { truncado = true; corte = indice; break }
       try {
-        analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients, plazo)
+        analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients, plazo, fichaEstudio)
       } catch { aiFailures++ }
       estado = !analysis || analysis.degraded ? 'fallo' : 'ok'
     } else {
@@ -476,6 +480,9 @@ async function syncPersonalInboxSinCerrojo(
 
   const { data: clientsData } = await admin.from('clients').select('name')
   const knownClients = (clientsData || []).map((c: { name: string }) => c.name)
+  // La ficha, UNA vez por pasada y no por correo: es la misma para todos y
+  // pedirla veinte veces seria pagar veinte lecturas por el mismo texto.
+  const fichaEstudio = await leerFicha(admin)
 
   // T0 arranca AQUI, no junto al bucle: el fetch de Gmail y sus consultas tambien
   // gastan del minuto de la funcion. Medirlo desde despues era contar solo una
@@ -593,7 +600,7 @@ async function syncPersonalInboxSinCerrojo(
       const plazo = Math.min(plazoRestante(T0, 60), TOPE_PERSONAL_MS - (Date.now() - T0))
       if (plazo < MINIMO_UTIL_MS) { truncado = true; corte = indice; break }
       try {
-        analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients, plazo)
+        analysis = await analyzeEmail(email.subject || '', (email.body_preview || '').slice(0, 800), email.from_name, knownClients, plazo, fichaEstudio)
       } catch { aiFailures++ }
       estado = !analysis || analysis.degraded ? 'fallo' : 'ok'
     } else {

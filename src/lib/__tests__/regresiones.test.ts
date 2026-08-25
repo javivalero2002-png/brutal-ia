@@ -3771,6 +3771,76 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('las superficies de IA se DERIVAN, no se enumeran', () => {
+  // Javi: «cuando le das a redactar, Harvey y la IA tienen constancia de toda la
+  // empresa y todo el contexto». Lo daba por hecho. NO ERA ASI.
+  //
+  // `/api/inbox/harvey-draft` era la TERCERA superficie de IA de la app y la unica
+  // sin nada: 61 lineas, CERO consultas de negocio. Ni ficha, ni memoria, ni
+  // clientes, ni un solo correo anterior de ese remitente. Ni el cuerpo del email
+  // —solo `ai_summary`, que es un resumen de un resumen—. Y `senderLanguage:
+  // 'español'` escrito A MANO en el cliente, asi que a un correo en ingles se le
+  // decia que el remitente escribia en español.
+  //
+  // POR QUE NO LO CAZO NINGUNA REGLA: las que exigen contexto ENUMERABAN a mano
+  // las superficies, y eran una lista de dos ficheros. Una tercera se escapaba
+  // sola, y una cuarta se escapara igual.
+  //
+  // Esta regla no enumera: BUSCA quien llama al modelo y exige que cada uno tenga
+  // contexto o este en la lista de excepciones CON SU MOTIVO.
+  const RUTAS = ficheros('src/app/api', ['.ts'])
+    .filter(f => /anthropic\.messages\.create/.test(leerCodigo(f)))
+
+  /**
+   * Superficies que llaman al modelo y NO necesitan la ficha del estudio, cada
+   * una con su motivo. Si una deja de cumplirlo, hay que sacarla de aqui.
+   */
+  const SIN_FICHA: Record<string, string> = {
+    'src/app/api/documents/route.ts':
+      'ingesta de un PDF: extrae texto para METERLO en memoria. Darle la ficha seria contarle lo que ya sabemos para que resuma lo que aun no sabemos.',
+    'src/app/api/projects/analyze-pdf/route.ts':
+      'analiza el PDF de UN proyecto concreto, y el propio documento es todo el contexto que necesita. Ademas es el unico sitio con prompt caching y meterle un bloque que cambia cada hora lo invalidaria.',
+    'src/app/api/clients/[id]/ai-advice/route.ts':
+      'consejo sobre UN cliente, con la ficha de ese cliente delante. Pendiente de revisar si le vendria bien, pero hoy no es un fallo mudo.',
+  }
+
+  it('toda superficie de IA tiene contexto, o una excepcion escrita', () => {
+    expect(RUTAS.length, 'ya no hay rutas que llamen al modelo: revisa esta regla en vez de borrarla')
+      .toBeGreaterThan(2)
+    const sinNada: string[] = []
+    for (const f of RUTAS) {
+      if (SIN_FICHA[f]) continue
+      const src = leerCodigo(f)
+      if (!/leerFicha\(/.test(src)) sinNada.push(f)
+    }
+    expect(sinNada, `superficies de IA sin la ficha del estudio y sin excepcion escrita — hablaran del estudio sin saber quien es:\n  ${sinNada.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('las excepciones que se apuntan siguen existiendo', () => {
+    // Una excepcion que sobra es una mentira que se lee como una decision.
+    const fantasmas = Object.keys(SIN_FICHA).filter(f => !RUTAS.includes(f))
+    expect(fantasmas, `hay excepciones apuntadas para ficheros que ya no llaman al modelo:\n  ${fantasmas.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('el borrador compone su contexto en el SERVIDOR, no se fia del navegador', () => {
+    const D = leerCodigo('src/app/api/inbox/harvey-draft/route.ts')
+    // El cliente manda un id; el servidor lee la fila y comprueba que puede verla.
+    // Con seis campos sueltos, el navegador elegia que contarle al modelo y el
+    // servidor no podia comprobar ni que ese correo fuera tuyo.
+    expect(/from\('inbox_messages'\)/.test(D),
+      'el borrador vuelve a fiarse de lo que le mande el navegador: no puede comprobar de quien es el correo')
+      .toBe(true)
+    expect(/ver_colabs/.test(D),
+      'el borrador no comprueba ver_colabs: se podria redactar —y leer— un correo del buzon compartido sin permiso')
+      .toBe(true)
+    expect(/senderLanguage/.test(D + leerCodigo('src/components/sections/InboxSection.tsx')),
+      'vuelve el idioma escrito a mano: a un correo en ingles se le respondera en español')
+      .toBe(false)
+  })
+})
+
 describe('fichar significa una sola cosa en toda la app', () => {
   // Javi: «aqui me pone 3 seguidos y en verdad no complete ningun dia de fichar».
   //

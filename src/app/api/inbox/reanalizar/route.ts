@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { leerFicha } from '@/lib/fichaEstudio'
 import { checkAiRateLimit } from '@/lib/rate-limit'
 import { analyzeEmail } from '@/lib/ai'
 import { NextRequest, NextResponse } from 'next/server'
@@ -62,6 +63,7 @@ export async function POST(request: NextRequest) {
     // Plazo generoso: es UNA llamada pedida a mano, con alguien mirando la
     // pantalla. No compite con nada.
     45_000,
+    await leerFicha(admin),
   )
 
   // `degraded` significa que el modelo no respondió y esto es el apaño local. No
