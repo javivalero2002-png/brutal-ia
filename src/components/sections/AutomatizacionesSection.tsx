@@ -24,8 +24,55 @@ interface PropsAutomatizaciones {
   isOwner: any
 }
 
+
+/** El catálogo de lo que la app SABE vigilar.
+ *
+ *  Vive fuera del componente y se pinta SIEMPRE. Antes estaba dentro de un
+ *  `{data.reglas.length===0 && …}`, o sea que al añadir la primera regla
+ *  desaparecían las once. Javi: «cuando seleccionas una y le das a usar, ya no te
+ *  aparecen como ejemplo para poder añadirlas; quiero que sigan apareciendo».
+ *
+ *  Y tiene más sentido del que parece: esconderlas justo al usar la primera deja
+ *  al equipo sin saber qué más se puede hacer, en el momento en que acaba de
+ *  descubrir que la sección sirve para algo. */
+const PLANTILLAS = [
+// ── DE CONTROL, primero ─────────────────────────────────────
+// Javi: «el jefe puede ponerse un aviso de que alguien lleva dos
+// días sin fichar». Las de abajo miran COSAS —correos, tareas,
+// proyectos—; estas miran PERSONAS, que es lo que un jefe necesita
+// y no había. Van arriba porque son las que él pidió y las que
+// responden a la pregunta que se hace todos los días.
+{name:'Alguien lleva 2 días sin fichar', cond:'2 días laborables sin fichar', act:'Avisarme a mí',
+ config:{v:1,trigger:{type:'sin_fichar',threshold:2},action:{type:'notify_owner',message:'{persona} lleva {dias} días sin fichar'}}},
+{name:'Alguien se ha marcado bloqueado', cond:'Se marca BLOQUEADO al cerrar el día', act:'Avisarme a mí',
+ config:{v:1,trigger:{type:'bloqueado'},action:{type:'notify_owner',message:'{persona} se marcó bloqueado el {dia}'}}},
+{name:'Día fichado y sin cerrar', cond:'Fichó y no cerró el día', act:'Avisarme a mí',
+ config:{v:1,trigger:{type:'dia_sin_cerrar'},action:{type:'notify_owner',message:'{persona} no cerró el día {dia}'}}},
+
+// ── DE ALTA ─────────────────────────────────────────────────
+{name:'Nuevo proyecto añadido', cond:'Se crea un proyecto', act:'Notificar al equipo',
+ config:{v:1,trigger:{type:'proyecto_nuevo'},action:{type:'notify_team',message:'Nuevo proyecto: {proyecto}'}}},
+{name:'Nueva pieza de contenido', cond:'Se añade una pieza', act:'Notificar al equipo',
+ config:{v:1,trigger:{type:'pieza_nueva'},action:{type:'notify_team',message:'Nueva pieza: {pieza}'}}},
+
+{name:'Seguimiento de emails urgentes', cond:'Email urgente sin leer', act:'Crear tarea (alta)',
+ config:{v:1,trigger:{type:'email_urgent'},action:{type:'create_task',taskText:'Responder a {remitente} sobre {asunto}',level:'high'}}},
+{name:'Alerta de deadline próximo', cond:'Deadline en < 7 días', act:'Notificar al equipo',
+ config:{v:1,trigger:{type:'project_deadline',days:7},action:{type:'notify_team',message:'Deadline cercano en {proyecto} ({dias} días)'}}},
+{name:'Inbox saturado', cond:'15+ emails sin leer', act:'Avisarme a mí',
+ config:{v:1,trigger:{type:'unread_pileup',threshold:15},action:{type:'notify_owner',message:'Tienes {total} emails sin leer'}}},
+{name:'Muchas tareas vencidas', cond:'5+ tareas vencidas', act:'Avisarme a mí',
+ config:{v:1,trigger:{type:'many_overdue',threshold:5},action:{type:'notify_owner',message:'Tienes {total} tareas vencidas pendientes'}}},
+{name:'Tareas urgentes sin asignar', cond:'Tareas urgentes sin responsable', act:'Notificar al equipo',
+ config:{v:1,trigger:{type:'high_priority_unassigned'},action:{type:'notify_team',message:'Tarea urgente sin asignar: {tarea}'}}},
+]
+
 function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: PropsAutomatizaciones) {
   const isMobile = useIsMobile()
+  // Las plantillas que ya se han usado, por nombre. Es la clave con la que se
+  // crean, asi que es la unica comparacion honesta que se puede hacer.
+  const enUso = new Set(data.reglas.map((r: Regla) => r.name))
+
   const activeCount = data.reglas.filter((r: Regla)=>r.active).length
   const totalFired = data.reglas.reduce((s: number, r: Regla)=>s+(r.trigger_count||0),0)
   const autoCount = data.reglas.filter((r: Regla)=>r.active && isStructured(r)).length
@@ -278,41 +325,13 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: PropsAuto
           </div>
         ))}
         {reglaSearch && visibleReglas.length===0&&<div className="py-10 text-center text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Sin resultados para "{reglaSearch}"</div>}
-        {data.reglas.length===0&&(
+        {(
           <div className="py-10 px-6">
-            <div className="text-center text-[12px] mb-6" style={{color:'rgba(255,255,255,0.2)'}}>Sin reglas · empieza con una plantilla</div>
+            <div className="text-center text-[12px] mb-6" style={{color:'rgba(255,255,255,0.2)'}}>
+              {data.reglas.length===0 ? 'Sin reglas · empieza con una plantilla' : 'Plantillas · lo que la app sabe vigilar'}
+            </div>
             <div className="space-y-2">
-              {[
-                // ── DE CONTROL, primero ─────────────────────────────────────
-                // Javi: «el jefe puede ponerse un aviso de que alguien lleva dos
-                // días sin fichar». Las de abajo miran COSAS —correos, tareas,
-                // proyectos—; estas miran PERSONAS, que es lo que un jefe necesita
-                // y no había. Van arriba porque son las que él pidió y las que
-                // responden a la pregunta que se hace todos los días.
-                {name:'Alguien lleva 2 días sin fichar', cond:'2 días laborables sin fichar', act:'Avisarme a mí',
-                 config:{v:1,trigger:{type:'sin_fichar',threshold:2},action:{type:'notify_owner',message:'{persona} lleva {dias} días sin fichar'}}},
-                {name:'Alguien se ha marcado bloqueado', cond:'Se marca BLOQUEADO al cerrar el día', act:'Avisarme a mí',
-                 config:{v:1,trigger:{type:'bloqueado'},action:{type:'notify_owner',message:'{persona} se marcó bloqueado el {dia}'}}},
-                {name:'Día fichado y sin cerrar', cond:'Fichó y no cerró el día', act:'Avisarme a mí',
-                 config:{v:1,trigger:{type:'dia_sin_cerrar'},action:{type:'notify_owner',message:'{persona} no cerró el día {dia}'}}},
-
-                // ── DE ALTA ─────────────────────────────────────────────────
-                {name:'Nuevo proyecto añadido', cond:'Se crea un proyecto', act:'Notificar al equipo',
-                 config:{v:1,trigger:{type:'proyecto_nuevo'},action:{type:'notify_team',message:'Nuevo proyecto: {proyecto}'}}},
-                {name:'Nueva pieza de contenido', cond:'Se añade una pieza', act:'Notificar al equipo',
-                 config:{v:1,trigger:{type:'pieza_nueva'},action:{type:'notify_team',message:'Nueva pieza: {pieza}'}}},
-
-                {name:'Seguimiento de emails urgentes', cond:'Email urgente sin leer', act:'Crear tarea (alta)',
-                 config:{v:1,trigger:{type:'email_urgent'},action:{type:'create_task',taskText:'Responder a {remitente} sobre {asunto}',level:'high'}}},
-                {name:'Alerta de deadline próximo', cond:'Deadline en < 7 días', act:'Notificar al equipo',
-                 config:{v:1,trigger:{type:'project_deadline',days:7},action:{type:'notify_team',message:'Deadline cercano en {proyecto} ({dias} días)'}}},
-                {name:'Inbox saturado', cond:'15+ emails sin leer', act:'Avisarme a mí',
-                 config:{v:1,trigger:{type:'unread_pileup',threshold:15},action:{type:'notify_owner',message:'Tienes {total} emails sin leer'}}},
-                {name:'Muchas tareas vencidas', cond:'5+ tareas vencidas', act:'Avisarme a mí',
-                 config:{v:1,trigger:{type:'many_overdue',threshold:5},action:{type:'notify_owner',message:'Tienes {total} tareas vencidas pendientes'}}},
-                {name:'Tareas urgentes sin asignar', cond:'Tareas urgentes sin responsable', act:'Notificar al equipo',
-                 config:{v:1,trigger:{type:'high_priority_unassigned'},action:{type:'notify_team',message:'Tarea urgente sin asignar: {tarea}'}}},
-              ].map((tpl,i)=>(
+              {PLANTILLAS.map((tpl,i)=>(
                 <div key={i} className="flex items-center gap-4 px-5 py-4 rounded-2xl transition-all" style={{background:'rgba(27,95,250,0.03)',border:'1px solid rgba(27,95,250,0.1)'}}>
                   <div className="flex-1 min-w-0">
                     <div className="font-figtree text-[13px] font-semibold text-white mb-1">{tpl.name}</div>
@@ -322,7 +341,13 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: PropsAuto
                       <span>{tpl.act}</span>
                     </div>
                   </div>
-                  {isOwner && <button onClick={async()=>{try{await data.createRegla({name:tpl.name,condition_text:JSON.stringify(tpl.config),action_text:`${tpl.cond} › ${tpl.act}`,active:true});showToast('Regla creada · el motor la ejecutará')}catch{showToast('Error')}}} className="flex-shrink-0 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(27,95,250,0.12)',color:BLU,border:'1px solid rgba(27,95,250,0.2)'}}>+ USAR</button>}
+                    {/* La que ya tienes se queda A LA VISTA, pero sin poder añadirse
+                        otra vez: dos reglas iguales avisan dos veces, y a la tercera
+                        nadie lee los avisos. Se recupera sola si borras la regla. */}
+                    {isOwner && (enUso.has(tpl.name)
+                      ? <span className="flex-shrink-0 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide"
+                          style={{background:'rgba(46,212,122,0.1)',color:GRN,border:'1px solid rgba(46,212,122,0.22)'}}>YA LA TIENES</span>
+                      : <button onClick={async()=>{try{await data.createRegla({name:tpl.name,condition_text:JSON.stringify(tpl.config),action_text:`${tpl.cond} › ${tpl.act}`,active:true});showToast('Regla creada · el motor la ejecutará')}catch{showToast('Error')}}} className="flex-shrink-0 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(27,95,250,0.12)',color:BLU,border:'1px solid rgba(27,95,250,0.2)'}}>+ USAR</button>)}
                 </div>
               ))}
             </div>
