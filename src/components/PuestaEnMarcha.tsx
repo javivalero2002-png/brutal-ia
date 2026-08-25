@@ -28,6 +28,24 @@ import { activarPush } from '@/lib/activarPush'
 
 const CLAVE_PASO = 'nx_onboarding_paso'
 
+// FUERA EL PASO DE CONTRASEÑA.
+//
+// Javi: «quítalo porque ya lo has hecho al principio, cuando pasó el enlace».
+// El camino normal es el enlace de invitación, y ahí la contraseña se pone en
+// esa misma pantalla treinta segundos antes: volver a pedirla en la primera
+// pantalla de la app es explicar un motivo que no existe.
+//
+// Había un apaño —`nx_clave_elegida` en localStorage— que cambiaba el TEXTO
+// según si la habías puesto, pero el paso salía igual. Y solo funcionaba si
+// habías pasado por /reset-password en ESE navegador, así que con otro móvil
+// o una pestaña privada volvía a decirte que te la había dado otra persona.
+//
+// No se pierde nada: cambiar la contraseña sigue estando en Operativa →
+// Ajustes, que es donde se busca cuando se quiere cambiar — no en un recorrido
+// de bienvenida.
+const PASOS = ['Bienvenida', 'Tu ficha', 'Instalar', 'Gmail', 'Avisos', 'Listo']
+
+
 /**
  * Olvida el paso a medias. Se exporta porque quien REABRE el recorrido a mano
  * (Operativa → «Ver la puesta en marcha») tiene que empezar por el principio, y
@@ -167,7 +185,18 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
   useEffect(() => {
     try {
       const guardado = Number(localStorage.getItem(CLAVE_PASO))
-      if (Number.isFinite(guardado) && guardado > 0) setPaso(guardado)
+      // ACOTADO AL ÚLTIMO PASO QUE EXISTE. Sin esto, un número guardado que ya no
+      // existe revienta el render entero: `PASOS[6]` es `undefined` y
+      // `.toUpperCase()` lanza. Y como el valor vive en localStorage, pasa en CADA
+      // carga — la app queda inaccesible sin abrir la consola del navegador.
+      //
+      // No es teórico: hoy mismo se quitó el paso de contraseña y la lista pasó de
+      // 7 a 6. Quien hubiera llegado a «Listo» sin pulsar ENTRAR tenía un 6
+      // guardado, y ese 6 ya no es un paso.
+      //
+      // Esta pantalla es la única que se interpone entre alguien y su herramienta
+      // de trabajo: si falla, no falla una sección, falla el acceso.
+      if (Number.isFinite(guardado) && guardado > 0) setPaso(Math.min(guardado, PASOS.length - 1))
     } catch { /* sin localStorage se empieza por el principio, que tampoco es grave */ }
   }, [])
 
@@ -251,22 +280,6 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
   // El ASPECTO no está aquí a propósito: ya se elige al arrancar la app, en la
   // pantalla de la insignia, y con mejor tratamiento que unas muestras de color.
   // Repetirlo aquí sería preguntar dos veces lo mismo en el primer minuto.
-  // FUERA EL PASO DE CONTRASEÑA.
-  //
-  // Javi: «quítalo porque ya lo has hecho al principio, cuando pasó el enlace».
-  // El camino normal es el enlace de invitación, y ahí la contraseña se pone en
-  // esa misma pantalla treinta segundos antes: volver a pedirla en la primera
-  // pantalla de la app es explicar un motivo que no existe.
-  //
-  // Había un apaño —`nx_clave_elegida` en localStorage— que cambiaba el TEXTO
-  // según si la habías puesto, pero el paso salía igual. Y solo funcionaba si
-  // habías pasado por /reset-password en ESE navegador, así que con otro móvil
-  // o una pestaña privada volvía a decirte que te la había dado otra persona.
-  //
-  // No se pierde nada: cambiar la contraseña sigue estando en Operativa →
-  // Ajustes, que es donde se busca cuando se quiere cambiar — no en un recorrido
-  // de bienvenida.
-  const PASOS = ['Bienvenida', 'Tu ficha', 'Instalar', 'Gmail', 'Avisos', 'Listo']
   const ultimo = PASOS.length - 1
 
   const Cabecera = ({ icono, eyebrow, titulo, bajada, opcional }: { icono: string; eyebrow: string; titulo: string; bajada: string; opcional?: boolean }) => (
@@ -481,7 +494,7 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
                       cuenta de que tiene dos correos, no en Operativa tres días
                       después. */}
                   <a href="/api/gmail/connect?account=personal"
-                    onClick={() => { try { localStorage.setItem(CLAVE_PASO, '3') } catch {} }}
+                    onClick={() => irA(paso)}
                     className="flex items-center justify-center gap-2 w-full py-2.5 rounded-2xl font-syne text-[8.5px] font-black tracking-widest mt-0.5"
                     style={{ background: 'rgba(255,255,255,0.03)', border: `1px dashed ${BORDER}`, color: 'rgba(255,255,255,0.4)' }}>
                     <LucideIcon name="plus" size={12} color="rgba(255,255,255,0.4)" />
@@ -497,7 +510,7 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
                   </p>
                   <div className="mb-3"><AvisoGoogle /></div>
                   <a href="/api/gmail/connect?account=personal"
-                    onClick={() => { try { localStorage.setItem(CLAVE_PASO, '4') } catch {} }}
+                    onClick={() => irA(paso)}
                     className="flex items-center justify-center gap-2 w-full py-3 rounded-2xl font-syne text-[9px] font-black tracking-widest"
                     style={{ background: `${BLU}18`, border: `1px solid ${BLU}38`, color: BLU }}>
                     <LucideIcon name="mail" size={13} color={BLU} />
