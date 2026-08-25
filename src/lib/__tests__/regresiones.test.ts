@@ -3757,6 +3757,50 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('la puesta en marcha no puede dejar a nadie fuera', () => {
+  // ESTA PANTALLA ES LA UNICA QUE SE INTERPONE ENTRE ALGUIEN Y SU HERRAMIENTA DE
+  // TRABAJO. Si falla, no falla una seccion: falla el acceso. Y no vive dentro de
+  // ningun SectionErrorBoundary, asi que un error de render sube a global-error.
+  //
+  // Las dos reglas de aqui nacen de DOS REGRESIONES REALES metidas el mismo dia,
+  // las dos por escribir a mano un numero que ya no era el que era:
+  //
+  //   1. Al quitar el paso de contrasena, PASOS paso de 7 a 6. Quien hubiera
+  //      llegado a «Listo» sin pulsar ENTRAR tenia un 6 guardado en localStorage,
+  //      y `PASOS[6].toUpperCase()` lanza. Como el valor persiste, pasaba en CADA
+  //      carga: app inaccesible sin abrir la consola del navegador.
+  //   2. El boton CONECTAR GMAIL guardaba el literal '4' para volver a su paso.
+  //      Era correcto cuando Gmail era el 4; tras renumerar es el 3, asi que
+  //      volver de Google te dejaba en AVISOS sin ver nunca «Ya esta conectado».
+  //      Y el gemelo de al lado —el boton nuevo— si estaba bien: mismo valor
+  //      escrito dos veces, arreglado en una copia y vivo en la otra.
+  const P = leerCodigo('src/components/PuestaEnMarcha.tsx')
+
+  it('el paso que se restaura se acota al ultimo que existe', () => {
+    const i = P.indexOf('localStorage.getItem(CLAVE_PASO)')
+    expect(i, 'ya no se restaura el paso: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const bloque = P.slice(i, i + 700)
+    expect(/Math\.min\(guardado, PASOS\.length - 1\)/.test(bloque),
+      'el paso guardado se restaura sin tope: un numero que ya no existe revienta el render en cada carga y deja la app inaccesible')
+      .toBe(true)
+  })
+
+  it('nadie escribe a mano el numero de un paso', () => {
+    // La unica fuente del numero es `irA`, que hace setPaso y localStorage a la
+    // vez. Un literal es un valor que hay que acordarse de cambiar al reordenar,
+    // y ya se demostro que no nos acordamos.
+    const literales = [...P.matchAll(/setItem\(CLAVE_PASO,\s*'(\d+)'\)/g)].map(m => m[0])
+    expect(literales, `se vuelve a escribir a mano el numero del paso — al reordenar la lista quedara apuntando al sitio equivocado:\n  ${literales.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('PASOS vive fuera del componente, para poder acotarlo antes de pintar', () => {
+    expect(/^const PASOS = \[/m.test(P),
+      'PASOS vuelve dentro del componente: el efecto que restaura el paso no lo ve y no puede acotarlo')
+      .toBe(true)
+  })
+})
+
 describe('la contrasena no se pide en la bienvenida', () => {
   // Javi: «este paso, quitalo porque ya lo has hecho al principio, cuando paso el
   // enlace». Tiene razon: el camino normal es el enlace de invitacion, y ahi la
