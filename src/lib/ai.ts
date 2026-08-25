@@ -347,6 +347,8 @@ export async function chat(
      * criterio, que es como las dos IAs acabarían sabiendo cosas distintas otra vez.
      */
     memoria?: string
+    /** La ficha del estudio: el resumen permanente de toda la memoria. */
+    ficha?: string
   }
 ): Promise<{ reply: string; searched: boolean }> {
   const urgentTasks = context.tasks.filter(t => t.level === 'urgent')
@@ -384,7 +386,12 @@ CONTEXTO DEL NEGOCIO (actualizado al ${context.todayDate}):
 - Pipeline de contenido: ${context.contentPipeline} pieza${context.contentPipeline !== 1 ? 's' : ''} programada${context.contentPipeline !== 1 ? 's' : ''}
 - Tareas urgentes: ${urgentTasks.map(t => t.text).join(', ') || 'ninguna'}
 - Tareas de alta prioridad: ${highTasks.map(t => t.text).join(', ') || 'ninguna'}
-- Tareas totales pendientes: ${context.tasks.length}${context.memoria ? `
+- Tareas totales pendientes: ${context.tasks.length}${context.ficha ? `
+FICHA DEL ESTUDIO (lo permanente: quiénes son los clientes, cómo se trabaja, qué
+se decidió). Es el punto de partida; si la pregunta pide un dato concreto, míralo
+en la memoria de abajo antes que aquí:
+${context.ficha}
+` : ''}${context.memoria ? `
 
 MEMORIA DEL ESTUDIO (lo que el equipo ha ido guardando: briefs, tarifas, decisiones,
 cómo se hizo algo). Úsala como fuente cuando la pregunta encaje, y di de dónde sale:

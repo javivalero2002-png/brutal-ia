@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { ERRORES_ACCIONABLES } from '@/lib/gmailAuth'
 import { syncColabsInbox, syncPersonalInbox } from '@/lib/colabsSync'
 import { runAutomations } from '@/lib/automations'
+import { fichaDesfasada, regenerarFicha } from '@/lib/fichaEstudio'
 import { madridHour } from '@/components/shared/helpers'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { marcarLatido } from '@/lib/reglaRows'
@@ -168,6 +169,31 @@ export async function GET(request: NextRequest) {
     automations = { error: err?.message || 'error' }
   }
 
+  // ── LA FICHA DEL ESTUDIO ────────────────────────────────────────────────
+  //
+  // Javi: «cada vez que se le añade algo se modifica ese contexto para ir
+  // mejorándolo». Se rehace AQUÍ y no en el POST de /api/memoria por dos
+  // motivos: subir un PDF crea una nota, y regenerar la ficha entera en esa
+  // misma petición añadiría una llamada al modelo a algo que el usuario está
+  // esperando; y porque tres notas seguidas serían tres regeneraciones para el
+  // mismo resultado.
+  //
+  // Best-effort, igual que el motor: un fallo aquí no tumba el sync. Y si el
+  // modelo falla NO se escribe nada — una ficha vieja es infinitamente mejor
+  // que una vacía, porque la vacía se lee como «el estudio no tiene nada
+  // guardado», que es mentira.
+  let ficha: { rehecha: boolean; notas?: number; motivo?: string } = { rehecha: false }
+  try {
+    const estado = await fichaDesfasada(admin)
+    if (estado.hace) {
+      const r = await regenerarFicha(admin)
+      ficha = r.ok ? { rehecha: true, notas: r.notas } : { rehecha: false, motivo: r.motivo }
+    }
+  } catch (err: any) {
+    console.error('[cron] la ficha del estudio fallo:', err?.message)
+    ficha = { rehecha: false, motivo: err?.message || 'error' }
+  }
+
   // Retención de datos, una vez al día (a las 04:00 UTC de las 24 ejecuciones).
   // Va aquí y no en un borrado manual porque manual = se hace una vez y nunca
   // más. Ninguna de estas tablas tenía borrado en ningún sitio: los límites del
@@ -305,6 +331,7 @@ export async function GET(request: NextRequest) {
     // la ejecución en rojo a propósito (ver arriba), pero queda dicho.
     ...(reconexion.length ? { requierenReconexion: reconexion.map(o => o.mailbox) } : {}),
     automations,
+    ficha,
     ...(retention ? { retention } : {}),
   }, { status: failed ? 500 : 200 })
 }

@@ -1,5 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { memoriaRelevante, lineasDeMemoria } from '@/lib/memoriaRelevante'
+import { leerFicha } from '@/lib/fichaEstudio'
 import { chat } from '@/lib/ai'
 import { checkChatRateLimit } from '@/lib/rate-limit'
 import { logQueryErrors } from '@/lib/queryLog'
@@ -72,7 +73,18 @@ export async function POST(request: NextRequest) {
     //
     // Es para lo que existe la sección: que quede guardado lo que se va haciendo y
     // que la IA pueda tirar de ello.
-    admin.from('memoria').select('title, category, content').order('created_at', { ascending: false }).limit(120),
+    // DOS CONSULTAS, no un `.limit(120)` a secas.
+    //
+    // Ese limite reintroducia, un nivel mas abajo, el mismo bug que
+    // `memoriaRelevante` existe para evitar: cada PDF subido entra como una nota,
+    // asi que al pasar de 120 filas las decisiones CURADAS —las que alguien
+    // escribio a mano— caian fuera ANTES de que la funcion pudiera salvarlas.
+    // Recortar por fecha es exactamente lo que no hay que hacer aqui.
+    //
+    // Lo curado es poco y no caduca: se trae entero. Los documentos son muchos y
+    // se acotan, que es donde el techo si tiene sentido.
+    admin.from('memoria').select('title, category, content').not('category', 'ilike', 'documento').order('created_at', { ascending: false }).limit(200),
+    admin.from('memoria').select('title, category, content').ilike('category', 'documento').order('created_at', { ascending: false }).limit(150),
   ])
 
   // Aquí murió el bug de la tabla `agenda` durante semanas: supabase-js no lanza,
@@ -81,7 +93,7 @@ export async function POST(request: NextRequest) {
   // que esto registra sin romper la respuesta.
   logQueryErrors('chat', q)
 
-  const [{ data: profile }, { data: clients }, { data: projects }, { data: tasks }, { data: team }, { data: inbox }, { data: history }, { count: contentPipelineCount }, { data: memoria }] = q
+  const [{ data: profile }, { data: clients }, { data: projects }, { data: tasks }, { data: team }, { data: inbox }, { data: history }, { count: contentPipelineCount }, { data: curadas }, { data: documentos }] = q
 
   const emailsList = (inbox || []).map((e: any) => ({
     from: e.from_name || '',
@@ -111,7 +123,11 @@ export async function POST(request: NextRequest) {
         // Elegidas con la MISMA función que usa Harvey. Pasarlas todas reventaría el
         // contexto —hay notas largas— y elegirlas con otro criterio aquí sería
         // volver a tener dos IAs que saben cosas distintas.
-        memoria: lineasDeMemoria(memoriaRelevante(memoria, message)) || undefined,
+        memoria: lineasDeMemoria(memoriaRelevante([...(curadas || []), ...(documentos || [])], message)) || undefined,
+        // LA FICHA, siempre. `memoriaRelevante` elige lo que casa con la pregunta;
+        // esto es lo que la IA debe saber aunque la pregunta no case con nada.
+        // Va desde el SERVIDOR para que no dependa de que el cliente la mande.
+        ficha: await leerFicha(admin) || undefined,
       }
     )
     reply = result.reply
