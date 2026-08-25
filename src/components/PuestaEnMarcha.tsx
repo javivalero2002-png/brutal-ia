@@ -108,29 +108,46 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
   const [iniciales, setIniciales] = useState(profile?.initials || '')
   const [color, setColor] = useState(profile?.avatar_color || BLU)
 
-  // Contraseña
-  const [actual, setActual] = useState('')
-  const [nueva, setNueva] = useState('')
-  const [repetida, setRepetida] = useState('')
-  /**
-   * ¿Ya eligió su contraseña al entrar?
-   *
-   * Quien llega por el enlace de invitación la pone en `/reset-password` treinta
-   * segundos antes de ver esto. Volver a pedírsela —y encima diciéndole que «te la
-   * dio otra persona»— es explicarle un motivo que no existe, en la primera
-   * pantalla que ve de la app.
-   *
-   * Quien entra con la contraseña temporal que le pasó el propietario SÍ tiene que
-   * cambiarla, y para esa persona el paso y su texto son verdad.
-   */
-  const [claveYaElegida, setClaveYaElegida] = useState(false)
-  useEffect(() => {
-    try { setClaveYaElegida(localStorage.getItem('nx_clave_elegida') === '1') } catch { /* se pide, como antes */ }
-  }, [])
-
-  const [claveCambiada, setClaveCambiada] = useState(false)
-
   const [avisos, setAvisos] = useState(false)
+
+
+  // LAS CUENTAS DE VERDAD, no la columna vieja.
+
+  //
+
+  // Javi: «me pone que estoy conectado a este correo, pero en verdad estoy
+
+  // conectado a dos». Aqui se leia `profile.gmail_account`, que es la columna
+
+  // de UNA sola direccion de antes de `gmail_cuentas` — asi que con varias
+
+  // conectadas ensenaba la que se hubiera guardado la ultima, y las demas
+
+  // no existian para esta pantalla.
+
+  //
+
+  // `null` mientras no se sabe: un array vacio significa «ninguna conectada»,
+
+  // que es otra cosa, y con el se pintaria CONECTAR a quien ya las tiene.
+
+  const [buzones, setBuzones] = useState<{ email: string; compartida: boolean }[] | null>(null)
+
+  useEffect(() => {
+
+    let vivo = true
+
+    fetch('/api/gmail/cuentas')
+
+      .then(r => (r.ok ? r.json() : null))
+
+      .then(j => { if (vivo && j) setBuzones(Array.isArray(j.cuentas) ? j.cuentas : []) })
+
+      .catch(() => {})
+
+    return () => { vivo = false }
+
+  }, [])
 
   // Instalar la app. Los navegadores NO se comportan igual y ese es todo el
   // problema de este paso:
@@ -219,26 +236,6 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
     } catch { showToast('No se pudo guardar tu ficha') }
     finally { setGuardando(false) }
   }
-
-  const cambiarClave = async () => {
-    if (nueva.length < 8) { showToast('La nueva contraseña necesita al menos 8 caracteres'); return }
-    if (nueva !== repetida) { showToast('Las dos contraseñas no coinciden'); return }
-    setGuardando(true)
-    try {
-      const res = await fetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentPassword: actual, newPassword: nueva }),
-      })
-      const j = await res.json().catch(() => ({}))
-      if (!res.ok) { showToast(j?.error || 'No se pudo cambiar la contraseña'); return }
-      setClaveCambiada(true)
-      showToast('Contraseña cambiada')
-      irA(3)
-    } catch { showToast('No se pudo cambiar la contraseña') }
-    finally { setGuardando(false) }
-  }
-
   const activarAvisos = async () => {
     setGuardando(true)
     // Pedir el permiso NO basta: sin suscripción en el servidor no llega ni un
@@ -254,7 +251,22 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
   // El ASPECTO no está aquí a propósito: ya se elige al arrancar la app, en la
   // pantalla de la insignia, y con mejor tratamiento que unas muestras de color.
   // Repetirlo aquí sería preguntar dos veces lo mismo en el primer minuto.
-  const PASOS = ['Bienvenida', 'Tu ficha', 'Contraseña', 'Instalar', 'Gmail', 'Avisos', 'Listo']
+  // FUERA EL PASO DE CONTRASEÑA.
+  //
+  // Javi: «quítalo porque ya lo has hecho al principio, cuando pasó el enlace».
+  // El camino normal es el enlace de invitación, y ahí la contraseña se pone en
+  // esa misma pantalla treinta segundos antes: volver a pedirla en la primera
+  // pantalla de la app es explicar un motivo que no existe.
+  //
+  // Había un apaño —`nx_clave_elegida` en localStorage— que cambiaba el TEXTO
+  // según si la habías puesto, pero el paso salía igual. Y solo funcionaba si
+  // habías pasado por /reset-password en ESE navegador, así que con otro móvil
+  // o una pestaña privada volvía a decirte que te la había dado otra persona.
+  //
+  // No se pierde nada: cambiar la contraseña sigue estando en Operativa →
+  // Ajustes, que es donde se busca cuando se quiere cambiar — no en un recorrido
+  // de bienvenida.
+  const PASOS = ['Bienvenida', 'Tu ficha', 'Instalar', 'Gmail', 'Avisos', 'Listo']
   const ultimo = PASOS.length - 1
 
   const Cabecera = ({ icono, eyebrow, titulo, bajada, opcional }: { icono: string; eyebrow: string; titulo: string; bajada: string; opcional?: boolean }) => (
@@ -395,33 +407,6 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
 
           {paso === 2 && (
             <>
-              {/* Las dos versiones van marcadas OPCIONAL, y no solo la primera.
-                  El camino normal es el enlace de invitación, y ahí la contraseña
-                  se pone en esa misma pantalla: cuando llegas aquí ya está hecho.
-                  La otra versión existe para quien entró con una temporal que le
-                  pasaron — de ahí «por si no has tenido opción de ponerla tú». */}
-              {claveYaElegida ? (
-                <Cabecera icono="key" eyebrow="SEGURIDAD" opcional titulo="Tu contraseña ya está puesta"
-                  bajada="La elegiste tú al entrar por el enlace, así que este paso te lo puedes saltar. Está aquí por si no has tenido opción de ponerla — o si quieres cambiarla igualmente." />
-              ) : (
-                <Cabecera icono="key" eyebrow="SEGURIDAD" opcional titulo="Pon tu propia contraseña"
-                  bajada="Por si no has tenido opción de elegirla tú: si entraste con una que te pasó otra persona, cámbiala aquí. Si ya la pusiste al entrar, sigue sin más." />
-              )}
-              <div className="flex flex-col gap-2">
-                <input type="password" value={actual} onChange={e => setActual(e.target.value)} placeholder="Contraseña actual" className={campo} style={estiloCampo} />
-                <input type="password" value={nueva} onChange={e => setNueva(e.target.value)} placeholder="Nueva (mínimo 8 caracteres)" className={campo} style={estiloCampo} />
-                <input type="password" value={repetida} onChange={e => setRepetida(e.target.value)} placeholder="Repite la nueva" className={campo} style={estiloCampo} />
-              </div>
-              {claveCambiada && (
-                <div className="flex items-center gap-2 mt-3 font-figtree text-[12px]" style={{ color: GRN }}>
-                  <LucideIcon name="check" size={13} color={GRN} /> Contraseña cambiada
-                </div>
-              )}
-            </>
-          )}
-
-          {paso === 3 && (
-            <>
               <Cabecera icono="download" eyebrow="ACCESO DIRECTO" titulo="Instala Nexus"
                 bajada="Se abre a pantalla completa, sin barra del navegador, y los avisos llegan aunque la tengas cerrada." />
               {yaInstalada ? (
@@ -476,15 +461,32 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
             </>
           )}
 
-          {paso === 4 && (
+          {paso === 3 && (
             <>
               <Cabecera icono="mail" eyebrow="CORREO" titulo="Conecta tu Gmail"
                 bajada="Tus correos entran en Inbox y la IA te marca los urgentes. Nexus no manda correo en tu nombre." />
-              {profile?.gmail_connected ? (
-                <div className="flex items-center gap-2 px-3.5 py-3 rounded-2xl font-figtree text-[12.5px]"
-                  style={{ background: `${GRN}10`, border: `1px solid ${GRN}30`, color: GRN }}>
-                  <LucideIcon name="check" size={14} color={GRN} />
-                  Ya está conectado{profile.gmail_account ? ` · ${profile.gmail_account}` : ''}
+              {/* Las conectadas, TODAS. Mientras el servidor no conteste se usa
+                  `gmail_connected` del perfil para no pintar CONECTAR a quien ya
+                  las tiene: es peor equivocarse hacia ese lado. */}
+              {(buzones === null ? !!profile?.gmail_connected : buzones.length > 0) ? (
+                <div className="flex flex-col gap-1.5">
+                  {(buzones && buzones.length ? buzones : [{ email: profile?.gmail_account || '', compartida: false }]).map(b => (
+                    <div key={b.email} className="flex items-center gap-2 px-3.5 py-3 rounded-2xl font-figtree text-[12.5px]"
+                      style={{ background: `${GRN}10`, border: `1px solid ${GRN}30`, color: GRN }}>
+                      <LucideIcon name="check" size={14} color={GRN} />
+                      <span className="break-all">{b.email || 'Ya está conectado'}{b.compartida ? ' · compartido' : ''}</span>
+                    </div>
+                  ))}
+                  {/* Conectar OTRA sigue disponible aquí: es donde la gente se da
+                      cuenta de que tiene dos correos, no en Operativa tres días
+                      después. */}
+                  <a href="/api/gmail/connect?account=personal"
+                    onClick={() => { try { localStorage.setItem(CLAVE_PASO, '3') } catch {} }}
+                    className="flex items-center justify-center gap-2 w-full py-2.5 rounded-2xl font-syne text-[8.5px] font-black tracking-widest mt-0.5"
+                    style={{ background: 'rgba(255,255,255,0.03)', border: `1px dashed ${BORDER}`, color: 'rgba(255,255,255,0.4)' }}>
+                    <LucideIcon name="plus" size={12} color="rgba(255,255,255,0.4)" />
+                    CONECTAR OTRA CUENTA
+                  </a>
                 </div>
               ) : (
                 <>
@@ -506,7 +508,7 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
             </>
           )}
 
-          {paso === 5 && (
+          {paso === 4 && (
             <>
               <Cabecera icono="bell" eyebrow="AVISOS" titulo="Que te avise de lo urgente"
                 bajada="Solo para lo que no puede esperar: un correo urgente de cliente o una tarea que vence hoy." />
@@ -558,19 +560,7 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
           )}
           {paso === 0 && <Boton primario onClick={() => irA(1)}>EMPEZAR</Boton>}
           {paso === 1 && <Boton primario onClick={guardarPerfil}>GUARDAR</Boton>}
-          {paso === 2 && (!actual && !nueva && !repetida
-            /* Sin escribir nada, el botón grande es SEGUIR — y ya no depende de si
-               tenemos la marca de «eligió su clave al entrar».
-               Antes, sin la marca, el botón principal decía CAMBIAR y salía
-               apagado: la única salida era un SALTAR gris y pequeño. Eso se lee
-               como «tienes que hacerlo», que es justo lo contrario de OPCIONAL —
-               y la marca vive en localStorage, así que basta con una pestaña
-               privada, otro navegador o un móvil distinto para perderla.
-               Los campos se quedan a la vista: en cuanto escribe algo, el botón
-               vuelve a ser CAMBIAR y hace lo que dice. */
-            ? <Boton primario onClick={() => irA(3)}>SEGUIR</Boton>
-            : <Boton primario onClick={cambiarClave} disabled={!actual || !nueva || !repetida}>CAMBIAR</Boton>)}
-          {(paso === 3 || paso === 4 || paso === 5) && <Boton primario onClick={() => irA(paso + 1)}>SIGUIENTE</Boton>}
+          {(paso === 2 || paso === 3 || paso === 4) && <Boton primario onClick={() => irA(paso + 1)}>SIGUIENTE</Boton>}
           {paso === ultimo && <Boton primario onClick={terminar}>ENTRAR EN NEXUS</Boton>}
         </div>
       </div>

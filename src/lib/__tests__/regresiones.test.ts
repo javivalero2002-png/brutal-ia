@@ -2294,71 +2294,6 @@ describe('el enlace de invitacion no se gasta antes de usarse', () => {
 // No era solo repetir un paso. Era explicar un motivo que no existe, en la
 // primera pantalla que ve alguien de la app.
 // ───────────────────────────────────────────────────────────────────────────────
-describe('la contraseña se pide una vez y con un motivo cierto', () => {
-  it('elegir la contraseña al entrar deja constancia', () => {
-    const R = leerCodigo('src/app/reset-password/page.tsx')
-    const i = R.indexOf('setOk(true)')
-    expect(i, 'ya no se guarda asi: revisa esta regla').toBeGreaterThan(-1)
-    expect(/nx_clave_elegida/.test(R.slice(i, i + 700)),
-      'no deja dicho que la contraseña ya se eligio: la puesta en marcha la volvera a pedir con un motivo falso')
-      .toBe(true)
-  })
-
-  it('el paso de contraseña dice la verdad segun como se haya entrado', () => {
-    const P = leerCodigo('src/components/PuestaEnMarcha.tsx')
-    expect(/claveYaElegida/.test(P),
-      'el paso no sabe como ha entrado la persona: dira «te la dio otra persona» a quien se la acaba de poner')
-      .toBe(true)
-    // Las dos cabeceras, y ELEGIDAS POR LA CONDICION — no basta con que los dos
-    // textos esten en el fichero. Comprobarlo asi daba verde con la condicion
-    // cableada a `false`, o sea con el texto falso saliendole a todo el mundo:
-    // verificado poniendo `{false ? (` y viendo la regla en verde.
-    const t = P.indexOf('claveYaElegida ?')
-    expect(t, 'la cabecera ya no depende de como se haya entrado').toBeGreaterThan(-1)
-    const ternario = P.slice(t, t + 700)
-    expect(/Tu contraseña ya está puesta/.test(ternario), 'falta el texto para quien ya la eligio').toBe(true)
-    // El texto de esta rama cambio cuando el paso paso a estar marcado OPCIONAL:
-    // antes decia «te la dio otra persona», que es cierto solo para quien entra con
-    // una temporal. Ahora lo dice condicionado —«por si no has tenido opcion»—
-    // porque el camino normal es el enlace, y por ahi la contrasena ya esta puesta.
-    expect(/no has tenido opción de elegirla/.test(ternario),
-      'falta el texto para quien entra con una que le pasaron').toBe(true)
-  })
-
-  it('CUALQUIERA puede seguir sin escribir nada, tenga marca o no', () => {
-    const P = leerCodigo('src/components/PuestaEnMarcha.tsx')
-    // Anclado al BOTON, no a la primera aparicion de `paso === 2`: esa es el
-    // bloque que pinta los campos, y el boton esta 150 lineas mas abajo. Anclar al
-    // primer `indexOf` es el tropiezo que ya ha dado verde con el fallo dentro
-    // varias veces en este fichero.
-    const i = P.lastIndexOf('paso === 2 &&')
-    expect(i, 'ya no existe el paso 2: revisa esta regla').toBeGreaterThan(-1)
-    const cond = P.slice(i, i + 140)
-
-    // Esta regla exigia antes que el camino de salida dependiera de
-    // `claveYaElegida`, y ahora exige lo contrario — porque la version anterior
-    // era mas debil de lo que parecia. Esa marca vive en localStorage: una
-    // pestana privada, otro navegador o un movil distinto la pierden. Sin ella el
-    // boton principal decia CAMBIAR y salia APAGADO, y la unica salida era un
-    // SALTAR gris y pequeno. Un paso marcado OPCIONAL cuyo boton grande te exige
-    // algo no es opcional: es obligatorio con mala conciencia.
-    expect(/!actual && !nueva/.test(cond),
-      'el boton ya no mira si hay algo escrito: puede volver a exigir la contrasena a quien no necesita cambiarla')
-      .toBe(true)
-    expect(/claveYaElegida/.test(cond),
-      'el boton principal vuelve a depender de una marca de localStorage: quien la pierda se queda con un boton apagado')
-      .toBe(false)
-  })
-
-  it('al terminar se olvida, para que la proxima vez decida de nuevo', () => {
-    const P = leerCodigo('src/components/PuestaEnMarcha.tsx')
-    const i = P.indexOf('const terminar')
-    expect(/removeItem\('nx_clave_elegida'\)/.test(P.slice(i, i + 900)),
-      'la marca sobrevive a la puesta en marcha: si se resetea y se entra con una temporal nueva, el paso se saltaria sin motivo')
-      .toBe(true)
-  })
-})
-
 describe('abrir una pieza rearma TODOS sus campos, no casi todos', () => {
   const C = leerCodigo('src/components/sections/ContenidoSection.tsx')
 
@@ -2621,23 +2556,6 @@ describe('las preferencias de avisos no se duplican', () => {
     expect(/error:\s*errLectura/.test(ventana), 'la lectura no captura su error').toBe(true)
     expect(/if \(errLectura\)/.test(ventana), 'captura el error y no lo mira, que es lo mismo que no capturarlo').toBe(true)
   })
-})
-
-describe('el paso de la contrasena es opcional de verdad, no solo en el texto', () => {
-  const P = leerCodigo('src/components/PuestaEnMarcha.tsx')
-
-  it('va marcado OPCIONAL en las DOS versiones', () => {
-    // El camino normal es el enlace de invitacion, y ahi la contrasena se pone en
-    // esa misma pantalla: cuando llegas aqui ya esta hecho. Sin el distintivo
-    // parece un tramite obligatorio y la gente escribe una nueva sin necesitarlo.
-    const paso = P.slice(P.indexOf('{paso === 2 &&'), P.indexOf('{paso === 3 &&'))
-    const cabeceras = [...paso.matchAll(/<Cabecera[\s\S]*?\/>/g)]
-    expect(cabeceras.length, 'ya no hay dos versiones del paso: revisa esta regla en vez de borrarla').toBe(2)
-    for (const c of cabeceras) {
-      expect(/\bopcional\b/.test(c[0]), 'una de las dos versiones no lleva el distintivo OPCIONAL').toBe(true)
-    }
-  })
-
 })
 
 describe('nadie se topa con la pantalla de Google sin avisar', () => {
@@ -3835,6 +3753,57 @@ describe('el briefing dice donde mirar', () => {
   it('se ordena por señal, con los bloqueos primero', () => {
     expect(/sort\(\(a: any, b: any\) =>\s*\(b\.bloqueos - a\.bloqueos\)/.test(D),
       'el equipo vuelve al orden de la tabla profiles: la fila que importa queda enterrada')
+      .toBe(true)
+  })
+})
+
+describe('la contrasena no se pide en la bienvenida', () => {
+  // Javi: «este paso, quitalo porque ya lo has hecho al principio, cuando paso el
+  // enlace». Tiene razon: el camino normal es el enlace de invitacion, y ahi la
+  // contrasena se pone en esa misma pantalla treinta segundos antes. Pedirla otra
+  // vez en la primera pantalla de la app —y encima diciendo «por si te la dio otra
+  // persona»— es explicar un motivo que no existe.
+  //
+  // Habia un apano: `nx_clave_elegida` en localStorage cambiaba el TEXTO segun si
+  // la habias puesto. Pero el paso salia igual, y la marca solo existia si habias
+  // pasado por /reset-password en ESE navegador — con otro movil o una pestana
+  // privada volvia a decirte lo que no era.
+  //
+  // Las tres reglas que habia aqui defendian ese paso: que dijera la verdad segun
+  // como hubieras entrado, que fuera opcional en las dos versiones, y que se
+  // pudiera seguir sin escribir nada. Al quitarlo dejan de tener sentido, y esta
+  // las sustituye — no se borran reglas sin poner lo que protege la decision nueva.
+  const P = leerCodigo('src/components/PuestaEnMarcha.tsx')
+
+  it('la puesta en marcha no vuelve a pedir la contrasena', () => {
+    expect(/change-password/.test(P),
+      'la bienvenida vuelve a pedir la contrasena: quien entra por el enlace ya la ha puesto')
+      .toBe(false)
+    const pasos = P.match(/const PASOS = \[[^\]]*\]/)?.[0] || ''
+    expect(pasos, 'ya no existe la lista de PASOS: revisa esta regla en vez de borrarla').toBeTruthy()
+    expect(/Contrase/i.test(pasos), 'vuelve a haber un paso de contrasena en la bienvenida')
+      .toBe(false)
+  })
+
+  it('pero cambiarla sigue siendo posible, en Ajustes', () => {
+    // Quitar el paso solo vale si el camino sigue existiendo donde se busca. Quien
+    // entro con una clave temporal tiene que poder cambiarla.
+    expect(/change-password/.test(leerCodigo('src/components/sections/AjustesSection.tsx')),
+      'se quito el paso de la bienvenida Y tambien el de Ajustes: nadie puede cambiar su contrasena desde la app')
+      .toBe(true)
+  })
+
+  it('el paso de Gmail ensena TODAS las cuentas, no la columna vieja', () => {
+    // Javi: «me pone que estoy conectado a este correo, pero en verdad estoy
+    // conectado a dos». Leia `profile.gmail_account`, la columna de UNA direccion
+    // de antes de `gmail_cuentas`.
+    const i = P.indexOf('gmail_connected')
+    expect(i, 'ya no hay paso de Gmail: revisa esta regla').toBeGreaterThan(-1)
+    expect(/fetch\('\/api\/gmail\/cuentas'\)/.test(P),
+      'la bienvenida vuelve a sacar la cuenta del perfil: con dos conectadas ensenara solo una')
+      .toBe(true)
+    expect(/buzones\.map|buzones && buzones\.length/.test(P),
+      'no se recorren los buzones: se seguira ensenando una sola direccion')
       .toBe(true)
   })
 })
