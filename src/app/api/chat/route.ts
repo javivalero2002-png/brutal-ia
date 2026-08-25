@@ -78,11 +78,11 @@ export async function POST(request: NextRequest) {
     // escribir y no de ejecutar.
     (veColabs
       ? admin.from('inbox_messages')
-          .select('from_name,subject,ai_summary,ai_urgency,shared,received_at,is_read')
+          .select('from_name,subject,ai_summary,ai_urgency,ai_client,shared,received_at,is_read')
           .or(`user_id.eq.${user.id},shared.eq.true`)
           .order('received_at', { ascending: false }).limit(20)
       : admin.from('inbox_messages')
-          .select('from_name,subject,ai_summary,ai_urgency,shared,received_at,is_read')
+          .select('from_name,subject,ai_summary,ai_urgency,ai_client,shared,received_at,is_read')
           .eq('user_id', user.id)
           .order('received_at', { ascending: false }).limit(20)),
     // Fetch history BEFORE saving current message so it doesn't appear twice in the messages array
@@ -130,6 +130,10 @@ export async function POST(request: NextRequest) {
     summary: e.ai_summary || '',
     urgency: e.ai_urgency || 'normal',
     shared: !!e.shared,
+    // El cliente y el «leído» viajan para poder ORDENAR por importancia: sin
+    // ellos el tope de quince se gasta con boletines.
+    client: e.ai_client || undefined,
+    is_read: !!e.is_read,
     received_at: e.received_at || '',
   }))
 

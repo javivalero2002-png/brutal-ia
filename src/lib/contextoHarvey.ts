@@ -1,4 +1,5 @@
 import { todayKey, localDayKey, madridDateLabel, estadoDeadline } from '@/components/shared/helpers'
+import { correosParaIA } from '@/lib/correosParaIA'
 import { cuandoEnMadrid } from '@/lib/ventanaCalendario'
 import { memoriaRelevante, lineasDeMemoria } from '@/lib/memoriaRelevante'
 
@@ -62,12 +63,22 @@ export function construirContexto(data: DatosContexto, pregunta?: string): strin
   // lleva tope Y mete a propósito urgentes de hoy ya leídos, así que su longitud
   // no es «sin leer»: etiquetarla así hacía que Harvey dijera siempre el tope.
   const sinLeer = inbox.filter(m => !m.is_read).length
-  const aEnsenar = inbox.filter(m =>
+  // El tope se gastaba por ORDEN DE LLEGADA entre los no leídos, y con 704 sin
+  // leer —casi todos boletines— se gastaba entero antes de llegar a nada que
+  // importe. Medido: los diez correos del contexto real eran DHGate, Polymarket,
+  // Temu, adidas, idealista… Un correo de cliente de ayer no salía por ningún lado.
+  // `correosParaIA` decide QUÉ entra; el tope se queda igual.
+  const candidatos = inbox.filter(m =>
     // `localDayKey` y no cortar el ISO: `received_at` va en UTC y `hoy` es el día
     // de Madrid. De 00:00 a 02:00 no son el mismo día, y un correo urgente de esta
     // madrugada ya leído desaparecía del contexto.
     !m.is_read || ((m.ai_urgency === 'urgent' || m.ai_urgency === 'high') && localDayKey(txt(m.received_at)) === hoy)
-  ).slice(0, 10)
+  )
+  // Cliente REAL: `ai_client` guarda desde siempre la marca de quien envía, así que
+  // se compara con los clientes dados de alta y no se cree lo que ponga.
+  const nombresCliente = new Set((data.clients || []).map(c => txt(c.name).toLowerCase()).filter(Boolean))
+  const aEnsenar = correosParaIA(candidatos, 10,
+    m => nombresCliente.has(String((m as { ai_client?: string | null }).ai_client || '').toLowerCase()))
 
   const lineasCorreo = aEnsenar.map(m => {
     const urg = m.ai_urgency === 'urgent' ? '[URGENTE]' : m.ai_urgency === 'high' ? '[ALTA]' : '[NORMAL]'

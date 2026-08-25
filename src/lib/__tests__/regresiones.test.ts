@@ -3902,6 +3902,27 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('las dos IAs eligen los mismos correos', () => {
+  // El contexto lleva tope —diez para Harvey, quince para Brutal.IA— y se gastaba
+  // por ORDEN DE LLEGADA entre los no leidos. Con 704 sin leer, casi todos
+  // boletines, se gastaba entero antes de llegar a nada que importara: los diez
+  // correos del contexto real eran DHGate, Polymarket, Temu, adidas, idealista.
+  it('las dos usan correosParaIA para gastar el tope', () => {
+    for (const ruta of ['src/lib/contextoHarvey.ts', 'src/lib/ai.ts']) {
+      expect(/correosParaIA\(/.test(leerCodigo(ruta)),
+        `${ruta} vuelve a llenar el tope por orden de llegada: los boletines se comen el contexto`).toBe(true)
+    }
+  })
+
+  it('nadie se cree el ai_client sin comparar con los clientes reales', () => {
+    // `ai_client` guarda desde siempre la marca de quien envia. Priorizar por ese
+    // campo a pelo pondria a Temu por delante de un cliente de verdad.
+    const c = leerCodigo('src/lib/contextoHarvey.ts')
+    expect(/nombresCliente|data\.clients/.test(c),
+      'contextoHarvey prioriza por ai_client sin contrastar con la lista de clientes').toBe(true)
+  })
+})
+
 describe('la IA no se declara incapaz de lo que la app sabe hacer', () => {
   // El caso REAL, hablando con ella: sin eventos cargados, «¿que reuniones tengo
   // esta semana?» se contestaba con «no tengo acceso a tu calendario, miralo en

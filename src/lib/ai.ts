@@ -4,6 +4,7 @@ import { sanearHistorial } from './historialIA'
 import { estadoDeadline, todayKey } from '@/components/shared/helpers'
 import { COMO_LEER_EL_DIARIO } from '@/lib/resumenEquipo'
 import { cuandoEnMadrid } from '@/lib/ventanaCalendario'
+import { correosParaIA } from '@/lib/correosParaIA'
 import { nivelTarea, type NivelTarea } from '@/components/shared/helpers'
 
 // Sin topes, el SDK se queda con sus valores por defecto: 10 MINUTOS de timeout
@@ -370,7 +371,14 @@ export async function chat(
     projects: Array<{name: string; status: string; deadline?: string}>
     tasks: Array<{text: string; level: string; assignee?: string}>
     unreadInbox: number
-    emails: Array<{from: string; subject: string; summary: string; urgency: string; shared: boolean; received_at: string}>
+    emails: Array<{
+      from: string; subject: string; summary: string; urgency: string
+      shared: boolean; received_at: string
+      /** El cliente YA emparejado con la lista real (o vacío). Sirve para priorizar. */
+      client?: string
+      /** Para no colar como «sin leer» algo que ya se leyó al ordenar por importancia. */
+      is_read?: boolean
+    }>
     teamSize: number
     /**
      * LOS NOMBRES, no solo cuántos. Brutal.IA leía «Equipo: 7 personas» y nada
@@ -415,7 +423,14 @@ export async function chat(
   const urgentEmails = context.emails.filter(e => e.urgency === 'urgent')
   const emailsBlock = context.emails.length > 0
     ? `\n\nEMAILS RECIENTES (los ${context.emails.length} mas recientes, ${context.unreadInbox} sin leer de esos):\n${
-        context.emails.slice(0, 15).map(e => {
+        // Ordenados por importancia, no por llegada: con cientos de boletines sin
+        // leer el tope se gastaba antes de llegar a un cliente. Mismo criterio que
+        // Harvey, en el mismo sitio, para que no vuelvan a saber cosas distintas.
+        correosParaIA(
+          context.emails.map(e => ({ ...e, ai_urgency: e.urgency, ai_client: e.client })),
+          15,
+          e => !!(e as { ai_client?: string | null }).ai_client && (e as { ai_client?: string | null }).ai_client !== 'Desconocido',
+        ).map(e => {
           const tag = e.shared ? '[COLABS]' : '[PERSONAL]'
           const urgTag = e.urgency === 'urgent' ? '🔴' : e.urgency === 'high' ? '🟡' : '⚪'
           return `  ${urgTag}${tag} De: ${e.from} | "${e.subject}" → ${e.summary || '(sin resumen)'}`
