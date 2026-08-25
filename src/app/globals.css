@@ -85,6 +85,12 @@
 :root { --nx-arranque: #030308; }
 html, body { height: 100%; overflow: hidden; background: var(--nx-arranque); overscroll-behavior: none; }
 
+/* El icono de actualizar, girando mientras recarga. Con `prefers-reduced-motion`
+   no gira: el botón ya se pone azul, que es la señal que importa. */
+.nx-gira { animation: nxGira 0.8s linear infinite; }
+@keyframes nxGira { to { transform: rotate(360deg) } }
+@media (prefers-reduced-motion: reduce) { .nx-gira { animation: none } }
+
 /* PEDIR SCROLL VERTICAL NO ES PEDIR SCROLL HORIZONTAL.
  *
  * Javi: «esta página no es estática». El detalle de un correo se deslizaba de

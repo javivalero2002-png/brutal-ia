@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
+import { haFichado } from '@/components/shared/helpers'
 import { sendPushToUser, canSendPush } from '@/lib/push'
 import { todayKey, madridHour } from '@/components/shared/helpers'
 import { NextRequest, NextResponse } from 'next/server'
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest) {
 
   const { data: yaFicharon, error: errDiario } = await admin
     .from('diario')
-    .select('user_id, entrada')
+    .select('user_id, entrada, entrada_at')
     .eq('dia', dia)
   if (errDiario) {
     console.error('[recordatorio] no se pudo leer el diario:', errDiario.message)
@@ -76,7 +77,10 @@ export async function GET(request: NextRequest) {
   // justo a quien hay que recordárselo.
   const conObjetivos = new Set(
     (yaFicharon || [])
-      .filter(f => ((f.entrada as string | null) || '').trim().length > 0)
+      // `haFichado` y no el texto: una fila de borrador tiene texto y NO es un
+      // fichaje. Con el criterio de antes, quien hubiera dejado algo escrito sin
+      // guardar de verdad no recibia el aviso — justo quien mas lo necesita.
+      .filter(f => haFichado(f as { entrada_at?: string | null }))
       .map(f => f.user_id as string))
 
   let avisados = 0

@@ -335,6 +335,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   const [modalSaving, setModalSaving] = useState(false)
   const [toast, setToast] = useState<string|null>(null)
   const [notifOpen, setNotifOpen] = useState(false)
+  const [actualizando, setActualizando] = useState(false)
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
   // `parcial` lo manda /api/notifications cuando una de sus dos consultas falla:
   // devuelve 200 con lo que sí pudo contar. Nadie lo leía, así que "no tienes
@@ -785,7 +786,38 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
             <div className="h-5 w-px" style={{background:BORDER}}/>
             <span className="font-syne text-[10px] font-black tracking-widest" style={{color:BLU,textShadow:`0 0 10px ${BLU}60`}}>IA</span>
             <div className="ml-auto flex items-center gap-2">
-              {/* Notification bell */}
+            {/* ── ACTUALIZAR ─────────────────────────────────────────────────
+                Javi: «hay que poner un botón de actualizar para que se actualice
+                la app, ponlo al lado del símbolo de las notificaciones».
+
+                La app ya se refresca sola —al volver a la pestaña, con un margen
+                de 5 minutos— pero eso no sirve cuando ACABAS de cambiar algo
+                fuera y quieres verlo ya: un evento en Google Calendar, un correo
+                que entra, algo que ha tocado un compañero.
+
+                Recarga TODO: datos, bandeja y calendario. Recargar solo una parte
+                deja la pantalla contradiciéndose a sí misma, que es peor que no
+                recargar nada. */}
+            <button onClick={async e=>{
+              e.stopPropagation()
+              if (actualizando) return
+              setActualizando(true)
+              const r = await Promise.allSettled([data.reload?.(), data.reloadInbox?.(), data.reloadCalendar?.()])
+              // Se dice si algo no pudo. Un «Actualizado» sobre una recarga a
+              // medias es justo lo que hace dudar de lo que hay en pantalla.
+              const fallos = r.filter(x => x.status === 'rejected').length
+              showToast(fallos ? 'Actualizado a medias — algo no respondió' : 'Actualizado')
+              // Un mínimo visible: sin él, con la red rápida el icono parpadea y
+              // no se sabe si ha hecho algo.
+              setTimeout(()=>setActualizando(false), 400)
+            }} title="Actualizar" aria-label="Actualizar los datos"
+              className="w-7 h-7 rounded-xl flex items-center justify-center transition-all"
+              style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${BORDER}`}}>
+              <div className={actualizando ? 'nx-gira' : ''} style={{display:'flex'}}>
+                <LucideIcon name="refresh-cw" size={12} color={actualizando?BLU:'rgba(255,255,255,0.32)'}/>
+              </div>
+            </button>
+            {/* Notification bell */}
               <div className="relative">
                 <button onClick={e=>{e.stopPropagation();setNotifOpen(o=>!o)}} className="w-7 h-7 rounded-xl flex items-center justify-center relative transition-all" style={{background:notifOpen?'rgba(27,95,250,0.15)':'transparent'}}>
                   {/* Ámbar —ni azul ni apagado— cuando la consulta ha fallado:
