@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { logQueryErrors } from '@/lib/queryLog'
 import Anthropic from '@anthropic-ai/sdk'
 
 /**
@@ -124,10 +125,27 @@ export async function regenerarFicha(admin: SupabaseClient): Promise<{ ok: boole
   // ficha y tuvo que añadir un aviso de su cosecha diciendo que el contexto
   // operativo decia lo contrario. Una IA que avisa de que sus dos fuentes se
   // contradicen es una IA en la que se deja de confiar.
-  const [{ data: clientesVivos }, { data: proyectosVivos }] = await Promise.all([
+  //
+  // Y LOS ERRORES SE MIRAN, con una consecuencia mas dura que en otros sitios:
+  // supabase-js NO lanza, asi que si la lectura de `clients` falla —un error
+  // pasajero, un 42703 tras un cambio de columna— `clientesVivos` queda a null, la
+  // ficha se escribe con «CLIENTES DADOS DE ALTA AHORA MISMO (0): ninguno», y el
+  // prompt dice justo debajo que eso MANDA sobre lo que digan los documentos.
+  //
+  // Como la ficha se PERSISTE, a partir de ahi las dos IAs contestan «no tenemos
+  // ningun cliente» con autoridad, y seguiran haciendolo hasta la siguiente
+  // regeneracion. Por eso aqui no basta con registrar el fallo: se aborta. Una
+  // ficha vieja es peor que una nueva; una ficha FALSA es peor que las dos.
+  const vivos = await Promise.all([
     admin.from('clients').select('name, status'),
     admin.from('projects').select('name, status'),
   ])
+  logQueryErrors('ficha', vivos)
+  if (vivos.some(r => r.error)) {
+    console.error('[ficha] no se pudo leer el estado vivo — no se reescribe la ficha')
+    return { ok: false, motivo: 'estado vivo' }
+  }
+  const [{ data: clientesVivos }, { data: proyectosVivos }] = vivos
   const activos = (proyectosVivos || []).filter(p => p.status !== 'completado')
   const estado = [
     `CLIENTES DADOS DE ALTA AHORA MISMO (${(clientesVivos || []).length}): ${(clientesVivos || []).map(c => c.name).join(', ') || 'ninguno'}`,

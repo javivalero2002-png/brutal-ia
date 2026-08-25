@@ -138,10 +138,15 @@ export async function POST(request: NextRequest) {
     //
     // Y aquí se espera la búsqueda web, que lleva corriendo desde arriba: si tardó
     // menos que las consultas, ya está lista y no se espera nada.
-    const [{ data: plantilla }, searchResults] = await Promise.all([
+    // El error SE NOMBRA. supabase-js no lanza: sin esto, un fallo al leer la
+    // plantilla deja a Harvey sin saber quien es nadie —ni con quien habla, ni a
+    // quien puede asignar una tarea— y se comporta como si el equipo estuviera
+    // vacio. Contesta igual, solo que peor, y nadie se entera.
+    const [{ data: plantilla, error: errPlantilla }, searchResults] = await Promise.all([
       admin.from('profiles').select('id, name, role'),
       busqueda,
     ])
+    if (errPlantilla) console.error('[harvey] no se pudo leer la plantilla:', errPlantilla.message)
     const quienHabla = (plantilla ?? []).find(p => p.id === user.id) ?? null
 
     const userContent = String(message) + formatSearchContextVoice(searchResults)

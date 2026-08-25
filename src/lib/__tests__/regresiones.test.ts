@@ -4052,6 +4052,52 @@ describe('todos los buscadores de la app buscan igual', () => {
   })
 })
 
+describe('«supabase-js NO lanza» por fin tiene regla', () => {
+  // CLAUDE.md lo pone como una de las trampas que ya han mordido —«en un
+  // Promise.all que desestructura solo `data`, un fallo es indistinguible de "no
+  // hay filas" — un bug asi vivio semanas»— y NO habia ninguna regla que lo
+  // vigilara. Habia dos sitios vivos:
+  //
+  //   · `fichaEstudio.ts`: si falla la lectura de `clients`, la ficha se escribia
+  //     con «CLIENTES DADOS DE ALTA AHORA MISMO (0): ninguno» y el prompt dice
+  //     justo debajo que eso MANDA sobre los documentos. Y la ficha se PERSISTE:
+  //     a partir de ahi las dos IAs contestan «no tenemos ningun cliente» con
+  //     autoridad. Por eso ahi no basta con registrar — se aborta la regeneracion.
+  //   · `harvey-draft`: un fallo al leer la memoria salia como «no hay nada
+  //     relevante» y el borrador se escribia sobre menos contexto del que hay.
+  it('ningun Promise.all de consultas tira los errores', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (ruta.startsWith('src/lib/__tests__/')) continue
+      const c = leerCodigo(ruta)
+      for (const m of c.matchAll(/(?:const|let)\s+(\[[^\]]*\]|\w+)\s*=\s*await Promise\.all\(\[/g)) {
+        const abre = c.indexOf('[', m.index! + m[0].length - 1)
+        // El array de promesas: de `Promise.all([` a su `])`.
+        let n = 0, fin = abre
+        for (let i = abre; i < c.length; i++) {
+          if (c[i] === '[') n++
+          else if (c[i] === ']') { n--; if (n === 0) { fin = i; break } }
+        }
+        const promesas = c.slice(abre, fin)
+        if (!/\b(admin|supabase)\.from\(/.test(promesas)) continue
+
+        const destino = m[1]
+        // Vale cualquiera de las dos: nombrar `error` al desestructurar, o pasar el
+        // resultado entero por `logQueryErrors`.
+        const nombraError = /\berror\b/.test(destino)
+        const despues = c.slice(fin, fin + 400)
+        const registra = /logQueryErrors\(/.test(despues) || /\.some\(r => r\.error\)/.test(despues)
+        if (!nombraError && !registra) {
+          infractores.push(`${ruta}: ${destino.replace(/\s+/g, ' ').slice(0, 80)}`)
+        }
+      }
+    }
+    expect(infractores,
+      `un Promise.all de consultas desestructura solo \`data\`. supabase-js NO lanza, asi que un fallo de lectura se vuelve indistinguible de «no hay filas» — y en la ficha eso se PERSISTE y las dos IAs lo repiten con autoridad. Nombra \`error\` o pasa el resultado por logQueryErrors():\n  ${infractores.join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
 describe('tres afirmaciones mas que no se sostenian', () => {
   it('ninguna PANTALLA saca la hora de un evento cortando el ISO', () => {
     // La regla hermana cubre los constructores de contexto de las dos IAs. Estas
