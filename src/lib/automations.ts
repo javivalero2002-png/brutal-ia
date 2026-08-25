@@ -506,7 +506,11 @@ async function ejecutarReglas(
     // Un snapshot que no trae lo que el evaluador mira es un fallo mudo: no hay
     // error, solo cero coincidencias para siempre.
     admin.from('tasks').select('id,text,done,due_date,project_id,client_id,notes,level,assigned_to'),
-    admin.from('projects').select('id,name,status,deadline,client_id'),
+    // `created_at` VA EN EL SELECT: el disparador «Nuevo proyecto añadido» lo lee
+    // (`Date.now() - new Date(p.created_at)`) y sin la columna es `undefined`, el
+    // `continue` se ejecuta siempre y la automatizacion NO PUEDE SALTAR NUNCA.
+    // Mismo fallo mudo que este fichero ya documenta con `level` y `assigned_to`.
+    admin.from('projects').select('id,name,status,deadline,client_id,created_at'),
     admin.from('clients').select('id,name'),
     // ── Lo que miran las automatizaciones de CONTROL ────────────────────────
     // El comentario de arriba lo dice y vale también aquí: un snapshot que no trae

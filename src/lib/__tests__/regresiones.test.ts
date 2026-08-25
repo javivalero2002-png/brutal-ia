@@ -5805,6 +5805,66 @@ describe('el motor de automatizaciones recibe lo que mira', () => {
       .toEqual([])
   })
 
+  it('cada lista del snapshot trae las COLUMNAS que el evaluador le lee', () => {
+    // La regla de al lado comprueba que la LISTA llegue (`ctx.projects` existe). No
+    // comprueba que esa lista traiga las columnas que se leen de sus elementos, y
+    // por ahi se colo «Nuevo proyecto añadido»: el evaluador hace `p.created_at` y
+    // el select era `'id,name,status,deadline,client_id'`. Sin la columna,
+    // `created_at` es undefined, el `continue` se ejecuta siempre y el disparador
+    // NO PUEDE SALTAR NUNCA — sin error, sin log, cero coincidencias para siempre.
+    // Es el mismo fallo mudo que este fichero ya documenta con `level`.
+    const A = leerCodigo('src/lib/automations.ts')
+    const ini = A.indexOf('export function evaluateTrigger')
+    const fin = A.indexOf('export async function runAutomations')
+    const evaluador = A.slice(ini, fin)
+
+    const bucles = [...evaluador.matchAll(/for \(const (\w+) of \(?ctx\.(\w+)/g)]
+    expect(bucles.length, 'no se reconoce ningun bucle sobre ctx: revisa esta regla').toBeGreaterThan(2)
+
+    // Los select DEL SNAPSHOT, no los del fichero entero: hay mas consultas sueltas
+    // (contadores, por ejemplo `select('user_id')`) y quedarse con la ultima daba
+    // ocho falsos positivos de golpe.
+    const iSnap = A.indexOf('const snapshot = await Promise.all([')
+    expect(iSnap, 'ya no se construye el snapshot con Promise.all: revisa esta regla').toBeGreaterThan(-1)
+    const bloqueSnap = A.slice(iSnap, A.indexOf('])', iSnap) + 2)
+    // UNION de columnas por tabla: una misma tabla se consulta varias veces en el
+    // snapshot (`inbox_messages` va completa para la lista y con `select('user_id')`
+    // para un contador). Quedarse con la ultima daba ocho falsos positivos.
+    const selects: Record<string, string> = {}
+    for (const m of bloqueSnap.matchAll(/from\('(\w+)'\)\.select\('([^']*)'/g)) {
+      selects[m[1]] = (selects[m[1]] ? selects[m[1]] + ',' : '') + m[2]
+    }
+
+    const TABLA: Record<string, string> = {
+      projects: 'projects', tasks: 'tasks', clients: 'clients', agenda: 'content_agenda',
+      inbox: 'inbox_messages', diario: 'diario', team: 'profiles',
+    }
+    const DE_ARRAY = ['length', 'map', 'filter', 'find', 'some', 'every', 'slice', 'push', 'join']
+
+    const faltan: string[] = []
+    for (const [, variable, lista] of bucles) {
+      const sel = selects[TABLA[lista]]
+      if (!sel || sel.includes('*')) continue
+      // Las dos formas de leer una columna, porque este fichero usa las dos:
+      // `p.created_at` y `(p as { created_at?: string }).created_at`. Mirando solo
+      // la primera, la regla pasaba en verde con el bug reintroducido — el acceso
+      // real de `proyecto_nuevo` lleva el cast por delante.
+      const cols = new Set([
+        ...[...evaluador.matchAll(new RegExp(`\\b${variable}\\.(\\w+)`, 'g'))].map(m => m[1]),
+        ...[...evaluador.matchAll(new RegExp(`\\(\\s*${variable}\\s+as\\s+[^)]*\\)\\.(\\w+)`, 'g'))].map(m => m[1]),
+      ])
+      for (const c of cols) {
+        if (DE_ARRAY.includes(c)) continue
+        if (!new RegExp(`\\b${c}\\b`).test(sel)) {
+          faltan.push(`ctx.${lista}: se lee ${variable}.${c} y select('${sel}') no lo trae`)
+        }
+      }
+    }
+    expect([...new Set(faltan)],
+      `el evaluador lee columnas que el snapshot no pide. PostgREST devuelve SOLO lo pedido, asi que el valor es undefined y ese disparador no salta NUNCA — sin error y sin log:\n  ${[...new Set(faltan)].join('\n  ')}`)
+      .toEqual([])
+  })
+
   it('todo campo que lee evaluateTrigger viene cargado en el snapshot', () => {
     // EL FALLO MUDO que el propio fichero documenta: «un snapshot que no trae lo
     // que el evaluador mira es un fallo mudo — no hay error, solo cero
