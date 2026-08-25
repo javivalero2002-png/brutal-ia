@@ -4052,6 +4052,57 @@ describe('todos los buscadores de la app buscan igual', () => {
   })
 })
 
+describe('tres afirmaciones mas que no se sostenian', () => {
+  it('ninguna PANTALLA saca la hora de un evento cortando el ISO', () => {
+    // La regla hermana cubre los constructores de contexto de las dos IAs. Estas
+    // dos pantallas seguian cortando: Google devuelve cada evento en el desfase del
+    // calendario donde vive (+01:00 el personal, +02:00 el compartido), asi que la
+    // misma reunion salia a las 10:30 en un panel y a las 11:30 en Calendario.
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (!ruta.startsWith('src/components/')) continue
+      for (const m of leerCodigo(ruta).matchAll(/\w*[Ss]tart\w*\.slice\(\s*11\s*,\s*16\s*\)/g)) {
+        infractores.push(`${ruta}: ${m[0]}`)
+      }
+    }
+    expect(infractores, `una pantalla vuelve a sacar la hora cortando el ISO: dira una hora distinta de la que enseña Calendario, y solo para algunos calendarios:\n  ${infractores.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('el panel de procesos vigila TODOS los crons que hay', () => {
+    // El panel dice «TODO LO AUTOMÁTICO, AL DÍA» y `CADENCIA` solo listaba dos de
+    // los cuatro: los dos recordatorios podian llevar dias sin correr y aqui salia
+    // todo verde. Un panel que afirma mas de lo que mira es peor que no tenerlo,
+    // porque se deja de comprobar a mano.
+    const crons = new Set(
+      (JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons?: { path: string }[] }).crons
+        ?.map(c => c.path.split('/').pop()!) || [])
+    expect(crons.size, 'no hay crons en vercel.json: revisa esta regla').toBeGreaterThan(1)
+    const L = leerCodigo('src/app/api/admin/latido/route.ts')
+    const m = L.match(/const CADENCIA: Record<string, number> = \{([\s\S]*?)\n\}/)
+    expect(m, 'ya no existe CADENCIA: revisa esta regla en vez de borrarla').toBeTruthy()
+    // `backup` late como `copia`: el cron y el nombre del latido no coinciden.
+    const ALIAS: Record<string, string> = { backup: 'copia' }
+    const sinVigilar = [...crons].map(c => ALIAS[c] || c).filter(c => !new RegExp(`['"]?${c}['"]?\\s*:`).test(m![1]))
+    expect(sinVigilar, `hay crons que el panel de procesos no vigila, y aun asi dice «todo al dia»:\n  ${sinVigilar.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('«fichó y no cerró» se decide por el fichaje, no por el texto', () => {
+    // Con el texto, quien abre Fichar, escribe dos palabras y se va —sin llegar a
+    // fichar— salia acusado de «ficho y no cerro». Es una afirmacion falsa sobre el
+    // trabajo de alguien, y le llega a un jefe.
+    const A = leerCodigo('src/lib/automations.ts')
+    const i = A.indexOf("sincerrar:")
+    expect(i, 'ya no existe el disparador sin_fichar: revisa esta regla').toBeGreaterThan(-1)
+    const bloque = A.slice(Math.max(0, i - 400), i)
+    expect(/haFichado\(/.test(bloque),
+      'vuelve a decidirse por el texto: acusara de no cerrar a quien nunca ficho').toBe(true)
+    expect(/!\(d\.entrada \|\| ''\)\.trim\(\)/.test(bloque),
+      'vuelve el criterio del texto').toBe(false)
+  })
+})
+
 describe('la CSP deja incrustar lo que la app sabe incrustar', () => {
   // `videoEmbed()` genera iframes de YouTube, Vimeo, Drive e Instagram; `frame-src`
   // solo listaba los dos primeros. Drive e Instagram los bloqueaba la CSP: caja

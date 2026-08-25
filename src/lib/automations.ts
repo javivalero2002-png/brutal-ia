@@ -346,7 +346,12 @@ export function evaluateTrigger(cfg: RuleConfig, ctx: {
     const nombre = new Map((ctx.equipo || []).map(p => [p.id, p.name || 'alguien']))
     for (const d of ctx.diario || []) {
       if (d.dia >= hoy) continue
-      if (!(d.entrada || '').trim() || d.cierre_at) continue
+      // `haFichado` y NO el texto. Con el texto, quien abre Fichar, escribe dos
+      // palabras y se va —sin llegar a fichar— salía acusado de «fichó y no
+      // cerró»: una afirmación falsa sobre el trabajo de alguien, y le llega a un
+      // jefe. Es el mismo criterio que ya usa el recordatorio de las 20:00, donde
+      // está escrito al lado: «haFichado y no el texto».
+      if (!haFichado(d as { entrada_at?: string | null }) || d.cierre_at) continue
       out.push({ key: `sincerrar:${d.user_id}:${d.dia}`, vars: { persona: nombre.get(d.user_id) || 'alguien', dia: d.dia } })
     }
   } else if (t.type === 'bloqueado') {

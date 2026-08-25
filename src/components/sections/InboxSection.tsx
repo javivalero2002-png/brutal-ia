@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { horaMadrid } from '@/lib/ventanaCalendario'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { NexusData } from '@/types'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR, rotuloNivel } from '@/components/shared'
@@ -1182,7 +1183,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                   <div className="space-y-2">
                     {upcoming.map((e:any,i:number)=>{ const d=new Date(e.start); const hasT=!!e.start?.includes('T'); return (
                       <div key={i} className="flex items-center gap-3 p-3 rounded-xl" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${BORDER}`}}>
-                        <div className="flex flex-col items-center flex-shrink-0" style={{minWidth:'40px'}}><span className="font-figtree text-[13px] font-black" style={{color:'#A78BFA'}}>{hasT?e.start.slice(11,16):'—'}</span><span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.25)'}}>{d.toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span></div>
+                        <div className="flex flex-col items-center flex-shrink-0" style={{minWidth:'40px'}}><span className="font-figtree text-[13px] font-black" style={{color:'#A78BFA'}}>{hasT?horaMadrid(e.start):'—'}</span><span className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.25)'}}>{d.toLocaleDateString('es-ES',{day:'numeric',month:'short'})}</span></div>
                         <div className="min-w-0 flex-1"><div className="font-figtree text-[12px] font-semibold truncate" style={{color:'rgba(255,255,255,0.75)'}}>{e.title}</div>{e.location&&<div className="font-syne text-[8px] truncate mt-0.5" style={{color:'rgba(255,255,255,0.28)'}}>{e.location}</div>}</div>
                       </div>
                     )})}
