@@ -107,7 +107,17 @@ export async function ejecutarAccionHarvey(
       }
 
       case 'pieza': {
-        const cliente = buscarCliente(accion.clientName)
+        // SIN cliente y SIN fecha, y no es un olvido: el contrato del prompt son
+        // tres campos a proposito —«NO preguntes por el cliente, la fecha ni mas
+        // detalles: con el tema y la plataforma basta»—, porque esto se dicta en
+        // voz alta y un interrogatorio de cuatro preguntas para apuntar un reel no
+        // lo usa nadie. El resto se edita luego en el pipeline.
+        //
+        // Aqui se leian ademas el cliente y la fecha de la accion. El parser no
+        // rellena ninguno de los dos para una pieza, asi que eran siempre
+        // `undefined`: no fallaban, PARECIAN una funcion. Quien leyera el ejecutor
+        // daba por hecho que una pieza dictada se enlaza con su cliente, y no pasa.
+        // Codigo muerto que miente es peor que codigo muerto.
         await data.createAgenda({
           title: accion.text,
           // Normalizadas: una plataforma que no esta en la lista no casa ningun color
@@ -115,10 +125,50 @@ export async function ejecutarAccionHarvey(
           platform: plataformaContenido(accion.platform),
           content_type: tipoContenido(accion.contentType),
           status: 'borrador',
-          publish_date: accion.date || undefined,
-          client_id: cliente?.id,
         })
         showToast('Pieza añadida al pipeline de contenido')
+        return true
+      }
+      case 'completar': {
+        // La contraria de 'tarea'. Harvey leía en voz alta lo que había pendiente y
+        // no podía tachar nada: decir «ya está» y que la tarea siga ahí es lo que
+        // hace que se deje de usar por voz.
+        //
+        // CUÁL es exactamente lo decide AQUÍ, no el modelo. El modelo repite el
+        // título que él mismo acaba de leer del contexto, y aquí está la lista de
+        // verdad: comparar contra ella es lo único que puede fallar en voz alta
+        // («la del guion» no es un título) y por tanto lo único que hay que hacer
+        // bien.
+        const norm = (t: string) => t.toLowerCase()
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')   // «guion» casa «guión»
+          .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
+        const buscado = norm(accion.text)
+        if (!buscado) { showToast('No he entendido qué tarea marcar como hecha'); return false }
+
+        const pendientes = ((data.tasks || []) as { id: string; text: string; done?: boolean }[])
+          .filter(t => !t.done)
+        // Por capas y de más estricta a menos: exacta, luego empieza por, luego
+        // contiene. Sin las capas, «guion» elegía la primera que lo llevara dentro
+        // aunque hubiera una que se llamara exactamente así.
+        const exactas = pendientes.filter(t => norm(t.text) === buscado)
+        const empiezan = pendientes.filter(t => norm(t.text).startsWith(buscado))
+        const contienen = pendientes.filter(t => norm(t.text).includes(buscado) || buscado.includes(norm(t.text)))
+        const candidatas = exactas.length ? exactas : empiezan.length ? empiezan : contienen
+
+        if (!candidatas.length) {
+          showToast(`No encuentro ninguna tarea pendiente que sea «${accion.text}»`)
+          return false
+        }
+        if (candidatas.length > 1) {
+          // NO se elige la primera. Marcar hecha la tarea equivocada es un error
+          // que nadie ve —desaparece de la lista— y que el usuario descubre
+          // cuando ya cuenta como trabajo terminado de alguien.
+          showToast(`Hay ${candidatas.length} tareas que encajan con eso. Dime cuál: ${candidatas.slice(0, 3).map(t => `«${t.text}»`).join(', ')}`)
+          return false
+        }
+
+        await data.toggleTask(candidatas[0].id)
+        showToast(`Hecha: ${candidatas[0].text}`)
         return true
       }
       case 'nota': {

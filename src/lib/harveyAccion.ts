@@ -12,7 +12,7 @@ import { nivelTarea, type NivelTarea } from '@/components/shared/helpers'
 // El contrato lo fija el prompt en src/app/api/harvey/chat/route.ts (~línea 150).
 // Si cambias uno, cambia el otro.
 
-export const TIPOS_ACCION = ['tarea', 'evento', 'proyecto', 'cliente', 'pieza', 'nota'] as const
+export const TIPOS_ACCION = ['tarea', 'evento', 'proyecto', 'cliente', 'pieza', 'nota', 'completar'] as const
 export type TipoAccion = (typeof TIPOS_ACCION)[number]
 
 export interface AccionHarvey {
@@ -77,10 +77,52 @@ export function parsearAccionHarvey(respuesta: string): { texto: string; accion:
       return { texto, accion: { type: 'cliente', text: campo(1), industry: campo(2) || '—' } }
     case 'pieza':
       return { texto, accion: { type: 'pieza', text: campo(1), platform: campo(2) || 'Instagram', contentType: campo(3) || 'Post' } }
+    case 'completar':
+      // La CONTRARIA de 'tarea', y faltaba: Harvey te leía en voz alta lo que
+      // tenías pendiente y no podía tachar nada. Decir «ya está» y que la tarea
+      // siga ahí es lo que hace que se deje de usar por voz.
+      //
+      // Un solo campo: el texto de la tarea. Quién la resuelve NO se pregunta —la
+      // resuelve quien habla— y cuál es exactamente lo decide el ejecutor, que
+      // tiene la lista delante; el modelo solo repite el título que él mismo acaba
+      // de leer.
+      return { texto, accion: { type: 'completar', text: campo(1) } }
     case 'nota':
       // Harvey YA la ofrecía en voz alta —su prompt dice «ofrece crear el resto como
       // tarea o NOTA»— y no existía: decía que la creaba y no se proponía nada. Esta
       // es la mitad que faltaba.
       return { texto, accion: { type: 'nota', text: campo(1), category: campo(2) || 'General' } }
+  }
+}
+
+/**
+ * Cómo se PINTA cada acción en la tarjeta «HARVEY PROPONE».
+ *
+ * Vive aquí porque esa tarjeta está escrita CUATRO veces —HoySection y
+ * HarveySection, y cada una en su variante de móvil y de escritorio—, así que
+ * cualquier tipo nuevo había que darlo de alta en cuatro sitios o se pintaba con
+ * el icono de «cliente» y el botón decía «CREANDO…».
+ *
+ * Y decir «creando» al completar una tarea no es un detalle: la tarjeta es lo
+ * único que el usuario lee antes de confirmar algo que no puede deshacer.
+ */
+export function etiquetaAccion(tipo: TipoAccion): {
+  icono: string
+  /** Cabecera corta, para la tarjeta que ya dice «HARVEY PROPONE — …». */
+  titulo: string
+  /** Cabecera con verbo, para la que dice solo «HARVEY — …». Las dos existen. */
+  tituloLargo: string
+  enCurso: string
+} {
+  switch (tipo) {
+    case 'tarea':     return { icono: 'check-square', titulo: 'TAREA',     tituloLargo: 'CREAR TAREA',        enCurso: 'CREANDO…' }
+    case 'evento':    return { icono: 'calendar',     titulo: 'EVENTO',    tituloLargo: 'CREAR EVENTO',       enCurso: 'CREANDO…' }
+    case 'proyecto':  return { icono: 'folder',       titulo: 'PROYECTO',  tituloLargo: 'CREAR PROYECTO',     enCurso: 'CREANDO…' }
+    case 'cliente':   return { icono: 'user-plus',    titulo: 'CLIENTE',   tituloLargo: 'CREAR CLIENTE',      enCurso: 'CREANDO…' }
+    case 'pieza':     return { icono: 'film',         titulo: 'PIPELINE',  tituloLargo: 'AÑADIR AL PIPELINE', enCurso: 'CREANDO…' }
+    case 'nota':      return { icono: 'book-open',    titulo: 'MEMORIA',   tituloLargo: 'GUARDAR EN MEMORIA', enCurso: 'GUARDANDO…' }
+    // MARCAR y no CREAR: es la unica accion que no anade nada, y la tarjeta es lo
+    // unico que el usuario lee antes de confirmar algo que no puede deshacer.
+    case 'completar': return { icono: 'check',        titulo: 'COMPLETAR', tituloLargo: 'MARCAR COMO HECHA',  enCurso: 'MARCANDO…' }
   }
 }

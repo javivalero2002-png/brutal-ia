@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { textOf } from '@/lib/aiText'
 import { sanearHistorial } from './historialIA'
-import { estadoDeadline } from '@/components/shared/helpers'
+import { estadoDeadline, todayKey } from '@/components/shared/helpers'
+import { COMO_LEER_EL_DIARIO } from '@/lib/resumenEquipo'
 import { nivelTarea, type NivelTarea } from '@/components/shared/helpers'
 
 // Sin topes, el SDK se queda con sus valores por defecto: 10 MINUTOS de timeout
@@ -343,9 +344,32 @@ export async function chat(
     unreadInbox: number
     emails: Array<{from: string; subject: string; summary: string; urgency: string; shared: boolean; received_at: string}>
     teamSize: number
+    /**
+     * LOS NOMBRES, no solo cuántos. Brutal.IA leía «Equipo: 7 personas» y nada
+     * más: no podía contestar «¿quién puede llevar esto?» ni reconocer un nombre
+     * que le dijeras, mientras Harvey —que sí los tiene— contestaba de otra
+     * manera a la misma pregunta.
+     */
+    team?: string[]
     userName: string
     todayDate: string
     contentPipeline: number
+    /**
+     * Las piezas con TÍTULO. Llegaba un número pelado —«3 piezas programadas»—,
+     * así que la única pregunta que se podía contestar sobre el pipeline era
+     * cuántas había. Ni de qué van, ni para cuándo.
+     */
+    contenido?: Array<{title: string; platform?: string; status?: string; publish_date?: string}>
+    /**
+     * La agenda. Brutal.IA no tenía calendario y Harvey sí, así que «¿qué tengo
+     * esta semana?» dependía de a cuál de las dos se lo preguntaras.
+     */
+    eventos?: Array<{title: string; start: string; cuenta?: string}>
+    /**
+     * El diario del equipo, ya redactado por `resumenDelEquipo`. Cadena vacía si
+     * la pregunta no iba de esto: el bloque solo se paga cuando hace falta.
+     */
+    diarioEquipo?: string
     /**
      * Las notas de Memoria que vienen al caso. Ya vienen ELEGIDAS y formateadas por
      * `memoriaRelevante`, la misma función que usa Harvey — no una copia con otro
@@ -381,17 +405,45 @@ export async function chat(
     p => p.status !== 'completado' && estadoDeadline(p.deadline)?.vencido === true
   )
 
+  // Quién lleva cada cosa. La consulta YA traía el responsable —el `select` pide
+  // `assignee:profiles!assigned_to(name)` y el tipo lo declara— y el prompt lo
+  // tiraba: se imprimía solo `t.text`. O sea que Brutal.IA tenía el dato delante y
+  // contestaba «no sé de quién es» a la pregunta más normal que hay sobre una tarea.
+  const conQuien = (t: {text: string; assignee?: string}) =>
+    t.assignee ? `${t.text} (→ ${t.assignee})` : t.text
+
+  // Las piezas por título. Se acotan a 10: el pipeline entero en cada mensaje se
+  // paga en tokens en todas las preguntas que no van de contenido.
+  const lineasContenido = (context.contenido || []).length
+    ? `:\n${(context.contenido || []).slice(0, 10).map(c =>
+        `  · ${c.title}${c.platform ? ` [${c.platform}]` : ''}${c.status ? ` — ${c.status}` : ''}${c.publish_date ? ` — ${c.publish_date}` : ''}`,
+      ).join('\n')}`
+    : ''
+
+  // La agenda. Solo lo que viene, y con la cuenta si hay más de una conectada:
+  // «tienes reunión el jueves» significa algo distinto según en qué calendario.
+  const proximos = (context.eventos || [])
+    .filter(e => e.start && e.start.slice(0, 10) >= todayKey())
+    .sort((a, b) => a.start.localeCompare(b.start))
+    .slice(0, 8)
+  const variasCuentas = new Set((context.eventos || []).map(e => e.cuenta).filter(Boolean)).size > 1
+  const lineasAgenda = proximos.length
+    ? `\nCALENDARIO PRÓXIMO:\n${proximos.map(e =>
+        `  · ${e.start.slice(0, 16).replace('T', ' ')} — ${e.title}${variasCuentas && e.cuenta ? ` (${e.cuenta})` : ''}`,
+      ).join('\n')}`
+    : ''
+
   const systemPrompt = `Eres Brutal.IA, la inteligencia artificial de Brutal Studios, una agencia creativa española especializada en marketing digital, contenido y estrategia de marca.
 
 CONTEXTO DEL NEGOCIO (actualizado al ${context.todayDate}):
 - Usuario: ${context.userName}
-- Equipo: ${context.teamSize} personas
+- Equipo (${context.teamSize}): ${(context.team || []).join(', ') || 'sin datos'}
 - Clientes: ${context.clients.join(', ') || 'ninguno'}
 - Proyectos activos: ${activeProjects.map(p => p.name).join(', ') || 'ninguno'} (${context.projects.length} en total${overdueProjects.length > 0 ? `, ${overdueProjects.length} VENCIDO${overdueProjects.length > 1 ? 'S' : ''}` : ''})
-- Pipeline de contenido: ${context.contentPipeline} pieza${context.contentPipeline !== 1 ? 's' : ''} programada${context.contentPipeline !== 1 ? 's' : ''}
-- Tareas urgentes: ${urgentTasks.map(t => t.text).join(', ') || 'ninguna'}
-- Tareas de alta prioridad: ${highTasks.map(t => t.text).join(', ') || 'ninguna'}
-- Tareas totales pendientes: ${context.tasks.length}${context.ficha ? `
+- Pipeline de contenido: ${context.contentPipeline} pieza${context.contentPipeline !== 1 ? 's' : ''} pendiente${context.contentPipeline !== 1 ? 's' : ''}${lineasContenido}
+- Tareas urgentes: ${urgentTasks.map(conQuien).join(', ') || 'ninguna'}
+- Tareas de alta prioridad: ${highTasks.map(conQuien).join(', ') || 'ninguna'}
+- Tareas totales pendientes: ${context.tasks.length}${lineasAgenda}${context.diarioEquipo || ''}${context.diarioEquipo ? `\n${COMO_LEER_EL_DIARIO.trim()}` : ''}${context.ficha ? `
 FICHA DEL ESTUDIO (lo permanente: quiénes son los clientes, cómo se trabaja, qué
 se decidió). Es el punto de partida; si la pregunta pide un dato concreto, míralo
 en la memoria de abajo antes que aquí:
@@ -406,6 +458,7 @@ CAPACIDADES Y ACCESO A INTERNET:
 - Tienes acceso a búsqueda web en tiempo real mediante Tavily. Cuando el mensaje del usuario incluye un bloque <web_search_results>, son datos actuales de internet recopilados justo antes de tu respuesta.
 - Eres el cerebro que sintetiza esos datos. Usa los resultados para dar respuestas precisas, actualizadas y autoritativas. No cites fuentes con números ("según [1]") — integra la información de forma natural como si la supieras.
 - Si no hay <web_search_results> en el mensaje, usa tu conocimiento de entrenamiento (hasta mediados de 2025) y sé transparente si algo puede haber cambiado.
+- Tienes acceso a: tareas (con quién las lleva), proyectos, clientes, pipeline de contenido, inbox, calendario y el diario de trabajo del equipo. Si un dato no aparece arriba, dilo: no lo deduzcas ni te lo inventes.
 - Tienes conocimiento profundo de marketing digital, influencers, redes sociales, estrategia de contenido, branding y sector creativo.
 - Puedes proporcionar listas de influencers, marcas, estrategias, hashtags, análisis de nichos, propuestas creativas, borradores de copy, briefs, presupuestos y cualquier recurso que una agencia creativa necesite.
 - NUNCA te niegues a responder — siempre entrega algo útil. Si piden un listado, da el listado completo.
@@ -441,7 +494,19 @@ Responde siempre en español. Sé directo, concreto y profesional. Formato markd
   }, { timeout: 45_000, maxRetries: 0 })
 
   const reply = textOf(msg) || 'No pude procesar tu mensaje.'
-  return { reply, searched: shouldSearch && results.length > 0 }
+  // 1200 tokens dan de sobra casi siempre, pero «casi siempre» es justo cuando
+  // esto muerde: si piden «dame 30 influencers» la respuesta se corta a mitad de
+  // la 24 y se servía como si estuviera entera. Nadie lo notaba, porque una lista
+  // que acaba sin más parece una lista que acaba.
+  //
+  // Se dice en la propia respuesta, que es donde el usuario está mirando, y no en
+  // la consola del servidor, que es donde estaba el aviso de Harvey — o sea en
+  // ningún sitio.
+  const truncada = (msg as { stop_reason?: string | null }).stop_reason === 'max_tokens'
+  return {
+    reply: truncada ? `${reply}\n\n_(Se me ha cortado aquí por longitud. Pídeme la continuación y sigo.)_` : reply,
+    searched: shouldSearch && results.length > 0,
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

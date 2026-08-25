@@ -4,7 +4,7 @@ import { construirContexto } from '@/lib/contextoHarvey'
 import { memoriaRelevante, lineasDeMemoria } from '@/lib/memoriaRelevante'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
-import { parsearAccionHarvey, type AccionHarvey } from '@/lib/harveyAccion'
+import { parsearAccionHarvey, type AccionHarvey , etiquetaAccion } from '@/lib/harveyAccion'
 import { nivelTarea } from '@/components/shared/helpers'
 import { BLU, RED, GRN, VIO, BORDER } from '@/components/shared/design-tokens'
 import { useIsMobile } from '@/components/shared/hooks'
@@ -834,13 +834,11 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
             </div>
 
             {pendingAction && orbMode==='idle' && !isMobile && (()=>{
-              const iconMap: Record<string,string> = {tarea:'check-square',evento:'calendar',proyecto:'folder',cliente:'user-plus',pieza:'film'}
-              const labelMap: Record<string,string> = {tarea:'CREAR TAREA',evento:'CREAR EVENTO',proyecto:'CREAR PROYECTO',cliente:'CREAR CLIENTE',pieza:'AÑADIR AL PIPELINE'}
               return (
                 <div ref={actionCardRef} className="mt-4 rounded-2xl overflow-hidden animate-fadeUp" style={{border:`1px solid ${BLU}35`,background:`${BLU}08`}}>
                   <div className="px-5 py-3 flex items-center gap-2" style={{borderBottom:`1px solid ${BLU}18`,background:`${BLU}0c`}}>
-                    <LucideIcon name={iconMap[pendingAction.type]||'zap'} size={12} color={BLU}/>
-                    <span className="font-syne text-[8px] font-black tracking-widest" style={{color:BLU}}>HARVEY — {labelMap[pendingAction.type]||pendingAction.type.toUpperCase()}</span>
+                    <LucideIcon name={etiquetaAccion(pendingAction.type).icono} size={12} color={BLU}/>
+                    <span className="font-syne text-[8px] font-black tracking-widest" style={{color:BLU}}>HARVEY — {etiquetaAccion(pendingAction.type).tituloLargo}</span>
                   </div>
                   <div className="px-5 py-4">
                     <p className="font-figtree text-[14px] font-semibold mb-1.5" style={{color:'rgba(255,255,255,0.88)'}}>{pendingAction.text}</p>
@@ -854,7 +852,7 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
                     </div>
                     <div className="flex gap-2">
                       <button onClick={confirmHarveyAction} disabled={confirmingAction} className="flex-1 py-2.5 rounded-xl font-syne text-[8.5px] font-black tracking-widest transition-all disabled:opacity-40" style={{background:BLU,color:'white'}}>
-                        {confirmingAction?'CREANDO…':'CONFIRMAR'}
+                        {confirmingAction?etiquetaAccion(pendingAction.type).enCurso:'CONFIRMAR'}
                       </button>
                       <button onClick={()=>setPendingAction(null)} className="flex-1 py-2.5 rounded-xl font-syne text-[8.5px] font-black tracking-widest transition-all hover:bg-white/5" style={{border:`1px solid rgba(255,255,255,0.08)`,color:'rgba(255,255,255,0.25)'}}>
                         CANCELAR
@@ -943,16 +941,14 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
       })()}
 
       {isMobile && pendingAction && orbMode==='idle' && (()=>{
-        const iconMap: Record<string,string> = {tarea:'check-square',evento:'calendar',proyecto:'folder',cliente:'user-plus',pieza:'film'}
-        const labelMap: Record<string,string> = {tarea:'CREAR TAREA',evento:'CREAR EVENTO',proyecto:'CREAR PROYECTO',cliente:'CREAR CLIENTE',pieza:'AÑADIR AL PIPELINE'}
         return (
           <>
             <div className="fixed inset-0 z-[90] bg-black/60" onClick={()=>setPendingAction(null)}/>
             <div ref={actionCardRef} className="fixed bottom-0 left-0 right-0 z-[91] rounded-t-3xl animate-fadeUp" style={{background:'#0A0A14',border:`1px solid ${BLU}35`,borderBottom:'none',paddingBottom:'env(safe-area-inset-bottom,0px)'}}>
               <div className="w-10 h-1 rounded-full mx-auto mt-2.5 mb-1" style={{background:'rgba(255,255,255,0.12)'}}/>
               <div className="px-5 py-2.5 flex items-center gap-2" style={{borderBottom:`1px solid ${BLU}18`}}>
-                <LucideIcon name={iconMap[pendingAction.type]||'zap'} size={12} color={BLU}/>
-                <span className="font-syne text-[8px] font-black tracking-widest" style={{color:BLU}}>HARVEY — {labelMap[pendingAction.type]||pendingAction.type.toUpperCase()}</span>
+                <LucideIcon name={etiquetaAccion(pendingAction.type).icono} size={12} color={BLU}/>
+                <span className="font-syne text-[8px] font-black tracking-widest" style={{color:BLU}}>HARVEY — {etiquetaAccion(pendingAction.type).tituloLargo}</span>
               </div>
               <div className="px-5 py-4">
                 <p className="font-figtree text-[14px] font-semibold mb-1.5" style={{color:'rgba(255,255,255,0.88)'}}>{pendingAction.text}</p>
@@ -966,7 +962,7 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
                 </div>
                 <div className="flex gap-2">
                   <button onClick={confirmHarveyAction} disabled={confirmingAction} className="flex-1 py-3 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all disabled:opacity-40" style={{background:BLU,color:'white'}}>
-                    {confirmingAction?'CREANDO…':'CONFIRMAR'}
+                    {confirmingAction?etiquetaAccion(pendingAction.type).enCurso:'CONFIRMAR'}
                   </button>
                   <button onClick={()=>setPendingAction(null)} className="flex-1 py-3 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all" style={{border:`1px solid rgba(255,255,255,0.12)`,color:'rgba(255,255,255,0.35)'}}>
                     CANCELAR

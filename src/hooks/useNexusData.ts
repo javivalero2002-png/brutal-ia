@@ -382,7 +382,21 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     const tempId = crypto.randomUUID()
     setChatMessages(prev => [...prev, { id: tempId, role: 'user', content: message, created_at: new Date().toISOString() }])
     try {
-      const { reply, searched } = await apiFetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message }) })
+      const { reply, searched } = await apiFetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        message,
+        // LA AGENDA VA DESDE AQUÍ. Brutal.IA no tenía calendario y Harvey sí, así
+        // que «¿qué tengo esta semana?» dependía de a cuál preguntaras. Pedirla en
+        // el servidor significaba llamar a Google en cada mensaje —lista de
+        // calendarios más paginación por cuenta, segundos— para una pregunta que
+        // casi nunca va de eso. Aquí ya está cargada: es el mismo dato que el
+        // usuario tiene delante en la pantalla, y no cuesta nada.
+        //
+        // El servidor la acota y la sanea igualmente: que llegue del cliente no la
+        // convierte en de fiar.
+        eventos: (calendarEvents || []).slice(0, 60).map(e => ({
+          title: (e as any).title || '', start: (e as any).start || '', cuenta: (e as any).cuenta,
+        })),
+      }) })
       setChatMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'ai', content: reply, created_at: new Date().toISOString(), searched: !!searched }])
       return reply
     } catch (err) {

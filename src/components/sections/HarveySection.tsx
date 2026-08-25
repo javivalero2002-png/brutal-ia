@@ -4,7 +4,7 @@ import { construirContexto } from '@/lib/contextoHarvey'
 import { memoriaRelevante as elegirMemoria } from '@/lib/memoriaRelevante'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
-import { parsearAccionHarvey, type AccionHarvey } from '@/lib/harveyAccion'
+import { parsearAccionHarvey, type AccionHarvey , etiquetaAccion } from '@/lib/harveyAccion'
 import { nivelTarea } from '@/components/shared/helpers'
 import type { NexusData } from '@/types'
 import { estadoDeadline, Esperando, BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, AMBAR, mensajeErrorTranscripcion } from '@/components/shared'
@@ -895,8 +895,8 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
       {pendingAction && mode==='idle' && !isMobile && (
         <div ref={harveyActionCardRef} className="mx-7 mb-3 rounded-2xl overflow-hidden flex-shrink-0 relative z-10 animate-fadeUp" style={{background:'rgba(27,95,250,0.07)',border:'1px solid rgba(27,95,250,0.22)'}}>
           <div className="px-4 pt-3.5 pb-1 flex items-center gap-2">
-            <LucideIcon name={pendingAction.type==='tarea'?'check-square':pendingAction.type==='evento'?'calendar':pendingAction.type==='proyecto'?'folder':pendingAction.type==='pieza'?'film':'user'} size={12} color={BLU}/>
-            <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(27,95,250,0.7)'}}>HARVEY PROPONE — {pendingAction.type==='pieza'?'PIPELINE':pendingAction.type.toUpperCase()}</span>
+            <LucideIcon name={etiquetaAccion(pendingAction.type).icono} size={12} color={BLU}/>
+            <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(27,95,250,0.7)'}}>HARVEY PROPONE — {etiquetaAccion(pendingAction.type).titulo}</span>
           </div>
           <div className="px-4 pb-3.5">
             <p className="font-figtree text-[14px] font-semibold mb-2" style={{color:'rgba(255,255,255,0.9)'}}>{pendingAction.text}</p>
@@ -910,7 +910,7 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
             </div>
             <div className="flex gap-2">
               <button onClick={confirmHarveyAction} disabled={confirmingAction} className="flex-1 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest transition-all disabled:opacity-40 text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
-                {confirmingAction?'CREANDO…':'CONFIRMAR'}
+                {confirmingAction?etiquetaAccion(pendingAction.type).enCurso:'CONFIRMAR'}
               </button>
               <button onClick={()=>setPendingAction(null)} className="px-4 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all hover:opacity-70" style={{background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.4)',border:`1px solid ${BORDER}`}}>CANCELAR</button>
             </div>
@@ -1032,8 +1032,8 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
           <div ref={harveyActionCardRef} className="fixed bottom-0 left-0 right-0 z-[91] rounded-t-3xl animate-fadeUp" style={{background:SURFACE,border:'1px solid rgba(27,95,250,0.3)',borderBottom:'none',paddingBottom:'env(safe-area-inset-bottom,0px)'}}>
             <div className="w-10 h-1 rounded-full mx-auto mt-2.5 mb-1" style={{background:'rgba(255,255,255,0.12)'}}/>
             <div className="px-5 py-2.5 flex items-center gap-2" style={{borderBottom:'1px solid rgba(27,95,250,0.15)'}}>
-              <LucideIcon name={pendingAction.type==='tarea'?'check-square':pendingAction.type==='evento'?'calendar':pendingAction.type==='proyecto'?'folder':pendingAction.type==='pieza'?'film':'user'} size={12} color={BLU}/>
-              <span className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(27,95,250,0.7)'}}>HARVEY PROPONE — {pendingAction.type==='pieza'?'PIPELINE':pendingAction.type.toUpperCase()}</span>
+              <LucideIcon name={etiquetaAccion(pendingAction.type).icono} size={12} color={BLU}/>
+              <span className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(27,95,250,0.7)'}}>HARVEY PROPONE — {etiquetaAccion(pendingAction.type).titulo}</span>
             </div>
             <div className="px-5 py-4">
               <p className="font-figtree text-[14px] font-semibold mb-2" style={{color:'rgba(255,255,255,0.9)'}}>{pendingAction.text}</p>
@@ -1047,7 +1047,7 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
               </div>
               <div className="flex gap-2">
                 <button onClick={confirmHarveyAction} disabled={confirmingAction} className="flex-1 py-3 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all disabled:opacity-40 text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
-                  {confirmingAction?'CREANDO…':'CONFIRMAR'}
+                  {confirmingAction?etiquetaAccion(pendingAction.type).enCurso:'CONFIRMAR'}
                 </button>
                 <button onClick={()=>setPendingAction(null)} className="flex-1 py-3 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all" style={{border:`1px solid rgba(255,255,255,0.12)`,color:'rgba(255,255,255,0.35)'}}>CANCELAR</button>
               </div>

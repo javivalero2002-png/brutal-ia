@@ -1204,7 +1204,10 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
   // El calendario del Diario deja PLANIFICAR dias futuros a proposito. Sin tope
   // por arriba, Harvey leia esos planes y los contaba como trabajo hecho.
   it('harvey no lee dias del diario que aun no han pasado', () => {
-    const C = leerCodigo('src/app/api/harvey/chat/route.ts')
+    // El bloque se mudó a `resumenEquipo.ts` cuando Brutal.IA necesitó lo mismo.
+    // La regla lo detectó sola —se puso roja— y por eso se reapunta en vez de
+    // borrarse: la que se borra al mudar el código es la que deja de proteger.
+    const C = leerCodigo('src/lib/resumenEquipo.ts')
     const i = C.indexOf("from('diario')")
     expect(i, 'harvey ya no lee el diario: revisa esta regla').toBeGreaterThan(-1)
     const consulta = C.slice(i, i + 260)
@@ -1322,7 +1325,10 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
   // el modelo recita los titulos de las tareas uno por uno — medido: 130 palabras
   // y los 5 titulos literales, con listas y emojis, en algo que se lee EN VOZ ALTA.
   it('harvey resume el trabajo de alguien en vez de recitarlo', () => {
-    const H = leerCodigo('src/app/api/harvey/chat/route.ts')
+    // Las instrucciones viven pegadas al dato en `resumenEquipo.ts`
+    // (`COMO_LEER_EL_DIARIO`): separarlas es como se acaba mandando el diario sin
+    // decirle al modelo que lo de «se propuso» es un plan y no un hecho.
+    const H = leerCodigo('src/lib/resumenEquipo.ts')
     expect(/CÓMO SE CUENTA LO QUE HA HECHO ALGUIEN/.test(H),
       'se quitó la instrucción de sintetizar: Harvey volvera a leer la lista entera en voz alta').toBe(true)
     expect(/MUESTRA, no la lista completa/.test(H),
@@ -3442,8 +3448,125 @@ describe('el diseño acierta en el PRIMER render, no en el segundo', () => {
   })
 })
 
+describe('la tarjeta de Harvey no vuelve a tener su propio mapa', () => {
+  // Estaba escrita CUATRO veces y con dos mapas distintos entre si: `nota` salia
+  // con el icono de «cliente» en dos de ellas, y el boton decia CREANDO al marcar
+  // una tarea como hecha. Ahora sale de `etiquetaAccion()`, que es exhaustiva por
+  // tipo — o sea que un tipo nuevo sin etiqueta ya no compila.
+  it('las secciones no llevan su propia tabla de iconos ni de titulos', () => {
+    const infractores = TS.filter(r => /sections\/(Hoy|Harvey)Section/.test(r) &&
+      /(iconMap|labelMap)\s*:\s*Record<string,\s*string>/.test(leerCodigo(r)))
+    expect(infractores, `vuelve a haber un mapa de etiquetas a mano:\n  ${infractores.join('\n  ')}`).toEqual([])
+  })
+
+  it('el boton de confirmar no dice «CREANDO» a pelo', () => {
+    const infractores = TS.filter(r => /sections\/(Hoy|Harvey)Section/.test(r) &&
+      /confirmingAction\s*\?\s*'CREANDO/.test(leerCodigo(r)))
+    expect(infractores, `el boton vuelve a decir CREANDO para todo, incluido marcar una tarea como hecha:\n  ${infractores.join('\n  ')}`).toEqual([])
+  })
+})
+
+describe('el ejecutor no lee campos que el parser nunca rellena', () => {
+  // El caso `pieza` leia el cliente y la fecha de la accion, y el parser no los
+  // pone: eran `undefined` SIEMPRE. No fallaba nada —y por eso vivio— pero quien
+  // leyera el ejecutor daba por hecho que una pieza dictada se enlaza con su
+  // cliente. Codigo muerto que parece una funcion es peor que codigo muerto.
+  //
+  // El contrato de `pieza` son tres campos A PROPOSITO: se dicta en voz alta y un
+  // interrogatorio de cuatro preguntas para apuntar un reel no lo usa nadie. O
+  // sea que la solucion no era rellenarlos, era dejar de leerlos.
+  it('cada campo que se lee en un case, el parser lo pone en ese mismo case', () => {
+    const EJ = leerCodigo('src/lib/harveyEjecutar.ts')
+    const PA = leerCodigo('src/lib/harveyAccion.ts')
+
+    // Lo que el parser SI rellena, por tipo.
+    const rellena: Record<string, Set<string>> = {}
+    for (const m of PA.matchAll(/case '(\w+)':[\s\S]{0,600}?type: '\1'([\s\S]{0,400}?)\}\s*\}/g)) {
+      rellena[m[1]] = new Set([...m[2].matchAll(/(\w+):/g)].map(x => x[1]))
+    }
+    expect(Object.keys(rellena).length, 'no se reconocio ningun case del parser: revisa esta regla en vez de borrarla')
+      .toBeGreaterThan(3)
+
+    // Lo que el ejecutor LEE, por tipo. Cada case va de `case 'x': {` al siguiente.
+    const casos = [...EJ.matchAll(/case '(\w+)': \{/g)]
+    const huerfanos: string[] = []
+    casos.forEach((c, i) => {
+      const tipo = c[1]
+      if (!rellena[tipo]) return   // un case que el parser no conoce ya lo cubre otra regla
+      const cuerpo = EJ.slice(c.index!, casos[i + 1]?.index ?? EJ.length)
+      for (const l of cuerpo.matchAll(/accion\.(\w+)/g)) {
+        // `type` y `text` los pone el parser en todos.
+        if (l[1] === 'type' || l[1] === 'text') continue
+        if (!rellena[tipo].has(l[1])) huerfanos.push(`${tipo}.${l[1]}`)
+      }
+    })
+    expect([...new Set(huerfanos)],
+      `el ejecutor lee campos que el parser NUNCA rellena para ese tipo: son undefined siempre, no fallan, y parecen una funcion que no existe:\n  ${[...new Set(huerfanos)].join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
+describe('una respuesta cortada no se sirve como entera', () => {
+  // Las dos IAs tienen tope de tokens y las dos se lo tragaban. Harvey lo avisaba
+  // con un `console.warn` —o sea a NADIE— y ahi es peor que en Brutal.IA: el
+  // `[ACCION:...]` va al FINAL, asi que es lo primero que se pierde al truncar.
+  // Harvey decia en voz alta «te creo la tarea», la etiqueta se quedaba cortada,
+  // no se creaba nada, y el usuario se enteraba tres dias despues.
+  it('las dos miran stop_reason y se lo dicen a quien esta mirando', () => {
+    // OJO A LA FORMA. La primera version buscaba el texto de aviso «por ahi cerca»
+    // de la bandera, y PASO EN VERDE con las dos mutaciones puestas: desactivar la
+    // rama (`if (false)`, `false ? ...`) no borra el literal, que sigue en el
+    // fichero sin que nadie lo emita nunca. Hay que exigir que la bandera y el
+    // mensaje esten UNIDOS en la misma expresion.
+    for (const [ruta, ata] of [
+      // Harvey: stream de texto plano que se lee en voz alta. Se encola al cerrar.
+      ['src/app/api/harvey/chat/route.ts', /if \(truncada\)\s*\{[\s\S]{0,400}?cortado la respuesta/],
+      // Brutal.IA: no hay stream, se pega al final de la respuesta que devuelve.
+      ['src/lib/ai.ts', /truncada\s*\?[\s\S]{0,200}?cortado aqui|truncada\s*\?[\s\S]{0,200}?cortado aquí/],
+    ] as const) {
+      const c = leerCodigo(ruta)
+      expect(/stop_reason === 'max_tokens'/.test(c),
+        `${ruta} ya no mira si el modelo corto la respuesta`).toBe(true)
+      expect(ata.test(c),
+        `${ruta} detecta el truncamiento y no se lo dice a quien esta mirando. Que lo MIRE no basta: antes lo miraba y lo escribia en la consola del servidor, que es donde no lo lee nadie.`)
+        .toBe(true)
+    }
+  })
+})
+
+describe('las dos IAs saben lo mismo del equipo', () => {
+  // Harvey contestaba «¿que hizo Pablo ayer?» y Brutal.IA no: la misma pregunta,
+  // en la misma app, con dos respuestas segun a cual de las dos le hablaras. Desde
+  // fuera no son dos herramientas —son «la IA»—, y eso no se lee como una
+  // limitacion: se lee como que la IA a veces se inventa que no sabe.
+  it('las dos rutas de chat tiran del mismo modulo', () => {
+    for (const ruta of ['src/app/api/harvey/chat/route.ts', 'src/app/api/chat/route.ts']) {
+      expect(/resumenDelEquipo\(/.test(leerCodigo(ruta)),
+        `${ruta} ya no usa resumenDelEquipo(): o se quedo sin diario de equipo, o tiene su propia copia — que es el gemelo de siempre`)
+        .toBe(true)
+    }
+  })
+
+  it('nadie se ha vuelto a escribir el bloque por su cuenta', () => {
+    // Se mira la PROSA, no la consulta. Un `from('diario')` no es una copia: el
+    // motor de automatizaciones lee el diario de 14 dias para disparar avisos, y
+    // `/api/equipo/resumen` lo lee para la valoracion que solo ve un propietario.
+    // Lo que no puede haber dos veces son las frases del bloque — «se propuso»,
+    // «hizo (cierre del dia)» —, porque son el CONTRATO con el modelo: el prompt
+    // le explica como leerlas, y una segunda copia con otras palabras es una copia
+    // que el prompt no sabe interpretar.
+    // Y la PAREJA de frases, no cualquiera de las dos: `comoVaLaPersona` (la
+    // valoracion que redacta la IA para el panel de equipo, solo propietario)
+    // tambien escribe «se propuso», y comparte ese vocabulario a proposito — pero
+    // cierra con «conto al cerrar» y alimenta otro prompt. No es una copia.
+    const sobran = TS.filter(r => r !== 'src/lib/resumenEquipo.ts' && (c =>
+      /se propuso:/.test(c) && /hizo \(cierre del d/.test(c))(leerCodigo(r)))
+    expect(sobran, `vuelve a haber una copia del bloque de diario fuera del modulo:\n  ${sobran.join('\n  ')}`).toEqual([])
+  })
+})
+
 describe('Harvey sabe lo que pasa en Fichar', () => {
-  const R = leerCodigo('src/app/api/harvey/chat/route.ts')
+  const R = leerCodigo('src/lib/resumenEquipo.ts')
 
   it('trae las horas y el animo, no solo el texto', () => {
     // Javi: «lo que hace cada uno en fichar se va a poder preguntar en Harvey — un
