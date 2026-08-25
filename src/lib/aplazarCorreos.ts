@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { leerFicha } from '@/lib/fichaEstudio'
 import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { analyzeEmail, plazoRestante, MINIMO_UTIL_MS } from '@/lib/ai'
 import { insertarEnInbox } from '@/lib/inboxInsert'
@@ -122,6 +123,7 @@ export async function rescatarAplazados(
 
   const { data: clientsData } = await admin.from('clients').select('name')
   const knownClients = (clientsData || []).map((c: { name: string }) => c.name)
+  const fichaEstudio = await leerFicha(admin)
 
   let rescatados = 0
   for (const m of pendientes) {
@@ -131,7 +133,7 @@ export async function rescatarAplazados(
     let a: Awaited<ReturnType<typeof analyzeEmail>> | null = null
     try {
       a = await analyzeEmail(m.subject || '', (m.body_preview || '').slice(0, 800),
-        m.from_name || '', knownClients, restante())
+        m.from_name || '', knownClients, restante(), fichaEstudio)
     } catch { /* analyzeEmail no lanza, pero por si acaso */ }
     if (!a || a.degraded) continue
 

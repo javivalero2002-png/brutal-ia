@@ -196,6 +196,8 @@ export async function analyzeEmail(
    * de tiempo por delante; sin el rigen los valores del cliente (15 s x 2).
    */
   plazoMs?: number,
+  /** La ficha del estudio: quiénes somos y quiénes son nuestros clientes. */
+  ficha?: string,
 ): Promise<EmailAnalysis> {
   let msg: Awaited<ReturnType<typeof anthropic.messages.create>>
   try {
@@ -206,7 +208,10 @@ export async function analyzeEmail(
         role: 'user',
         content: `Eres el asistente de IA de Brutal Studios, una agencia creativa. Analiza este email y responde en JSON.
 
-Clientes conocidos: ${knownClients.map(c => sanitize(c)).join(', ')}
+${ficha ? `QUIÉNES SOMOS (ficha del estudio — úsala para saber si este email tiene que ver con nosotros):
+${ficha}
+
+` : ''}Clientes conocidos: ${knownClients.map(c => sanitize(c)).join(', ') || '(ninguno dado de alta todavía — fíjate en la ficha de arriba)'}
 
 Email de: ${sanitize(fromName)}
 Asunto: ${sanitize(subject)}
