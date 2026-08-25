@@ -4052,6 +4052,31 @@ describe('todos los buscadores de la app buscan igual', () => {
   })
 })
 
+describe('el trabajo de alguien no desaparece por no haber fichado', () => {
+  // `/api/equipo/resumen` mapeaba sobre `diario` y colgaba las tareas DENTRO de
+  // cada dia, asi que un dia trabajado sin fichar no existia — y con el, todas las
+  // tareas cerradas ese dia.
+  //
+  // MEDIDO contra produccion con una tarea completada el 23 de agosto (un dia sin
+  // fila de diario), preguntando «¿que tal va Javi?»:
+  //   antes → «No hay nada escrito de Javi en este tramo: ni objetivos, ni
+  //            cierres, NI TAREAS COMPLETADAS.»
+  //   ahora → «Javi ha completado el montaje del teaser el veintitres de agosto,
+  //            pero no cerro ese dia de trabajo.»
+  // Lo primero es una afirmacion, y es falsa, y la lee un jefe sobre el trabajo de
+  // alguien. El primer caso de prueba que escribi uso «ayer» y NO aislaba el bug,
+  // porque ese dia si tenia fila de diario: el caso tiene que ejercitar la decision.
+  it('los dias salen del diario Y de las tareas, no solo del diario', () => {
+    const R = leerCodigo('src/app/api/equipo/resumen/route.ts')
+    expect(/new Set\(\[\.\.\.conDiario\.keys\(\), \.\.\.conTareas\]\)/.test(R),
+      'la lista de dias vuelve a salir solo de `diario`: el trabajo de quien cerro tareas sin fichar desaparece, y el texto que lee el jefe dice «ni tareas completadas»')
+      .toBe(true)
+    // Y que no se vuelva a mapear directamente sobre el diario.
+    expect(/const dias: DiaDeTrabajo\[\] = \(diario \|\| \[\]\)\.map/.test(R),
+      'se vuelve a construir la lista de dias mapeando sobre `diario`').toBe(false)
+  })
+})
+
 describe('una funcion memorizada no lee estado congelado del primer render', () => {
   // `sendChatMessage` era un `useCallback` con deps `[]` que leia `calendarEvents`
   // de la clausura. Con deps vacias la funcion es SIEMPRE la del primer render, y
