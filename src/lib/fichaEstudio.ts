@@ -66,7 +66,10 @@ export async function leerFicha(admin: SupabaseClient): Promise<string> {
 export async function fichaDesfasada(admin: SupabaseClient): Promise<{ hace: boolean; notas: number; ultima: string | null }> {
   const [{ count, error: errC }, { data: reciente, error: errR }, { data: ficha, error: errF }] = await Promise.all([
     admin.from('memoria').select('id', { count: 'exact', head: true }),
-    admin.from('memoria').select('updated_at, created_at').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    // Se ordena por `updated_at`: la nota que se acaba de EDITAR es la que importa
+    // para saber si la ficha se quedó vieja, y ordenando por `created_at` esa nota
+    // podía estar la penúltima y no verse nunca.
+    admin.from('memoria').select('updated_at, created_at').order('updated_at', { ascending: false }).limit(1).maybeSingle(),
     admin.from('memoria_ficha').select('notas, ultima_nota, texto').eq('id', 1).maybeSingle(),
   ])
   if (errC || errR || errF) {
@@ -74,11 +77,19 @@ export async function fichaDesfasada(admin: SupabaseClient): Promise<{ hace: boo
     return { hace: false, notas: 0, ultima: null }
   }
   const notas = count ?? 0
-  const ultima = (reciente?.created_at as string | null) || null
+  // LA MÁS RECIENTE DE LAS DOS FECHAS. Se pedía `updated_at` y luego se usaba solo
+  // `created_at`, así que EDITAR una nota no rehacía la ficha nunca: cambiar una
+  // tarifa o corregir un brief no llegaba a las IAs, que siguen leyendo la ficha
+  // vieja como la verdad permanente del estudio.
+  const ultima = [reciente?.created_at, reciente?.updated_at]
+    .filter((x): x is string => typeof x === 'string' && !!x)
+    .sort().pop() || null
   if (!notas) return { hace: false, notas: 0, ultima: null }
   // Sin ficha escrita todavía, se hace en cuanto haya algo que resumir.
   if (!ficha || !((ficha.texto as string | null) || '').trim()) return { hace: true, notas, ultima }
-  const crecio = notas - Number(ficha.notas || 0) >= NOTAS_PARA_REHACER
+  // Crecer o MENGUAR. Borrar una nota bajaba el recuento, la resta salía negativa y
+  // la ficha se quedaba citando algo que ya no existe.
+  const crecio = notas - Number(ficha.notas || 0) >= NOTAS_PARA_REHACER || notas < Number(ficha.notas || 0)
   const hayMasNueva = !!ultima && (!ficha.ultima_nota || ultima > String(ficha.ultima_nota))
   return { hace: crecio || hayMasNueva, notas, ultima }
 }

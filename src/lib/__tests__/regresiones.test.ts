@@ -4087,6 +4087,40 @@ describe('todos los buscadores de la app buscan igual', () => {
   })
 })
 
+describe('dos contadores que subian solos', () => {
+  it('«completadas esta semana» se cuenta por completed_at', () => {
+    // Se contaba por `updated_at`: retocar el texto de una tarea vieja ya terminada
+    // le cambia el `updated_at` y la hacia contar como completada ESTA semana. El
+    // contador del panel de equipo subia sin que nadie hubiera terminado nada.
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (!ruta.startsWith('src/components/')) continue
+      const c = leerCodigo(ruta)
+      for (const m of c.matchAll(/t\.done\s*&&[^\n]*new Date\(t\.updated_at/g)) {
+        infractores.push(`${ruta}: ${m[0].slice(0, 70)}`)
+      }
+    }
+    expect(infractores, `vuelve a contarse una tarea como terminada esta semana por su ultima EDICION:\n  ${infractores.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('la ficha se rehace tambien al EDITAR y al BORRAR una nota', () => {
+    // `fichaDesfasada` pedia `updated_at` y luego usaba solo `created_at`, asi que
+    // editar una nota no rehacia la ficha NUNCA: cambiar una tarifa o corregir un
+    // brief no llegaba a las IAs, que siguen leyendo la ficha vieja como la verdad
+    // permanente del estudio. Y borrar bajaba el recuento, la resta salia negativa
+    // y la ficha se quedaba citando algo que ya no existe.
+    const F = leerCodigo('src/lib/fichaEstudio.ts')
+    const i = F.indexOf('export async function fichaDesfasada')
+    expect(i, 'ya no existe fichaDesfasada: revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = F.slice(i, F.indexOf('\nexport ', i + 10))
+    expect(/reciente\?\.updated_at/.test(cuerpo),
+      'vuelve a mirarse solo `created_at`: editar una nota no rehara la ficha').toBe(true)
+    expect(/notas < Number\(ficha\.notas/.test(cuerpo),
+      'borrar una nota vuelve a no rehacer la ficha: se queda citando lo que ya no existe').toBe(true)
+  })
+})
+
 describe('«supabase-js NO lanza» por fin tiene regla', () => {
   // CLAUDE.md lo pone como una de las trampas que ya han mordido —«en un
   // Promise.all que desestructura solo `data`, un fallo es indistinguible de "no
