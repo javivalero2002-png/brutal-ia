@@ -188,6 +188,21 @@ export interface WhatsAppAnalysis {
   confirmationQuestion: string
 }
 
+/**
+ * El cliente que dice el modelo, atado a los clientes que existen de verdad.
+ *
+ * Compara sin tildes ni mayusculas y devuelve el nombre TAL COMO esta dado de alta,
+ * para que la columna no acabe con «idealista» e «Idealista» como dos cosas — que es
+ * lo que hay hoy en la base.
+ */
+export function clienteConocido(valor: unknown, conocidos: string[]): string {
+  const limpio = String(valor ?? '').trim()
+  const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim()
+  const objetivo = norm(limpio)
+  if (!objetivo || objetivo === 'desconocido') return 'Desconocido'
+  return (conocidos || []).find(c => norm(c) === objetivo) ?? 'Desconocido'
+}
+
 export async function analyzeEmail(
   subject: string,
   body: string,
@@ -223,7 +238,7 @@ Responde SOLO con JSON válido (sin markdown):
 {
   "summary": "resumen en 1-2 frases en español",
   "action": "acción requerida en 1 frase o 'Ninguna acción requerida'",
-  "client": "nombre del cliente si se identifica o 'Desconocido'",
+  "client": "EXACTAMENTE uno de los clientes conocidos de arriba, o 'Desconocido'. Quien ENVÍA el correo no es un cliente por enviarlo: Temu, Google o un banco son remitentes. Si no estás seguro, 'Desconocido'.",
   "urgency": "urgent|high|normal",
   "suggestedTask": "texto de tarea a crear o null"
 }`
@@ -256,7 +271,19 @@ Responde SOLO con JSON válido (sin markdown):
     // mordio con tasks.level, y este es su gemelo exacto —lo mismo, en otro
     // campo—. Se normaliza AQUI, en la frontera, y no en los tres inserts que
     // consumen esto: normalizar tres veces es como se arregla uno y sobreviven dos.
-    return { ...bruto, urgency: nivelTarea(bruto?.urgency, 'normal') }
+      // Y `client` IGUAL, por el mismo motivo y con peor consecuencia.
+      //
+      // El prompt pedia «nombre del cliente si se identifica» sin atarlo a nada, asi
+      // que el modelo contestaba lo unico que veia: la marca de quien enviaba.
+      // MEDIDO sobre los 871 correos reales: 123 nombres distintos en `ai_client` y
+      // NINGUNO era cliente — Temu 42 veces, Google 28, AliExpress 15, Revolut 12.
+      // Javi lo dijo con estas palabras: «los clientes los revisa mal, saca clientes
+      // de donde no son».
+      //
+      // Se ata a la lista de verdad. Si no casa: «Desconocido», que es la respuesta
+      // honesta. Un hueco se entiende; una etiqueta que dice «cliente: Temu» hace
+      // que la columna entera deje de creerse.
+    return { ...bruto, urgency: nivelTarea(bruto?.urgency, 'normal'), client: clienteConocido(bruto?.client, knownClients) }
   } catch {
     return { summary: subject, action: 'Revisar email', client: 'Desconocido', urgency: 'normal', degraded: true }
   }

@@ -3902,6 +3902,38 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('el cliente de un correo no lo inventa el modelo', () => {
+  // Medido sobre los 871 correos reales: 123 nombres distintos en `ai_client` y
+  // ninguno era cliente. El unitario prueba el normalizador; esto prueba que se
+  // USA — que es donde se pierden estos arreglos: la funcion existe, esta bien
+  // hecha, y el sitio que importa sigue metiendo el valor crudo.
+  it('analyzeEmail pasa el cliente por clienteConocido antes de devolverlo', () => {
+    const A = leerCodigo('src/lib/ai.ts')
+    const i = A.indexOf('export async function analyzeEmail(')
+    expect(i, 'ya no existe analyzeEmail: revisa esta regla').toBeGreaterThan(-1)
+    const j = A.indexOf('export async function analyzeWhatsAppMessage', i)
+    const cuerpo = A.slice(i, j > i ? j : A.length)
+    expect(/client: clienteConocido\(/.test(cuerpo),
+      'el cliente vuelve a salir crudo del modelo: la columna se llenara otra vez con la marca de quien envia (Temu, Google, Revolut)')
+      .toBe(true)
+  })
+
+  it('la pantalla pinta lo mismo que filtra', () => {
+    // El filtro ya emparejaba contra los clientes reales; el panel escribia
+    // `ai_client` TAL CUAL, asi que la ficha del correo decia «Cliente: Temu»
+    // mientras el contador no lo contaba. Dos verdades para el mismo correo.
+    const I = leerCodigo('src/components/sections/InboxSection.tsx')
+    const crudos = [...I.matchAll(/\{[^{}]*\bai_client\s*!==\s*'Desconocido'[^{}]*\}/g)].map(m => m[0])
+    expect(crudos, `vuelve a pintarse ai_client sin emparejar con un cliente real:\n  ${crudos.join('\n  ')}`).toEqual([])
+  })
+
+  it('el prompt dice que el remitente no es un cliente', () => {
+    const A = leerCodigo('src/lib/ai.ts')
+    expect(/no es un cliente por enviarlo|EXACTAMENTE uno de los clientes/.test(A),
+      'el prompt vuelve a pedir «el cliente si se identifica» sin atarlo a la lista').toBe(true)
+  })
+})
+
 describe('una hora de evento no se saca cortando el texto', () => {
   // Google devuelve cada evento en el desfase del calendario DONDE VIVE, no en el
   // del usuario: el calendario personal de Javi va en +01:00 y el compartido en
