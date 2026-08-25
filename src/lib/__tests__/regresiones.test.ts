@@ -3839,6 +3839,51 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('las plantillas de automatizacion no se esconden al usar una', () => {
+  // Javi: «cuando seleccionas una y le das a usar, ya no te aparecen como ejemplo
+  // para poder anadirlas. Quiero que sigan apareciendo».
+  //
+  // Estaban dentro de `{data.reglas.length===0 && …}`: al crear la PRIMERA regla
+  // desaparecian las once. Y son el catalogo de lo que la app sabe vigilar —
+  // esconderlas justo al usar la primera deja al equipo sin saber que mas se puede
+  // hacer, en el momento en que acaba de descubrir que la seccion sirve.
+  const UI = leerCodigo('src/components/sections/AutomatizacionesSection.tsx')
+
+  it('el catalogo se pinta siempre, no solo cuando no hay reglas', () => {
+    const i = UI.indexOf('PLANTILLAS.map(')
+    expect(i, 'ya no se pintan las plantillas: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    // Lo que hay POR ENCIMA del map, dentro del bloque que lo envuelve, no puede
+    // condicionar su existencia al numero de reglas.
+    const antes = UI.slice(Math.max(0, i - 600), i)
+    expect(/reglas\.length===0\s*&&/.test(antes),
+      'las plantillas vuelven a esconderse en cuanto hay una regla: el catalogo desaparece justo al empezar a usarlo')
+      .toBe(false)
+  })
+
+  it('el catalogo vive fuera del componente, para poder contarlo', () => {
+    // Estaba escrito a mano dentro del JSX. Fuera se puede leer, contar y —lo que
+    // importa aqui— comprobar que no se ha quedado a medias.
+    expect(/^const PLANTILLAS = \[/m.test(UI),
+      'las plantillas vuelven a estar incrustadas en el JSX')
+      .toBe(true)
+    const ini = UI.indexOf('const PLANTILLAS = [')
+    const bloque = UI.slice(ini, UI.indexOf('\n]', ini))
+    const cuantas = [...bloque.matchAll(/\{name:'/g)].length
+    expect(cuantas, `el catalogo se ha quedado en ${cuantas} plantillas: alguna edicion se comio la lista`)
+      .toBeGreaterThanOrEqual(8)
+  })
+
+  it('la que ya se usa se ve, pero no se puede duplicar', () => {
+    // Dos reglas iguales avisan dos veces, y a la tercera nadie lee los avisos.
+    expect(/enUso\.has\(tpl\.name\)/.test(UI),
+      'ya no se distingue la plantilla que esta en uso: se puede anadir dos veces y avisara doble')
+      .toBe(true)
+    expect(/const enUso = new Set\(data\.reglas\.map/.test(UI),
+      'el conjunto de plantillas en uso ya no sale de las reglas reales')
+      .toBe(true)
+  })
+})
+
 describe('un cliente es uno de la tabla, no lo que escriba el modelo', () => {
   // Javi: «en el inbox los clientes los revisa mal, saca clientes de donde no
   // son». Tenia 57 de 100 correos marcados como cliente — Amazon, AliExpress,
