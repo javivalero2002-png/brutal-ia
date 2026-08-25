@@ -3902,6 +3902,24 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('lo que se dice de las cuentas de Gmail sale de la tabla nueva', () => {
+  // `profiles.gmail_account` es la columna VIEJA: UNA ranura que el callback pisa
+  // en cada conexion. Con tres cuentas conectadas, Sincronizacion decia «Conectado
+  // a lauravalero754@gmail.com» —la ultima que entro— mientras justo debajo pintaba
+  // la lista de verdad con las dos personales. Dos verdades en la misma pantalla, y
+  // la de arriba en letra mas grande.
+  //
+  // Javi: «aqui me pone que estoy conectado a este correo, pero en verdad estoy
+  // conectado a dos».
+  it('la seccion no pinta la ranura vieja como si fuera la cuenta', () => {
+    const c = leerCodigo('src/components/sections/SincronizacionSection.tsx')
+    const crudos = [...c.matchAll(/Conectado a \$\{gmailStatus[^}]*\}/g)].map(m => m[0])
+    expect(crudos, `vuelve a anunciarse la ranura vieja como «la cuenta conectada»:\n  ${crudos.join('\n  ')}`).toEqual([])
+    expect(/rotuloCuentas/.test(c),
+      'ya no se calcula el rotulo desde la lista de cuentas: volvera a decir una sola cuando hay varias').toBe(true)
+  })
+})
+
 describe('todos los buscadores de la app buscan igual', () => {
   // `buscaEnTexto` existe porque `includes()` no sirve escribiendo en español: no
   // encuentra «diseño» si escribes «diseno», ni casa dos palabras sueltas. Se

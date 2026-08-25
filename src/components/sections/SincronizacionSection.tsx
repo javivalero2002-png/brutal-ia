@@ -83,6 +83,28 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
       .catch(() => {})
   }, [])
   useEffect(() => { cargarCuentas() }, [cargarCuentas])
+  /**
+   * LO QUE SE DICE DE «a qué cuenta estás conectado».
+   *
+   * Salía de `gmailStatus.gmail_account`, que es la columna VIEJA de `profiles`: UNA
+   * ranura que el callback pisa en cada conexión. Con tres cuentas conectadas decía
+   * «Conectado a lauravalero754@gmail.com» —la última que entró— mientras justo
+   * debajo se pintaba la lista de verdad con las dos personales. Dos verdades en la
+   * misma pantalla, y la de arriba en letra más grande.
+   *
+   * Javi lo dijo tal cual: «aquí me pone que estoy conectado a este correo, pero en
+   * verdad estoy conectado a dos».
+   *
+   * Sale de `cuentas`, que es la tabla nueva y la que usan de verdad la sincro y el
+   * calendario. La ranura vieja solo queda como respaldo por si la lista no cargó.
+   */
+  const personales = cuentas.filter(c => !c.compartida)
+  const rotuloCuentas = personales.length === 0
+    ? (gmailStatus?.gmail_account || 'Cuenta conectada')
+    : personales.length === 1
+      ? personales[0].email
+      : `${personales.length} cuentas: ${personales.map(c => c.email).join(', ')}`
+
   const desconectarCuenta = async (email: string) => {
     try {
       const res = await fetch('/api/gmail/cuentas', {
@@ -655,7 +677,7 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
                     {loadingGmail && <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{background:'rgba(255,255,255,0.15)'}}/><span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{background:'rgba(255,255,255,0.1)',animationDelay:'0.2s'}}/></span>}
                   </div>
                   <div className="font-syne text-[9px] tracking-wide" style={{color:'rgba(255,255,255,0.3)'}}>
-                    {personalOk ? (gmailStatus.gmail_account || 'Cuenta conectada') : 'Cuenta no conectada'}
+                    {personalOk ? rotuloCuentas : 'Cuenta no conectada'}
                   </div>
                   {/* Las cuentas conectadas, una por línea.
                   Antes había DOS ranuras fijas —«mi Gmail» y «colaboraciones»— y eso
@@ -1026,7 +1048,7 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
                 })()}
               </div>
               <div className="font-syne text-[9px] tracking-wide" style={{color:'rgba(255,255,255,0.3)'}}>
-                {personalOk ? (gmailStatus.gmail_account ? `Conectado a ${gmailStatus.gmail_account}` : 'Gmail conectado') : 'Se activa al conectar Gmail Personal'}
+                {personalOk ? `Conectado a ${rotuloCuentas}` : 'Se activa al conectar Gmail Personal'}
               </div>
               {personalOk && (
                 <div className="mt-1.5 font-syne text-[8px]" style={{color:'rgba(167,139,250,0.5)'}}>{plural(calCount,'evento próximo','eventos próximos')}</div>
