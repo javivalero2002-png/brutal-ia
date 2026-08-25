@@ -28,6 +28,8 @@ export interface AccionHarvey {
   platform?: string
   contentType?: string
   assigneeName?: string
+  /** Solo para `tarea`: a qué proyecto se engancha. Se resuelve en el ejecutor. */
+  projectName?: string
   invitees?: string
 }
 
@@ -68,7 +70,11 @@ export function parsearAccionHarvey(respuesta: string): { texto: string; accion:
       // El nivel se normaliza AQUÍ, no al crear la tarea: la tarjeta «HARVEY
       // PROPONE» pinta su color comparando con 'urgent', así que un «urgente» del
       // modelo salía además con el color equivocado.
-      return { texto, accion: { type: 'tarea', text: campo(1), level: nivelTarea(campo(2)), assigneeName: campo(3) } }
+      // El proyecto es el CUARTO campo y llega vacío casi siempre, que es lo
+      // correcto: una tarea suelta es una tarea suelta. Lo que no puede pasar es
+      // que, cuando el usuario SÍ dice de qué proyecto es, se pierda — porque
+      // entonces Proyectos no refleja nada de lo que se dicta.
+      return { texto, accion: { type: 'tarea', text: campo(1), level: nivelTarea(campo(2)), assigneeName: campo(3), projectName: campo(4) } }
     case 'evento':
       return { texto, accion: { type: 'evento', text: campo(1), date: campo(2), time: campo(3), invitees: campo(4) } }
     case 'proyecto':

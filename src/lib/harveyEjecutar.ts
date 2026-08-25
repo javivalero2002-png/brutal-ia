@@ -63,16 +63,39 @@ export async function ejecutarAccionHarvey(
         const miembro = accion.assigneeName
           ? matchTeamMember(equipo, accion.assigneeName)
           : (matchTeamMember(equipo, perfil?.name || '') || (perfil?.id ? { id: perfil.id, name: perfil.name } : null))
+        // EL PROYECTO. Sin esto, una tarea dictada no pertenecía a ningún sitio:
+        // Proyectos no reflejaba nada de lo que se creaba por voz, aunque el
+        // usuario hubiera dicho de cuál era.
+        //
+        // Se busca entre los ACTIVOS. Un proyecto completado que aún se llama
+        // parecido casaría primero y la tarea se iría a algo ya cerrado, donde
+        // nadie mira. Y si no se reconoce NO se inventa: la tarea se crea suelta y
+        // el aviso lo dice, que es recuperable — engancharla al proyecto
+        // equivocado no lo es, porque nadie sabe que hay que buscarla.
+        const proyecto = accion.projectName
+          ? (data.projects as { id: string; name: string; status?: string }[])
+              .filter(p => p.status !== 'completado')
+              .find(p => p.name.toLowerCase().includes(accion.projectName!.toLowerCase())
+                      || accion.projectName!.toLowerCase().includes(p.name.toLowerCase()))
+          : undefined
+
         await data.createTask({
           text: accion.text,
           level: accion.level,          // ya normalizado en el parser
           source: 'ai',
           ...(miembro ? { assigned_to: miembro.id } : {}),
+          ...(proyecto ? { project_id: proyecto.id } : {}),
         })
+        // El aviso dice las DOS cosas que pueden haber salido mal, y las dice
+        // aunque la tarea se haya creado: «creada» a secas cuando el proyecto no
+        // se reconoció deja al usuario creyendo que está en el proyecto.
+        const noEncontrado = accion.projectName && !proyecto
+          ? ` (fuera de proyecto: no encontré "${accion.projectName}")`
+          : proyecto ? ` en ${proyecto.name}` : ''
         showToast(
-          miembro ? `Tarea creada y asignada a ${miembro.name}`
-          : accion.assigneeName ? `Tarea creada (sin asignar: no encontré a "${accion.assigneeName}")`
-          : 'Tarea creada por Harvey',
+          (miembro ? `Tarea creada y asignada a ${miembro.name}`
+           : accion.assigneeName ? `Tarea creada (sin asignar: no encontré a "${accion.assigneeName}")`
+           : 'Tarea creada por Harvey') + noEncontrado,
         )
         return true
       }
