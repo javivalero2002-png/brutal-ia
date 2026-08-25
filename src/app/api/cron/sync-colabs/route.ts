@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
+import { rescatarAplazados } from '@/lib/aplazarCorreos'
 import { ERRORES_ACCIONABLES } from '@/lib/gmailAuth'
 import { syncColabsInbox, syncPersonalInbox } from '@/lib/colabsSync'
 import { runAutomations } from '@/lib/automations'
@@ -169,6 +170,39 @@ export async function GET(request: NextRequest) {
     automations = { error: err?.message || 'error' }
   }
 
+  // ── LOS APLAZADOS ──────────────────────────────────────────────────────
+
+  //
+
+  // Los correos que se aplazaron por falta de tiempo se quedaban en «pendiente»
+
+  // PARA SIEMPRE: los bucles del sync hacen `continue` sobre cualquier gmail_id
+
+  // ya guardado, asi que ninguno volvia a mirarlos. Sin resumen, sin urgencia y
+
+  // fuera del filtro de Clientes, con la unica salida de abrirlos a mano.
+
+  //
+
+  // Va aqui, con lo que sobra: primero el correo nuevo, y solo despues lo
+
+  // atrasado. Si no sobra tiempo, no se empieza — lo de ayer puede esperar a la
+
+  // hora siguiente; lo de ahora, no.
+
+  let aplazados: { rescatados: number; quedan: number } = { rescatados: 0, quedan: -1 }
+
+  try {
+
+    aplazados = await rescatarAplazados(admin, 240_000 - (Date.now() - T0))
+
+  } catch (err: any) {
+
+    console.error('[cron] el rescate de aplazados fallo:', err?.message)
+
+  }
+
+
   // ── LA FICHA DEL ESTUDIO ────────────────────────────────────────────────
   //
   // Javi: «cada vez que se le añade algo se modifica ese contexto para ir
@@ -262,6 +296,15 @@ export async function GET(request: NextRequest) {
           // La propia tabla de cerrojos: una fila por día se acumularía para
           // siempre. Los vigentes no se tocan, y el de hoy caduca en 25h.
           job_locks: await purge('job_locks', 'expires_at', 0),
+          // Solo los RESUELTOS. Un error abierto no caduca por viejo: si lleva tres
+          // meses pasando, eso es justo lo que hay que ver.
+          errores: await (async () => {
+            const corte = new Date(Date.now() - 60 * 86400000).toISOString()
+            const { error, count } = await admin.from('errores')
+              .delete({ count: 'exact' }).not('resuelto_at', 'is', null).lt('resuelto_at', corte)
+            if (error) throw new Error(`errores: ${error.message}`)
+            return count || 0
+          })(),
         }
       } catch (err: any) {
         // No tumba el cron: el sync de emails es más importante que la poda.
@@ -332,6 +375,7 @@ export async function GET(request: NextRequest) {
     ...(reconexion.length ? { requierenReconexion: reconexion.map(o => o.mailbox) } : {}),
     automations,
     ficha,
+    aplazados,
     ...(retention ? { retention } : {}),
   }, { status: failed ? 500 : 200 })
 }

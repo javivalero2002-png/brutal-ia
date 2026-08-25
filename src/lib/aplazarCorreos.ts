@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { acquireLock, releaseLock } from '@/lib/jobLock'
+import { analyzeEmail, plazoRestante, MINIMO_UTIL_MS } from '@/lib/ai'
 import { insertarEnInbox } from '@/lib/inboxInsert'
 
 /**
@@ -67,4 +69,86 @@ export async function aplazarResto(
     return 0
   }
   return cola.length
+}
+
+/**
+ * Vuelve a mirar los correos que se aplazaron por falta de tiempo.
+ *
+ * Sin esto, `ai_estado: 'pendiente'` era una vía muerta: los tres bucles del sync
+ * hacen `continue` sobre cualquier `gmail_id` ya guardado, así que un correo
+ * aplazado no se volvía a analizar NUNCA. Se quedaba en la bandeja sin resumen,
+ * sin urgencia y fuera del filtro de Clientes — y la única salida era abrirlo a
+ * mano y pulsar reanalizar. Hoy hay 27 así.
+ *
+ * No hace falta volver a Gmail: el cuerpo ya está guardado en `body_preview`, que
+ * es exactamente lo que usa el reanálisis manual.
+ *
+ * ACOTADO POR TIEMPO Y POR NÚMERO. Corre con lo que sobra del cron, después de los
+ * buzones, así que lo primero es no comerse el minuto de nadie: pregunta si cabe
+ * la siguiente llamada antes de hacerla, en vez de comprobar entre iteraciones si
+ * ya se pasó. Es la lección que CLAUDE.md documenta sobre los presupuestos.
+ */
+export async function rescatarAplazados(
+  admin: SupabaseClient,
+  plazoMs: number,
+  max = 12,
+): Promise<{ rescatados: number; quedan: number }> {
+  const T0 = Date.now()
+  // `plazoRestante` y no una resta a mano: es el mismo reloj que usa el resto del
+  // repo, y la regla de regresiones exige que todo bucle que llama a `analyzeEmail`
+  // pregunte por él. El segundo argumento son los segundos de vida de la función.
+  const restante = () => Math.min(plazoMs - (Date.now() - T0), plazoRestante(T0, 300))
+  // Por debajo del mínimo útil no cabe ni una llamada: no se empieza.
+  if (restante() < MINIMO_UTIL_MS) return { rescatados: 0, quedan: -1 }
+
+  // CERROJO PROPIO. Sin él, dos ejecuciones solapadas del cron analizarían los
+  // mismos correos aplazados y se pagaría dos veces cada uno — que es exactamente
+  // lo que el cerrojo del sync evita para el correo nuevo.
+  const cerrojo = await acquireLock(admin, 'aplazados', 5 * 60_000)
+  if (!cerrojo.adquirido) return { rescatados: 0, quedan: -1 }
+  try {
+
+  const { data: pendientes, error } = await admin
+    .from('inbox_messages')
+    .select('id, subject, body_preview, from_name')
+    .eq('ai_estado', 'pendiente')
+    .order('received_at', { ascending: false })
+    .limit(max)
+  if (error) {
+    console.error('[aplazados] no se pudieron leer —', error.message)
+    return { rescatados: 0, quedan: -1 }
+  }
+  if (!pendientes?.length) return { rescatados: 0, quedan: 0 }
+
+  const { data: clientsData } = await admin.from('clients').select('name')
+  const knownClients = (clientsData || []).map((c: { name: string }) => c.name)
+
+  let rescatados = 0
+  for (const m of pendientes) {
+    // ¿Cabe la SIGUIENTE? No «¿me he pasado?»: eso autoriza una llamada sin saber
+    // lo que va a costar, y una sola puede irse a 75s si Google contesta 429.
+    if (restante() < MINIMO_UTIL_MS) break
+    let a: Awaited<ReturnType<typeof analyzeEmail>> | null = null
+    try {
+      a = await analyzeEmail(m.subject || '', (m.body_preview || '').slice(0, 800),
+        m.from_name || '', knownClients, restante())
+    } catch { /* analyzeEmail no lanza, pero por si acaso */ }
+    if (!a || a.degraded) continue
+
+    const { error: errUp } = await admin.from('inbox_messages').update({
+      ai_summary: a.summary, ai_action: a.action, ai_client: a.client,
+      ai_urgency: a.urgency, ai_estado: 'ok', ai_motivo: null,
+    }).eq('id', m.id)
+    if (errUp) { console.error('[aplazados] no se pudo guardar —', errUp.message); continue }
+    rescatados++
+  }
+
+  const { count } = await admin
+    .from('inbox_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('ai_estado', 'pendiente')
+  return { rescatados, quedan: count ?? -1 }
+  } finally {
+    if (!cerrojo.degradado) await releaseLock(admin, 'aplazados', cerrojo.holder)
+  }
 }

@@ -30,8 +30,16 @@ export async function cuentasDe(admin: SupabaseClient, profileId: string): Promi
     .eq('profile_id', profileId)
     .order('creada_at', { ascending: true })
   if (error) {
+    // NO se devuelve `[]`: eso es indistinguible de «esta persona no tiene cuentas»,
+    // y quien llama reacciona igual — el sync cae al respaldo de las columnas
+    // viejas y sincroniza UNA sola cuenta diciendo que fue bien. Es la trampa que
+    // avisa CLAUDE.md («supabase-js NO lanza»), y aqui el respaldo la disfrazaba
+    // del todo.
+    //
+    // Se lanza. `syncPersonalInbox` ya vive dentro de un try/finally, asi que el
+    // cerrojo se suelta igual, y arriba se anota en el registro de errores.
     console.error('[gmail] no se pudieron leer las cuentas de', profileId, '—', error.message)
-    return []
+    throw new Error(`no se pudieron leer las cuentas: ${error.message}`)
   }
   return (data || []) as CuentaGmail[]
 }

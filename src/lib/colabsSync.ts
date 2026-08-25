@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { anotarError } from '@/lib/errores'
 import { cuentaCompartida, cuentasDe, quitarCuenta } from '@/lib/gmailCuentas'
 import { aplazarResto } from '@/lib/aplazarCorreos'
 import { insertarEnInbox } from '@/lib/inboxInsert'
@@ -142,7 +143,18 @@ async function syncColabsInboxSinCerrojo(
     if (!isTokenExpired && esConexionRota(error)) {
       // Google rechaza la conexión pero puede ser configuración global: se avisa
       // como accionable SIN borrar el token. Ver src/lib/gmailAuth.ts.
+      // SE ANOTA. Antes solo habia un console.error, que dura lo que dure la
+      // retencion de logs de Vercel: el buzon dejaba de traer correo, el cron
+      // respondia 200 y el latido se pintaba verde. Si nadie miraba ese dia,
+      // el fallo no existia. Paso de verdad el 2026-08-13.
       console.error('[sync] Google rechazó la conexión:', error.response?.data?.error)
+      await anotarError(admin, {
+        clave: 'gmail:auth_rota:colabs',
+        donde: 'sync del buzón compartido',
+        que: 'Google rechaza la conexión del buzón de colaboraciones. Deja de entrar correo compartido hasta reconectarlo.',
+        gravedad: 'alta',
+        contexto: { motivo: error.response?.data?.error || error.message, cuenta: correoCuenta },
+      })
       return { ok: false, error: 'auth_rota' }
     }
     if (isTokenExpired) {
@@ -389,7 +401,22 @@ export async function syncPersonalInbox(
     // Las compartidas se excluyen aquí: de esas se encarga `syncColabsInbox`, y
     // sincronizarlas dos veces duplicaría el trabajo de análisis por cada persona
     // que la tenga conectada.
-    const cuentas = (await cuentasDe(admin, profile.id)).filter(c => !c.compartida)
+    // `cuentasDe` LANZA si la consulta falla, y eso es a proposito: devolver `[]`
+    // era indistinguible de «no tiene cuentas» y hacia caer el sync a UNA sola por
+    // el respaldo de las columnas viejas, diciendo que fue bien.
+    let cuentas: Awaited<ReturnType<typeof cuentasDe>>
+    try {
+      cuentas = (await cuentasDe(admin, profile.id)).filter(c => !c.compartida)
+    } catch (err: any) {
+      await anotarError(admin, {
+        clave: 'gmail:cuentas_ilegibles',
+        donde: 'sync personal',
+        que: 'No se pudo leer la tabla de cuentas de Gmail. El sync se queda a ciegas y solo miraría una cuenta.',
+        gravedad: 'alta',
+        contexto: { motivo: err?.message, persona: profile.id },
+      })
+      return { ok: false, error: 'no se pudieron leer las cuentas' }
+    }
 
     // Sin cuentas en la tabla se usa la columna vieja. Es lo que permite desplegar
     // esto antes de correr la migración sin dejar a nadie sin correo.
@@ -406,7 +433,21 @@ export async function syncPersonalInbox(
     let ultimoError: string | null = null
     for (const c of cuentas) {
       const r = await syncPersonalInboxSinCerrojo(admin, profile, c.refresh_token, c.email)
-      if (!r.ok) { ultimoError = r.error; continue }
+      if (!r.ok) {
+        ultimoError = r.error
+        // SE ANOTA, aunque las demas vayan bien. `ultimoError` solo se usaba si
+        // fallaban TODAS: con dos cuentas, la que se caia desaparecia del
+        // resultado y el agregado decia `ok: true`. El cron lo registraba como
+        // exito y el latido se pintaba verde con un buzon muerto.
+        await anotarError(admin, {
+          clave: `gmail:sync_caido:${c.email}`,
+          donde: 'sync personal',
+          que: `El buzón ${c.email} no se pudo sincronizar. Sus correos dejan de entrar mientras las demás cuentas siguen bien, así que no se nota.`,
+          gravedad: 'alta',
+          contexto: { motivo: r.error, persona: profile.id },
+        })
+        continue
+      }
       total += r.total || 0; synced += r.synced || 0
       aiFailures += r.aiFailures || 0; insertFailures += r.insertFailures || 0
       if (r.truncado) algunoTruncado = true
@@ -452,7 +493,18 @@ async function syncPersonalInboxSinCerrojo(
     if (!isTokenExpired && esConexionRota(error)) {
       // Google rechaza la conexión pero puede ser configuración global: se avisa
       // como accionable SIN borrar el token. Ver src/lib/gmailAuth.ts.
+      // SE ANOTA. Antes solo habia un console.error, que dura lo que dure la
+      // retencion de logs de Vercel: el buzon dejaba de traer correo, el cron
+      // respondia 200 y el latido se pintaba verde. Si nadie miraba ese dia,
+      // el fallo no existia. Paso de verdad el 2026-08-13.
       console.error('[sync] Google rechazó la conexión:', error.response?.data?.error)
+      await anotarError(admin, {
+        clave: `gmail:auth_rota:${correoCuenta || profile.id}`,
+        donde: 'sync personal',
+        que: `Google rechaza la conexión de ${correoCuenta || 'una cuenta personal'}. Deja de entrar su correo hasta reconectarla.`,
+        gravedad: 'alta',
+        contexto: { motivo: error.response?.data?.error || error.message, cuenta: correoCuenta },
+      })
       return { ok: false, error: 'auth_rota' }
     }
     if (isTokenExpired) {

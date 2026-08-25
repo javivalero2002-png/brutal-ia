@@ -6,7 +6,7 @@ import { AvisoGoogle } from '@/components/shared'
 import { rutaApp } from '@/lib/appUrl'
 import type { NexusData } from '@/types'
 import { BLU, RED, GRN, AMBAR, SURFACE, SURF2, BORDER, useIsMobile, LucideIcon, AjGroup, todayKey } from '@/components/shared'
-import { plural } from '@/components/shared/helpers'
+import { plural, relTime } from '@/components/shared/helpers'
 
 const GMAIL_STATUS_LS = 'gmail_status_cache'
 interface PropsSincronizacion {
@@ -61,6 +61,18 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
   // en el Inbox porque es una reparacion puntual de datos viejos, como el
   // arreglo de enlaces de Memoria — y el Inbox es para leer correo.
   const [sinIdent, setSinIdent] = useState(0)
+  // LOS ERRORES QUE LA APP HA ANOTADO.
+  //
+  // Javi: «estaría bien que se anotasen en algún lado para notificártelos».
+  // Antes lo que fallaba solo dejaba un console.error que dura lo que dure la
+  // retención de logs de Vercel: si nadie miraba ese día, el fallo no existió.
+  const [errores, setErrores] = useState<any[] | null>(null)
+  const cargarErrores = useCallback(() => {
+    fetch('/api/admin/errores').then(r => (r.ok ? r.json() : null))
+      .then(j => setErrores(Array.isArray(j?.errores) ? j.errores : []))
+      .catch(() => {})
+  }, [])
+  useEffect(() => { if (profile?.role === 'owner') cargarErrores() }, [cargarErrores, profile?.role])
   const [identificando, setIdentificando] = useState(false)
   const cargarCuentas = useCallback(() => {
     fetch('/api/gmail/cuentas').then(r => (r.ok ? r.json() : null))
@@ -579,6 +591,49 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
         </div>
 
         {/* ── EMAIL ── */}
+      {/* ── LO QUE HA FALLADO ────────────────────────────────────────────────
+          Va ARRIBA DEL TODO y solo cuando hay algo. Un panel que siempre está,
+          diciendo «0 errores», se deja de mirar en dos días; uno que solo aparece
+          cuando pasa algo se lee siempre.
+
+          Agrupado por clave: el mismo fallo cada hora son 24 filas al día, y así
+          es una que dice cuántas veces y desde cuándo — que es lo que importa de
+          un fallo repetido. */}
+      {profile?.role === 'owner' && errores && errores.length > 0 && (
+        <div className="mb-4 rounded-2xl overflow-hidden" style={{ background: SURF2, border: `1px solid ${RED}33` }}>
+          <div className="flex items-center gap-2.5 px-4 pt-3.5 pb-2">
+            <LucideIcon name="alert-triangle" size={14} color={RED} />
+            <span className="font-syne text-[8.5px] font-black tracking-[0.2em]" style={{ color: RED }}>
+              {plural(errores.length, 'ERROR DETECTADO', 'ERRORES DETECTADOS')}
+            </span>
+          </div>
+          {errores.slice(0, 8).map(e => (
+            <div key={e.id} className="flex items-start gap-3 px-4 py-3" style={{ borderTop: `1px solid ${BORDER}` }}>
+              <span className="mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0"
+                style={{ background: e.gravedad === 'alta' ? RED : e.gravedad === 'media' ? AMBAR : 'rgba(255,255,255,0.25)' }} />
+              <div className="flex-1 min-w-0">
+                <div className="font-figtree text-[12.5px] break-words" style={{ color: 'rgba(255,255,255,0.8)' }}>{e.que}</div>
+                <div className="font-figtree text-[10.5px] mt-0.5 break-words" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  {e.donde} · {e.veces > 1 ? `${e.veces} veces · ` : ''}última {relTime(e.ultima_at)}
+                </div>
+              </div>
+              <button onClick={async () => {
+                try {
+                  const r = await fetch('/api/admin/errores', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: e.id }) })
+                  if (!r.ok) throw new Error(String(r.status))
+                  cargarErrores()
+                  showToast('Marcado como resuelto — si vuelve a pasar, reaparece')
+                } catch { showToast('No se pudo marcar') }
+              }}
+                className="font-syne text-[7.5px] font-black tracking-widest px-2.5 py-1 rounded-lg flex-shrink-0 transition-opacity hover:opacity-70"
+                style={{ color: 'rgba(255,255,255,0.3)', border: `1px solid ${BORDER}` }}>
+                RESUELTO
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
         <AjGroup label="EMAIL">
           <div className="space-y-3">
 
@@ -698,7 +753,15 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
                         style={{background:'rgba(255,255,255,0.035)',color:'rgba(255,255,255,0.45)',border:`1px solid ${BORDER}`}}>
                         <LucideIcon name="rotate-ccw" size={11} color="rgba(255,255,255,0.35)"/>Reconectar
                       </a>
-                      <BotonDesconectar account="personal" aviso="¿DESCONECTAR MI GMAIL PERSONAL?"/>
+                      {/* SOLO CON UNA CUENTA. Este boton llama a `quitarCuentaTodas`, que borra
+                          POR CRITERIO y no por direccion: con dos personales se llevaba las dos
+                          de golpe, bajo un aviso en singular —«¿DESCONECTAR MI GMAIL PERSONAL?»—
+                          y encima justo debajo de una linea que solo ensenaba una direccion.
+                          Con varias, la lista TUS CUENTAS ya tiene su QUITAR por direccion, que
+                          es lo que la gente quiere: quitar UNA. */}
+                      {cuentas.filter(c => !c.compartida).length <= 1 && (
+                        <BotonDesconectar account="personal" aviso="¿DESCONECTAR MI GMAIL PERSONAL?"/>
+                      )}
                     </>
                   ) : (
                     <a href="/api/gmail/connect?account=personal" className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest text-white transition-all hover:opacity-80 no-underline" style={{background:'linear-gradient(135deg,#EA4335,#C62828)'}}>
