@@ -4052,6 +4052,75 @@ describe('todos los buscadores de la app buscan igual', () => {
   })
 })
 
+describe('un select trae las columnas que el codigo va a leer', () => {
+  // EL FALLO MAS CARO DE LA AUDITORIA, y no daba error de ninguna clase.
+  //
+  // `recordatorio-cerrar` —el aviso de las 20:00 que Javi llama vital— pedia
+  // `select('user_id, entrada, cierre_at')` y luego filtraba con `haFichado()`, que
+  // lee `entrada_at`. PostgREST devuelve SOLO las columnas que le pides, asi que
+  // `entrada_at` no venia ni como clave: `undefined`, `haFichado` false siempre,
+  // lista de avisados SIEMPRE vacia. El aviso no se envio nunca a nadie.
+  //
+  // Y el cron contestaba `{ok:true, avisados:0}`, que es indistinguible de «hoy
+  // todo el mundo habia cerrado su dia». Ni un error, ni un log, ni un latido rojo.
+  //
+  // El gemelo de al lado, `recordatorio-fichar`, SI pedia la columna.
+  //
+  // Las columnas se sacan del CUERPO del ayudante, no de una lista escrita aqui:
+  // si mañana `diarioTieneAlgo` empieza a mirar otra columna, esta regla lo exige
+  // sola sin que nadie se acuerde de actualizarla.
+  const H = leerCodigo('src/components/shared/helpers.ts')
+  const columnasQueLee = (nombre: string): string[] => {
+    const i = H.indexOf(`export const ${nombre} =`)
+    expect(i, `ya no existe ${nombre}: revisa esta regla en vez de borrarla`).toBeGreaterThan(-1)
+    const fin = H.indexOf('\nexport ', i + 10)
+    const cuerpo = H.slice(i, fin > i ? fin : i + 900)
+    return [...new Set([...cuerpo.matchAll(/\bd\??\.(\w+)/g)].map(m => m[1]))]
+  }
+
+  // ACOTADA AL SITIO, no al fichero — que es el error que CLAUDE.md avisa y que
+  // esta regla cometio en su primera version. `POST /api/diario` lee
+  // `select('entrada_at, cierre_at')` para NO pisar la hora de fichaje al editar
+  // por segunda vez, y ese resultado no pasa por ningun ayudante. Es un select
+  // legitimo en un fichero que ademas usa `diarioTieneAlgo` en otra consulta.
+  const EXCEPCIONES: Record<string, string> = {
+    "src/app/api/diario/route.ts::entrada_at, cierre_at":
+      'POST lee la fila previa solo para conservar entrada_at/cierre_at al reescribir; no lo filtra con nada',
+  }
+
+  it('quien filtra con haFichado o diarioTieneAlgo pide esas columnas', () => {
+    const AYUDANTES = ['haFichado', 'diarioTieneAlgo'] as const
+    const usadas = new Set<string>()
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (ruta.startsWith('src/lib/__tests__/') || ruta.endsWith('shared/helpers.ts')) continue
+      const c = leerCodigo(ruta)
+      for (const ayudante of AYUDANTES) {
+        if (!new RegExp(`\\b${ayudante}\\(`).test(c)) continue
+        const necesita = columnasQueLee(ayudante)
+        // Todos los `select` sobre `diario` de ese fichero.
+        for (const m of c.matchAll(/from\('diario'\)\s*(?:\.\w+\([^)]*\)\s*)*?\.select\(\s*'([^']*)'/g)) {
+          const pedidas = m[1]
+          if (pedidas.includes('*')) continue     // `select('*')` lo trae todo
+          const faltan = necesita.filter(col => !new RegExp(`\\b${col}\\b`).test(pedidas))
+          const clave = `${ruta}::${pedidas}`
+          if (EXCEPCIONES[clave]) { usadas.add(clave); continue }
+          if (faltan.length) {
+            infractores.push(`${ruta}: filtra con ${ayudante}() y su select('${pedidas}') no trae ${faltan.join(', ')}`)
+          }
+        }
+      }
+    }
+    expect(infractores,
+      `un select no trae una columna que el codigo va a leer despues. PostgREST devuelve SOLO lo pedido, asi que el valor sera undefined, el filtro dara false para todo el mundo y la lista saldra vacia — SIN error, SIN log, y sin forma de distinguirlo de «no habia nadie»:\n  ${infractores.join('\n  ')}`)
+      .toEqual([])
+
+    // Una excepcion que ya no existe se nota sola, como todas las de este fichero.
+    const sobran = Object.keys(EXCEPCIONES).filter(k => !usadas.has(k))
+    expect(sobran, `hay excepciones que ya no hacen falta: quitalas\n  ${sobran.join('\n  ')}`).toEqual([])
+  })
+})
+
 describe('los tres sitios que cuentan dias del diario usan el mismo criterio', () => {
   // Habia CUATRO filas de diario en la base que no eran nada —`entrada: ''` y todo
   // lo demas a null— y las tres cuentas de dias las contaban. El briefing decia «1
