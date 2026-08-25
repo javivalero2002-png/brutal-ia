@@ -3902,6 +3902,28 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('todos los buscadores de la app buscan igual', () => {
+  // `buscaEnTexto` existe porque `includes()` no sirve escribiendo en español: no
+  // encuentra «diseño» si escribes «diseno», ni casa dos palabras sueltas. Se
+  // arreglo en las SEIS secciones y la lupa de ⌘K —la mas a mano— se quedo con la
+  // comparacion de siempre. El arreglo estaba hecho y escrito; el sitio mas visible
+  // no lo tenia.
+  it('nadie compara a mano lo que el usuario escribe', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (!/src\/(components\/sections|components\/NexusDashboard|lib\/busquedaGlobal)/.test(ruta)) continue
+      const c = leerCodigo(ruta)
+      // `algo.toLowerCase().includes(<la consulta>)` — se buscan los nombres que
+      // este repo usa de verdad para la caja de busqueda.
+      for (const m of c.matchAll(/\.toLowerCase\(\)\.includes\(\s*(q|query|search|searchQuery|busqueda)\b/g)) {
+        infractores.push(`${ruta}: ${m[0]}`)
+      }
+    }
+    expect(infractores, `vuelve a compararse la busqueda con includes(): no encontrara con tildes ni con dos palabras, y solo en algunos sitios de la app:\n  ${infractores.join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
 describe('los tres sitios que cuentan dias del diario usan el mismo criterio', () => {
   // Habia CUATRO filas de diario en la base que no eran nada —`entrada: ''` y todo
   // lo demas a null— y las tres cuentas de dias las contaban. El briefing decia «1
