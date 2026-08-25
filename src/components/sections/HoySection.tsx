@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { construirContexto } from '@/lib/contextoHarvey'
 import { memoriaRelevante, lineasDeMemoria } from '@/lib/memoriaRelevante'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
@@ -213,75 +214,10 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
       if (orbModeRef.current === 'speaking') setOrbMode('idle')
     } catch { setOrbMode('idle') }
   }
-  const buildCtx = (pregunta?: string) => {
-    const active = (data.projects as Project[]).filter(p=>p.status!=='completado')
-    // El mismo criterio de dia que `overdueP`: marcar [ATRASADO] en el contexto de
-    // Harvey algo que la pantalla pinta como «vence hoy» hacia que le contestara al
-    // fundador sobre un retraso que no existe.
-    const overdue = (data.projects as Project[]).filter(p=>p.status!=='completado'&&estadoDeadline(p.deadline)?.vencido)
-    const clients = (data.clients as Client[]).filter(c=>c.status==='Activo')
-    const highTasks = data.tasks.filter((t:Task)=>!t.done&&t.level==='high')
-    const pip = (data.agenda||[]).filter((a:any)=>a.status!=='publicado')
-    const urgentLines = urgentTasks.slice(0,5).map((t:Task)=>`"${t.text}"${t.assignee?.name?' ('+t.assignee.name+')':''}`).join(', ')
-    const projLines = active.slice(0,8).map((p:Project)=>`${p.name} ${p.progress}%${overdue.find(o=>o.id===p.id)?' [ATRASADO]':''}`).join(' | ')
-
-    const inboxAll: any[] = data.inbox || []
-    // No leídos + urgentes/altos de HOY aunque ya se hayan abierto: leer un email
-    // importante no debe borrarlo del contexto de Harvey.
-    const todayForInbox = todayKey()
-    const unreadEmails = inboxAll.filter((m:any)=>
-      // localDayKey, no slice(0,10): received_at se guarda con toISOString() (UTC)
-      // y todayForInbox es el dia de Madrid. De 00:00 a 02:00 no son el mismo dia,
-      // y un correo urgente de esta madrugada ya leido desaparecia del contexto.
-      !m.is_read || ((m.ai_urgency==='urgent'||m.ai_urgency==='high') && localDayKey(m.received_at)===todayForInbox)
-    ).slice(0, 10)
-    const emailLines = unreadEmails.map((m:any) => {
-      const urg = m.ai_urgency==='urgent'?'[URGENTE]':m.ai_urgency==='high'?'[ALTA]':'[NORMAL]'
-      const colabs = m.shared ? '[COLABS]' : '[PERSONAL]'
-      const action = m.ai_action&&m.ai_action!=='Ninguna acción requerida'?` → Acción: ${m.ai_action}`:''
-      const summary = m.ai_summary ? ` | Resumen: ${m.ai_summary}` : ''
-      return `  • De: ${m.from_name||'?'} | Asunto: "${m.subject||'Sin asunto'}" ${urg}${colabs}${summary}${action}`
-    }).join('\n')
-
-    const todayStr = todayKey()
-    const calEvents = (data.calendarEvents||[]) as any[]
-    const nextEvents = calEvents.filter((e:any)=>e.start>=todayStr).slice(0,5)
-    const eventLines = nextEvents.map((e:any) => {
-      const hasTime = e.start && e.start.includes('T')
-      const timeStr = hasTime ? ` a las ${e.start.slice(11,16)}` : ''
-      return `${e.title} (${e.start?.slice(0,10)||'?'}${timeStr})`
-    }).join(' · ')
-
-    // Por relevancia, no por fecha. Cogía las 12 más recientes, y como cada PDF
-    // subido entra como una nota más, a partir del documento trece el orbe de esta
-    // pantalla —la portada de todo el mundo— ya no veía ni una decisión del
-    // estudio. HarveySection tenía esto arreglado desde hace días: era el gemelo.
-    // CON la pregunta. Sin ella, `memoriaRelevante` no puede emparejar nada y
-    // devuelve siempre las mismas: 10 curadas y los 4 documentos mas recientes,
-    // preguntes lo que preguntes. HarveySection ya lo hacia bien —le pasa el texto—
-    // y esto era su gemelo, con el bug que el otro ya no tenia.
-    const memLines = lineasDeMemoria(memoriaRelevante(data.memoria as any, pregunta))
-
-    return `BRUTAL STUDIOS — ${madridDateLabel()}
-
-TAREAS: ${pendingAll} pendientes | ${completedToday} completadas hoy
-URGENTES (${urgentTasks.length}): ${urgentLines||'ninguna'}
-ALTA PRIORIDAD (${highTasks.length}): ${highTasks.slice(0,3).map((t:Task)=>t.text).join(', ')||'ninguna'}
-
-PROYECTOS ACTIVOS (${active.length}): ${projLines||'ninguno'}
-${overdue.length>0?`ATRASADOS (${overdue.length}): ${overdue.map((p:Project)=>p.name).join(', ')}\n`:''}
-CLIENTES ACTIVOS (${clients.length}): ${clients.map(c=>c.name).join(', ')||'ninguno'}
-EQUIPO: ${((data.team||[]) as any[]).map((m:any)=>m.name).filter(Boolean).join(', ')||'sin datos'}
-PIPELINE CONTENIDO: ${pip.length} piezas pendientes
-
-INBOX — ${unreadCount} sin leer (${inboxAll.length} total):
-${emailLines||'  Sin emails sin leer'}
-
-CALENDARIO PRÓXIMO: ${eventLines||'sin eventos próximos'}
-
-DOCUMENTOS Y CONOCIMIENTO (memoria — úsalo si es relevante):
-${memLines||'  sin documentos'}`
-  }
+  // UNO SOLO, compartido con el otro Harvey. Estaba escrito dos veces con
+  // once diferencias entre ambos — arreglos hechos a una copia y no a la
+  // otra. El motivo largo esta en src/lib/contextoHarvey.ts.
+  const buildCtx = (pregunta?: string) => construirContexto(data as never, pregunta)
   // Deja el audio de ESTA respuesta listo para el botón de reproducir. Lo llaman
   // las dos salidas —la normal y la del autoplay bloqueado—: si solo lo hiciera
   // una, la otra dejaría el botón apuntando a la respuesta anterior.
@@ -292,14 +228,37 @@ ${memLines||'  sin documentos'}`
     replayUrlRef.current = full
   }
 
+  // EL HILO DE LA CONVERSACION. El orbe de esta pantalla mandaba solo
+
+  // `{message, context}`: cada pregunta empezaba de cero. Si Harvey preguntaba
+
+  // «¿para que fecha la reunion?» —cosa que su prompt le OBLIGA a hacer— y
+
+  // respondias «el jueves», esa frase le llegaba suelta, sin la pregunta que la
+
+  // provoco. El gemelo de HarveySection lo tiene medido: sin historial crea la
+
+  // tarea 1 de cada 3 veces; con historial, 3 de 3.
+
+  //
+
+  // Un ref y no un estado: `askHarvey` corre antes del re-render, asi que un
+
+  // `useState` le llegaria con el turno anterior.
+
+  const hiloRef = useRef<Array<{ role: 'user' | 'harvey'; text: string }>>([])
+
+
   const askHarvey = async (userMsg: string) => {
+    const previos = hiloRef.current
+    hiloRef.current = [...previos, { role: 'user' as const, text: userMsg }].slice(-20)
     const run = ++voiceRunRef.current
     setOrbMode('thinking')
     setPendingAction(null)
     setHarveyReply('')
     setShowTranscript(false)
     try {
-      const res = await fetch('/api/harvey/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:userMsg,context:buildCtx(userMsg),stream:true}),signal:AbortSignal.timeout(60000)})
+      const res = await fetch('/api/harvey/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:userMsg,context:buildCtx(userMsg),history:previos.slice(-10),stream:true}),signal:AbortSignal.timeout(60000)})
       if (!aliveRef.current || run !== voiceRunRef.current) return
       if (!res.ok) { const j = await res.json().catch(()=>({})); throw new Error(j.error||'Error') }
 
@@ -348,6 +307,11 @@ ${memLines||'  sin documentos'}`
 
       // Un solo sitio para las dos secciones: esto estaba escrito linea por linea
       // aqui y en la otra, y cada bug de la pareja habia que arreglarlo dos veces.
+      // La respuesta se apunta en el hilo: sin esto el ref solo tendria preguntas y
+      // Harvey seguiria sin ver lo que EL contesto, que es la mitad que importa
+      // cuando pregunta algo y le respondes con dos palabras.
+      hiloRef.current = [...hiloRef.current, { role: 'harvey' as const, text: reply }].slice(-20)
+
       const { texto: limpio, accion } = parsearAccionHarvey(reply)
       reply = limpio
       if (accion) setPendingAction(accion)
