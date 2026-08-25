@@ -158,9 +158,22 @@ describe('fechas · ningún deadline se mide restando timestamps', () => {
   it('el día de hoy nunca se saca en UTC para lógica de negocio', () => {
     // `new Date().toISOString().slice(0,10)` da el día en UTC: a partir de las
     // ~22:00 de Madrid salta al día siguiente. Para eso está todayKey().
+    //
+    // SE PROHÍBE EL DERIVADO, NO UNA FORMA DE ESCRIBIRLO. La versión anterior solo
+    // buscaba `.slice(0,10)`, así que `.split('T')[0]` y `.substring(0,10)` pasaban
+    // las dos reglas — y `.split('T')[0]` no es una forma rebuscada: ya es un idioma
+    // de este repo, está escrito en cuatro sitios, así que es lo que sale solo al
+    // escribir la línea siguiente.
+    //
+    // Lo que se busca es un `toISOString()` de la fecha de AHORA seguido de
+    // cualquier forma de quedarse con los diez primeros caracteres.
+    const CORTES = String.raw`(?:\.slice\(\s*0\s*,\s*10\s*\)|\.substring\(\s*0\s*,\s*10\s*\)|\.substr\(\s*0\s*,\s*10\s*\)|\.split\('T'\)\[0\]|\.split\("T"\)\[0\])`
+    const patron = new RegExp(String.raw`new Date\(\)\.toISOString\(\)\s*` + CORTES)
     const malas = TS.flatMap(f => leer(f).split('\n').map((l, i) => ({ f, i: i + 1, l })))
-      .filter(({ l }) => /new Date\(\)\.toISOString\(\)\.slice\(\s*0\s*,\s*10\s*\)/.test(l) && !/^\s*(\/\/|\*)/.test(l))
-    expect(malas.map(u => `${u.f}:${u.i}`), 'Día en UTC: usa todayKey() de shared/helpers').toEqual([])
+      .filter(({ l }) => patron.test(l) && !/^\s*(\/\/|\*)/.test(l))
+    expect(malas.map(u => `${u.f}:${u.i}`),
+      'Día en UTC: a partir de las ~22:00 de Madrid da el día de MAÑANA. Usa todayKey() de shared/helpers')
+      .toEqual([])
   })
 })
 
@@ -1191,13 +1204,35 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
   // co-responsable y el Diario, el briefing y Harvey no. Una tarea compartida
   // sumaba en un comprobador y no en el otro.
   it('los cuatro sitios cuentan igual de quien es una tarea', () => {
+    // SE INVIERTE LA REGLA. La version anterior miraba solo `api/(diario|harvey)` y
+    // buscaba el literal exacto `assigned_to === p.id`, asi que se saltaba dos
+    // cosas: `resumenEquipo.ts` —el fichero al que se MUDO este codigo, y que es lo
+    // que leen las dos IAs para contestar «¿como va Pablo?»— y cualquier variable
+    // que no se llame `p`.
+    //
+    // Si ese fichero volviera a contar solo `assigned_to`, las tareas donde alguien
+    // es CO-responsable desaparecerian de la respuesta de la IA mientras Reportes
+    // —que si usa `esTareaDe`— las sigue contando: la IA le dice al jefe que Pablo
+    // cerro 2 y la seccion dice 4, la misma tarde.
+    //
+    // Ahora se listan los ficheros que hablan de tareas por persona y se prohibe la
+    // comparacion a pelo en TODOS, con cualquier nombre de variable.
     const infractores: string[] = []
     for (const ruta of TS) {
-      if (!/api\/(diario|harvey)/.test(ruta)) continue
-      if (/assigned_to === p\.id/.test(leerCodigo(ruta))) infractores.push(ruta)
+      if (ruta.startsWith('src/lib/__tests__/')) continue
+      const c = leerCodigo(ruta)
+      // Solo los ficheros que ya conocen el ayudante: son los que cuentan tareas
+      // por persona. Prohibirlo en todo el repo daria falsos positivos en las
+      // rutas que legitimamente filtran por `assigned_to` en una consulta.
+      if (!/\besTareaDe\b/.test(c)) continue
+      for (const m of c.matchAll(/\.assigned_to\s*===\s*(\w+(?:\.\w+)*)/g)) {
+        // Dentro de la propia definicion de esTareaDe, la comparacion es correcta.
+        if (ruta.endsWith('shared/helpers.ts')) continue
+        infractores.push(`${ruta}: .assigned_to === ${m[1]}`)
+      }
     }
     expect(infractores,
-      'compara assigned_to a pelo en vez de esTareaDe(): las tareas con co-responsable se cuentan distinto que en Reportes')
+      `compara assigned_to a pelo en vez de esTareaDe(): las tareas con co-responsable se cuentan distinto segun quien pregunte, y la IA y Reportes daran numeros distintos el mismo dia:\n  ${infractores.join('\n  ')}`)
       .toEqual([])
   })
 
