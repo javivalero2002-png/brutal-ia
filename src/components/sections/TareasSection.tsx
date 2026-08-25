@@ -178,7 +178,12 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(false)
   const [priorityFilter, setPriorityFilter] = useState<'all'|'urgent'|'high'|'normal'>('all')
   const [searchText,     setSearchText]     = useState('')
-  const [taskSort,       setTaskSort]       = useState<'prioridad'|'fecha'>('prioridad')
+  // `fecha` de fábrica, no `prioridad`: es lo que la pantalla lleva enseñando desde
+  // siempre —los cuatro cajones de ATRASADAS/HOY/PRÓXIMAS/SIN FECHA— y cambiar la
+  // vista por defecto de todo el mundo para arreglar un botón sería cobrarle a
+  // todos el arreglo de uno. Ahora el botón cambia algo de verdad; cuál viene
+  // marcado al entrar es otra decisión, y esa se queda como estaba.
+  const [taskSort,       setTaskSort]       = useState<'prioridad'|'fecha'>('fecha')
   const [focusMode,      setFocusMode]      = useState(!!initialFocus)
   const [activeTask,     setActiveTask]     = useState<Task|null>(null)
   // Espejo en ref del estado. Los `.then()` de una peticion capturan el closure del
@@ -563,6 +568,20 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   }, [data.tasks,searchText,assigneeFilter,projectFilter])
 
   const grouped = useMemo(()=>{
+    // AGRUPAR POR FECHA ES *ORDENAR* POR FECHA, y por eso lo decide el mismo botón.
+    //
+    // Javi: «con estos 2 botones en tareas no pasa nada». Y era verdad: el orden se
+    // calculaba bien —lo hace `filtered`— pero en la pestaña «Todas» la lista NO se
+    // pinta en plano, se reparte en ATRASADAS / HOY / PRÓXIMAS / SIN FECHA. Esos
+    // cuatro cajones SON una ordenación por fecha, así que se comían cualquier otra:
+    // una tarea urgente para el mes que viene seguía cayendo en PRÓXIMAS, debajo de
+    // todo, por mucho que pulsaras «por prioridad».
+    //
+    // Ahora el botón elige entre las dos formas de mirar la misma lista:
+    //   · por fecha     → los cuatro cajones, que es lo que había
+    //   · por prioridad → lista plana, urgentes arriba (y las vencidas por delante,
+    //                     que eso ya lo hacía el comparador)
+    if (taskSort==='prioridad') return null
     if (tabFilter!=='todas') return null
     const over:Task[]=[],today:Task[]=[],upcoming:Task[]=[],nodate:Task[]=[]
     filtered.forEach((t:Task)=>{
@@ -573,7 +592,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
       upcoming.push(t)
     })
     return {over,today,upcoming,nodate}
-  }, [filtered,tabFilter,todayStr])
+  }, [filtered,tabFilter,todayStr,taskSort])
 
   const TABS = [
     {id:'todas'      as const, label:'Todas',       short:'Todas',    count: counts.pendientes},
@@ -1030,7 +1049,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
               </button>
               {/* Sort */}
               <div className="flex p-0.5 rounded-xl" style={{background:SURF2,border:`1px solid ${BORDER}`}}>
-                {([{id:'prioridad' as const,icon:'arrow-up-narrow-wide',title:'Por prioridad'},{id:'fecha' as const,icon:'calendar-clock',title:'Por fecha'}] as const).map(s=>(
+                {([{id:'prioridad' as const,icon:'arrow-up-narrow-wide',title:'Ordenar por prioridad: urgentes arriba, en una sola lista'},{id:'fecha' as const,icon:'calendar-clock',title:'Agrupar por fecha: atrasadas, hoy, próximas y sin fecha'}] as const).map(s=>(
                   <button key={s.id} onClick={()=>setTaskSort(s.id)} title={s.title} className="w-7 h-7 flex items-center justify-center rounded-lg transition-all"
                     style={{background:taskSort===s.id?BLU+'26':'transparent',border:`1px solid ${taskSort===s.id?BLU+'55':'transparent'}`}}>
                     <LucideIcon name={s.icon as any} size={12} color={taskSort===s.id?'#5b8dff':'rgba(255,255,255,0.25)'}/>
