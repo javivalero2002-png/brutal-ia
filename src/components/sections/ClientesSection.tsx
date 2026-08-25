@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { parseImporte, buscaEnTexto } from '@/components/shared'
+import { estadoDeadline, parseImporte, buscaEnTexto } from '@/components/shared'
 import { rutaApp } from '@/lib/appUrl'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR} from '@/components/shared/design-tokens'
@@ -561,7 +561,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className="text-[10px]" style={{color:'rgba(255,255,255,0.25)'}}>{(({'activo':'Activo','urgente':'Urgente','plan.':'Plan.','revisión':'Revisión','completado':'Completado'} as Record<string,string>)[p.status]||p.status)}</span>
                         {p.deadline && p.deadline!=='TBD' && (()=>{
-                          const dOver = dlDate(p.deadline)<new Date()
+                          const dOver = !!estadoDeadline(p.deadline)?.vencido
                           const dSoon = !dOver && dlDate(p.deadline)<new Date(Date.now()+7*24*3600*1000)
                           return <span className="font-syne text-[8px] font-black px-1.5 py-0.5 rounded-full" style={{background:dOver?`${RED}15`:dSoon?'rgba(255,176,32,0.1)':'transparent',color:dOver?RED:dSoon?'rgba(255,176,32,0.8)':'rgba(255,255,255,0.25)'}}>{dOver&&'⚠ '}{dlLabel(p.deadline)}</span>
                         })()}

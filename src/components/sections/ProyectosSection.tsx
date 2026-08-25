@@ -723,7 +723,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
       {/* Quick project stats */}
       {data.projects.length > 0 && (()=>{
         const activeP = data.projects.filter((p: Project)=>p.status==='activo'||p.status==='urgente')
-        const overdueP = data.projects.filter((p: Project)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<new Date())
+        const overdueP = data.projects.filter((p: Project)=>p.status!=='completado'&&estadoDeadline(p.deadline)?.vencido)
         const avgProg = activeP.length ? Math.round(activeP.reduce((s: number,p: Project)=>s+p.progress,0)/activeP.length) : null
         return (
           <div className="flex items-center gap-4 mb-6 px-1">
@@ -936,7 +936,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               <div className={`flex items-center gap-4 py-3 transition-colors${isMobile?' px-4 flex-wrap gap-y-1.5':' px-6 py-4'}`} style={{borderLeft:`3px solid ${(()=>{
                 if (selectedId===p.id) return p.color||BLU
                 if (!p.deadline||p.deadline==='TBD'||p.status==='completado') return (p.color||BLU)+'35'
-                const dOver = dlDate(p.deadline)<new Date()
+                const dOver = !!estadoDeadline(p.deadline)?.vencido
                 const dSoon = !dOver && dlDate(p.deadline)<new Date(Date.now()+7*24*3600*1000)
                 return dOver ? `${RED}75` : dSoon ? 'rgba(255,176,32,0.55)' : (p.color||BLU)+'35'
               })()}`}}>

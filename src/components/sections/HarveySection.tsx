@@ -6,7 +6,7 @@ import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
 import { parsearAccionHarvey, type AccionHarvey } from '@/lib/harveyAccion'
 import { nivelTarea } from '@/components/shared/helpers'
 import type { NexusData } from '@/types'
-import { Esperando, BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, AMBAR, mensajeErrorTranscripcion } from '@/components/shared'
+import { estadoDeadline, Esperando, BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, AMBAR, mensajeErrorTranscripcion } from '@/components/shared'
 import { VIO } from '@/components/shared/design-tokens'
 import type { IrASeccion } from '@/components/shared/secciones'
 
@@ -204,7 +204,12 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
     const calEvents = (data.calendarEvents||[]) as any[]
     const urgentTasks = tasks.filter(t=>!t.done&&t.level==='urgent')
     const highTasks = tasks.filter(t=>!t.done&&t.level==='high')
-    const overdueProjects = projects.filter(p=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<new Date())
+    // `estadoDeadline` y no una resta de instantes. Comparar `dlDate(p.deadline) <
+      // new Date()` marca como ATRASADO algo que vence HOY a partir de las 00:00, y
+      // entonces Harvey le contesta al fundador sobre un retraso que no existe
+      // mientras la pantalla dice «vence hoy». Es el bug de las 02:00 que CLAUDE.md
+      // documenta, arreglado en el gemelo de HoySection y vivo aquí.
+      const overdueProjects = projects.filter(p=>p.status!=='completado'&&estadoDeadline(p.deadline)?.vencido)
     const activeProjects = projects.filter(p=>p.status!=='completado')
     const activeClients = clients.filter(c=>c.status==='Activo')
     const pipeline = agenda.filter((a:any)=>a.status!=='publicado')
@@ -731,7 +736,7 @@ ${memLines2||'  sin documentos'}`
 
   const pipeline = (data.agenda||[]).filter((a:any)=>a.status!=='publicado')
   const todayStrH = todayKey()
-  const overdueProjectsH = (data.projects||[]).filter((p:any)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<new Date())
+  const overdueProjectsH = (data.projects||[]).filter((p:any)=>p.status!=='completado'&&estadoDeadline(p.deadline)?.vencido)
   const todayCalEvtsH = ((data.calendarEvents||[]) as any[]).filter((e:any)=>e.start?.slice(0,10)===todayStrH)
   const urgentUnread = unreadEmails.filter((m:any)=>m.ai_urgency==='urgent')
   // HEX, no rgba(), aunque hoy nadie les concatene opacidad.
@@ -831,7 +836,7 @@ ${memLines2||'  sin documentos'}`
               <div className="font-figtree text-[13px] leading-relaxed max-w-[280px] mx-auto" style={{color:'rgba(255,255,255,0.45)'}}>
                 {(() => {
                   const nU = (data.tasks||[]).filter((t:any)=>!t.done&&t.level==='urgent').length
-                  const nO = (data.projects||[]).filter((p:any)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<new Date()).length
+                  const nO = (data.projects||[]).filter((p:any)=>p.status!=='completado'&&estadoDeadline(p.deadline)?.vencido).length
                   const nM = (data.inbox||[]).filter((m:any)=>!m.is_read).length
                   const partes = []
                   if (nU) partes.push(`${nU} urgente${nU>1?'s':''}`)

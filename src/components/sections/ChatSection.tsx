@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect, useRef } from 'react'
-import { Esperando } from '@/components/shared'
+import { estadoDeadline, Esperando } from '@/components/shared'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { Task, Project, NexusData} from '@/types'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, useIsMobile, dlDate, LucideIcon, todayKey } from '@/components/shared'
@@ -225,7 +225,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
   const send = () => sendText(chatInput.trim())
 
   const urgentN = data.tasks.filter((t: Task)=>!t.done&&t.level==='urgent').length
-  const overdueN = data.projects.filter((p: Project)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<new Date()).length
+  const overdueN = data.projects.filter((p: Project)=>p.status!=='completado'&&estadoDeadline(p.deadline)?.vencido).length
   const unreadN = data.inbox.filter((m: any)=>!m.is_read).length
   const PROMPTS = [
     urgentN > 0
@@ -503,7 +503,7 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
       {!isEmpty && !chatLoading && (()=>{
         const urgentTasks = data.tasks?.filter((t:any)=>!t.done&&t.level==='urgent').length||0
         const unread = data.inbox?.filter((m:any)=>!m.is_read).length||0
-        const overdueProjs = data.projects?.filter((p:any)=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<new Date()).length||0
+        const overdueProjs = data.projects?.filter((p:any)=>p.status!=='completado'&&estadoDeadline(p.deadline)?.vencido).length||0
         const suggestions: {text:string; hint:string}[] = []
         if (urgentTasks > 0) suggestions.push({text:`¿Cómo resolver mis ${urgentTasks} tarea${urgentTasks>1?'s':''} urgente${urgentTasks>1?'s':''}?`, hint:'URGENTE'})
         if (unread > 0) suggestions.push({text:`Resume los ${unread} mensajes sin leer`, hint:'INBOX'})
