@@ -1,6 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getAuthCtx } from '@/lib/authz'
-import { todayKey, localDayKey, ventanaDelDia, esTareaDe } from '@/components/shared/helpers'
+import { todayKey, localDayKey, ventanaDelDia, esTareaDe, diarioTieneAlgo } from '@/components/shared/helpers'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Lee varios días de diario y las tareas de ese tramo. Sin llamadas al modelo:
@@ -72,7 +72,11 @@ export async function GET(request: NextRequest) {
   if (fallo) return NextResponse.json({ error: fallo.message }, { status: 500 })
 
   const porPersona = (equipo ?? []).map(p => {
-    const suyas = (entradas ?? []).filter(e => e.user_id === p.id)
+    // `diarioTieneAlgo`: abrir Fichar y borrar lo escrito deja una fila con
+    // `entrada: ''` y todo lo demás a null. Contándolas, el briefing decía «1 día»
+    // de alguien que no estuvo — y las dos IAs lo leían y lo repetían: «ha habido
+    // actividad los días 21, 22, 24 y 25». No la hubo. Existir no es haber hecho algo.
+    const suyas = (entradas ?? []).filter(e => e.user_id === p.id && diarioTieneAlgo(e))
     const completadas = (tareas ?? []).filter(t =>
       esTareaDe(t, p) && t.completed_at && localDayKey(t.completed_at) >= desde)
     const objetivos = suyas.flatMap(e =>

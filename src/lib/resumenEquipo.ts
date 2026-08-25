@@ -1,4 +1,4 @@
-import { todayKey, localDayKey, ventanaDelDia, esTareaDe } from '@/components/shared/helpers'
+import { todayKey, localDayKey, ventanaDelDia, esTareaDe, diarioTieneAlgo } from '@/components/shared/helpers'
 import { logQueryErrors } from '@/lib/queryLog'
 
 /**
@@ -68,7 +68,11 @@ export async function resumenDelEquipo(
   const [{ data: diarios }, { data: hechas }] = q
 
   const lineasEquipo = (plantilla ?? []).map(p => {
-    const mios = (diarios ?? []).filter((d: any) => d.user_id === p.id)
+    // Solo las filas que SON algo. Una fila vacía —abrir Fichar y borrar lo
+    // escrito— se colaba como un día y salía aquí con su línea «no escribió
+    // objetivos · no cerró el día», que el modelo lee como un día trabajado sin
+    // resultados. Es peor que no decir nada: acusa.
+    const mios = (diarios ?? []).filter((d: any) => d.user_id === p.id && diarioTieneAlgo(d))
     const tareas = (hechas ?? []).filter((t: any) =>
       esTareaDe(t, p as any) && t.completed_at && localDayKey(t.completed_at) >= desdeClave)
     if (!mios.length && !tareas.length) return null

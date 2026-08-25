@@ -3902,6 +3902,27 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('los tres sitios que cuentan dias del diario usan el mismo criterio', () => {
+  // Habia CUATRO filas de diario en la base que no eran nada —`entrada: ''` y todo
+  // lo demas a null— y las tres cuentas de dias las contaban. El briefing decia «1
+  // dia», el resumen del equipo escribia una linea por cada una, y las dos IAs lo
+  // leian y lo repetian: «ha habido actividad los dias 21, 22, 24 y 25». No la hubo.
+  //
+  // Tres sitios con el mismo criterio son tres oportunidades de arreglar uno.
+  const SITIOS = [
+    ['src/app/api/diario/route.ts', 'el panel de Fichar'],
+    ['src/app/api/diario/briefing/route.ts', 'el briefing del equipo'],
+    ['src/lib/resumenEquipo.ts', 'lo que leen las dos IAs'],
+  ] as const
+
+  it('ninguno cuenta una fila por el hecho de existir', () => {
+    for (const [ruta, que] of SITIOS) {
+      expect(/diarioTieneAlgo\(/.test(leerCodigo(ruta)),
+        `${ruta} (${que}) vuelve a contar filas vacias como dias de trabajo`).toBe(true)
+    }
+  })
+})
+
 describe('el cliente de un correo no lo inventa el modelo', () => {
   // Medido sobre los 871 correos reales: 123 nombres distintos en `ai_client` y
   // ninguno era cliente. El unitario prueba el normalizador; esto prueba que se

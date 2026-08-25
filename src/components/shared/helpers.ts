@@ -405,6 +405,27 @@ export function mensajeErrorTranscripcion(status: number, delServidor?: string |
 export const haFichado = (d: { entrada_at?: string | null } | null | undefined) =>
   !!d?.entrada_at
 
+/**
+ * ¿Esta fila de diario CUENTA como un día, o es un resto?
+ *
+ * Abrir Fichar y escribir dos letras que luego borras deja una fila con
+ * `entrada: ''` y todo lo demás a null. En la base hay cuatro así ahora mismo.
+ *
+ * No es un detalle de limpieza: esa fila se contaba como día. El briefing decía
+ * «1 día» de alguien que no estuvo, el resumen del equipo escribía una línea por
+ * cada una —«no escribió objetivos · no cerró el día»— y las dos IAs lo leían y lo
+ * repetían en voz alta. Textual de Brutal.IA con los datos reales: «ha habido
+ * actividad los días 21, 22, 24 y 25». No la hubo.
+ *
+ * Existir no es haber hecho algo. Una fila cuenta si tiene texto, si se fichó, si
+ * se cerró o si se dijo cómo fue el día.
+ */
+export const diarioTieneAlgo = (d: {
+  entrada?: string | null; cierre?: string | null
+  entrada_at?: string | null; cierre_at?: string | null; animo?: string | null
+} | null | undefined) =>
+  !!(d && ((d.entrada || '').trim() || (d.cierre || '').trim() || d.entrada_at || d.cierre_at || d.animo))
+
 // ─────────────────────────────────────────────────────────────────────────────
 // LO QUE ESCRIBE EL MODELO, NORMALIZADO EN LA FRONTERA.
 //
