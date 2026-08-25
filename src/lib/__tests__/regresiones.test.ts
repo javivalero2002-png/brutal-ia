@@ -3771,6 +3771,57 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('lo que se le oculta a alguien no se le cuela por detras', () => {
+  // `ver_colabs` es el interruptor de «quiero ver el buzon del equipo». Se
+  // respetaba en `/api/inbox` y en `/api/chat`, y el comentario de chat/route.ts lo
+  // dice con todas las letras: «ocultarle a alguien el correo del equipo en la
+  // pantalla y seguir metiendoselo a su Harvey no es medio arreglo, es ninguno».
+  //
+  // Pues faltaba la otra mitad. La suscripcion en VIVO escuchaba `shared=eq.true` a
+  // secas, sin mirar el interruptor: a quien lo tuviera apagado, la pantalla le
+  // ocultaba el buzon compartido y cada correo que entrara con la app abierta se le
+  // colaba igual en el estado local — y de ahi al contexto de Harvey. Se corregia
+  // solo al recargar, asi que era intermitente y no se notaba.
+  const H = leerCodigo('src/hooks/useNexusData.ts')
+
+  it('la suscripcion al buzon compartido comprueba ver_colabs', () => {
+    const i = H.indexOf("filter: `shared=eq.true`")
+    expect(i, 'ya no hay suscripcion al buzon compartido: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    // La guarda va ANTES de suscribirse, no dentro del manejador: suscribirse y
+    // luego tirar el mensaje deja el canal abierto y el dato viajando.
+    const antes = H.slice(Math.max(0, i - 900), i)
+    expect(/ver_colabs === false\) return/.test(antes),
+      'la suscripcion en vivo vuelve a traer el buzon compartido a todo el mundo: a quien lo tenga apagado se le colara en el contexto de Harvey')
+      .toBe(true)
+  })
+
+  it('apagar el interruptor surte efecto sin recargar', () => {
+    // Sin `ver_colabs` en las dependencias, el canal sigue vivo hasta que la
+    // persona recarga — que es justo lo que no va a hacer despues de apagarlo.
+    const i = H.indexOf("filter: `shared=eq.true`")
+    const despues = H.slice(i, i + 900)
+    expect(/\}, \[profile\?\.id, profile\?\.ver_colabs\]\)/.test(despues),
+      'el efecto no depende de ver_colabs: apagarlo no cierra el canal hasta recargar')
+      .toBe(true)
+  })
+
+  it('nadie decide si un proyecto esta vencido restando instantes', () => {
+    // El bug de las 02:00 que documenta CLAUDE.md: `dlDate(p.deadline) < new Date()`
+    // marca como ATRASADO algo que vence HOY desde las 00:00, y entonces Harvey
+    // contesta sobre un retraso que no existe mientras la pantalla dice «vence hoy».
+    // Estaba arreglado en HoySection y vivo en HarveySection: el gemelo exacto.
+    const malos: string[] = []
+    for (const f of CLIENTE) {
+      const src = leerCodigo(f)
+      for (const m of src.matchAll(/dlDate\([^)]*\)\s*<\s*new Date\(\)|new Date\(\)\s*>\s*dlDate\(/g)) {
+        malos.push(`${f}:${src.slice(0, m.index!).split('\n').length}`)
+      }
+    }
+    expect(malos, `se vuelve a decidir «vencido» restando instantes en vez de con estadoDeadline — un proyecto que vence HOY saldra como atrasado desde las 00:00:\n  ${malos.join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
 describe('las superficies de IA se DERIVAN, no se enumeran', () => {
   // Javi: «cuando le das a redactar, Harvey y la IA tienen constancia de toda la
   // empresa y todo el contexto». Lo daba por hecho. NO ERA ASI.

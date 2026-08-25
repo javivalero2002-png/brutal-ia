@@ -83,7 +83,7 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
     // el equivalente MENSUAL, que es lo que significa MRR — antes un contrato
     // anual se sumaba entero, doce veces más de lo que es.
     const totalMRR = activeClients.reduce((sum: number,c: Client)=>sum+parseImporte(c.revenue||'').mensual,0)
-    const overdueProjects = projects.filter(p=>p.deadline&&p.deadline!=='TBD'&&p.status!=='completado'&&dlDate(p.deadline)<new Date())
+    const overdueProjects = projects.filter(p=>p.status!=='completado'&&estadoDeadline(p.deadline)?.vencido)
     const projectsByStatus = [
       {label:'En progreso', count:projects.filter(p=>p.status==='activo').length, color:BLU},
       {label:'Urgente', count:projects.filter(p=>p.status==='urgente').length, color:RED},

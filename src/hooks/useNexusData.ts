@@ -153,9 +153,24 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id])
 
-  // Supabase Realtime — shared colabs emails (visible to all team members)
+  // Supabase Realtime — el buzón COMPARTIDO, solo para quien puede verlo.
+  //
+  // Aquí faltaba la mitad de un arreglo. `/api/inbox` y `/api/chat` respetan
+  // `ver_colabs` —el comentario de chat/route.ts lo dice con todas las letras:
+  // «ocultarle a alguien el correo del equipo en la pantalla y seguir metiéndoselo
+  // a su Harvey no es medio arreglo, es ninguno»— pero ESTA suscripción escuchaba
+  // `shared=eq.true` a secas.
+  //
+  // Consecuencia real: a quien tuviera el interruptor apagado, la pantalla le
+  // ocultaba el buzón compartido, y cada correo que entrara con la app abierta se
+  // le colaba igual en el estado local... y de ahí al contexto de Harvey. Se
+  // corregía solo al recargar, así que era intermitente y no se notaba.
+  //
+  // `ver_colabs` va en las dependencias: apagar el interruptor tiene que surtir
+  // efecto sin recargar, que es cuando alguien lo apaga porque no quiere verlo.
   useEffect(() => {
     if (!profile) return
+    if (profile.ver_colabs === false) return
     const sharedChannel = supabase
       .channel(`inbox-shared-${profile.id}`)
       .on('postgres_changes', {
@@ -174,7 +189,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
       .subscribe()
     return () => { supabase.removeChannel(sharedChannel) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.id])
+  }, [profile?.id, profile?.ver_colabs])
 
   // Dar de alta o de baja a alguien no refrescaba la lista: la persona nueva no
   // aparecia hasta recargar la pagina, asi que parecia que el alta no habia
