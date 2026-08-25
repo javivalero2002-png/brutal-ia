@@ -3902,6 +3902,241 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('decir que lo has hecho sin haberlo hecho tiene aviso', () => {
+  // La emision de la accion NO es determinista. Probando las ocho frases contra el
+  // modelo real, una de ocho salio sin `[ACCION:...]`: Harvey dijo «he añadido el
+  // reel al pipeline» y no se propuso nada. El truncamiento por longitud ya se
+  // avisa aparte —el `[ACCION:...]` va al final y es lo primero que se pierde—;
+  // esto cubre el resto, que no da ninguna señal.
+  it('las dos secciones lo comprueban', () => {
+    for (const ruta of ['src/components/sections/HoySection.tsx', 'src/components/sections/HarveySection.tsx']) {
+      const c = leerCodigo(ruta)
+      expect(/afirmaHaberloHecho\(/.test(c),
+        `${ruta} vuelve a dar por buena una respuesta que dice «he creado la tarea» sin accion detras`).toBe(true)
+      // Y atado al caso: solo cuando NO hubo accion.
+      const i = c.indexOf('afirmaHaberloHecho(')
+      expect(/else if/.test(c.slice(Math.max(0, i - 120), i)),
+        `${ruta}: el aviso no cuelga del caso «no hubo accion», asi que saltaria tambien cuando si la hubo`).toBe(true)
+    }
+  })
+})
+
+describe('las dos IAs eligen los mismos correos', () => {
+  // El contexto lleva tope —diez para Harvey, quince para Brutal.IA— y se gastaba
+  // por ORDEN DE LLEGADA entre los no leidos. Con 704 sin leer, casi todos
+  // boletines, se gastaba entero antes de llegar a nada que importara: los diez
+  // correos del contexto real eran DHGate, Polymarket, Temu, adidas, idealista.
+  it('las dos usan correosParaIA para gastar el tope', () => {
+    for (const ruta of ['src/lib/contextoHarvey.ts', 'src/lib/ai.ts']) {
+      expect(/correosParaIA\(/.test(leerCodigo(ruta)),
+        `${ruta} vuelve a llenar el tope por orden de llegada: los boletines se comen el contexto`).toBe(true)
+    }
+  })
+
+  it('nadie se cree el ai_client sin comparar con los clientes reales', () => {
+    // `ai_client` guarda desde siempre la marca de quien envia. Priorizar por ese
+    // campo a pelo pondria a Temu por delante de un cliente de verdad.
+    const c = leerCodigo('src/lib/contextoHarvey.ts')
+    expect(/nombresCliente|data\.clients/.test(c),
+      'contextoHarvey prioriza por ai_client sin contrastar con la lista de clientes').toBe(true)
+  })
+})
+
+describe('la IA no se declara incapaz de lo que la app sabe hacer', () => {
+  // El caso REAL, hablando con ella: sin eventos cargados, «¿que reuniones tengo
+  // esta semana?» se contestaba con «no tengo acceso a tu calendario, miralo en
+  // Google Calendar». Y SI lo tiene — leer el calendario es una de las cosas que la
+  // app hace, y encima acababa de arreglarse la ventana para que trajera 15 meses.
+  //
+  // Una IA que se declara incapaz de algo que sabe hacer no se vuelve a usar para
+  // eso, y eso no se ve en ningun log: el usuario simplemente deja de preguntar.
+  it('distingue «no hay nada» de «no lo he podido leer»', () => {
+    const A = leerCodigo('src/lib/ai.ts')
+    expect(/no se ha podido cargar la agenda/.test(A),
+      'vuelve a haber un solo estado: sin eventos, el modelo concluye que no tiene calendario').toBe(true)
+    expect(/NO digas que no tienes acceso/.test(A),
+      'no se le dice explicitamente que no niegue tener acceso').toBe(true)
+    // Y el servidor tiene que CONSERVAR la diferencia: si convierte «no mandado» en
+    // «lista vacia», el prompt ya no puede distinguirlos por mucho que lo intente.
+    const C = leerCodigo('src/app/api/chat/route.ts')
+    expect(/Array\.isArray\(body\?\.eventos\) \? undefined/.test(C),
+      'el servidor vuelve a convertir «no mandado» en lista vacia: la distincion se pierde antes de llegar al prompt').toBe(true)
+  })
+})
+
+describe('lo que se dice de las cuentas de Gmail sale de la tabla nueva', () => {
+  // `profiles.gmail_account` es la columna VIEJA: UNA ranura que el callback pisa
+  // en cada conexion. Con tres cuentas conectadas, Sincronizacion decia «Conectado
+  // a lauravalero754@gmail.com» —la ultima que entro— mientras justo debajo pintaba
+  // la lista de verdad con las dos personales. Dos verdades en la misma pantalla, y
+  // la de arriba en letra mas grande.
+  //
+  // Javi: «aqui me pone que estoy conectado a este correo, pero en verdad estoy
+  // conectado a dos».
+  it('la seccion no pinta la ranura vieja como si fuera la cuenta', () => {
+    const c = leerCodigo('src/components/sections/SincronizacionSection.tsx')
+    const crudos = [...c.matchAll(/Conectado a \$\{gmailStatus[^}]*\}/g)].map(m => m[0])
+    expect(crudos, `vuelve a anunciarse la ranura vieja como «la cuenta conectada»:\n  ${crudos.join('\n  ')}`).toEqual([])
+    expect(/rotuloCuentas/.test(c),
+      'ya no se calcula el rotulo desde la lista de cuentas: volvera a decir una sola cuando hay varias').toBe(true)
+  })
+})
+
+describe('todos los buscadores de la app buscan igual', () => {
+  // `buscaEnTexto` existe porque `includes()` no sirve escribiendo en español: no
+  // encuentra «diseño» si escribes «diseno», ni casa dos palabras sueltas. Se
+  // arreglo en las SEIS secciones y la lupa de ⌘K —la mas a mano— se quedo con la
+  // comparacion de siempre. El arreglo estaba hecho y escrito; el sitio mas visible
+  // no lo tenia.
+  it('nadie compara a mano lo que el usuario escribe', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (!/src\/(components\/sections|components\/NexusDashboard|lib\/busquedaGlobal)/.test(ruta)) continue
+      const c = leerCodigo(ruta)
+      // `algo.toLowerCase().includes(<la consulta>)` — se buscan los nombres que
+      // este repo usa de verdad para la caja de busqueda.
+      for (const m of c.matchAll(/\.toLowerCase\(\)\.includes\(\s*(q|query|search|searchQuery|busqueda)\b/g)) {
+        infractores.push(`${ruta}: ${m[0]}`)
+      }
+    }
+    expect(infractores, `vuelve a compararse la busqueda con includes(): no encontrara con tildes ni con dos palabras, y solo en algunos sitios de la app:\n  ${infractores.join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
+describe('los tres sitios que cuentan dias del diario usan el mismo criterio', () => {
+  // Habia CUATRO filas de diario en la base que no eran nada —`entrada: ''` y todo
+  // lo demas a null— y las tres cuentas de dias las contaban. El briefing decia «1
+  // dia», el resumen del equipo escribia una linea por cada una, y las dos IAs lo
+  // leian y lo repetian: «ha habido actividad los dias 21, 22, 24 y 25». No la hubo.
+  //
+  // Tres sitios con el mismo criterio son tres oportunidades de arreglar uno.
+  const SITIOS = [
+    ['src/app/api/diario/route.ts', 'el panel de Fichar'],
+    ['src/app/api/diario/briefing/route.ts', 'el briefing del equipo'],
+    ['src/lib/resumenEquipo.ts', 'lo que leen las dos IAs'],
+  ] as const
+
+  it('ninguno cuenta una fila por el hecho de existir', () => {
+    for (const [ruta, que] of SITIOS) {
+      expect(/diarioTieneAlgo\(/.test(leerCodigo(ruta)),
+        `${ruta} (${que}) vuelve a contar filas vacias como dias de trabajo`).toBe(true)
+    }
+  })
+})
+
+describe('el cliente de un correo no lo inventa el modelo', () => {
+  // Medido sobre los 871 correos reales: 123 nombres distintos en `ai_client` y
+  // ninguno era cliente. El unitario prueba el normalizador; esto prueba que se
+  // USA — que es donde se pierden estos arreglos: la funcion existe, esta bien
+  // hecha, y el sitio que importa sigue metiendo el valor crudo.
+  it('analyzeEmail pasa el cliente por clienteConocido antes de devolverlo', () => {
+    const A = leerCodigo('src/lib/ai.ts')
+    const i = A.indexOf('export async function analyzeEmail(')
+    expect(i, 'ya no existe analyzeEmail: revisa esta regla').toBeGreaterThan(-1)
+    const j = A.indexOf('export async function analyzeWhatsAppMessage', i)
+    const cuerpo = A.slice(i, j > i ? j : A.length)
+    expect(/client: clienteConocido\(/.test(cuerpo),
+      'el cliente vuelve a salir crudo del modelo: la columna se llenara otra vez con la marca de quien envia (Temu, Google, Revolut)')
+      .toBe(true)
+  })
+
+  it('la pantalla pinta lo mismo que filtra', () => {
+    // El filtro ya emparejaba contra los clientes reales; el panel escribia
+    // `ai_client` TAL CUAL, asi que la ficha del correo decia «Cliente: Temu»
+    // mientras el contador no lo contaba. Dos verdades para el mismo correo.
+    const I = leerCodigo('src/components/sections/InboxSection.tsx')
+    const crudos = [...I.matchAll(/\{[^{}]*\bai_client\s*!==\s*'Desconocido'[^{}]*\}/g)].map(m => m[0])
+    expect(crudos, `vuelve a pintarse ai_client sin emparejar con un cliente real:\n  ${crudos.join('\n  ')}`).toEqual([])
+  })
+
+  it('el prompt dice que el remitente no es un cliente', () => {
+    const A = leerCodigo('src/lib/ai.ts')
+    expect(/no es un cliente por enviarlo|EXACTAMENTE uno de los clientes/.test(A),
+      'el prompt vuelve a pedir «el cliente si se identifica» sin atarlo a la lista').toBe(true)
+  })
+})
+
+describe('una hora de evento no se saca cortando el texto', () => {
+  // Google devuelve cada evento en el desfase del calendario DONDE VIVE, no en el
+  // del usuario: el calendario personal de Javi va en +01:00 y el compartido en
+  // +02:00. Cortar el ISO (`start.slice(11,16)`) da la hora de ese desfase.
+  //
+  // Medido sobre los eventos reales: «reunion brutal» del 4 de agosto salia como
+  // las 10:30 para Harvey y como las 11:30 en la pantalla. La misma reunion. Y era
+  // la peor version del fallo, porque la seccion SI lo hacia bien: la app y la IA
+  // decian cosas distintas del mismo dato.
+  it('los constructores de contexto usan el ayudante de Madrid', () => {
+    const infractores: string[] = []
+    for (const ruta of ['src/lib/contextoHarvey.ts', 'src/lib/ai.ts']) {
+      const c = leerCodigo(ruta)
+      // Cualquier `slice` que saque hora y minuto de algo que se llama `start`.
+      for (const m of c.matchAll(/(\w*[Ss]tart\w*)[^\n]{0,40}\.slice\(\s*11\s*,\s*16\s*\)/g)) {
+        infractores.push(`${ruta}: ${m[0].slice(0, 60)}`)
+      }
+      // O que corte los 16 primeros caracteres, que es la otra forma de lo mismo.
+      for (const m of c.matchAll(/(\w*[Ss]tart\w*)\.slice\(\s*0\s*,\s*16\s*\)/g)) {
+        infractores.push(`${ruta}: ${m[0].slice(0, 60)}`)
+      }
+    }
+    expect(infractores, `vuelve a leerse la hora cortando el ISO: dira una hora distinta de la que enseña la pantalla, y solo para algunos calendarios:\n  ${infractores.join('\n  ')}`)
+      .toEqual([])
+    for (const ruta of ['src/lib/contextoHarvey.ts', 'src/lib/ai.ts']) {
+      expect(/cuandoEnMadrid\(/.test(leerCodigo(ruta)), `${ruta} ya no usa cuandoEnMadrid()`).toBe(true)
+    }
+  })
+
+  it('la ventana del calendario se decide en UN sitio', () => {
+    // La seccion deja navegar a cualquier mes y de Google solo se trae un tramo.
+    // Si el rango se escribe dos veces, el aviso de «mes no cargado» acaba mintiendo
+    // en la direccion contraria: diciendo que hay datos donde no los hay.
+    const g = leerCodigo('src/lib/gmail.ts')
+    expect(/ventanaCalendario\(\)/.test(g), 'gmail.ts vuelve a calcular la ventana por su cuenta').toBe(true)
+    expect(/new Date\(now\.getFullYear\(\), now\.getMonth\(\)/.test(g),
+      'gmail.ts vuelve a construir el rango a mano').toBe(false)
+    expect(/mesCargado\(/.test(leerCodigo('src/components/sections/CalendarioSection.tsx')),
+      'el calendario ya no avisa de los meses que no ha traido: los pinta vacios, que se lee como «no tienes nada»').toBe(true)
+  })
+})
+
+describe('el cliente no llama a metodos que la ruta no tiene', () => {
+  // ESTE ES EL BUG QUE ME COMI. La accion de cerrar el dia llamaba a
+  // `/api/diario` con PATCH y esa ruta exporta GET y POST: en produccion
+  // contestaba 405 y no se escribia nada. La prueba unitaria pasaba en verde
+  // porque su `fetch` de mentira aceptaba el metodo que le dieras — o sea que
+  // estaba de acuerdo con MI SUPOSICION, no con la ruta.
+  //
+  // Un doble solo comprueba lo que ya creias. Esto compara contra el fichero.
+  it('cada fetch a /api/... usa un metodo que ese route.ts exporta', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (ruta.startsWith('src/app/api/')) continue      // el servidor no se llama a si mismo
+      const codigo = leerCodigo(ruta)
+      // `fetch('/api/loquesea', { ... method: 'X' ... })` — se mira la llamada
+      // entera, no el fichero: en un fichero grande hay muchos metodos sueltos.
+      for (const m of codigo.matchAll(/fetch\(\s*[`'"](\/api\/[^`'"?\s]*)[^)]*?\bmethod:\s*'(\w+)'/g)) {
+        const [, url, metodo] = m
+        // Se resuelve el fichero de esa ruta: primero literal, luego con el
+        // ultimo tramo como [id], que es como estan escritas las dinamicas.
+        const partes = url.replace(/^\//, '').split('/')
+        const candidatos = [
+          `src/app/${url.replace(/^\//, '')}/route.ts`,
+          `src/app/${[...partes.slice(0, -1), '[id]'].join('/')}/route.ts`,
+        ]
+        const fichero = candidatos.find(c => TS.includes(c))
+        // Una URL con interpolacion (`/api/tasks/${id}`) no se resuelve aqui:
+        // se salta en vez de dar un falso positivo.
+        if (!fichero) continue
+        if (!new RegExp(`export async function ${metodo}\\b`).test(leerCodigo(fichero))) {
+          infractores.push(`${ruta}: ${metodo} ${url} — ${fichero} no exporta ${metodo}`)
+        }
+      }
+    }
+    expect(infractores, `el cliente llama con un metodo que la ruta no tiene: en produccion es un 405 y no se escribe nada, sin que nadie lo vea:\n  ${infractores.join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
 describe('lo que emite Harvey se normaliza antes de guardarse', () => {
   // CLAUDE.md ya lo avisa —«lo que escribe el modelo no entra crudo en la base»— y
   // el aviso seguia vigente: de las CINCO acciones que Harvey podia emitir, SOLO la

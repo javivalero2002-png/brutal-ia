@@ -11,6 +11,7 @@ import CreateModal from '@/components/CreateModal'
 
 import { BLU, RED, GRN, AMBAR, SURFACE, SURF2, BORDER, ACCENT_COLORS } from '@/components/shared/design-tokens'
 import { useIsMobile, useBackClosable } from '@/components/shared/hooks'
+import { filtrarBusqueda } from '@/lib/busquedaGlobal'
 import { dlDate, todayKey, localDayKey, daysBetweenKeys, rotuloNivel, esTareaDe } from '@/components/shared/helpers'
 import { construirKanbanCols } from '@/components/shared/kanban'
 import LucideIcon from '@/components/shared/LucideIcon'
@@ -583,17 +584,24 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   }
 
   const searchResults = (() => {
-    const q = searchQuery.toLowerCase().trim()
+    const q = searchQuery.trim()
     if (q.length < 2) return []
-    return [
+    // `extra` es lo que NO se pinta pero sí se busca: el cuerpo de una nota, el
+    // resumen de un correo. Buscar solo por título deja fuera justo lo que se busca
+    // cuando no te acuerdas de cómo se llamaba.
+    const todos: Array<{ type: string; title: string; sub?: string; extra?: string; act: () => void }> = [
       ...data.clients.map(c => ({ type:'Cliente', title:c.name, sub:c.industry, act:()=>{ setSelectedClient(c.id); setSection('clientes'); setSearchOpen(false) }})),
       ...data.projects.map(p => ({ type:'Proyecto', title:p.name, sub:p.client?.name||'—', act:()=>{ setSelectedProject(p.id); setProjView('list'); setSection('proyectos'); setSearchOpen(false) }})),
       ...data.tasks.map(t => ({ type:'Tarea', title:t.text, sub:rotuloNivel(t.level), act:()=>{ setSection('tareas'); setSearchOpen(false) }})),
-      ...data.memoria.map(m => ({ type:'Memoria', title:m.title, sub:m.category, act:()=>{ setSection('memoria'); setSearchOpen(false) }})),
+      ...data.memoria.map(m => ({ type:'Memoria', title:m.title, sub:m.category, extra:(m.content||'').slice(0,600), act:()=>{ setSection('memoria'); setSearchOpen(false) }})),
       ...data.agenda.map((a: any) => ({ type:'Contenido', title:a.title, sub:a.platform, act:()=>{ setSection('contenido'); setSearchOpen(false) }})),
-      ...data.inbox.map((m: any) => ({ type:'Inbox', title:m.subject||m.from_name||'Sin asunto', sub:m.from_name||'', act:()=>{ setSection('inbox'); setSearchOpen(false) }})),
+      ...data.inbox.map((m: any) => ({ type:'Inbox', title:m.subject||m.from_name||'Sin asunto', sub:m.from_name||'', extra:m.ai_summary||'', act:()=>{ setSection('inbox'); setSearchOpen(false) }})),
       ...data.team.map((p: any) => ({ type:'Equipo', title:p.name, sub:p.role||'Miembro', act:()=>{ setSection('equipo'); setSearchOpen(false) }})),
-    ].filter(r => r.title.toLowerCase().includes(q) || (r.sub||'').toLowerCase().includes(q)).slice(0, 9)
+    ]
+    // El filtrado vive en `busquedaGlobal.ts`: dentro del componente no se podía
+    // probar, y era justo el buscador que se había quedado sin arreglar mientras
+    // las seis secciones ya usaban `buscaEnTexto`.
+    return filtrarBusqueda(todos, q)
   })()
   sr.current = searchResults
 

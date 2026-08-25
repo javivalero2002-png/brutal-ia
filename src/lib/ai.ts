@@ -3,6 +3,8 @@ import { textOf } from '@/lib/aiText'
 import { sanearHistorial } from './historialIA'
 import { estadoDeadline, todayKey } from '@/components/shared/helpers'
 import { COMO_LEER_EL_DIARIO } from '@/lib/resumenEquipo'
+import { cuandoEnMadrid } from '@/lib/ventanaCalendario'
+import { correosParaIA } from '@/lib/correosParaIA'
 import { nivelTarea, type NivelTarea } from '@/components/shared/helpers'
 
 // Sin topes, el SDK se queda con sus valores por defecto: 10 MINUTOS de timeout
@@ -187,6 +189,21 @@ export interface WhatsAppAnalysis {
   confirmationQuestion: string
 }
 
+/**
+ * El cliente que dice el modelo, atado a los clientes que existen de verdad.
+ *
+ * Compara sin tildes ni mayusculas y devuelve el nombre TAL COMO esta dado de alta,
+ * para que la columna no acabe con «idealista» e «Idealista» como dos cosas — que es
+ * lo que hay hoy en la base.
+ */
+export function clienteConocido(valor: unknown, conocidos: string[]): string {
+  const limpio = String(valor ?? '').trim()
+  const norm = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim()
+  const objetivo = norm(limpio)
+  if (!objetivo || objetivo === 'desconocido') return 'Desconocido'
+  return (conocidos || []).find(c => norm(c) === objetivo) ?? 'Desconocido'
+}
+
 export async function analyzeEmail(
   subject: string,
   body: string,
@@ -222,7 +239,7 @@ Responde SOLO con JSON válido (sin markdown):
 {
   "summary": "resumen en 1-2 frases en español",
   "action": "acción requerida en 1 frase o 'Ninguna acción requerida'",
-  "client": "nombre del cliente si se identifica o 'Desconocido'",
+  "client": "EXACTAMENTE uno de los clientes conocidos de arriba, o 'Desconocido'. Quien ENVÍA el correo no es un cliente por enviarlo: Temu, Google o un banco son remitentes. Si no estás seguro, 'Desconocido'.",
   "urgency": "urgent|high|normal",
   "suggestedTask": "texto de tarea a crear o null"
 }`
@@ -255,7 +272,19 @@ Responde SOLO con JSON válido (sin markdown):
     // mordio con tasks.level, y este es su gemelo exacto —lo mismo, en otro
     // campo—. Se normaliza AQUI, en la frontera, y no en los tres inserts que
     // consumen esto: normalizar tres veces es como se arregla uno y sobreviven dos.
-    return { ...bruto, urgency: nivelTarea(bruto?.urgency, 'normal') }
+      // Y `client` IGUAL, por el mismo motivo y con peor consecuencia.
+      //
+      // El prompt pedia «nombre del cliente si se identifica» sin atarlo a nada, asi
+      // que el modelo contestaba lo unico que veia: la marca de quien enviaba.
+      // MEDIDO sobre los 871 correos reales: 123 nombres distintos en `ai_client` y
+      // NINGUNO era cliente — Temu 42 veces, Google 28, AliExpress 15, Revolut 12.
+      // Javi lo dijo con estas palabras: «los clientes los revisa mal, saca clientes
+      // de donde no son».
+      //
+      // Se ata a la lista de verdad. Si no casa: «Desconocido», que es la respuesta
+      // honesta. Un hueco se entiende; una etiqueta que dice «cliente: Temu» hace
+      // que la columna entera deje de creerse.
+    return { ...bruto, urgency: nivelTarea(bruto?.urgency, 'normal'), client: clienteConocido(bruto?.client, knownClients) }
   } catch {
     return { summary: subject, action: 'Revisar email', client: 'Desconocido', urgency: 'normal', degraded: true }
   }
@@ -342,7 +371,14 @@ export async function chat(
     projects: Array<{name: string; status: string; deadline?: string}>
     tasks: Array<{text: string; level: string; assignee?: string}>
     unreadInbox: number
-    emails: Array<{from: string; subject: string; summary: string; urgency: string; shared: boolean; received_at: string}>
+    emails: Array<{
+      from: string; subject: string; summary: string; urgency: string
+      shared: boolean; received_at: string
+      /** El cliente YA emparejado con la lista real (o vacío). Sirve para priorizar. */
+      client?: string
+      /** Para no colar como «sin leer» algo que ya se leyó al ordenar por importancia. */
+      is_read?: boolean
+    }>
     teamSize: number
     /**
      * LOS NOMBRES, no solo cuántos. Brutal.IA leía «Equipo: 7 personas» y nada
@@ -387,7 +423,14 @@ export async function chat(
   const urgentEmails = context.emails.filter(e => e.urgency === 'urgent')
   const emailsBlock = context.emails.length > 0
     ? `\n\nEMAILS RECIENTES (los ${context.emails.length} mas recientes, ${context.unreadInbox} sin leer de esos):\n${
-        context.emails.slice(0, 15).map(e => {
+        // Ordenados por importancia, no por llegada: con cientos de boletines sin
+        // leer el tope se gastaba antes de llegar a un cliente. Mismo criterio que
+        // Harvey, en el mismo sitio, para que no vuelvan a saber cosas distintas.
+        correosParaIA(
+          context.emails.map(e => ({ ...e, ai_urgency: e.urgency, ai_client: e.client })),
+          15,
+          e => !!(e as { ai_client?: string | null }).ai_client && (e as { ai_client?: string | null }).ai_client !== 'Desconocido',
+        ).map(e => {
           const tag = e.shared ? '[COLABS]' : '[PERSONAL]'
           const urgTag = e.urgency === 'urgent' ? '🔴' : e.urgency === 'high' ? '🟡' : '⚪'
           return `  ${urgTag}${tag} De: ${e.from} | "${e.subject}" → ${e.summary || '(sin resumen)'}`
@@ -427,11 +470,24 @@ export async function chat(
     .sort((a, b) => a.start.localeCompare(b.start))
     .slice(0, 8)
   const variasCuentas = new Set((context.eventos || []).map(e => e.cuenta).filter(Boolean)).size > 1
-  const lineasAgenda = proximos.length
-    ? `\nCALENDARIO PRÓXIMO:\n${proximos.map(e =>
-        `  · ${e.start.slice(0, 16).replace('T', ' ')} — ${e.title}${variasCuentas && e.cuenta ? ` (${e.cuenta})` : ''}`,
-      ).join('\n')}`
-    : ''
+  // TRES estados, no dos. Sin esta distinción el modelo llegaba a la peor
+  // conclusión posible: preguntándole «¿qué reuniones tengo esta semana?» sin
+  // eventos cargados contestaba «no tengo acceso a tu calendario, míralo en Google
+  // Calendar». Y SÍ lo tiene — es una de las cosas que la app hace.
+  //
+  // Una IA que se declara incapaz de algo que sabe hacer no se vuelve a usar para
+  // eso. Y «no hay nada» tampoco es «no lo he podido leer»: lo primero es un dato,
+  // lo segundo un fallo.
+  const lineasAgenda = !context.eventos
+    ? '\nCALENDARIO: no se ha podido cargar la agenda ahora mismo. Dilo así si preguntan; NO digas que no tienes acceso al calendario.'
+    : proximos.length === 0
+      ? '\nCALENDARIO PRÓXIMO: ninguno. La agenda se ha leído bien y no hay nada por delante.'
+      // En hora de MADRID. Cortar el ISO daba la hora del desfase de cada
+      // calendario, que no es la misma en todos: medido, una hora de diferencia
+      // entre lo que decía la IA y lo que enseñaba la pantalla.
+      : `\nCALENDARIO PRÓXIMO:\n${proximos.map(e =>
+          `  · ${cuandoEnMadrid(e.start)} — ${e.title}${variasCuentas && e.cuenta ? ` (${e.cuenta})` : ''}`,
+        ).join('\n')}`
 
   const systemPrompt = `Eres Brutal.IA, la inteligencia artificial de Brutal Studios, una agencia creativa española especializada en marketing digital, contenido y estrategia de marca.
 

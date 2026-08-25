@@ -125,12 +125,27 @@ describe('el prompt de Brutal.IA lleva lo que dice llevar', () => {
     expect(con).toContain('es un PLAN, no un hecho')
   })
 
+  it('«no hay nada» y «no he podido leerlo» son cosas distintas', async () => {
+    // El caso REAL que salió hablando con ella: sin eventos cargados contestaba «no
+    // tengo acceso a tu calendario, míralo en Google Calendar». Y sí lo tiene — es
+    // una de las cosas que la app hace. Una IA que se declara incapaz de algo que
+    // sabe hacer no se vuelve a usar para eso.
+    const sinCampo = await prompt()                      // el cliente no mandó nada
+    expect(sinCampo).toMatch(/no se ha podido cargar la agenda/i)
+    expect(sinCampo).toMatch(/NO digas que no tienes acceso/i)
+
+    const vacio = await prompt({ eventos: [] })          // se leyó y no hay nada
+    expect(vacio).toMatch(/CALENDARIO PRÓXIMO: ninguno/i)
+    expect(vacio).toMatch(/se ha leído bien/i)
+    expect(vacio).not.toMatch(/no se ha podido cargar/i)
+
+    const conAlgo = await prompt({ eventos: [{ title: 'Rodaje', start: '2099-01-02T09:00:00Z' }] })
+    expect(conAlgo).toContain('Rodaje')
+    expect(conAlgo).not.toMatch(/no se ha podido cargar|ninguno\. La agenda/i)
+  })
+
   it('lo que no llega, no se finge', async () => {
-    // Sin calendario no debe aparecer una cabecera vacía: un «CALENDARIO PRÓXIMO:»
-    // sin nada debajo se lee como «no tienes nada», que es una afirmación, no un
-    // hueco.
     const p = await prompt()
-    expect(p).not.toContain('CALENDARIO PRÓXIMO')
     expect(p).toMatch(/no lo deduzcas ni te lo inventes/i)
   })
 })

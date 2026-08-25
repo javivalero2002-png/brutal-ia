@@ -1,5 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { todayKey, localDayKey, ventanaDelDia, esTareaDe } from '@/components/shared/helpers'
+import { todayKey, localDayKey, ventanaDelDia, esTareaDe, diarioTieneAlgo } from '@/components/shared/helpers'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Solo columnas conocidas. Misma razón que en el resto de rutas: impide que un
@@ -60,7 +60,10 @@ export async function GET(request: NextRequest) {
       entrada: entradas.find(e => e.user_id === p.id) ?? null,
       tareas: tareasDelDia.filter(t => esTareaDe(t, p)),
     }))
-    .filter(x => x.entrada || x.tareas.length > 0)
+    // `diarioTieneAlgo` y no «la fila existe»: abrir Fichar y borrar lo escrito
+    // deja una fila con `entrada: ''` y todo lo demás a null, y esa fila se
+    // contaba como un día de trabajo de esa persona.
+    .filter(x => diarioTieneAlgo(x.entrada) || x.tareas.length > 0)
 
   return NextResponse.json({ dia, entradas, porPersona })
 }

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { clienteConocido } from '@/lib/ai'
 import { triar } from '@/lib/inboxTriage'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,5 +144,51 @@ describe('el interruptor de «que la IA lea mi correo»', () => {
     // No se puede comprobar aqui —lo decide quien llama—, asi que queda escrito
     // donde se lee. `triar` responde «¿le pago un analisis?», nunca «¿lo guardo?».
     expect(triar(correo({}), PROPIOS, NADIE, false).analizar).toBe(false)
+  })
+})
+
+describe('el cliente de un correo sale de la lista, no de la imaginacion', () => {
+  // MEDIDO sobre los 871 correos reales de la base: `ai_client` tenia 123 nombres
+  // distintos y NINGUNO era cliente. Temu 42 veces, Google 28, AliExpress 15,
+  // Revolut 12. La tabla `clients` esta vacia, o sea que el 100% era inventado.
+  //
+  // Javi lo dijo asi: «en el inbox los clientes los revisa mal, saca clientes de
+  // donde no son». No era una impresion: el prompt pedia «el nombre del cliente si
+  // se identifica» sin atarlo a nada, y el modelo contestaba lo unico que veia.
+  const CLIENTES = ['ClipBoom', 'Nocilla', 'Mango']
+
+  it('un remitente cualquiera NO se convierte en cliente', () => {
+    for (const inventado of ['Temu', 'Google', 'AliExpress', 'Revolut', 'idealista', 'Brutal Studios']) {
+      expect(clienteConocido(inventado, CLIENTES), `${inventado} pasa como cliente`).toBe('Desconocido')
+    }
+  })
+
+  it('un cliente de verdad sí pasa', () => {
+    expect(clienteConocido('ClipBoom', CLIENTES)).toBe('ClipBoom')
+  })
+
+  it('devuelve el nombre COMO ESTA DADO DE ALTA', () => {
+    // En la base conviven «idealista» e «Idealista» como dos cosas distintas. Si el
+    // modelo escribe «clipboom», la columna no puede acabar con dos ClipBoom.
+    expect(clienteConocido('clipboom', CLIENTES)).toBe('ClipBoom')
+    expect(clienteConocido('  MANGO ', CLIENTES)).toBe('Mango')
+  })
+
+  it('las tildes no separan al mismo cliente', () => {
+    expect(clienteConocido('Nocílla', CLIENTES)).toBe('Nocilla')
+  })
+
+  it('sin clientes dados de alta, todo es Desconocido', () => {
+    // Es el estado REAL de hoy: `clients` vacia. La respuesta honesta es el hueco.
+    expect(clienteConocido('Temu', [])).toBe('Desconocido')
+    expect(clienteConocido('ClipBoom', [])).toBe('Desconocido')
+  })
+
+  it('nada raro se cuela', () => {
+    expect(clienteConocido(null, CLIENTES)).toBe('Desconocido')
+    expect(clienteConocido(undefined, CLIENTES)).toBe('Desconocido')
+    expect(clienteConocido(42, CLIENTES)).toBe('Desconocido')
+    expect(clienteConocido('', CLIENTES)).toBe('Desconocido')
+    expect(clienteConocido('Desconocido', CLIENTES)).toBe('Desconocido')
   })
 })

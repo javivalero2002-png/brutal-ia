@@ -4,7 +4,7 @@ import { construirContexto } from '@/lib/contextoHarvey'
 import { memoriaRelevante as elegirMemoria } from '@/lib/memoriaRelevante'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
-import { parsearAccionHarvey, type AccionHarvey , etiquetaAccion } from '@/lib/harveyAccion'
+import { parsearAccionHarvey, type AccionHarvey , etiquetaAccion, afirmaHaberloHecho } from '@/lib/harveyAccion'
 import { nivelTarea } from '@/components/shared/helpers'
 import type { NexusData } from '@/types'
 import { estadoDeadline, Esperando, BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, AMBAR, mensajeErrorTranscripcion } from '@/components/shared'
@@ -400,6 +400,14 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
       const { texto: limpio, accion } = parsearAccionHarvey(reply)
       reply = limpio
       if (accion) setPendingAction(accion)
+      // RED DE SEGURIDAD. La emisión de la acción no es determinista: probando
+      // las ocho frases contra el modelo real, una de ocho salió sin
+      // `[ACCION:...]` — Harvey dijo «he añadido el reel al pipeline» y no se
+      // propuso nada. El usuario se queda con la frase, la da por buena, y lo
+      // descubre días después buscando algo que no existe.
+      else if (afirmaHaberloHecho(limpio)) {
+        reply = `${limpio}\n\n(Ojo: lo he dicho pero no me ha salido la ficha para confirmarlo, así que NO se ha guardado. Pídemelo otra vez.)`
+      }
 
       setIsSearching(false)
       // Si la respuesta viene del fallback local, se dice. Callarlo era hacer pasar

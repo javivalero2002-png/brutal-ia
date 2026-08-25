@@ -29,7 +29,11 @@ export async function POST(request: NextRequest) {
   // segundos de Google en cada mensaje. Pero llegar del cliente no la hace de
   // fiar: se valida la forma, se acota y el texto se limpia de caracteres de
   // control (que además rompen la API de Anthropic). Nada de esto se guarda.
-  const eventos = (Array.isArray(body?.eventos) ? body.eventos : [])
+  // `undefined` si el cliente NO manda el campo, `[]` si lo manda vacío. La
+  // diferencia importa: sin ella el prompt no puede distinguir «no tienes nada» de
+  // «no he podido leer la agenda», y el modelo llegaba a la peor conclusión de las
+  // tres — decir que no tiene acceso al calendario.
+  const eventos = !Array.isArray(body?.eventos) ? undefined : (body.eventos as unknown[])
     .slice(0, 60)
     .filter((e: any) => e && typeof e.title === 'string' && typeof e.start === 'string')
     .map((e: any) => ({
@@ -74,11 +78,11 @@ export async function POST(request: NextRequest) {
     // escribir y no de ejecutar.
     (veColabs
       ? admin.from('inbox_messages')
-          .select('from_name,subject,ai_summary,ai_urgency,shared,received_at,is_read')
+          .select('from_name,subject,ai_summary,ai_urgency,ai_client,shared,received_at,is_read')
           .or(`user_id.eq.${user.id},shared.eq.true`)
           .order('received_at', { ascending: false }).limit(20)
       : admin.from('inbox_messages')
-          .select('from_name,subject,ai_summary,ai_urgency,shared,received_at,is_read')
+          .select('from_name,subject,ai_summary,ai_urgency,ai_client,shared,received_at,is_read')
           .eq('user_id', user.id)
           .order('received_at', { ascending: false }).limit(20)),
     // Fetch history BEFORE saving current message so it doesn't appear twice in the messages array
@@ -126,6 +130,10 @@ export async function POST(request: NextRequest) {
     summary: e.ai_summary || '',
     urgency: e.ai_urgency || 'normal',
     shared: !!e.shared,
+    // El cliente y el «leído» viajan para poder ORDENAR por importancia: sin
+    // ellos el tope de quince se gasta con boletines.
+    client: e.ai_client || undefined,
+    is_read: !!e.is_read,
     received_at: e.received_at || '',
   }))
 

@@ -112,6 +112,29 @@ export async function regenerarFicha(admin: SupabaseClient): Promise<{ ok: boole
     ...docs.slice(0, 40).map(n => linea(n, 300)),
   ].join('\n').slice(0, 24000)
 
+  // EL ESTADO VIVO, ademas de la memoria.
+  //
+  // La ficha se escribia SOLO desde `memoria`, y memoria son documentos: un PDF de
+  // hace meses dice «ClipBoom, dos proyectos en marcha» y la ficha lo repetia como
+  // presente. Comprobado contra la base: `clients` esta VACIA y los cinco proyectos
+  // estan `completado`. O sea que la ficha —que va en el prompt de las dos IAs y en
+  // cada analisis de correo— afirmaba lo contrario que las tablas de la propia app.
+  //
+  // No es teoria: a «¿que clientes tenemos?» Brutal.IA contesto «ClipBoom» por la
+  // ficha y tuvo que añadir un aviso de su cosecha diciendo que el contexto
+  // operativo decia lo contrario. Una IA que avisa de que sus dos fuentes se
+  // contradicen es una IA en la que se deja de confiar.
+  const [{ data: clientesVivos }, { data: proyectosVivos }] = await Promise.all([
+    admin.from('clients').select('name, status'),
+    admin.from('projects').select('name, status'),
+  ])
+  const activos = (proyectosVivos || []).filter(p => p.status !== 'completado')
+  const estado = [
+    `CLIENTES DADOS DE ALTA AHORA MISMO (${(clientesVivos || []).length}): ${(clientesVivos || []).map(c => c.name).join(', ') || 'ninguno'}`,
+    `PROYECTOS ACTIVOS AHORA MISMO (${activos.length}): ${activos.map(p => p.name).join(', ') || 'ninguno'}`,
+    `PROYECTOS TERMINADOS: ${(proyectosVivos || []).filter(p => p.status === 'completado').map(p => p.name).join(', ') || 'ninguno'}`,
+  ].join('\n')
+
   let msg: Awaited<ReturnType<typeof anthropic.messages.create>>
   try {
     msg = await anthropic.messages.create({
@@ -125,6 +148,13 @@ export async function regenerarFicha(admin: SupabaseClient): Promise<{ ok: boole
 ${material}
 """
 
+Y esto es el ESTADO DE HOY, sacado de las tablas de la app. Manda sobre lo que
+digan los documentos, que pueden ser de hace meses:
+
+"""
+${estado}
+"""
+
 Escribe la FICHA DEL ESTUDIO: lo que cualquiera del equipo debería tener siempre presente. Reglas:
 
 - En español de España. Máximo 600 palabras.
@@ -133,6 +163,10 @@ Escribe la FICHA DEL ESTUDIO: lo que cualquiera del equipo debería tener siempr
 - NO inventes nada que no esté arriba. Si de algo apenas hay información, no lo menciones.
 - No expliques que estás resumiendo, no pongas introducción ni cierre.
 - Si algo se contradice entre notas, quédate con lo más reciente y dilo en una frase.
+- El ESTADO DE HOY manda. Si un documento habla de un cliente o un proyecto que hoy
+  no está activo, no lo cuentes como si lo estuviera: di lo que fue («ClipBoom:
+  trabajo terminado») o no lo menciones. Nunca presentes como vigente algo que las
+  tablas dan por cerrado — esta ficha la leen las dos IAs y acaban afirmándolo.
 
 Responde solo con la ficha.`,
       }],

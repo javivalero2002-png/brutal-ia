@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseRuleConfig, AUTO_MARK } from '@/lib/automations'
-import { dlDate, todayKey, localDayKey, estadoDeadline } from '@/components/shared/helpers'
+import { dlDate, todayKey, localDayKey, estadoDeadline, diarioTieneAlgo } from '@/components/shared/helpers'
 import { splitForTTS } from '@/components/shared/audio'
 import { needsWebSearch } from '@/lib/ai'
 
@@ -243,5 +243,33 @@ describe('clientes: los correos de un cliente no son los de otro', () => {
   it('un nombre de palabras muy cortas solo casa exacto', () => {
     expect(casan('Zip Co', 'Zip Co')).toBe(true)
     expect(casan('Zip Co', 'Zip Co Australia')).toBe(false)
+  })
+})
+
+describe('una fila de diario vacia no es un dia de trabajo', () => {
+  // En la base hay CUATRO filas asi: `entrada: ''` y todo lo demas a null. Las crea
+  // abrir Fichar y borrar lo que escribiste — el autoguardado manda el texto vacio.
+  //
+  // No era un detalle de limpieza: esa fila se contaba como dia. El briefing decia
+  // «1 dia» de alguien que no estuvo, el resumen del equipo escribia una linea por
+  // cada una, y las dos IAs lo leian y lo repetian en voz alta. Textual de
+  // Brutal.IA con los datos reales: «ha habido actividad los dias 21, 22, 24 y 25».
+  // No la hubo.
+  it('la fila que no es nada, no cuenta', () => {
+    expect(diarioTieneAlgo({ entrada: '', cierre: null, entrada_at: null, cierre_at: null, animo: null })).toBe(false)
+    expect(diarioTieneAlgo({ entrada: '   ', cierre: null, entrada_at: null, cierre_at: null, animo: null })).toBe(false)
+    expect(diarioTieneAlgo(null)).toBe(false)
+    expect(diarioTieneAlgo(undefined)).toBe(false)
+    expect(diarioTieneAlgo({})).toBe(false)
+  })
+
+  it('cualquier señal real cuenta', () => {
+    expect(diarioTieneAlgo({ entrada: 'montar el teaser' }), 'escribio objetivos').toBe(true)
+    expect(diarioTieneAlgo({ cierre: 'lo hice' }), 'cerro el dia').toBe(true)
+    expect(diarioTieneAlgo({ entrada_at: '2026-08-25T08:00:00Z' }), 'ficho').toBe(true)
+    expect(diarioTieneAlgo({ cierre_at: '2026-08-25T18:00:00Z' }), 'cerro').toBe(true)
+    // El caso real del 22 de agosto: dijo como fue el dia sin escribir nada mas.
+    expect(diarioTieneAlgo({ entrada: '', animo: 'productivo' }), 'marco el animo').toBe(true)
+    expect(diarioTieneAlgo({ entrada: '', animo: 'bloqueado' }), 'se marco bloqueado').toBe(true)
   })
 })

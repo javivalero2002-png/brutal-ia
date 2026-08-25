@@ -253,6 +253,13 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
   // (`matchClientByName`) y se usaba para colgar el client_id de una tarea y para
   // pintar el color — pero no para el filtro. De ahi que el panel derecho pintara
   // «—» en gris mientras el chip lo contaba como cliente.
+  // Y lo mismo AL PINTARLO, que era la mitad que faltaba: el filtro emparejaba
+  // contra los clientes reales pero el panel escribia `ai_client` tal cual, asi que
+  // se leia «Cliente: Temu» en la ficha del correo. Medido sobre los 871 correos de
+  // la base: 123 nombres distintos ahi y ninguno era cliente.
+  //
+  // Esto arregla tambien lo YA GUARDADO, sin tocar la base: el valor sigue en la
+  // columna y la pantalla deja de tratarlo como un cliente.
   const esDeCliente = (m: any) => !!matchClientByName(data.clients, m.ai_client)
   const fromClients = activeMsgs.filter(m=>esDeCliente(m)&&!m.is_read).length
 
@@ -988,7 +995,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                   <div className="grid grid-cols-2 gap-2">
                     <div className="rounded-xl p-3" style={{background:'rgba(255,255,255,0.04)',border:`1px solid rgba(255,255,255,0.06)`}}>
                       <div className="font-syne text-[6.5px] font-black tracking-widest mb-1" style={{color:'rgba(255,255,255,0.18)'}}>CLIENTE</div>
-                      <div className="text-[12px] font-semibold truncate" style={{color:matchedClient?matchedClient.color:'rgba(255,255,255,0.35)'}}>{selected.ai_client&&selected.ai_client!=='Desconocido'?selected.ai_client:'—'}</div>
+                      <div className="text-[12px] font-semibold truncate" style={{color:matchedClient?matchedClient.color:'rgba(255,255,255,0.35)'}}>{matchedClient?matchedClient.name:'—'}</div>
                     </div>
                     <div className="rounded-xl p-3" style={{background:'rgba(255,255,255,0.04)',border:`1px solid rgba(255,255,255,0.06)`}}>
                       <div className="font-syne text-[6.5px] font-black tracking-widest mb-1" style={{color:'rgba(255,255,255,0.18)'}}>CANAL</div>
@@ -1163,7 +1170,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                     {suggested.map((m:any)=>(
                       <button key={m.id} onClick={()=>handleSelect(m)} className="w-full text-left flex items-start gap-2.5 p-3 rounded-xl transition-all" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${BORDER}`}} onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'} onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.02)'}>
                         <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:`${uc(m.ai_urgency)}18`}}><LucideIcon name="corner-up-left" size={11} color={uc(m.ai_urgency)}/></div>
-                        <div className="min-w-0 flex-1"><div className="font-figtree text-[12px] font-semibold truncate" style={{color:'rgba(255,255,255,0.8)'}}>{m.ai_action}</div><div className="font-syne text-[8px] truncate mt-0.5" style={{color:'rgba(255,255,255,0.28)'}}>{m.from_name||'?'}{m.ai_client&&m.ai_client!=='Desconocido'?' · '+m.ai_client:''}</div></div>
+                        <div className="min-w-0 flex-1"><div className="font-figtree text-[12px] font-semibold truncate" style={{color:'rgba(255,255,255,0.8)'}}>{m.ai_action}</div><div className="font-syne text-[8px] truncate mt-0.5" style={{color:'rgba(255,255,255,0.28)'}}>{m.from_name||'?'}{esDeCliente(m)?' · '+matchClientByName(data.clients,m.ai_client)!.name:''}</div></div>
                       </button>
                     ))}
                   </div>

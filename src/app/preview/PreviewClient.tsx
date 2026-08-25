@@ -381,6 +381,9 @@ export default function PreviewClient({
   // ProyectosSection les concatena opacidad, así que el harness enseñaba el
   // tablero roto exactamente igual que producción. Ahora, además, no puede
   // divergir en colores.
+  const [montado, setMontado] = useState(false)
+  useEffect(() => { setMontado(true) }, [])
+
   const kanbanCols = construirKanbanCols(filteredProjects)
 
   return (
@@ -397,7 +400,15 @@ export default function PreviewClient({
         ))}
       </div>
 
+      {/* LAS SECCIONES SOLO EN EL CLIENTE.
+          El dashboard real nunca las renderiza en el servidor —pinta la pantalla de
+          arranque hasta que hay sesión—, pero este banco las monta directas, así
+          que el servidor pintaba la maqueta de escritorio y el cliente la de móvil
+          (`useIsMobile` lee `matchMedia` en el primer render) y React tiraba el
+          árbol entero con un error de hidratación.
+          Es ruido del harness, no de la app, y tapa lo que sí importa mirar. */}
       <div className="flex-1 overflow-hidden min-h-0">
+        {!montado ? null : (<>
         {section==='hoy' && <SectionErrorBoundary section="hoy"><HoySection profile={profile} data={data} urgentCount={urgentCount} unreadCount={unreadCount} onOpenModal={abrirModal} showToast={showToast} isOwner onNavigate={setSection}/></SectionErrorBoundary>}
         {section==='tareas' && <SectionErrorBoundary section="tareas"><TareasSection data={data} onOpenModal={abrirModal} showToast={showToast} isOwner profile={profile} onNavigate={setSection} onSelectProject={()=>{}} onSelectClient={()=>{}} initialView={initialView} initialFocus={initialFocus} initialGroupBy={initialGroupBy}/></SectionErrorBoundary>}
         {section==='automatizaciones' && <SectionErrorBoundary section="automatizaciones"><AutomatizacionesSection data={data} onOpenModal={abrirModal} showToast={showToast} isOwner/></SectionErrorBoundary>}
@@ -413,6 +424,7 @@ export default function PreviewClient({
         {section==='chat' && <SectionErrorBoundary section="chat"><ChatSection profile={profile} data={data} chatInput={chatInput} setChatInput={setChatInput} chatLoading={chatLoading} setChatLoading={setChatLoading} showToast={showToast} onNavigate={setSection}/></SectionErrorBoundary>}
         {section==='harvey' && <SectionErrorBoundary section="harvey"><HarveySection data={data} profile={profile} showToast={showToast} onNavigate={setSection} preloadMessage={null} onClearPreload={()=>{}}/></SectionErrorBoundary>}
         {section==='ajustes' && <SectionErrorBoundary section="ajustes"><AjustesSection profile={profile} data={data} showToast={showToast} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={abrirModal} isOwner onNavigate={setSection} onVerPuestaEnMarcha={()=>showToast('La bienvenida solo existe con tu cuenta')}/></SectionErrorBoundary>}
+        </>)}
       </div>
 
       {toast && (
