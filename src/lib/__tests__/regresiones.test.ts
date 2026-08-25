@@ -57,8 +57,22 @@ const leer = (f: string) => readFileSync(f, 'utf8')
  * Si algun dia esa ruta pasa a iterar, hay que sacarla de esta exencion.
  */
 const REANALISIS = 'src/app/api/inbox/reanalizar/route.ts'
+/**
+ * El rescate de aplazados NO criba, y es correcto.
+ *
+ * La criba mira las etiquetas de Gmail y el remitente para decidir si un
+ * correo merece una llamada al modelo. Estos YA pasaron por ella:
+ * `ai_estado: 'pendiente'` significa literalmente «la criba dijo que si,
+ * pero la pasada se quedo sin tiempo». Volver a cribarlos seria preguntar
+ * dos veces lo mismo — y encima no se podria, porque de Gmail solo se
+ * guardo el cuerpo, no las etiquetas.
+ *
+ * Si algun dia este fichero pasa a analizar correo NUEVO, hay que sacarlo
+ * de aqui: entonces si estaria saltandose la criba de verdad.
+ */
+const APLAZADOS = 'src/lib/aplazarCorreos.ts'
 const buclesDeSync = (todos: string[]) =>
-  todos.filter(f => f !== REANALISIS && /await analyzeEmail\(/.test(leerCodigo(f)))
+  todos.filter(f => f !== REANALISIS && f !== APLAZADOS && /await analyzeEmail\(/.test(leerCodigo(f)))
 
 const leerCodigo = (f: string) =>
   leer(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
@@ -3753,6 +3767,81 @@ describe('el briefing dice donde mirar', () => {
   it('se ordena por señal, con los bloqueos primero', () => {
     expect(/sort\(\(a: any, b: any\) =>\s*\(b\.bloqueos - a\.bloqueos\)/.test(D),
       'el equipo vuelve al orden de la tabla profiles: la fila que importa queda enterrada')
+      .toBe(true)
+  })
+})
+
+describe('lo que se rompe queda anotado', () => {
+  // Javi: «estaria bien que se anotasen en algun lado para notificartelos... que yo
+  // te dijese "hay algun error detectado" y sacases los errores detectados».
+  //
+  // Sale del hallazgo de fondo de la auditoria de Gmail: lo que falla en esta app
+  // NO DA ERROR A NADIE. Un buzon cuyo token revoca Google deja de traer correo, el
+  // cron responde 200, el latido se pinta verde, y la unica traza es un
+  // `console.error` que dura lo que dure la retencion de logs de Vercel. Si nadie
+  // mira ese dia, el fallo no existio. Paso de verdad el 2026-08-13.
+  const ERR = leerCodigo('src/lib/errores.ts')
+  const SYNC = leerCodigo('src/lib/colabsSync.ts')
+
+  it('los fallos mudos del sync se anotan, no solo se imprimen', () => {
+    // Los tres que encontro la auditoria. Cada uno deja de traer correo sin que
+    // nadie lo note, y los tres se veian igual desde fuera: verde.
+    for (const clave of ['gmail:auth_rota', 'gmail:sync_caido', 'gmail:cuentas_ilegibles']) {
+      expect(SYNC.includes(clave),
+        `el sync ya no anota «${clave}»: ese fallo vuelve a ser invisible — el correo deja de entrar y el latido sigue verde`)
+        .toBe(true)
+    }
+    // Y el console.error se CONSERVA: no se cambia un camino que funciona por otro
+    // sin haberlo probado.
+    expect(/console\.error/.test(ERR),
+      'anotarError dejo de imprimir: si la tabla falla, el fallo no queda en ningun sitio')
+      .toBe(true)
+  })
+
+  it('anotar un error no puede romper lo que estaba pasando', () => {
+    // Es lo que separa un registro util de una bomba: si escribir el error lanza,
+    // se lleva por delante el sync entero — y por un fallo tendriamos dos.
+    const i = ERR.indexOf('export async function anotarError')
+    expect(i, 'ya no existe anotarError: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const cuerpo = ERR.slice(i)
+    expect(/try \{/.test(cuerpo) && /catch \(err\)/.test(cuerpo),
+      'anotarError puede lanzar: un fallo al anotar tumbaria el proceso que lo estaba reportando')
+      .toBe(true)
+    expect(/Promise<void>/.test(cuerpo),
+      'anotarError devuelve algo: quien lo llame se vera tentado de ramificar sobre si se pudo anotar, que no es asunto suyo')
+      .toBe(true)
+  })
+
+  it('el registro no guarda secretos', () => {
+    // Un sitio donde queda escrito lo que falla es lo ultimo que deberia acabar
+    // siendo un sitio donde mirar tokens.
+    expect(/token\|secret\|password/.test(ERR) || /SECRETO/.test(ERR),
+      'el contexto de los errores ya no se filtra: un refresh_token puede acabar guardado en claro')
+      .toBe(true)
+    const i = ERR.indexOf('function limpiar')
+    expect(i, 'ya no existe el filtro del contexto').toBeGreaterThan(-1)
+    expect(/\[omitido\]/.test(ERR.slice(i, i + 500)),
+      'el filtro ya no sustituye los valores sensibles')
+      .toBe(true)
+  })
+
+  it('un error que vuelve se REABRE', () => {
+    // Es la senal mas valiosa del registro: significa que el arreglo no era. Con
+    // una marca de resuelto pegajosa se perderia justo eso.
+    const i = ERR.indexOf('.update({')
+    expect(i, 'anotarError ya no actualiza: revisa esta regla').toBeGreaterThan(-1)
+    expect(/resuelto_at: null/.test(ERR.slice(i, i + 700)),
+      'un error que vuelve a pasar se queda marcado como resuelto: se pierde la senal de que el arreglo no funciono')
+      .toBe(true)
+  })
+
+  it('los abiertos no caducan; solo se purgan los resueltos', () => {
+    const CRON = leerCodigo('src/app/api/cron/sync-colabs/route.ts')
+    const i = CRON.indexOf("from('errores')")
+    expect(i, 'ya no se purgan los errores: la tabla crecera para siempre').toBeGreaterThan(-1)
+    const bloque = CRON.slice(i, i + 300)
+    expect(/not\('resuelto_at', 'is', null\)/.test(bloque),
+      'la purga borra tambien los errores ABIERTOS: uno que lleva tres meses pasando es justo el que hay que ver')
       .toBe(true)
   })
 })
