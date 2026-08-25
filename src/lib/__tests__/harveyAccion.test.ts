@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { parsearAccionHarvey, etiquetaAccion, TIPOS_ACCION } from '@/lib/harveyAccion'
+import { parsearAccionHarvey, etiquetaAccion, TIPOS_ACCION, afirmaHaberloHecho } from '@/lib/harveyAccion'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -373,5 +373,35 @@ describe('una tarea dictada puede pertenecer a un proyecto', () => {
     const { accion } = parsearAccionHarvey('Hecho. [ACCION:tarea|Montar el teaser|high|Paula|Spot verano Mango]')
     expect(accion?.projectName).toBe('Spot verano Mango')
     expect(accion?.assigneeName).toBe('Paula')
+  })
+})
+
+describe('si dice que lo ha hecho y no hay accion, se avisa', () => {
+  // La emision NO es determinista. Probando las ocho frases contra el modelo real,
+  // una de ocho salio sin `[ACCION:...]`: Harvey contesto «he añadido el reel al
+  // pipeline» y no se propuso nada. El usuario se queda con la frase, la da por
+  // buena, y lo descubre dias despues buscando algo que no existe.
+  it('reconoce el pasado en primera persona', () => {
+    for (const t of [
+      'He creado la tarea para Paula.',
+      'He añadido el reel al pipeline de contenido.',
+      'Listo, he anotado las tarifas en memoria.',
+      'Queda apuntada para mañana.',
+      'Hecho. Ya lo tienes en el calendario.',
+      'Apuntado.',
+    ]) expect(afirmaHaberloHecho(t), `no detecta: ${t}`).toBe(true)
+  })
+
+  it('NO confunde una oferta con un hecho', () => {
+    // Avisar aqui seria ruido en la mitad de las respuestas, y un aviso que sale
+    // cuando no toca se aprende a ignorar — justo cuando de verdad importa.
+    for (const t of [
+      '¿Quieres que te la cree?',
+      'Puedo crearte una tarea si me dices para quién.',
+      'Te la creo si me confirmas la fecha.',
+      'Tienes tres tareas urgentes y una reunión el jueves.',
+      'No he podido crearla porque falta la fecha.',
+      'Mañana tienes la reunión de equipo.',
+    ]) expect(afirmaHaberloHecho(t), `falso positivo: ${t}`).toBe(false)
   })
 })

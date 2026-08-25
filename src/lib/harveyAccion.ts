@@ -140,3 +140,26 @@ export function etiquetaAccion(tipo: TipoAccion): {
     case 'diario':    return { icono: 'pen-line',    titulo: 'DIARIO',    tituloLargo: 'AÑADIR AL CIERRE DEL DÍA', enCurso: 'GUARDANDO…' }
   }
 }
+
+/**
+ * ¿Harvey ha dicho que HA HECHO algo, sin emitir la acción?
+ *
+ * La emisión no es determinista. Probando las ocho frases contra el modelo real,
+ * una de ocho salió sin `[ACCION:...]` — Harvey contestó «he añadido el reel al
+ * pipeline» y no se propuso nada. El usuario se queda con la frase, la da por
+ * buena, y lo descubre días después buscando algo que no existe.
+ *
+ * El truncamiento por longitud ya se avisa aparte (el `[ACCION:...]` va al final y
+ * es lo primero que se pierde). Esto cubre el resto de los casos, que no dan
+ * ninguna señal.
+ *
+ * Se busca el PASADO en primera persona —«he creado», «te la he apuntado»— y no
+ * los futuros ni los condicionales: «puedo crearte una tarea» o «¿te la apunto?»
+ * son ofertas, no afirmaciones, y avisar ahí sería ruido en la mitad de las
+ * respuestas.
+ */
+const AFIRMA_HECHO = /\b(he (creado|añadido|anotado|apuntado|guardado|marcado|cerrado|programado|puesto)|queda (creada?|anotada?|apuntada?|guardada?)|ya (la|lo) tienes|hecho[.,;]|listo[.,;]|apuntado[.,;]|anotado[.,;])/i
+
+export function afirmaHaberloHecho(texto: string): boolean {
+  return AFIRMA_HECHO.test(String(texto || ''))
+}

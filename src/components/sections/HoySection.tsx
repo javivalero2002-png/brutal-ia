@@ -4,7 +4,7 @@ import { construirContexto } from '@/lib/contextoHarvey'
 import { memoriaRelevante, lineasDeMemoria } from '@/lib/memoriaRelevante'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
-import { parsearAccionHarvey, type AccionHarvey , etiquetaAccion } from '@/lib/harveyAccion'
+import { parsearAccionHarvey, type AccionHarvey , etiquetaAccion, afirmaHaberloHecho } from '@/lib/harveyAccion'
 import { nivelTarea } from '@/components/shared/helpers'
 import { BLU, RED, GRN, VIO, BORDER } from '@/components/shared/design-tokens'
 import { useIsMobile } from '@/components/shared/hooks'
@@ -315,6 +315,14 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
       const { texto: limpio, accion } = parsearAccionHarvey(reply)
       reply = limpio
       if (accion) setPendingAction(accion)
+      // RED DE SEGURIDAD. La emisión de la acción no es determinista: probando
+      // las ocho frases contra el modelo real, una de ocho salió sin
+      // `[ACCION:...]` — Harvey dijo «he añadido el reel al pipeline» y no se
+      // propuso nada. El usuario se queda con la frase, la da por buena, y lo
+      // descubre días después buscando algo que no existe.
+      else if (afirmaHaberloHecho(limpio)) {
+        reply = `${limpio}\n\n(Ojo: lo he dicho pero no me ha salido la ficha para confirmarlo, así que NO se ha guardado. Pídemelo otra vez.)`
+      }
 
       // Si viene del fallback local, se DICE. Callarlo era hacer pasar por Harvey
       // una frase guardada, y encima leerla en voz alta con su voz.

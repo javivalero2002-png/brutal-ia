@@ -3902,6 +3902,25 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('decir que lo has hecho sin haberlo hecho tiene aviso', () => {
+  // La emision de la accion NO es determinista. Probando las ocho frases contra el
+  // modelo real, una de ocho salio sin `[ACCION:...]`: Harvey dijo «he añadido el
+  // reel al pipeline» y no se propuso nada. El truncamiento por longitud ya se
+  // avisa aparte —el `[ACCION:...]` va al final y es lo primero que se pierde—;
+  // esto cubre el resto, que no da ninguna señal.
+  it('las dos secciones lo comprueban', () => {
+    for (const ruta of ['src/components/sections/HoySection.tsx', 'src/components/sections/HarveySection.tsx']) {
+      const c = leerCodigo(ruta)
+      expect(/afirmaHaberloHecho\(/.test(c),
+        `${ruta} vuelve a dar por buena una respuesta que dice «he creado la tarea» sin accion detras`).toBe(true)
+      // Y atado al caso: solo cuando NO hubo accion.
+      const i = c.indexOf('afirmaHaberloHecho(')
+      expect(/else if/.test(c.slice(Math.max(0, i - 120), i)),
+        `${ruta}: el aviso no cuelga del caso «no hubo accion», asi que saltaria tambien cuando si la hubo`).toBe(true)
+    }
+  })
+})
+
 describe('las dos IAs eligen los mismos correos', () => {
   // El contexto lleva tope —diez para Harvey, quince para Brutal.IA— y se gastaba
   // por ORDEN DE LLEGADA entre los no leidos. Con 704 sin leer, casi todos
