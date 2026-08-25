@@ -33,6 +33,22 @@ async function apiFetch(url: string, opts?: RequestInit) {
 export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: InboxMessage) => void) {
   const onNewInboxRef = useRef(onNewInboxMessage)
   onNewInboxRef.current = onNewInboxMessage
+
+  // LA AGENDA, POR REF Y NO POR CLAUSURA.
+  //
+  // `sendChatMessage` es un `useCallback` con deps `[]`, o sea que es SIEMPRE la
+  // función del primer render — y en ese render `calendarEvents` vale `[]`, que es
+  // su estado inicial. Leyéndola de la clausura, el cuerpo que salía hacia
+  // `/api/chat` llevaba `eventos: []` en TODOS los mensajes, toda la sesión, para
+  // siempre: Brutal.IA no vio la agenda ni una sola vez.
+  //
+  // Y era la peor versión posible del fallo, porque el servidor distingue a
+  // propósito «lista vacía» de «no mandado» para que el modelo no diga que no tiene
+  // calendario: recibiendo `[]` contestaba «no tienes nada esta semana», que es una
+  // afirmación, y falsa.
+  //
+  // Con un ref la función conserva su identidad —nada se re-suscribe— y lee el
+  // valor de AHORA. Es el mismo patrón que la línea de arriba.
   const [clients, setClients] = useState<Client[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
@@ -43,6 +59,8 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [team, setTeam] = useState<Profile[]>([])
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
+  const calendarEventsRef = useRef<CalendarEvent[]>([])
+  calendarEventsRef.current = calendarEvents
   const [calendarScopeError, setCalendarScopeError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
@@ -393,7 +411,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
         //
         // El servidor la acota y la sanea igualmente: que llegue del cliente no la
         // convierte en de fiar.
-        eventos: (calendarEvents || []).slice(0, 60).map(e => ({
+        eventos: (calendarEventsRef.current || []).slice(0, 60).map(e => ({
           title: (e as any).title || '', start: (e as any).start || '', cuenta: (e as any).cuenta,
         })),
       }) })

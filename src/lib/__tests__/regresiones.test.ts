@@ -4052,6 +4052,87 @@ describe('todos los buscadores de la app buscan igual', () => {
   })
 })
 
+describe('una funcion memorizada no lee estado congelado del primer render', () => {
+  // `sendChatMessage` era un `useCallback` con deps `[]` que leia `calendarEvents`
+  // de la clausura. Con deps vacias la funcion es SIEMPRE la del primer render, y
+  // en ese render el estado vale su valor inicial: `[]`. Resultado — el cuerpo que
+  // salia hacia `/api/chat` llevaba `eventos: []` en todos los mensajes, toda la
+  // sesion, para siempre. Brutal.IA no vio la agenda ni una vez.
+  //
+  // Y era la peor version del fallo: el servidor distingue a proposito «lista
+  // vacia» de «no mandado» para que el modelo no diga que no tiene calendario.
+  // Recibiendo `[]` contestaba «no tienes nada esta semana» — una afirmacion, y
+  // falsa. Un bug de React convertido en una mentira de la IA.
+  //
+  // Se mira `useNexusData.ts` porque es el sitio donde vive el estado de la app: 18
+  // `useState` y las funciones que los consumen. La solucion cuando hace falta el
+  // valor de ahora sin cambiar la identidad de la funcion es un ref, que este mismo
+  // fichero ya usaba para `onNewInboxMessage`.
+  it('ningun useCallback con deps vacias lee un useState de este hook', () => {
+    const H = leerCodigo('src/hooks/useNexusData.ts')
+
+    // Los nombres de estado declarados con useState (no los setters).
+    const estados = [...H.matchAll(/const \[(\w+), set\w+\] = useState/g)].map(m => m[1])
+    expect(estados.length, 'no se reconoce ningun useState: revisa esta regla en vez de borrarla').toBeGreaterThan(8)
+
+    // EL FINAL DE CADA useCallback SE ENCUENTRA CONTANDO PARENTESIS.
+    //
+    // La primera version buscaba el siguiente `}, [])` con un `indexOf` y saltaba
+    // el callback si por el camino aparecia otro `useCallback(`. Como el `}, [])`
+    // mas cercano casi siempre pertenece a OTRO callback varias funciones mas
+    // abajo, la condicion se cumplia SIEMPRE: se saltaban los 34 y la regla no
+    // comprobaba absolutamente nada. Paso en verde con el bug reintroducido.
+    const cuerpoDe = (desde: number): { cuerpo: string; deps: string } | null => {
+      const abre = H.indexOf('(', desde)
+      if (abre === -1) return null
+      let n = 0
+      for (let i = abre; i < H.length; i++) {
+        if (H[i] === '(') n++
+        else if (H[i] === ')') {
+          n--
+          if (n === 0) {
+            const dentro = H.slice(abre + 1, i)
+            const coma = dentro.lastIndexOf(',')
+            if (coma === -1) return null
+            return { cuerpo: dentro.slice(0, coma), deps: dentro.slice(coma + 1).trim() }
+          }
+        }
+      }
+      return null
+    }
+
+    const revisados: string[] = []
+    const infractores: string[] = []
+    for (const m of H.matchAll(/const (\w+) = useCallback/g)) {
+      const t = cuerpoDe(m.index! + m[0].length)
+      if (!t) continue
+      revisados.push(m[1])
+      if (t.deps !== '[]') continue                 // solo las de dependencias vacias
+      // Fuera las cadenas literales antes de comparar: `apiFetch('/api/tasks')`
+      // contiene la palabra `tasks` y no es leer el estado `tasks`. Los `${...}`
+      // de las plantillas se conservan, que ahi si puede haber una lectura real.
+      const cuerpo = t.cuerpo
+        .replace(/'[^']*'/g, "''")
+        .replace(/"[^"]*"/g, '""')
+        // De las plantillas se conserva SOLO lo interpolado: `/api/tasks/${id}`
+        // contiene la palabra `tasks` y no es leer el estado `tasks`, pero
+        // `${calendarEvents.length}` si lo seria.
+        .replace(/`(?:[^`\\]|\\.)*`/g, lit =>
+          [...lit.matchAll(/\$\{([^{}]*)\}/g)].map(x => x[1]).join(' '))
+      for (const e of estados) {
+        // El nombre del estado, pero NO cuando es `xRef.current` ni el setter.
+        if (new RegExp(`(?<![\\w.])${e}(?!\\w)`).test(cuerpo)) {
+          infractores.push(`${m[1]}() tiene deps [] y lee el estado ${e}`)
+        }
+      }
+    }
+    expect(revisados.length, 'no se reconoce ningun useCallback: la regla no esta mirando nada').toBeGreaterThan(20)
+    expect(infractores,
+      `una funcion memorizada con deps vacias lee estado del componente: se queda con el valor del PRIMER render para siempre, y nadie lo ve porque no falla — simplemente manda el valor inicial. Usa un ref (como onNewInboxRef) o pon la dependencia:\n  ${infractores.join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
 describe('un select trae las columnas que el codigo va a leer', () => {
   // EL FALLO MAS CARO DE LA AUDITORIA, y no daba error de ninguna clase.
   //
