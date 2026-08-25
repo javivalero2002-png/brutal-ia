@@ -90,15 +90,11 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
   // qué buzones hay y cuánto ha entrado por cada uno.
   const [cuentas, setCuentas] = useState<CuentaBuzon[] | null>(null)
   const [cuentasMedidas, setCuentasMedidas] = useState(true)
-  // Los que entraron antes de que se guardara el buzón. Se enseñan a propósito:
-  // sin decirlo, las cuentas personales aparecen a cero y parece que no llega
-  // nada — que es justo el susto que se quiere evitar.
-  const [sinIdent, setSinIdent] = useState(0)
-  const [identificando, setIdentificando] = useState(false)
   const [selected, setSelected] = useState<any>(null)
   const [confirmMarkAll, setConfirmMarkAll] = useState(false)
   useBackClosable(!!selected, () => setSelected(null))
   const [creatingTask, setCreatingTask] = useState(false)
+  const [confirmarTarea, setConfirmarTarea] = useState<string|null>(null)
   const creatingTaskRef = useRef(false)
   // Harvey reply draft
   const [replyOpen, setReplyOpen] = useState(false)
@@ -125,8 +121,6 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
         setCuentas(Array.isArray(j.cuentas) ? j.cuentas : [])
 
         setCuentasMedidas(j.medido !== false)
-
-        setSinIdent(Number(j.sinIdentificar) || 0)
 
       })
 
@@ -193,7 +187,24 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
         return
       }
       if (e.key === 't' && selected && selected.ai_action && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName) && !(e.metaKey||e.ctrlKey||e.altKey)) {
-        e.preventDefault(); createTaskFromEmail(selected); return
+        e.preventDefault()
+        // DOS PULSACIONES, no una. Javi vio una tarea que no recordaba haber
+        // escrito: prioridad alta, sin proyecto, sin responsable y con un texto de
+        // una frase — la forma exacta de lo que crea esta funcion a partir de
+        // `ai_action`. Y la `t` esta pegada a `j`/`k`, que son las de pasar
+        // correos: vas navegando, la rozas, y aparece una tarea de la nada, sin
+        // confirmar y sin deshacer.
+        //
+        // Mismo patron que «marcar todo como leido», que ya se resolvio asi por lo
+        // mismo. El aviso dice QUE se va a crear, no solo que se confirme.
+        if (confirmarTarea !== selected.id) {
+          setConfirmarTarea(selected.id)
+          setTimeout(() => setConfirmarTarea(c => c === selected.id ? null : c), 4000)
+          showToast(`Pulsa «t» otra vez para crear: ${String(selected.ai_action).slice(0, 60)}`)
+          return
+        }
+        setConfirmarTarea(null)
+        createTaskFromEmail(selected); return
       }
       if ((e.key === 'j' || e.key === 'k') && !['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
         e.preventDefault()
@@ -227,7 +238,23 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
   const unread = activeMsgs.filter(m=>!m.is_read).length
   const urgent = activeMsgs.filter(m=>m.ai_urgency==='urgent'&&!m.is_read).length
   const internal = activeMsgs.filter(m=>m.source==='internal'&&!m.is_read).length
-  const fromClients = activeMsgs.filter(m=>m.ai_client&&m.ai_client!=='Desconocido'&&!m.is_read).length
+  // UN CLIENTE ES UNO DE LA TABLA `clients`, no lo que el modelo haya escrito.
+  //
+  // Javi: «los clientes los revisa mal, saca clientes de donde no son». Tenia 57
+  // de 100 correos marcados como cliente: Amazon, AliExpress, Facebook, idealista,
+  // Hostinger... El prompt de `analyzeEmail` solo pide «nombre del cliente si se
+  // identifica», y el modelo identifica empresas — que no es lo mismo.
+  //
+  // `ai_client` se guarda CRUDO porque su columna no tiene CHECK, al reves que
+  // `ai_urgency`, que si lo tiene y por eso se normaliza en la frontera. Sin CHECK
+  // nada rebota: el dato falso entra y la pantalla lo cuenta como bueno.
+  //
+  // El emparejador contra clientes reales ya existia DIEZ LINEAS mas arriba
+  // (`matchClientByName`) y se usaba para colgar el client_id de una tarea y para
+  // pintar el color — pero no para el filtro. De ahi que el panel derecho pintara
+  // «—» en gris mientras el chip lo contaba como cliente.
+  const esDeCliente = (m: any) => !!matchClientByName(data.clients, m.ai_client)
+  const fromClients = activeMsgs.filter(m=>esDeCliente(m)&&!m.is_read).length
 
   const calEvents = ((data.calendarEvents||[]) as any[]).sort((a:any,b:any)=>(a.start||'').localeCompare(b.start||''))
   const filtered = filter==='Archivados'
@@ -237,7 +264,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
         if (filter==='Todos') return true
         if (filter==='Sin leer') return !m.is_read
         if (filter==='Urgente') return m.ai_urgency==='urgent'
-        if (filter==='Clientes') return m.ai_client&&m.ai_client!=='Desconocido'
+        if (filter==='Clientes') return esDeCliente(m)
         if (filter==='Interno') return m.source==='internal'
         if (filter==='Personal') return m.source==='gmail'&&!m.shared
         if (filter==='Colabs') return m.source==='gmail'&&m.shared
@@ -363,8 +390,27 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
     {id:'Todos', label:'Todos', n: allMsgs.length, accent:'rgba(255,255,255,0.35)'},
     {id:'Sin leer', label:'Sin leer', n: unread, accent: BLU},
     {id:'Urgente', label:'Urgente', n: urgent, accent: RED},
-    {id:'Personal', label:'Personal', n: personalGmailCount, accent:'rgba(234,67,53,0.8)'},
-    {id:'Colabs', label:'Colabs', n: colabsGmailCount, accent: GRN},
+    // UN CHIP POR BUZON REAL. Esta es la unica forma de elegir cuenta en MOVIL:
+    // la columna de la izquierda con las cuentas es solo de escritorio, y la
+    // pantalla que hacia de selector se ha quitado —Javi: «no queda bien y no es
+    // util»—. Con `Personal` a secas, dos cuentas personales caian en el mismo
+    // chip y no habia manera de mirar solo una desde el telefono.
+    //
+    // Mientras `/api/gmail/cuentas` no conteste se conservan los dos de antes,
+    // para no dejar la fila coja durante la carga.
+    ...(cuentas === null
+      ? [
+          {id:'Personal', label:'Personal', n: personalGmailCount, accent:'rgba(234,67,53,0.8)'},
+          {id:'Colabs', label:'Colabs', n: colabsGmailCount, accent: GRN},
+        ]
+      : cuentas.map(cta => ({
+          id: `cuenta:${cta.email}`,
+          // El buzon comun se llama por su nombre; los personales, por lo de antes
+          // de la arroba. La direccion entera no cabe en un chip.
+          label: cta.compartida ? 'Colabs' : cta.email.split('@')[0],
+          n: activeMsgs.filter((m:any)=>m.cuenta===cta.email).length,
+          accent: cta.compartida ? GRN : 'rgba(234,67,53,0.8)',
+        }))),
     {id:'Clientes', label:'Clientes', n: fromClients, accent:'rgba(255,176,32,0.8)'},
     {id:'Interno', label:'Equipo', n: internal, accent: 'rgba(167,139,250,0.8)'},
     ...(allMsgs.some((m:any)=>m.source==='whatsapp') ? [{id:'WhatsApp', label:'WhatsApp', n: allMsgs.filter((m:any)=>m.source==='whatsapp').length, accent:'rgba(37,211,102,0.8)'}] : []),
@@ -463,153 +509,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
 
         {/* Header */}
         <div className={`flex-shrink-0 ${isMobile?'px-4':'px-6'} pt-5 pb-4`} style={{borderBottom:`1px solid ${BORDER}`}}>
-          {filter === 'hub' ? (
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-1" style={{color:'rgba(255,255,255,0.18)'}}>SEÑALES</div>
-                  <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Inbox</h1>
-                </div>
-                <div className="flex items-center gap-2">
-                  {/* Confirmación en dos toques: marcaba 97 mensajes de golpe,
-                      sin deshacer, con un solo clic accidental. */}
-                  {unread > 0 && (
-                    <button onClick={()=>{
-                      if (!confirmMarkAll) { setConfirmMarkAll(true); setTimeout(()=>setConfirmMarkAll(false), 4000); return }
-                      setConfirmMarkAll(false)
-                      const u=data.inbox.filter((m:any)=>!m.is_read)
-                      data.markManyRead(u.map((m:any)=>m.id)).catch(()=>showToast(u.length===1?'No se pudo marcar como leído':'No se pudieron marcar como leídos'))
-                      showToast(avisoLeidos(u.length))
-                    }} className="font-syne text-[8px] font-black px-2.5 py-2 rounded-xl transition-all" style={{color:confirmMarkAll?RED:'rgba(255,255,255,0.3)',border:`1px solid ${confirmMarkAll?'rgba(229,29,42,0.3)':BORDER}`}}>{confirmMarkAll ? `¿MARCAR ${unread}?` : `TODO LEÍDO · ${unread}`}</button>
-                  )}
-                </div>
-              </div>
-              {/* ── LOS BUZONES ─────────────────────────────────────────────
-                  Aquí había una tira de cifras (TOTAL / SIN LEER / URGENTES) que
-                  repetía lo que ya dicen las pestañas de arriba. Javi, sobre la
-                  flecha que trae a esta pantalla: «te lleva a una pantalla muy
-                  antigua que no aporta nada. Si ahí se pudiese elegir la cuenta
-                  específica que quieres ver, aportaría valor».
-
-                  Y respondía mal a su otra pregunta —«no sé si están entrando los
-                  Gmail de ambos correos»—, porque lo que eso contesta no es un
-                  total: es CUÁNDO ENTRÓ EL ÚLTIMO por cada buzón. Una cuenta
-                  conectada y muerta se ve igual que una viva hasta que lo miras. */}
-              <div className="flex flex-col gap-2">
-                {cuentas === null ? (
-                  <div className="font-figtree text-[12px] py-3 text-center" style={{color:'rgba(255,255,255,0.28)'}}>
-                    Comprobando tus buzones…
-                  </div>
-                ) : cuentas.length === 0 ? (
-                  <button onClick={()=>onNavigate('ajustes')}
-                    className="flex items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-all hover:opacity-80"
-                    style={{border:`1px solid ${BORDER}`,background:'rgba(255,255,255,0.02)'}}>
-                    <LucideIcon name="mail" size={16} color="rgba(255,255,255,0.35)"/>
-                    <div className="min-w-0">
-                      <div className="font-figtree text-[13px] font-bold" style={{color:'rgba(255,255,255,0.75)'}}>Sin buzones conectados</div>
-                      <div className="font-figtree text-[11px] mt-0.5 break-words" style={{color:'rgba(255,255,255,0.32)'}}>Conéctalos en Operativa para que empiece a entrar el correo</div>
-                    </div>
-                  </button>
-                ) : (<>
-                  {cuentas.map(c => {
-                  const act = filter === `cuenta:${c.email}`
-                  const col = c.compartida ? GRN : '#EA4335'
-                  // Sin `medido` no se afirma nada: pintar «0 correos» porque la
-                  // consulta se cayó es exactamente el fallo que se está buscando.
-                  const mudo = cuentasMedidas && c.total === 0
-                  return (
-                    <button key={c.email} onClick={()=>{ setFilter(`cuenta:${c.email}`); setActiveSender(null); setSelected(null) }}
-                      className="flex items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-all"
-                      style={{border:`1px solid ${act?col+'55':BORDER}`,background:act?`${col}0F`:'rgba(255,255,255,0.02)'}}>
-                      <svg viewBox="0 0 24 24" width={17} height={17} className="flex-shrink-0"><path fill={col} d="M22.5 12.5c0-.83-.07-1.64-.2-2.42H12v4.59h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.25z"/><path fill={col} d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill={col} d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill={col} d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-figtree text-[13px] font-bold break-all" style={{color:act?'#eef1fb':'rgba(255,255,255,0.78)'}}>{c.email}</div>
-                        <div className="font-figtree text-[11px] mt-0.5 break-words" style={{color: mudo ? AMBAR : 'rgba(255,255,255,0.32)'}}>
-                          {c.compartida ? 'Compartido · ' : ''}
-                          {!cuentasMedidas ? 'no se pudo comprobar'
-                            : mudo ? 'no ha entrado ningún correo'
-                            : `${plural(c.total,'correo','correos')} · último hace ${relTime(c.ultimo!)}`}
-                        </div>
-                      </div>
-                      {c.sinLeer > 0 && (
-                        <span className="font-figtree text-[10px] font-black px-2 py-0.5 rounded-full flex-shrink-0"
-                          style={{background:`${col}22`,color:col}}>{c.sinLeer}</span>
-                      )}
-                    </button>
-                  )
-                  })}
-
-                  {/* ── LOS QUE ENTRARON ANTES DE QUE SE GUARDARA EL BUZÓN ──────
-                      Sin esta fila, las cuentas personales salen a cero y parece
-                      que no llega nada — exactamente el susto que Javi quería
-                      quitarse. La migración solo atribuyó lo que se podía saber
-                      sin adivinar, y con dos cuentas personales eso es nada.
-
-                      Se arregla preguntándole a cada cuenta qué identificadores
-                      tiene: un `gmail_id` es del buzón que lo devuelve, así que
-                      es exacto y no una suposición. */}
-                  {sinIdent > 0 && (
-                    <div className="flex items-center gap-3 rounded-2xl px-4 py-3"
-                      style={{background:`${AMBAR}0D`,border:`1px solid ${AMBAR}2E`}}>
-                      <LucideIcon name="alert-circle" size={16} color={AMBAR}/>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-figtree text-[12.5px] font-bold break-words" style={{color:'rgba(255,255,255,0.78)'}}>
-                          {plural(sinIdent,'correo sin identificar','correos sin identificar')}
-                        </div>
-                        <div className="font-figtree text-[11px] mt-0.5 break-words" style={{color:'rgba(255,255,255,0.34)'}}>
-                          Entraron antes de que se guardara el buzón. No se adivinó cuál era; se puede preguntar a Gmail.
-                        </div>
-                      </div>
-                      <button disabled={identificando}
-                        onClick={async ()=>{
-                          setIdentificando(true)
-                          try {
-                            const r = await fetch('/api/inbox/identificar', { method:'POST' })
-                            if (!r.ok) {
-                              // EL MENSAJE DICE QUE PASO. Antes todo caia en el mismo
-                              // «no se pudieron identificar», y eso convirtio en un
-                              // misterio lo que era un despliegue a medias: Javi pulso
-                              // el boton antes de que la ruta existiera, se comio un
-                              // 404 disfrazado de fallo, y dio por hecho que ya estaba.
-                              showToast(r.status === 404
-                                ? 'Todavía no está disponible — espera un minuto y reinténtalo'
-                                : r.status === 401 ? 'Se ha cerrado la sesión'
-                                : `No se pudo (error ${r.status})`)
-                              setIdentificando(false)
-                              return
-                            }
-                            const j = await r.json()
-                            setSinIdent(Number(j.pendientes) || 0)
-                            if (j.identificados) {
-                              // Se vuelven a pedir las cuentas: sin esto, los recuentos
-                              // de cada buzon se quedan como estaban y la pantalla
-                              // contradice al mensaje que acaba de salir.
-                              fetch('/api/gmail/cuentas')
-                                .then(x => (x.ok ? x.json() : null))
-                                .then(x => { if (x) { setCuentas(x.cuentas || []); setSinIdent(Number(x.sinIdentificar) || 0) } })
-                                .catch(() => {})
-                              data.reloadInbox?.()
-                              showToast(plural(j.identificados,'correo identificado','correos identificados'))
-                            } else {
-                              showToast('Gmail no reconocio ninguno de estos correos')
-                            }
-                          } catch { showToast('Sin conexión con el servidor') }
-                          setIdentificando(false)
-                        }}
-                        className="font-syne text-[8.5px] font-black tracking-widest px-3.5 py-2 rounded-xl flex-shrink-0 transition-all active:scale-95 disabled:opacity-50"
-                        style={{background:`${AMBAR}22`,border:`1px solid ${AMBAR}55`,color:AMBAR}}>
-                        {identificando ? 'MIRANDO…' : 'IDENTIFICAR'}
-                      </button>
-                    </div>
-                  )}
-                </>)}
-              </div>
-            </div>
-          ) : (
             <div className="flex items-start gap-3">
-              <button onClick={()=>{ setFilter('hub'); setActiveSender(null); setSelected(null) }} title="Volver" aria-label="Volver a la bandeja" className="flex items-center gap-1.5 transition-opacity hover:opacity-60 mt-1" style={{color:'rgba(255,255,255,0.4)'}}>
-                <LucideIcon name="chevron-left" size={16} color="rgba(255,255,255,0.4)"/>
-              </button>
               <div className="flex items-center gap-2.5 flex-1 min-w-0">
                 {(filter==='Gmail'||filter==='Personal'||filter.startsWith('cuenta:')) && <svg viewBox="0 0 24 24" width={18} height={18}><path fill="#EA4335" d="M22.5 12.5c0-.83-.07-1.64-.2-2.42H12v4.59h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.25z"/><path fill="#4285F4" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>}
                 {filter==='Colabs' && <div className="relative flex-shrink-0"><svg viewBox="0 0 24 24" width={18} height={18}><path fill="#EA4335" d="M22.5 12.5c0-.83-.07-1.64-.2-2.42H12v4.59h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.25z"/><path fill="#4285F4" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg><div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center" style={{background:SURFACE,border:`1px solid ${GRN}50`}}><span className="font-syne text-[4.5px] font-black" style={{color:GRN}}>BS</span></div></div>}
@@ -638,11 +538,10 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                 )}
               </div>
             </div>
-          )}
         </div>
 
         {/* Tarjetas de estado (estilo referencia) */}
-        {!isMobile && !selected && filter!=='hub' && filter!=='Calendar' && (
+        {!isMobile && !selected && filter!=='Calendar' && (
           <div className="flex gap-3 px-6 py-3.5 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
             {[
               {n:unread, l:'Sin leer', c:unread>0?'#e2b877':'#FFFFFF', ic:'mail'},
@@ -660,142 +559,6 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
 
         {/* Message list */}
         {(()=>{
-          // ── HUB VIEW ─────────────────────────────────────────
-          if (filter==='hub') {
-            const waCount     = allMsgs.filter((m:any)=>m.source==='whatsapp').length
-            const teamCount   = allMsgs.filter((m:any)=>m.source==='internal').length
-            const teamUnread  = allMsgs.filter((m:any)=>m.source==='internal'&&!m.is_read).length
-            const todayStr    = todayKey()
-            const todayEvents = calEvents.filter((e:any)=>e.start?.slice(0,10)===todayStr).length
-            const GmailSvg = ({opacity=1}:{opacity?:number}) => (
-              <svg viewBox="0 0 24 24" width={36} height={36} style={{opacity}}>
-                <path fill="#EA4335" d="M22.5 12.5c0-.83-.07-1.64-.2-2.42H12v4.59h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.25z"/>
-                <path fill="#4285F4" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-              </svg>
-            )
-            const cards = [
-              {
-                id:'Personal', label:'Gmail Personal', sub: personalGmailCount===0?'Conectar en Operativa':personalGmailUnread>0?`${personalGmailUnread} sin leer · ${personalGmailCount} total`:plural(personalGmailCount,'mensaje'),
-                color:'#EA4335', active: personalGmailCount>0,
-                icon: <GmailSvg opacity={personalGmailCount>0?1:0.35}/>,
-                badge: personalGmailUnread > 0 ? personalGmailUnread : null,
-                hint: 'Tu cuenta personal',
-              },
-              {
-                id:'Colabs', label:'Colaboraciones', sub: colabsGmailCount===0?'Sin emails compartidos':colabsGmailUnread>0?`${colabsGmailUnread} sin leer · equipo`:plural(colabsGmailCount,'email compartido','emails compartidos'),
-                color:'#22c55e', active: colabsGmailCount>0,
-                icon: <div className="relative"><GmailSvg opacity={colabsGmailCount>0?1:0.35}/><div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center font-syne text-[6.5px] font-black" style={{background:SURFACE,border:'1px solid rgba(34,197,94,0.3)',color:'rgba(34,197,94,0.8)'}}>BS</div></div>,
-                badge: colabsGmailUnread > 0 ? colabsGmailUnread : null,
-                hint: 'Visible para todo el equipo',
-              },
-              {
-                id:'Calendar', label:'Calendario', sub: calEvents.length===0?'Sin eventos':todayEvents>0?`${plural(todayEvents,'evento')} hoy`:plural(calEvents.length,'próximo'),
-                color:'#A78BFA', active: calEvents.length>0,
-                icon: <svg viewBox="0 0 24 24" width={36} height={36} fill="none" stroke="#A78BFA" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2.5" ry="2.5"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><circle cx="8" cy="15" r="1" fill="#A78BFA"/><circle cx="12" cy="15" r="1" fill="#A78BFA"/><circle cx="16" cy="15" r="1" fill="#A78BFA"/></svg>,
-                badge: todayEvents > 0 ? todayEvents : null,
-                hint: 'Tu Google Calendar',
-              },
-              {
-                id:'WhatsApp', label:'WhatsApp', sub: waCount===0?'Webhook pendiente':plural(waCount,'mensaje'),
-                color:'#25D366', active: waCount>0,
-                icon: <svg viewBox="0 0 24 24" width={36} height={36} fill="#25D366" style={{opacity:waCount>0?1:0.35}}><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>,
-                badge: null,
-                hint: 'Mensajes de clientes',
-              },
-              {
-                id:'Interno', label:'Equipo', sub: teamCount===0?'Sin mensajes internos':teamUnread>0?`${teamUnread} sin leer`:plural(teamCount,'mensaje'),
-                // En hex por lo mismo que las carpetas: `card.color` se concatena
-                // con opacidad en el gradiente, el borde y los hover de abajo, y
-                // con rgba la tarjeta de Equipo se pintaba plana y sin borde.
-                color:'#A78BFA', active: teamCount>0,
-                icon: <svg viewBox="0 0 24 24" width={36} height={36} fill="none" stroke="rgba(167,139,250,0.9)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{opacity:teamCount>0?1:0.35}}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
-                badge: teamUnread > 0 ? teamUnread : null,
-                hint: 'Mensajes internos',
-              },
-            ]
-            return (
-              <div className="flex-1 overflow-y-auto p-5">
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  {/* First two cards (Personal + Colabs) always first row */}
-                  {cards.slice(0,2).map(card=>(
-                    <button key={card.id} onClick={()=>{ setFilter(card.id); setActiveSender(null); setSelected(null) }}
-                      className="relative rounded-2xl p-4 text-left transition-all duration-200 group"
-                      style={{background:`linear-gradient(145deg,${card.color}0e 0%,rgba(10,10,20,0.9) 100%)`,border:`1px solid ${card.color}22`,minHeight:'130px'}}
-                      onMouseEnter={e=>{ e.currentTarget.style.border=`1px solid ${card.color}45`; e.currentTarget.style.background=`linear-gradient(145deg,${card.color}18 0%,rgba(10,10,20,0.9) 100%)` }}
-                      onMouseLeave={e=>{ e.currentTarget.style.border=`1px solid ${card.color}22`; e.currentTarget.style.background=`linear-gradient(145deg,${card.color}0e 0%,rgba(10,10,20,0.9) 100%)` }}
-                    >
-                      <div className="absolute top-0 left-4 right-4 h-px" style={{background:`linear-gradient(90deg,transparent,${card.color}40,transparent)`}}/>
-                      {card.badge != null && (
-                        <div className="absolute top-3 right-3 min-w-[22px] h-[22px] px-1.5 rounded-full flex items-center justify-center font-figtree text-[11px] font-black" style={{background:card.color,color:'#fff'}}>
-                          {(card.badge as number) > 99 ? '99+' : card.badge}
-                        </div>
-                      )}
-                      <div className="mb-2.5">{card.icon}</div>
-                      <div className="font-figtree text-[15px] font-black leading-none mb-1" style={{color:'rgba(255,255,255,0.9)',letterSpacing:'-0.02em'}}>{card.label}</div>
-                      <div className="font-syne text-[8px] font-bold tracking-wide mb-0.5" style={{color: card.active ? `${card.color}cc` : 'rgba(255,255,255,0.18)'}}>{(card.sub as string).toUpperCase()}</div>
-                      {'hint' in card && <div className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.15)'}}>{(card as any).hint}</div>}
-                      <div className={`absolute bottom-3.5 right-3.5 transition-opacity ${isMobile?'opacity-60':'opacity-0 group-hover:opacity-100'}`}>
-                        <LucideIcon name="arrow-right" size={13} color={card.color}/>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  {/* Remaining cards (Calendar, WhatsApp, Equipo) */}
-                  {cards.slice(2).map(card=>(
-                    <button key={card.id} onClick={()=>{ setFilter(card.id); setActiveSender(null); setSelected(null) }}
-                      className="relative rounded-2xl p-4 text-left transition-all duration-200 group"
-                      style={{background:`linear-gradient(145deg,${card.color}0e 0%,rgba(10,10,20,0.9) 100%)`,border:`1px solid ${card.color}22`,minHeight:'110px'}}
-                      onMouseEnter={e=>{ e.currentTarget.style.border=`1px solid ${card.color}45`; e.currentTarget.style.background=`linear-gradient(145deg,${card.color}18 0%,rgba(10,10,20,0.9) 100%)` }}
-                      onMouseLeave={e=>{ e.currentTarget.style.border=`1px solid ${card.color}22`; e.currentTarget.style.background=`linear-gradient(145deg,${card.color}0e 0%,rgba(10,10,20,0.9) 100%)` }}
-                    >
-                      <div className="absolute top-0 left-3 right-3 h-px" style={{background:`linear-gradient(90deg,transparent,${card.color}40,transparent)`}}/>
-                      {card.badge != null && (
-                        <div className="absolute top-2.5 right-2.5 min-w-[20px] h-[20px] px-1 rounded-full flex items-center justify-center font-figtree text-[10px] font-black" style={{background:card.color,color:'#fff'}}>
-                          {(card.badge as number) > 99 ? '99+' : card.badge}
-                        </div>
-                      )}
-                      <div className="mb-2">{card.icon}</div>
-                      <div className="font-figtree text-[13px] font-black leading-none mb-1" style={{color:'rgba(255,255,255,0.85)',letterSpacing:'-0.02em'}}>{card.label}</div>
-                      <div className="font-syne text-[7.5px] font-bold tracking-wide" style={{color: card.active ? `${card.color}cc` : 'rgba(255,255,255,0.18)'}}>{(card.sub as string).toUpperCase()}</div>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Harvey Briefing CTA */}
-                {onAskHarvey && (
-                  <button
-                    onClick={()=>{
-                      const unreadList = allMsgs.filter((m:any)=>!m.is_read).slice(0,8)
-                      const emailSummary = unreadList.length > 0
-                        ? unreadList.map((m:any)=>`• ${m.from_name||'?'}: "${m.subject||'sin asunto'}"${m.ai_summary?` → ${m.ai_summary}`:''}`).join('\n')
-                        : 'ningún email sin leer'
-                      const todayEvts = calEvents.filter((e:any)=>e.start?.slice(0,10)===todayKey())
-                      const evtSummary = todayEvts.length > 0 ? todayEvts.map((e:any)=>e.title).join(', ') : 'sin eventos hoy'
-                      onAskHarvey(`Dame un briefing rápido de mi inbox y calendario de hoy.\n\nEmails sin leer (${unreadList.length}):\n${emailSummary}\n\nEventos de hoy: ${evtSummary}\n\n¿Cuáles son las prioridades más urgentes y qué debería atender primero?`)
-                    }}
-                    className="w-full mt-1 flex items-center gap-3 rounded-2xl px-4 py-3.5 transition-all duration-200 group"
-                    style={{background:`linear-gradient(135deg,${BLU}0a,${BLU}04)`,border:`1px solid ${BLU}20`}}
-                    onMouseEnter={e=>{ e.currentTarget.style.background=`linear-gradient(135deg,${BLU}16,${BLU}0a)`; e.currentTarget.style.border=`1px solid ${BLU}40` }}
-                    onMouseLeave={e=>{ e.currentTarget.style.background=`linear-gradient(135deg,${BLU}0a,${BLU}04)`; e.currentTarget.style.border=`1px solid ${BLU}20` }}
-                  >
-                    <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:`${BLU}14`}}>
-                      <LucideIcon name="cpu" size={16} color={BLU}/>
-                    </div>
-                    <div className="flex-1 text-left">
-                      <div className="font-syne text-[8px] font-black tracking-widest mb-0.5" style={{color:`${BLU}aa`}}>BRIEFING CON HARVEY</div>
-                      <div className="font-syne text-[7px]" style={{color:'rgba(255,255,255,0.2)'}}>Resumen de emails + calendario hablado por Harvey</div>
-                    </div>
-                    <div className={`transition-opacity ${isMobile?'opacity-60':'opacity-0 group-hover:opacity-100'}`}>
-                      <LucideIcon name="arrow-right" size={13} color={BLU}/>
-                    </div>
-                  </button>
-                )}
-              </div>
-            )
-          }
 
           // ── CALENDAR TAB ──────────────────────────────────────
           if (filter==='Calendar') {

@@ -5,7 +5,7 @@ import { BotonSincronizar } from '@/components/shared'
 import { AvisoGoogle } from '@/components/shared'
 import { rutaApp } from '@/lib/appUrl'
 import type { NexusData } from '@/types'
-import { BLU, RED, GRN, SURFACE, SURF2, BORDER, useIsMobile, LucideIcon, AjGroup, todayKey } from '@/components/shared'
+import { BLU, RED, GRN, AMBAR, SURFACE, SURF2, BORDER, useIsMobile, LucideIcon, AjGroup, todayKey } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
 
 const GMAIL_STATUS_LS = 'gmail_status_cache'
@@ -57,9 +57,17 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
   // Las cuentas de Gmail conectadas. Vienen del servidor y NO llevan token: el
   // cliente solo necesita saber qué direcciones hay.
   const [cuentas, setCuentas] = useState<{ email: string; compartida: boolean }[]>([])
+  // Los correos que entraron ANTES de que se guardara el buzon. Vive aqui y no
+  // en el Inbox porque es una reparacion puntual de datos viejos, como el
+  // arreglo de enlaces de Memoria — y el Inbox es para leer correo.
+  const [sinIdent, setSinIdent] = useState(0)
+  const [identificando, setIdentificando] = useState(false)
   const cargarCuentas = useCallback(() => {
     fetch('/api/gmail/cuentas').then(r => (r.ok ? r.json() : null))
-      .then(j => setCuentas(Array.isArray(j?.cuentas) ? j.cuentas : []))
+      .then(j => {
+        setCuentas(Array.isArray(j?.cuentas) ? j.cuentas : [])
+        setSinIdent(Number(j?.sinIdentificar) || 0)
+      })
       .catch(() => {})
   }, [])
   useEffect(() => { cargarCuentas() }, [cargarCuentas])
@@ -616,6 +624,51 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
                       </button>
                     </div>
                   ))}
+                  {sinIdent > 0 && (
+                    <div className="flex items-center gap-2.5 px-3.5 py-2.5" style={{ borderTop: `1px solid ${BORDER}` }}>
+                      <LucideIcon name="alert-circle" size={12} color={AMBAR} />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-figtree text-[12px] break-words" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                          {plural(sinIdent, 'correo sin identificar', 'correos sin identificar')}
+                        </div>
+                        <div className="font-figtree text-[10.5px] mt-0.5 break-words" style={{ color: 'rgba(255,255,255,0.28)' }}>
+                          Entraron antes de que se guardara el buzón. Se le puede preguntar a Gmail cuál fue.
+                        </div>
+                      </div>
+                      <button disabled={identificando}
+                        onClick={async () => {
+                          setIdentificando(true)
+                          try {
+                            const r = await fetch('/api/inbox/identificar', { method: 'POST' })
+                            if (!r.ok) {
+                              // El codigo se DICE. Con un mensaje generico, un
+                              // despliegue a medias es indistinguible de un fallo
+                              // real — y ya paso: Javi pulso el boton antes de que
+                              // la ruta existiera y dio por hecho que estaba hecho.
+                              showToast(r.status === 404
+                                ? 'Todavía no está disponible — espera un minuto y reinténtalo'
+                                : r.status === 401 ? 'Se ha cerrado la sesión'
+                                : `No se pudo (error ${r.status})`)
+                              setIdentificando(false)
+                              return
+                            }
+                            const j = await r.json()
+                            setSinIdent(Number(j.pendientes) || 0)
+                            // Se vuelven a pedir las cuentas: sin esto la pantalla
+                            // contradice al mensaje que acaba de salir.
+                            cargarCuentas()
+                            showToast(j.identificados
+                              ? plural(j.identificados, 'correo identificado', 'correos identificados')
+                              : 'Gmail no reconoció ninguno de estos correos')
+                          } catch { showToast('Sin conexión con el servidor') }
+                          setIdentificando(false)
+                        }}
+                        className="font-syne text-[8px] font-black tracking-widest px-2.5 py-1 rounded-lg flex-shrink-0 transition-opacity disabled:opacity-50"
+                        style={{ color: AMBAR, border: `1px solid ${AMBAR}55` }}>
+                        {identificando ? 'MIRANDO…' : 'IDENTIFICAR'}
+                      </button>
+                    </div>
+                  )}
                   <a href="/api/gmail/connect?account=personal"
                     className="flex items-center justify-center gap-2 mx-3.5 mb-3 mt-1 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-widest no-underline transition-opacity hover:opacity-80"
                     style={{ background: 'rgba(255,255,255,0.03)', border: `1px dashed ${BORDER}`, color: 'rgba(255,255,255,0.4)' }}>
