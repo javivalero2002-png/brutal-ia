@@ -1,5 +1,5 @@
 import type { AccionHarvey } from '@/lib/harveyAccion'
-import { plataformaContenido, tipoContenido, fechaOTBD } from '@/components/shared/helpers'
+import { plataformaContenido, tipoContenido, fechaOTBD, todayKey } from '@/components/shared/helpers'
 import type { NexusData } from '@/types'
 import { matchTeamMember } from '@/components/shared/audio'
 import { ACCENT_COLORS } from '@/components/shared/design-tokens'
@@ -127,6 +127,51 @@ export async function ejecutarAccionHarvey(
           status: 'borrador',
         })
         showToast('Pieza añadida al pipeline de contenido')
+        return true
+      }
+      case 'diario': {
+        // Cerrar el día hablando. Hasta ahora había que teclearlo en la sección, y
+        // si estás recogiendo material a las ocho eso es la diferencia entre que se
+        // escriba y que no. Es justo lo que el aviso de las 20:00 pide.
+        const texto = (accion.text || '').trim()
+        if (!texto) { showToast('No he entendido qué apuntar en el diario'); return false }
+
+        // SE AÑADE, NO SE PISA. `PATCH /api/diario` hace un upsert con el valor que
+        // le mandes, así que escribir a pelo BORRA lo que hubiera escrito antes —
+        // y borrar el cierre de alguien es lo peor que puede hacer una acción por
+        // voz: no hay papelera, y el texto no está en ningún otro sitio.
+        //
+        // Así que primero se lee. Si la lectura falla NO se escribe: escribir sin
+        // saber qué había es exactamente el caso que hay que evitar.
+        const hoy = todayKey()
+        let previo = ''
+        try {
+          const r = await fetch(`/api/diario?dia=${hoy}`)
+          if (!r.ok) throw new Error(String(r.status))
+          const j = await r.json()
+          // `{ dia, entradas, porPersona }` — la forma real de la respuesta, no
+          // una adivinada: `entradas` es una fila por persona que fichó ese día.
+          const mio = (Array.isArray(j?.entradas) ? j.entradas : [])
+            .find((d: { user_id?: string }) => d?.user_id && perfil?.id && d.user_id === perfil.id)
+          previo = String(mio?.cierre || '').trim()
+        } catch {
+          showToast('No he podido leer tu diario de hoy, así que no escribo nada para no pisarlo')
+          return false
+        }
+
+        const res = await fetch('/api/diario', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dia: hoy, cierre: previo ? `${previo}\n${texto}` : texto }),
+        })
+        if (!res.ok) {
+          const json = await res.json().catch(() => null)
+          showToast(typeof json?.error === 'string' && json.error.length > 3
+            ? json.error
+            : 'No se ha podido guardar en el diario')
+          return false
+        }
+        showToast(previo ? 'Añadido al cierre de tu día' : 'Día cerrado')
         return true
       }
       case 'completar': {

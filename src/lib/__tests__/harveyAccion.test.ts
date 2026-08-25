@@ -236,3 +236,64 @@ describe('la tarjeta de confirmacion dice la verdad', () => {
     expect(e.tituloLargo).toMatch(/marcar/i)
   })
 })
+
+describe('cerrar el dia por voz no pisa lo escrito', () => {
+  // `PATCH /api/diario` hace un upsert con el valor que le mandes, asi que
+  // escribir a pelo BORRA lo que hubiera antes. Borrar el cierre de alguien es lo
+  // peor que puede hacer una accion por voz: no hay papelera y ese texto no esta
+  // en ningun otro sitio.
+  const PERFIL = { id: 'u1', name: 'Javi' }
+
+  function conServidor(entradas: unknown[] | 'falla') {
+    const escrito: Record<string, unknown>[] = []
+    const dichos: string[] = []
+    const fetchFalso = async (url: string, init?: { method?: string; body?: string }) => {
+      if (!init || init.method !== 'PATCH') {
+        if (entradas === 'falla') return { ok: false, status: 500, json: async () => ({}) }
+        return { ok: true, status: 200, json: async () => ({ dia: '2026-08-25', entradas, porPersona: [] }) }
+      }
+      escrito.push(JSON.parse(init.body || '{}'))
+      return { ok: true, status: 200, json: async () => ({}) }
+    }
+    ;(globalThis as { fetch?: unknown }).fetch = fetchFalso
+    return {
+      escrito, dichos,
+      deps: { data: {} as never, perfil: PERFIL, showToast: (m: string) => { dichos.push(m) } },
+    }
+  }
+
+  it('con un cierre ya escrito, lo conserva y anade debajo', async () => {
+    const { escrito, deps } = conServidor([{ user_id: 'u1', cierre: 'He montado el teaser' }])
+    const ok = await ejecutarAccionHarvey({ type: 'diario', text: 'Y he mandado el presupuesto' }, deps)
+    expect(ok).toBe(true)
+    expect(escrito).toHaveLength(1)
+    expect(escrito[0].cierre).toBe('He montado el teaser\nY he mandado el presupuesto')
+  })
+
+  it('sin nada escrito, escribe solo lo dictado', async () => {
+    const { escrito, deps } = conServidor([])
+    await ejecutarAccionHarvey({ type: 'diario', text: 'He montado el teaser' }, deps)
+    expect(escrito[0].cierre).toBe('He montado el teaser')
+  })
+
+  it('no confunde el cierre de otro con el mio', async () => {
+    // `entradas` trae UNA FILA POR PERSONA: coger la primera pegaria el texto de
+    // Javi debajo del de Paula y lo escribiria en el dia de quien habla.
+    const { escrito, deps } = conServidor([
+      { user_id: 'otro', cierre: 'Cierre de Paula' },
+      { user_id: 'u1', cierre: 'Cierre de Javi' },
+    ])
+    await ejecutarAccionHarvey({ type: 'diario', text: 'Y una cosa mas' }, deps)
+    expect(escrito[0].cierre).toBe('Cierre de Javi\nY una cosa mas')
+  })
+
+  it('si no puede leer lo que habia, NO escribe', async () => {
+    // Escribir sin saber que habia es exactamente el caso que hay que evitar: se
+    // prefiere no guardar la frase a guardarla encima del cierre de la manana.
+    const { escrito, dichos, deps } = conServidor('falla')
+    const ok = await ejecutarAccionHarvey({ type: 'diario', text: 'algo' }, deps)
+    expect(ok).toBe(false)
+    expect(escrito, 'ha escrito sin saber que habia debajo').toEqual([])
+    expect(dichos.join(' ')).toMatch(/no he podido leer/i)
+  })
+})

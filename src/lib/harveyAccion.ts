@@ -12,7 +12,7 @@ import { nivelTarea, type NivelTarea } from '@/components/shared/helpers'
 // El contrato lo fija el prompt en src/app/api/harvey/chat/route.ts (~línea 150).
 // Si cambias uno, cambia el otro.
 
-export const TIPOS_ACCION = ['tarea', 'evento', 'proyecto', 'cliente', 'pieza', 'nota', 'completar'] as const
+export const TIPOS_ACCION = ['tarea', 'evento', 'proyecto', 'cliente', 'pieza', 'nota', 'completar', 'diario'] as const
 export type TipoAccion = (typeof TIPOS_ACCION)[number]
 
 export interface AccionHarvey {
@@ -77,6 +77,11 @@ export function parsearAccionHarvey(respuesta: string): { texto: string; accion:
       return { texto, accion: { type: 'cliente', text: campo(1), industry: campo(2) || '—' } }
     case 'pieza':
       return { texto, accion: { type: 'pieza', text: campo(1), platform: campo(2) || 'Instagram', contentType: campo(3) || 'Post' } }
+    case 'diario':
+      // Cerrar el día hablando. Javi lo llama vital y hasta ahora era teclear en
+      // la sección: si estás recogiendo el material a las ocho, dictarlo es la
+      // diferencia entre que se escriba y que no.
+      return { texto, accion: { type: 'diario', text: campo(1) } }
     case 'completar':
       // La CONTRARIA de 'tarea', y faltaba: Harvey te leía en voz alta lo que
       // tenías pendiente y no podía tachar nada. Decir «ya está» y que la tarea
@@ -124,5 +129,8 @@ export function etiquetaAccion(tipo: TipoAccion): {
     // MARCAR y no CREAR: es la unica accion que no anade nada, y la tarjeta es lo
     // unico que el usuario lee antes de confirmar algo que no puede deshacer.
     case 'completar': return { icono: 'check',        titulo: 'COMPLETAR', tituloLargo: 'MARCAR COMO HECHA',  enCurso: 'MARCANDO…' }
+    // AÑADIR y no ESCRIBIR: no pisa lo que ya hubiera puesto — eso es lo que la
+    // tarjeta tiene que dejar claro antes de que se confirme.
+    case 'diario':    return { icono: 'pen-line',    titulo: 'DIARIO',    tituloLargo: 'AÑADIR AL CIERRE DEL DÍA', enCurso: 'GUARDANDO…' }
   }
 }
