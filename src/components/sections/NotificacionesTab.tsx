@@ -2,7 +2,7 @@
 import { activarPush } from '@/lib/activarPush'
 import { AVISOS, ORDEN_AVISOS } from '@/lib/avisos'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { BLU, GRN, RED, AMBAR, SURFACE, BORDER, LucideIcon, useIsMobile, relTime } from '@/components/shared'
 
 interface NotifItem { id: string; title: string; body?: string; url?: string; tag?: string; read: boolean; created_at: string }
@@ -21,14 +21,32 @@ function NotificacionesTab({ showToast }: PropsNotificaciones) {
    */
   const [prefs, setPrefs] = useState<Record<string, boolean>>({})
   const [guardando, setGuardando] = useState(false)
-  useEffect(() => {
+  /**
+   * «No he podido leerlas» NO es «no tienes ninguna silenciada».
+   *
+   * El `catch` se lo tragaba y dejaba `prefs` en `{}`. Como el pintado es
+   * `prefs[cat] !== false`, los ocho interruptores salían ENCENDIDOS: la pantalla
+   * le afirmaba a alguien que no tiene nada silenciado sin haberlo comprobado.
+   *
+   * Y lo grave venía después: al pulsar cualquiera se manda el objeto ENTERO
+   * (`{...prefs, [cat]: valor}`), así que el primer toque escribía `{}` más esa
+   * clave encima de lo que hubiera en el servidor. Un fallo de red al abrir la
+   * pestaña te borraba todo lo que llevabas silenciado, sin decir nada.
+   */
+  const [estadoPrefs, setEstadoPrefs] = useState<'cargando' | 'listo' | 'error'>('cargando')
+  const cargarPrefs = useCallback(() => {
+    setEstadoPrefs('cargando')
     fetch('/api/push/prefs')
       .then(r => (r.ok ? r.json() : Promise.reject()))
-      .then(j => setPrefs(j.prefs || {}))
-      .catch(() => { /* todo activo por defecto: es lo que espera quien los activó */ })
+      .then(j => { setPrefs(j.prefs || {}); setEstadoPrefs('listo') })
+      .catch(() => setEstadoPrefs('error'))
   }, [])
+  useEffect(() => { cargarPrefs() }, [cargarPrefs])
 
   const cambiarPref = async (cat: string, valor: boolean) => {
+    // Sin haberlas leído no se escribe: se mandaría el objeto entero encima de lo
+    // que hay en el servidor, borrando lo que no se llegó a leer.
+    if (estadoPrefs !== 'listo') { showToast('Todavía no he podido leer tus preferencias'); return }
     const antes = prefs
     const nuevo = { ...prefs, [cat]: valor }
     setPrefs(nuevo)
@@ -176,7 +194,23 @@ function NotificacionesTab({ showToast }: PropsNotificaciones) {
 
             Y ahora cada línea es un interruptor: la pantalla HACE algo en vez de
             contar algo. */}
-        <div className="mt-5 flex flex-col gap-1">
+        {/* Si no se han podido leer, se DICE — y no se pintan ocho interruptores
+            encendidos afirmando algo que nadie ha comprobado. */}
+        {estadoPrefs === 'error' && (
+          <div className="mt-5 rounded-2xl px-4 py-3 flex items-center justify-between gap-3"
+               style={{background:'rgba(255,176,32,0.08)',border:'1px solid rgba(255,176,32,0.2)'}}>
+            <div className="font-figtree text-[12px]" style={{color:'rgba(255,255,255,0.6)'}}>
+              No he podido leer qué avisos tienes silenciados. No toco nada hasta saberlo.
+            </div>
+            <button onClick={cargarPrefs}
+              className="flex-shrink-0 font-syne text-[8px] font-black tracking-widest px-3 py-1.5 rounded-lg"
+              style={{background:'rgba(255,255,255,0.06)',color:'rgba(255,255,255,0.55)'}}>
+              REINTENTAR
+            </button>
+          </div>
+        )}
+        <div className="mt-5 flex flex-col gap-1"
+             style={estadoPrefs === 'listo' ? undefined : { opacity: 0.45, pointerEvents: 'none' }}>
           {ORDEN_AVISOS.map(cat => {
             const a = AVISOS[cat]
             const activo = prefs[cat] !== false

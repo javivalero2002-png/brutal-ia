@@ -4052,6 +4052,57 @@ describe('todos los buscadores de la app buscan igual', () => {
   })
 })
 
+describe('la CSP deja incrustar lo que la app sabe incrustar', () => {
+  // `videoEmbed()` genera iframes de YouTube, Vimeo, Drive e Instagram; `frame-src`
+  // solo listaba los dos primeros. Drive e Instagram los bloqueaba la CSP: caja
+  // negra vacia, sin error visible en la pantalla — que es exactamente el sintoma
+  // que los dos commits que añadieron ese soporte dicen haber arreglado («pegabas
+  // el enlace y no se veia nada»).
+  //
+  // La lista se saca de la FUNCION, no se escribe aqui: añadir un quinto proveedor
+  // sin tocar la CSP tiene que ponerse rojo solo.
+  it('todo dominio que videoEmbed produce esta en frame-src', () => {
+    const H = leerCodigo('src/components/shared/helpers.ts')
+    const i = H.indexOf('export const videoEmbed')
+    expect(i, 'ya no existe videoEmbed: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const fin = H.indexOf('\nexport ', i + 10)
+    const cuerpo = H.slice(i, fin > i ? fin : i + 1500)
+    const dominios = [...new Set([...cuerpo.matchAll(/https:\/\/([a-z0-9.-]+)\//g)].map(m => m[1]))]
+    expect(dominios.length, 'no se reconoce ningun dominio de embed').toBeGreaterThan(2)
+
+    const csp = leerCodigo('next.config.ts')
+    const m = csp.match(/"frame-src ([^"]*)"/)
+    expect(m, 'ya no hay frame-src: sin el, `default-src self` bloquea TODOS los iframes').toBeTruthy()
+    const faltan = dominios.filter(d => !m![1].includes(d))
+    expect(faltan, `videoEmbed genera iframes de dominios que la CSP bloquea. El usuario ve una caja negra vacia y ni un error:\n  ${faltan.join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
+describe('«no lo he podido leer» no se pinta como «no tienes nada»', () => {
+  // Las preferencias de avisos se leian con un `.catch(() => {})` que dejaba `prefs`
+  // en `{}`. Como el pintado es `prefs[cat] !== false`, los OCHO interruptores
+  // salian encendidos: la pantalla afirmaba que no tienes nada silenciado sin
+  // haberlo comprobado.
+  //
+  // Y lo grave venia despues: al pulsar cualquiera se manda el objeto ENTERO
+  // (`{...prefs, [cat]: valor}`), asi que el primer toque escribia `{}` mas esa
+  // clave encima del servidor. Un fallo de red al abrir la pestaña te borraba todo
+  // lo que llevabas silenciado, en silencio.
+  it('las preferencias distinguen cargando, listo y error', () => {
+    const N = leerCodigo('src/components/sections/NotificacionesTab.tsx')
+    expect(/estadoPrefs/.test(N),
+      'vuelve a haber un solo estado: un fallo de lectura se pintara como «nada silenciado»').toBe(true)
+    expect(/'cargando' \| 'listo' \| 'error'/.test(N), 'los tres estados ya no estan').toBe(true)
+    // Y la escritura tiene que estar cerrada mientras no se hayan leido.
+    const i = N.indexOf('const cambiarPref')
+    expect(i, 'ya no existe cambiarPref: revisa esta regla').toBeGreaterThan(-1)
+    expect(/estadoPrefs !== 'listo'/.test(N.slice(i, i + 500)),
+      'se puede escribir sin haber leido: el PUT manda el objeto entero y borra lo que no se llego a leer')
+      .toBe(true)
+  })
+})
+
 describe('el trabajo de alguien no desaparece por no haber fichado', () => {
   // `/api/equipo/resumen` mapeaba sobre `diario` y colgaba las tareas DENTRO de
   // cada dia, asi que un dia trabajado sin fichar no existia — y con el, todas las
