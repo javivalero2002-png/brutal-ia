@@ -404,3 +404,50 @@ export function mensajeErrorTranscripcion(status: number, delServidor?: string |
  */
 export const haFichado = (d: { entrada_at?: string | null } | null | undefined) =>
   !!d?.entrada_at
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LO QUE ESCRIBE EL MODELO, NORMALIZADO EN LA FRONTERA.
+//
+// `nivelTarea` existe desde hace tiempo y hace exactamente esto para las tareas.
+// Pero de las CINCO acciones que Harvey puede emitir, solo la tarea pasaba por un
+// normalizador: las otras cuatro metían `campo(n).trim()` crudo en la base.
+//
+// No rebotaba nada porque esas columnas NO tienen CHECK —al revés que `level` o
+// `animo`— así que el fallo no era un error, era un dato falso que se guarda:
+// una pieza con plataforma «Facebook» no casa ningún color y sale en gris, y un
+// proyecto con deadline «próximo viernes» no vence NUNCA, porque
+// `estadoDeadline` devuelve null para lo que no sea YYYY-MM-DD.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Las plataformas que la app sabe pintar. Una sola lista, no tres. */
+export const PLATAFORMAS = ['Instagram', 'TikTok', 'YouTube', 'LinkedIn', 'Twitter', 'Pinterest'] as const
+export const TIPOS_CONTENIDO = ['Post', 'Reel', 'Story', 'Video', 'Carrusel', 'Newsletter', 'Thread'] as const
+
+const casaCon = <T extends string>(lista: readonly T[], crudo: string | null | undefined, porDefecto: T): T => {
+  const v = (crudo || '').trim().toLowerCase()
+  if (!v) return porDefecto
+  const exacta = lista.find(x => x.toLowerCase() === v)
+  if (exacta) return exacta
+  // «ig», «yt», «insta»: lo que el modelo escribe cuando abrevia.
+  const parcial = lista.find(x => x.toLowerCase().startsWith(v) || v.startsWith(x.toLowerCase()))
+  return parcial || porDefecto
+}
+
+export const plataformaContenido = (crudo?: string | null) => casaCon(PLATAFORMAS, crudo, 'Instagram')
+export const tipoContenido = (crudo?: string | null) => casaCon(TIPOS_CONTENIDO, crudo, 'Post')
+
+/**
+ * Una fecha que la app pueda usar, o 'TBD'.
+ *
+ * `estadoDeadline` solo entiende `YYYY-MM-DD`. Guardar «próximo viernes» no da
+ * error: crea un proyecto que no vence nunca y que no sale en ninguna alerta de
+ * retraso. 'TBD' es lo que la app ya usa para «sin fecha», y al menos es cierto.
+ */
+export const fechaOTBD = (crudo?: string | null): string => {
+  const v = (crudo || '').trim()
+  if (!v) return 'TBD'
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return 'TBD'
+  // Bien formada pero imposible: '2026-13-45' pasa el patrón y no existe.
+  const d = new Date(`${v}T12:00:00`)
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v ? 'TBD' : v
+}

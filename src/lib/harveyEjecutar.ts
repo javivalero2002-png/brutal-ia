@@ -1,4 +1,5 @@
 import type { AccionHarvey } from '@/lib/harveyAccion'
+import { plataformaContenido, tipoContenido, fechaOTBD } from '@/components/shared/helpers'
 import type { NexusData } from '@/types'
 import { matchTeamMember } from '@/components/shared/audio'
 import { ACCENT_COLORS } from '@/components/shared/design-tokens'
@@ -83,7 +84,10 @@ export async function ejecutarAccionHarvey(
           client_id: cliente?.id,
           status: 'activo',
           progress: 0,
-          deadline: accion.date || 'TBD',
+          // `fechaOTBD` y no el texto crudo: «proximo viernes» crea un proyecto que no
+          // vence NUNCA, porque `estadoDeadline` solo entiende YYYY-MM-DD. 'TBD' es
+          // lo que la app ya usa para «sin fecha», y al menos es cierto.
+          deadline: fechaOTBD(accion.date),
           color: cliente?.color || color,
         })
         showToast('Proyecto creado por Harvey')
@@ -106,13 +110,32 @@ export async function ejecutarAccionHarvey(
         const cliente = buscarCliente(accion.clientName)
         await data.createAgenda({
           title: accion.text,
-          platform: accion.platform || 'Instagram',
-          content_type: accion.contentType || 'Post',
+          // Normalizadas: una plataforma que no esta en la lista no casa ningun color
+          // y la pieza sale en gris, sin que nadie sepa por que.
+          platform: plataformaContenido(accion.platform),
+          content_type: tipoContenido(accion.contentType),
           status: 'borrador',
           publish_date: accion.date || undefined,
           client_id: cliente?.id,
         })
         showToast('Pieza añadida al pipeline de contenido')
+        return true
+      }
+      case 'nota': {
+        // Harvey YA la ofrecía en voz alta y no existía: su prompt dice «ofrece
+        // crear el resto como tarea o NOTA», así que decía que la creaba y no se
+        // proponía nada. Ofrecer algo que no se puede hacer es peor que no
+        // ofrecerlo: la siguiente vez ya no te fías de lo que dice.
+        //
+        // La categoría se normaliza contra las que Memoria sabe filtrar.
+        // 'Documento' se excluye a propósito: esa la escribe la subida de PDFs, y
+        // `memoriaRelevante` la trata distinto —un documento que no casa con la
+        // pregunta se DESCARTA; lo curado no—. Una nota dictada es curada.
+        const CATS = ['General', 'Clientes', 'Procesos', 'Decisiones', 'Aprendizajes']
+        const pedida = (accion.category || '').trim().toLowerCase()
+        const cat = CATS.find(c => c.toLowerCase() === pedida) || 'General'
+        await data.createMemoria({ title: accion.text.slice(0, 120), content: accion.text, category: cat })
+        showToast(`Nota guardada en Memoria · ${cat}`)
         return true
       }
 
@@ -151,9 +174,18 @@ export async function ejecutarAccionHarvey(
         }
         // Este mensaje es accionable y por eso merece rama propia: el usuario tiene
         // que ir a reconectar Gmail, no reintentar sin más.
-        showToast(json?.error === 'insufficient_scope'
-          ? 'Re-conecta Gmail en Operativa → Sincronización → Reauth para activar la escritura'
-          : 'Error al crear el evento en Google Calendar')
+          // El servidor SE MOLESTA en decir «No se entendió la fecha "martes" — tiene
+          // que ser AAAA-MM-DD», y ese mensaje se tiraba a la basura: el usuario veía
+          // un error genérico que culpaba a Google de un problema que no era suyo, y
+          // no sabía que bastaba con repetir la fecha.
+          //
+          // `insufficient_scope` conserva rama propia porque su mensaje NO es el del
+          // servidor: hay que ir a reconectar Gmail, no reintentar.
+          showToast(json?.error === 'insufficient_scope'
+            ? 'Re-conecta Gmail en Operativa → Sincronización → Reauth para activar la escritura'
+            : (typeof json?.error === 'string' && json.error.length > 3
+                ? json.error
+                : 'Error al crear el evento en Google Calendar'))
         return false
       }
     }
