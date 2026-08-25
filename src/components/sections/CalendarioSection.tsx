@@ -29,7 +29,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
   // Alta rápida de evento en Google Calendar (usa POST /api/calendar/events)
   const [eventForm, setEventForm] = useState<null | { title: string; date: string; time: string; guests: string; desc: string }>(null)
   const [evSaving, setEvSaving] = useState(false)
-  const [editEvent, setEditEvent] = useState<null|{id:string;title:string;date:string;time:string;calendarId?:string}>(null)
+  const [editEvent, setEditEvent] = useState<null|{id:string;title:string;date:string;time:string;calendarId?:string;cuenta?:string}>(null)
   const [editSaving, setEditSaving] = useState(false)
   // Dos estados, no uno: `deletingEventId` hacía a la vez de «confirmación
   // armada» y de «petición en vuelo», y como el valor no cambiaba al arrancar el
@@ -83,13 +83,13 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
   // El calendario del evento viaja con él. Editar y borrar iban SIEMPRE contra
   // 'primary', así que cualquier evento de otro calendario —los que se listan
   // desde que la sincronización lee todos— daba 404 con los botones a la vista.
-  const deleteEvent = async (eventId: string, calendarId?: string) => {
+  const deleteEvent = async (eventId: string, calendarId?: string, cuenta?: string) => {
     // Cinturón además del `disabled` del botón: el teclado (Enter mantenido) y un
     // doble toque en móvil se cuelan antes de que React repinte.
     if (deletingEventId) return
     setDeletingEventId(eventId)
     try {
-      const res = await fetch(`/api/calendar/events/${eventId}?calendarId=${encodeURIComponent(calendarId || 'primary')}`, { method: 'DELETE' })
+      const res = await fetch(`/api/calendar/events/${eventId}?calendarId=${encodeURIComponent(calendarId || 'primary')}&cuenta=${encodeURIComponent(cuenta || '')}`, { method: 'DELETE' })
       if (!res.ok) { showToast('Error eliminando evento'); return }
       setConfirmEventId(null)
       setCalEvents(prev => prev.filter(e => e.id !== eventId))
@@ -111,7 +111,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
     try {
       const res = await fetch(`/api/calendar/events/${editEvent.id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: editEvent.title.trim(), date: editEvent.date, time: editEvent.time || undefined, calendarId: editEvent.calendarId }),
+        body: JSON.stringify({ title: editEvent.title.trim(), date: editEvent.date, time: editEvent.time || undefined, calendarId: editEvent.calendarId, cuenta: editEvent.cuenta }),
       })
       if (!res.ok) { showToast('Error actualizando evento'); return }
       const updated = await res.json()
@@ -632,7 +632,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
                                     </div>
                                   ) : (
                                     <div className="flex gap-1.5 flex-wrap">
-                                      <button onClick={()=>setEditEvent({id:e.raw.id,calendarId:e.raw.calendarId,title:e.label,date:e.raw.start?.split('T')[0]||selKey,time:e.raw.start?.includes('T')?formatTime(e.raw.start):''})}
+                                      <button onClick={()=>setEditEvent({id:e.raw.id,calendarId:e.raw.calendarId,cuenta:e.raw.cuenta,title:e.label,date:e.raw.start?.split('T')[0]||selKey,time:e.raw.start?.includes('T')?formatTime(e.raw.start):''})}
                                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[7.5px] font-black transition-all hover:opacity-80"
                                         style={{background:'rgba(167,139,250,0.08)',border:'1px solid rgba(167,139,250,0.18)',color:'rgba(167,139,250,0.75)'}}>
                                         <LucideIcon name="pencil" size={9} color="rgba(167,139,250,0.75)"/>EDITAR
@@ -642,7 +642,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
                                           {/* El borrado no es local: se va de Google Calendar y de la agenda de
                                               los invitados. La confirmación lo dice, que «¿BORRAR?» a secas sonaba
                                               a quitarlo de esta pantalla. */}
-                                          <button onClick={()=>deleteEvent(e.raw.id, e.raw.calendarId)} disabled={deletingEventId===e.raw?.id} className="px-3 py-1.5 rounded-xl font-syne text-[7.5px] font-black disabled:opacity-50" style={{background:`${RED}18`,color:RED,border:`1px solid ${RED}30`}}>
+                                          <button onClick={()=>deleteEvent(e.raw.id, e.raw.calendarId, e.raw.cuenta)} disabled={deletingEventId===e.raw?.id} className="px-3 py-1.5 rounded-xl font-syne text-[7.5px] font-black disabled:opacity-50" style={{background:`${RED}18`,color:RED,border:`1px solid ${RED}30`}}>
                                             {deletingEventId===e.raw?.id ? 'BORRANDO…' : '¿BORRAR DE GOOGLE CALENDAR?'}
                                           </button>
                                           <button onClick={()=>setConfirmEventId(null)} disabled={deletingEventId===e.raw?.id} className="px-2 py-1.5 rounded-xl font-syne text-[7.5px] font-black disabled:opacity-40" style={{color:'rgba(255,255,255,0.3)',border:'1px solid rgba(255,255,255,0.08)'}}>NO</button>

@@ -3771,6 +3771,59 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('el calendario escribe en la cuenta de la que salio el evento', () => {
+  // La mitad que faltaba del arreglo de hoy: la LECTURA paso a unir todas las
+  // cuentas personales, y la ESCRITURA se quedo usando una sola. Un evento de la
+  // segunda cuenta se borraba con el token de la primera — Google contesta que ese
+  // evento no existe y el usuario ve «Error eliminando evento» sin ninguna pista.
+  //
+  // Hoy no muerde y por eso hacia falta comprobarlo de verdad, no leerlo: en la
+  // segunda cuenta de Javi solo hay calendarios de festivos, que son de SOLO
+  // LECTURA y la UI ya les esconde editar y borrar. Muerde el dia que alguien
+  // tenga eventos propios en dos cuentas — o sea, en cuanto el equipo conecte.
+  const GET = leerCodigo('src/app/api/calendar/events/route.ts')
+  const ESCRIBE = leerCodigo('src/app/api/calendar/events/[id]/route.ts')
+  const UI = leerCodigo('src/components/sections/CalendarioSection.tsx')
+
+  it('cada evento se lleva la cuenta de la que vino', () => {
+    expect(/cuenta: personales\[i\]\.email/.test(GET),
+      'los eventos vuelven a salir sin decir de que cuenta son: la escritura no podra saber que token usar')
+      .toBe(true)
+  })
+
+  it('borrar y editar resuelven el token POR esa cuenta', () => {
+    // La firma obliga: `tokenDeAgenda(userId)` a secas no compila. Es lo que evita
+    // que alguien anada un tercer sitio y se olvide.
+    expect(/async function tokenDeAgenda\(userId: string, cuenta: string \| null\)/.test(ESCRIBE),
+      'tokenDeAgenda vuelve a no pedir la cuenta: se podra escribir en la agenda equivocada sin que TypeScript avise')
+      .toBe(true)
+    const usos = [...ESCRIBE.matchAll(/tokenDeAgenda\(([^)]*)\)/g)].map(m => m[1])
+    const sinCuenta = usos.filter(u => !u.includes(','))
+    expect(sinCuenta, `hay llamadas a tokenDeAgenda sin cuenta:\n  ${sinCuenta.join('\n  ')}`).toEqual([])
+  })
+
+  it('el PATCH lee el cuerpo ANTES de resolver el token', () => {
+    // La cuenta viaja en el cuerpo. Resolver el token antes de leerlo es
+    // exactamente el orden que devolvia a la agenda equivocada, y compila igual.
+    const iCuerpo = ESCRIBE.indexOf('await request.json()')
+    const iToken = ESCRIBE.indexOf('tokenDeAgenda(user.id, typeof cuenta')
+    expect(iCuerpo, 'el PATCH ya no lee el cuerpo: revisa esta regla').toBeGreaterThan(-1)
+    expect(iToken, 'el PATCH ya no resuelve el token por cuenta').toBeGreaterThan(-1)
+    expect(iCuerpo < iToken,
+      'el PATCH resuelve el token antes de leer la cuenta del cuerpo: volvera a escribir en la agenda equivocada')
+      .toBe(true)
+  })
+
+  it('la pantalla manda la cuenta en las dos operaciones', () => {
+    expect(/cuenta=\$\{encodeURIComponent\(cuenta \|\| ''\)\}/.test(UI),
+      'al borrar ya no se manda la cuenta: el servidor no sabra que token usar')
+      .toBe(true)
+    expect(/cuenta: editEvent\.cuenta/.test(UI),
+      'al editar ya no se manda la cuenta')
+      .toBe(true)
+  })
+})
+
 describe('lo que se rompe queda anotado', () => {
   // Javi: «estaria bien que se anotasen en algun lado para notificartelos... que yo
   // te dijese "hay algun error detectado" y sacases los errores detectados».

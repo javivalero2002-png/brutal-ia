@@ -68,7 +68,17 @@ export async function GET() {
     const resultados = await Promise.allSettled(
       personales.map(c => getCalendarEvents(c.refresh_token, 3)))
     resultados.forEach((r, i) => {
-      if (r.status === 'fulfilled') { personalEvents.push(...r.value); personalNoScope = false; return }
+      if (r.status === 'fulfilled') {
+        // CADA EVENTO SE LLEVA SU CUENTA. La lectura pasó a ser de varias cuentas
+        // pero la escritura no: sin esto, borrar o editar un evento de la segunda
+        // cuenta se hacía con el token de la primera, y Google contesta que ese
+        // evento no existe. Hoy no muerde —en la otra cuenta solo hay calendarios
+        // de festivos, que son de solo lectura— pero muerde el día que alguien
+        // tenga eventos propios en dos sitios, que es en cuanto el equipo conecte.
+        personalEvents.push(...r.value.map((e: any) => ({ ...e, cuenta: personales[i].email })))
+        personalNoScope = false
+        return
+      }
       const err: any = r.reason
       if (isNoScope(err)) return
       personalNoScope = false
