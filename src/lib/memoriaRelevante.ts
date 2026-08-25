@@ -52,7 +52,30 @@ export function memoriaRelevante(notas: NotaMemoria[] | null | undefined, pregun
         .sort((a, b) => b.p - a.p).slice(0, 6).map(x => x.m)
     : docs.slice(0, 4)
 
-  return [...curadas.slice(0, 10), ...docsElegidos]
+  // LO CURADO TAMBIÉN SE ORDENA POR RELEVANCIA, no por orden de llegada.
+  //
+  // Aquí ponía `curadas.slice(0, 10)` a secas: las diez primeras que se guardaron,
+  // mirase lo que mirase la pregunta. Con once decisiones curadas, la undécima era
+  // invisible para las dos IAs PARA SIEMPRE — preguntases lo que preguntases, y por
+  // mucho que fuera exactamente sobre ella.
+  //
+  // Es el mismo fallo que el `.limit(120)` que se arregló ayer, un piso más arriba:
+  // recortar por antigüedad lo que hay que recortar por relevancia.
+  //
+  // La diferencia con los documentos es deliberada: a un documento que no casa se le
+  // DESCARTA (`filter(p > 0)`), y a una nota curada no. Lo curado lo escribió alguien
+  // a mano y vale como base aunque la pregunta no lo mencione; solo se reordena para
+  // que lo que encaja suba. Sin pregunta —o sin ninguna coincidencia— todas puntúan
+  // 0 y el orden se conserva, así que sale exactamente lo mismo que antes.
+  const curadasElegidas = curadas
+    .map((m, i) => ({ m, p: puntua(m), i }))
+    // `i` como desempate: `sort` es estable en la práctica, pero apoyarse en eso
+    // deja el resultado a merced del motor, y aquí importa que sea reproducible.
+    .sort((a, b) => (b.p - a.p) || (a.i - b.i))
+    .slice(0, 10)
+    .map(x => x.m)
+
+  return [...curadasElegidas, ...docsElegidos]
 }
 
 /** Las mismas notas, ya en las líneas que se le pasan al modelo. */

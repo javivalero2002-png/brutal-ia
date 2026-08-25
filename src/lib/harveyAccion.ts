@@ -12,12 +12,14 @@ import { nivelTarea, type NivelTarea } from '@/components/shared/helpers'
 // El contrato lo fija el prompt en src/app/api/harvey/chat/route.ts (~línea 150).
 // Si cambias uno, cambia el otro.
 
-export const TIPOS_ACCION = ['tarea', 'evento', 'proyecto', 'cliente', 'pieza'] as const
+export const TIPOS_ACCION = ['tarea', 'evento', 'proyecto', 'cliente', 'pieza', 'nota'] as const
 export type TipoAccion = (typeof TIPOS_ACCION)[number]
 
 export interface AccionHarvey {
   type: TipoAccion
   text: string
+  /** Solo para `nota`: en qué apartado de Memoria entra. */
+  category?: string
   level?: NivelTarea
   date?: string
   time?: string
@@ -75,5 +77,10 @@ export function parsearAccionHarvey(respuesta: string): { texto: string; accion:
       return { texto, accion: { type: 'cliente', text: campo(1), industry: campo(2) || '—' } }
     case 'pieza':
       return { texto, accion: { type: 'pieza', text: campo(1), platform: campo(2) || 'Instagram', contentType: campo(3) || 'Post' } }
+    case 'nota':
+      // Harvey YA la ofrecía en voz alta —su prompt dice «ofrece crear el resto como
+      // tarea o NOTA»— y no existía: decía que la creaba y no se proponía nada. Esta
+      // es la mitad que faltaba.
+      return { texto, accion: { type: 'nota', text: campo(1), category: campo(2) || 'General' } }
   }
 }

@@ -3779,6 +3779,83 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('lo que emite Harvey se normaliza antes de guardarse', () => {
+  // CLAUDE.md ya lo avisa —«lo que escribe el modelo no entra crudo en la base»— y
+  // el aviso seguia vigente: de las CINCO acciones que Harvey podia emitir, SOLO la
+  // tarea pasaba por un normalizador (`nivelTarea`). Las otras cuatro metian
+  // `campo(n).trim()` a pelo.
+  //
+  // No rebotaba nada porque esas columnas NO tienen CHECK, al reves que `level` o
+  // `animo`. Asi que el fallo no era un error: era un dato falso que se guarda.
+  // Una pieza con plataforma «Facebook» no casa ningun color y sale en gris, y un
+  // proyecto con deadline «proximo viernes» NO VENCE NUNCA, porque `estadoDeadline`
+  // devuelve null para lo que no sea AAAA-MM-DD — o sea que no sale en ninguna
+  // alerta de retraso y nadie se entera.
+  const EJ = leerCodigo('src/lib/harveyEjecutar.ts')
+  const PARSER = leerCodigo('src/lib/harveyAccion.ts')
+  const PROMPT = leerCodigo('src/app/api/harvey/chat/route.ts')
+
+  it('nada que venga del modelo llega crudo a una columna sin CHECK', () => {
+    const crudos: string[] = []
+    // Los tres que iban a pelo. `|| 'valor'` no es normalizar: es poner un valor
+    // por defecto cuando falta, y no hacer nada cuando viene mal.
+    for (const [campo, patronMalo] of [
+      ['deadline', /deadline: accion\.date \|\| 'TBD'/],
+      ['platform', /platform: accion\.platform \|\| /],
+      ['content_type', /content_type: accion\.contentType \|\| /],
+    ] as const) {
+      if (patronMalo.test(EJ)) crudos.push(campo)
+    }
+    expect(crudos, `vuelven a guardarse crudos, y ninguna de esas columnas tiene CHECK que lo rebote:\n  ${crudos.join(', ')}`)
+      .toEqual([])
+    for (const n of ['fechaOTBD(', 'plataformaContenido(', 'tipoContenido(']) {
+      expect(EJ.includes(n), `el ejecutor ya no usa ${n}`).toBe(true)
+    }
+  })
+
+  it('el contrato del prompt y los tipos que el parser entiende dicen lo mismo', () => {
+    // El propio fichero lo pide: «El contrato lo fija el prompt. Si cambias uno,
+    // cambia el otro». Nada lo comprobaba. Harvey OFRECIA crear notas —su prompt lo
+    // dice— y el parser no conocia ese tipo: decia que la creaba y no pasaba nada.
+    // Ofrecer algo que no se puede hacer es peor que no ofrecerlo.
+    const m = PARSER.match(/TIPOS_ACCION = \[([^\]]*)\]/)
+    expect(m, 'ya no existe TIPOS_ACCION: revisa esta regla en vez de borrarla').toBeTruthy()
+    const tipos = m![1].split(',').map(t => t.trim().replace(/'/g, '')).filter(Boolean)
+    expect(tipos.length, 'TIPOS_ACCION esta vacio').toBeGreaterThan(4)
+    const sinContrato = tipos.filter(t => !PROMPT.includes(`[ACCION:${t}|`))
+    expect(sinContrato, `el parser entiende tipos que el prompt no le ofrece al modelo — nunca se emitiran:\n  ${sinContrato.join(', ')}`)
+      .toEqual([])
+    const sinParser = [...PROMPT.matchAll(/\[ACCION:(\w+)\|/g)].map(x => x[1]).filter(t => !tipos.includes(t))
+    expect(sinParser, `el prompt ofrece acciones que el parser NO entiende — Harvey dira que las hace y no pasara nada:\n  ${sinParser.join(', ')}`)
+      .toEqual([])
+  })
+
+  it('cada tipo que el parser entiende tiene quien lo ejecute', () => {
+    const tipos = (PARSER.match(/TIPOS_ACCION = \[([^\]]*)\]/)?.[1] || '')
+      .split(',').map(t => t.trim().replace(/'/g, '')).filter(Boolean)
+    const sinEjecutor = tipos.filter(t => !new RegExp(`case '${t}'`).test(EJ))
+    expect(sinEjecutor, `tipos sin ejecutor: se propondran en la tarjeta y al confirmar no haran nada:\n  ${sinEjecutor.join(', ')}`)
+      .toEqual([])
+  })
+
+  it('el motivo real de un evento fallido llega al usuario', () => {
+    // El servidor dice «No se entendio la fecha "martes" — tiene que ser
+    // AAAA-MM-DD» y se tiraba a la basura: el usuario veia un error generico que
+    // culpaba a Google, sin saber que bastaba con repetir la fecha.
+    const i = EJ.indexOf("'Error al crear el evento en Google Calendar'")
+    expect(i, 'ya no se maneja el fallo del evento: revisa esta regla').toBeGreaterThan(-1)
+    // Ojo a la FORMA: mirar si `json.error` aparece «por ahi cerca» no comprueba
+    // nada — en 500 caracteres cabe cualquier cosa, y la primera version de esta
+    // regla paso en verde con el bug reintroducido porque casaba con otra linea.
+    // Lo que hay que exigir es que el mensaje del servidor sea LA ALTERNATIVA a
+    // este texto generico, o sea la rama de al lado del ternario.
+    const antes = EJ.slice(Math.max(0, i - 200), i)
+    expect(/\?\s*json\??\.error\s*:\s*$/.test(antes),
+      `el texto generico ya no es el ultimo recurso de un ternario que prefiere el mensaje del servidor — el usuario vera «error al crear el evento» sin enterarse de que la fecha no se entendio. Justo antes hay:\n  ...${antes.slice(-90)}`)
+      .toBe(true)
+  })
+})
+
 describe('el contexto de Harvey se escribe UNA vez', () => {
   // Estaba escrito DOS veces —`buildCtx` en HoySection y `buildContext` en
   // HarveySection— con ONCE diferencias. Y no eran variantes a proposito: eran

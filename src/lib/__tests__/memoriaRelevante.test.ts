@@ -60,6 +60,47 @@ describe('memoriaRelevante', () => {
   })
 })
 
+  it('la nota curada que ENCAJA sube, aunque se guardara la ultima', () => {
+    // El fallo: `curadas.slice(0, 10)` cogia las diez primeras POR ORDEN DE LLEGADA.
+    // Con once decisiones curadas, la undecima era invisible para las dos IAs para
+    // siempre — preguntases lo que preguntases, y por mucho que fuera exactamente
+    // sobre ella. Es el mismo fallo que el `.limit(120)` de /api/chat, un piso mas
+    // arriba: recortar por antiguedad lo que hay que recortar por relevancia.
+    const relleno = Array.from({ length: 10 }, (_, i) => ({
+      title: `Nota de relleno ${i}`, category: 'General', content: 'texto cualquiera sin nada que ver',
+    }))
+    const laBuena = { title: 'Tarifas de postproduccion', category: 'Decisiones', content: 'La hora de postproduccion se factura a 45 euros.' }
+    const elegidas = memoriaRelevante([...relleno, laBuena], '¿cuanto cobramos la postproduccion?')
+    expect(elegidas.map(m => m.title)).toContain('Tarifas de postproduccion')
+    // Y sube arriba, no se cuela por los pelos: lo primero que lee el modelo.
+    expect(elegidas[0].title).toBe('Tarifas de postproduccion')
+  })
+
+  it('sin coincidencias, el orden y el resultado son los de siempre', () => {
+    // La reordenacion no puede cambiar lo que salia antes cuando nada casa: todas
+    // puntuan 0 y el desempate por indice conserva el orden de llegada.
+    const notas = Array.from({ length: 12 }, (_, i) => ({
+      title: `Nota ${i}`, category: 'General', content: 'contenido neutro',
+    }))
+    const conPregunta = memoriaRelevante(notas, 'algo que no aparece en ninguna parte')
+    const sinPregunta = memoriaRelevante(notas)
+    expect(conPregunta.map(m => m.title)).toEqual(notas.slice(0, 10).map(m => m.title))
+    expect(sinPregunta.map(m => m.title)).toEqual(notas.slice(0, 10).map(m => m.title))
+  })
+
+  it('una nota curada que no casa NO se descarta, solo baja', () => {
+    // La diferencia deliberada con los documentos: a un documento que no casa se le
+    // DESCARTA; a lo curado, no. Lo escribio alguien a mano y vale como base aunque
+    // la pregunta no lo mencione.
+    const curadas = [
+      { title: 'Como facturamos', category: 'Procesos', content: 'facturacion a 30 dias' },
+      { title: 'Nada que ver', category: 'General', content: 'xxx' },
+    ]
+    const r = memoriaRelevante(curadas, 'facturamos')
+    expect(r).toHaveLength(2)
+    expect(r[0].title).toBe('Como facturamos')
+  })
+
 describe('lineasDeMemoria', () => {
   it('aplana los saltos de línea y corta, para no colar un texto entero', () => {
     const salida = lineasDeMemoria([{ title: 'T', category: 'Documento', content: 'a\n\n   b' }], 10)
