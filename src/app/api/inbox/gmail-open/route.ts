@@ -1,4 +1,5 @@
 import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { tokenParaCorreo } from '@/lib/gmailCuentas'
 import { getOAuthClient } from '@/lib/gmail'
 import { google } from 'googleapis'
 import { NextRequest, NextResponse } from 'next/server'
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
   // Check if this is a shared (colabs) message to pick the right token
   const { data: inboxMsg } = await admin
     .from('inbox_messages')
-    .select('shared')
+    .select('shared, cuenta')
     .eq('gmail_id', msgId)
     .maybeSingle()
 
@@ -40,12 +41,16 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
     token = colabsOwner?.gmail_colabs_refresh_token ?? null
   } else {
-    const { data: profile } = await admin
-      .from('profiles')
-      .select('gmail_refresh_token')
-      .eq('id', user.id)
-      .single()
-    token = profile?.gmail_refresh_token ?? null
+    // EL TOKEN DEL BUZON POR EL QUE ENTRO ESTE CORREO.
+    //
+    // Aqui se leia `profiles.gmail_refresh_token`, que es UNA ranura que el
+    // callback pisa en cada conexion. Con dos cuentas personales esa columna
+    // deja de significar «tu Gmail» y pasa a significar «la ultima que
+    // tocaste»: los 749 correos de una cuenta se pedian con el token de la
+    // otra, Gmail no encontraba el identificador y salia un error generico.
+    const cuenta = (inboxMsg?.cuenta as string | null) || null
+    const elegida = await tokenParaCorreo(admin, user.id, cuenta)
+    token = elegida.token
   }
 
   if (!token) {

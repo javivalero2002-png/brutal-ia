@@ -3757,6 +3757,73 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('cada cosa usa el token de SU buzon, no el de la ultima conexion', () => {
+  // `profiles.gmail_refresh_token` y `gmail_account` son UNA RANURA que el callback
+  // pisa en cada conexion personal. Mientras hubo una sola cuenta por persona eso
+  // era «tu Gmail»; desde que `gmail_cuentas` permite varias, significa «la ultima
+  // que tocaste», que no es nada. Y nada dio error:
+  //
+  //   · el CALENDARIO de Javi era el de su segunda cuenta. Sin hueco y sin aviso:
+  //     una agenda entera que era la de otro buzon.
+  //   · los ADJUNTOS de sus 749 correos se pedian con el token del otro buzon.
+  //     Gmail no encuentra ese identificador ahi y contesta un error generico, asi
+  //     que parecia un problema de red.
+  //   · «ABRIR EN GMAIL», lo mismo.
+  //   · y al quitar una cuenta se vaciaban las columnas viejas aunque quedara otra,
+  //     con lo que la app decia «sin Gmail» mientras el sync seguia trayendo correo.
+  //
+  // La regla no prohibe la columna vieja —sigue siendo el respaldo mientras exista—
+  // sino usarla COMO SI FUERA la cuenta de algo concreto.
+  const RUTAS = [
+    'src/app/api/inbox/attachment/route.ts',
+    'src/app/api/inbox/gmail-open/route.ts',
+    'src/app/api/calendar/events/route.ts',
+    'src/app/api/calendar/events/[id]/route.ts',
+  ]
+
+  it('ninguna ruta pasa la ranura vieja como token a una llamada de Google', () => {
+    const malos: string[] = []
+    for (const f of RUTAS) {
+      const src = leerCodigo(f)
+      for (const m of src.matchAll(/\b(getCalendarEvents|createCalendarEvent|updateCalendarEvent|deleteCalendarEvent|getAttachment|getEmailsWithRefreshToken)\(([^,)]*)/g)) {
+        if (/gmail_refresh_token/.test(m[2])) malos.push(`${f}: ${m[0].slice(0, 70)}`)
+      }
+      // Y el token del correo se resuelve por su buzon, no por el perfil.
+      if (/inbox\//.test(f)) {
+        expect(/tokenParaCorreo\(/.test(src),
+          `${f} no resuelve el token por el buzon del correo: los adjuntos de una de las cuentas seguiran rotos`)
+          .toBe(true)
+        expect(/\.select\('shared, cuenta'\)/.test(src),
+          `${f} no pide la columna «cuenta»: no puede saber de que buzon vino el correo`)
+          .toBe(true)
+      }
+    }
+    expect(malos, `se vuelve a llamar a Google con «la ultima cuenta conectada» en vez de con la del buzon:\n  ${malos.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('el calendario mira TODAS las cuentas personales, no una', () => {
+    const src = leerCodigo('src/app/api/calendar/events/route.ts')
+    expect(/personalesDe\(admin, user\.id\)/.test(src),
+      'el calendario vuelve a mirar una sola cuenta: la agenda de la otra desaparece sin decir nada')
+      .toBe(true)
+    // En paralelo, no en serie: es una de las rutas mas lentas del arranque.
+    expect(/Promise\.allSettled\(/.test(src),
+      'las cuentas del calendario se piden en serie: con dos, la ruta tarda el doble — y una que falle se lleva a las demas')
+      .toBe(true)
+  })
+
+  it('quitar una cuenta no deja «sin Gmail» a quien conserva otra', () => {
+    const src = leerCodigo('src/lib/gmailCuentas.ts')
+    const i = src.indexOf("perfil?.gmail_account?.toLowerCase().trim() === correo")
+    expect(i, 'ya no se limpian las columnas viejas al quitar una cuenta: revisa esta regla').toBeGreaterThan(-1)
+    const bloque = src.slice(i, i + 900)
+    expect(/const otra = \(await cuentasDe\(admin, profileId\)\)\.find\(c => !c\.compartida\)/.test(bloque),
+      'al quitar una cuenta se vacian las columnas viejas sin mirar si queda otra: la app dira «sin Gmail» mientras sigue entrando correo')
+      .toBe(true)
+  })
+})
+
 describe('la puesta en marcha no puede dejar a nadie fuera', () => {
   // ESTA PANTALLA ES LA UNICA QUE SE INTERPONE ENTRE ALGUIEN Y SU HERRAMIENTA DE
   // TRABAJO. Si falla, no falla una seccion: falla el acceso. Y no vive dentro de
