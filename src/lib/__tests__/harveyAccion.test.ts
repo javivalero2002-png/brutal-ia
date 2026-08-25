@@ -247,12 +247,24 @@ describe('cerrar el dia por voz no pisa lo escrito', () => {
   function conServidor(entradas: unknown[] | 'falla') {
     const escrito: Record<string, unknown>[] = []
     const dichos: string[] = []
+    // EL DOBLE IMITA A LA RUTA, INCLUIDO LO QUE RECHAZA.
+    //
+    // Antes aceptaba el metodo que le dieras. Se subio la accion llamando con
+    // PATCH —que `/api/diario` NO exporta— y esta prueba paso en verde: estaba de
+    // acuerdo con la suposicion en vez de con la ruta. En produccion era un 405 y
+    // no se escribia nada. Lo caza tambien una regla estructural, que compara
+    // cada `fetch('/api/...')` con lo que ese route.ts exporta de verdad.
+    const METODOS_REALES = ['GET', 'POST']   // los que exporta src/app/api/diario/route.ts
     const fetchFalso = async (url: string, init?: { method?: string; body?: string }) => {
-      if (!init || init.method !== 'PATCH') {
+      const metodo = (init?.method || 'GET').toUpperCase()
+      if (!METODOS_REALES.includes(metodo)) {
+        return { ok: false, status: 405, json: async () => ({ error: 'Method Not Allowed' }) }
+      }
+      if (metodo === 'GET') {
         if (entradas === 'falla') return { ok: false, status: 500, json: async () => ({}) }
         return { ok: true, status: 200, json: async () => ({ dia: '2026-08-25', entradas, porPersona: [] }) }
       }
-      escrito.push(JSON.parse(init.body || '{}'))
+      escrito.push(JSON.parse(init!.body || '{}'))
       return { ok: true, status: 200, json: async () => ({}) }
     }
     ;(globalThis as { fetch?: unknown }).fetch = fetchFalso

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { mesCargado } from '@/lib/ventanaCalendario'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { NexusData } from '@/types'
 import { PLATAFORMA_COLOR, useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, dlDate, AMBAR, NIVEL_TAREA, rotuloNivel, nivelTarea } from '@/components/shared'
@@ -339,6 +340,18 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
           <span className="font-figtree text-[18px] font-black" style={{letterSpacing:'-0.02em'}}>{MONTHS_ES[viewMonth]} <span style={{color:'rgba(255,255,255,0.35)'}}>{viewYear}</span></span>
           <button onClick={nextMonth} className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors hover:bg-white/5" style={{background:SURF2}} aria-label="Siguiente"><LucideIcon name="chevron-right" size={14} color="rgba(255,255,255,0.4)"/></button>
           <button onClick={()=>{setViewMonth(today.getMonth());setViewYear(today.getFullYear());setSelectedDay(today)}} className="ml-2 px-3 py-1.5 rounded-lg font-syne text-[8px] font-black tracking-wide transition-colors" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>HOY</button>
+          {/* «Vacío» y «no lo he traído» NO son lo mismo.
+              Las flechas dejan navegar a cualquier mes y de Google solo se trae un
+              tramo; fuera de él el mes salía en blanco, o sea que el calendario
+              afirmaba «no tienes nada» de algo que ni había mirado.
+              `mesCargado` usa la MISMA función que decide la ventana al pedirlos:
+              escribir aquí el rango a mano sería el gemelo de siempre. */}
+          {!mesCargado(viewYear, viewMonth) && (
+            <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full"
+                  style={{background:'rgba(255,176,32,0.12)',color:AMBAR}}>
+              MES NO CARGADO
+            </span>
+          )}
           {(()=>{
             const monthKey = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}`
             const monthEventCount = Object.keys(eventsByDay).filter(k=>k.startsWith(monthKey)).reduce((s,k)=>s+eventsByDay[k].length,0)

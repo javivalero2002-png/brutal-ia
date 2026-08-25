@@ -1,4 +1,5 @@
 import { google } from 'googleapis'
+import { ventanaCalendario } from '@/lib/ventanaCalendario'
 import type { calendar_v3 } from 'googleapis'
 
 const CLIENT_ID = process.env.GOOGLE_CLIENT_ID!
@@ -128,9 +129,16 @@ export async function getCalendarEvents(refreshToken: string, monthsAhead = 2) {
   oauth2Client.setCredentials({ refresh_token: refreshToken })
   const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
 
-  const now = new Date()
-  const timeMin = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-  const timeMax = new Date(now.getFullYear(), now.getMonth() + monthsAhead, 1).toISOString()
+  // La ventana sale de `ventanaCalendario()`, compartida con la seccion: la
+  // sección deja navegar a cualquier mes con las flechas y aquí se traían tres,
+  // así que julio salía vacío y diciembre salía vacío SIN UN AVISO. Medido: un
+  // evento creado para el 30 de diciembre se guardó en Google con 200 y la app no
+  // lo enseñaba nunca.
+  //
+  // `monthsAhead` se conserva en la firma por los llamantes, pero ya no manda: la
+  // ventana es una decisión de producto, no de cada sitio que llame.
+  const { timeMin, timeMax } = ventanaCalendario()
+  void monthsAhead
 
   // Get all selected calendars — requires calendar.readonly scope.
   // Falls back to ['primary'] if token only has calendar.events (older tokens).

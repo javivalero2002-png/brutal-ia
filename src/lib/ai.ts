@@ -3,6 +3,7 @@ import { textOf } from '@/lib/aiText'
 import { sanearHistorial } from './historialIA'
 import { estadoDeadline, todayKey } from '@/components/shared/helpers'
 import { COMO_LEER_EL_DIARIO } from '@/lib/resumenEquipo'
+import { cuandoEnMadrid } from '@/lib/ventanaCalendario'
 import { nivelTarea, type NivelTarea } from '@/components/shared/helpers'
 
 // Sin topes, el SDK se queda con sus valores por defecto: 10 MINUTOS de timeout
@@ -428,8 +429,11 @@ export async function chat(
     .slice(0, 8)
   const variasCuentas = new Set((context.eventos || []).map(e => e.cuenta).filter(Boolean)).size > 1
   const lineasAgenda = proximos.length
+    // En hora de MADRID. Cortar el ISO daba la hora del desfase de cada
+    // calendario, que no es la misma en todos: medido, una hora de diferencia
+    // entre lo que decía la IA y lo que enseñaba la pantalla.
     ? `\nCALENDARIO PRÓXIMO:\n${proximos.map(e =>
-        `  · ${e.start.slice(0, 16).replace('T', ' ')} — ${e.title}${variasCuentas && e.cuenta ? ` (${e.cuenta})` : ''}`,
+        `  · ${cuandoEnMadrid(e.start)} — ${e.title}${variasCuentas && e.cuenta ? ` (${e.cuenta})` : ''}`,
       ).join('\n')}`
     : ''
 

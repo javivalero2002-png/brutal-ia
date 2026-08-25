@@ -182,8 +182,14 @@ export async function ejecutarAccionHarvey(
           return false
         }
 
+        // POST, no PATCH. `/api/diario` exporta GET y POST — y solo POST: con
+        // PATCH la ruta contesta 405 y no se escribe nada. Se subio con PATCH
+        // porque la prueba usaba un `fetch` de mentira que aceptaba el metodo que
+        // le dieras, o sea que estaba de acuerdo con la SUPOSICION en vez de con
+        // la ruta. Lo caza ahora una regla que compara cada `fetch('/api/...')`
+        // con lo que el fichero de esa ruta exporta de verdad.
         const res = await fetch('/api/diario', {
-          method: 'PATCH',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ dia: hoy, cierre: previo ? `${previo}\n${texto}` : texto }),
         })

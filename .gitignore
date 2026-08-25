@@ -38,3 +38,6 @@ public/pdf.worker.min.mjs
 
 # El PDF se genera con scripts/gen-manual.py — no versionar el binario
 Manual-BRUTAL-IA.pdf
+
+# Banco de pruebas manual contra produccion (ver probes/): no se versiona.
+probes/

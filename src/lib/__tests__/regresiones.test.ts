@@ -3902,6 +3902,86 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('una hora de evento no se saca cortando el texto', () => {
+  // Google devuelve cada evento en el desfase del calendario DONDE VIVE, no en el
+  // del usuario: el calendario personal de Javi va en +01:00 y el compartido en
+  // +02:00. Cortar el ISO (`start.slice(11,16)`) da la hora de ese desfase.
+  //
+  // Medido sobre los eventos reales: «reunion brutal» del 4 de agosto salia como
+  // las 10:30 para Harvey y como las 11:30 en la pantalla. La misma reunion. Y era
+  // la peor version del fallo, porque la seccion SI lo hacia bien: la app y la IA
+  // decian cosas distintas del mismo dato.
+  it('los constructores de contexto usan el ayudante de Madrid', () => {
+    const infractores: string[] = []
+    for (const ruta of ['src/lib/contextoHarvey.ts', 'src/lib/ai.ts']) {
+      const c = leerCodigo(ruta)
+      // Cualquier `slice` que saque hora y minuto de algo que se llama `start`.
+      for (const m of c.matchAll(/(\w*[Ss]tart\w*)[^\n]{0,40}\.slice\(\s*11\s*,\s*16\s*\)/g)) {
+        infractores.push(`${ruta}: ${m[0].slice(0, 60)}`)
+      }
+      // O que corte los 16 primeros caracteres, que es la otra forma de lo mismo.
+      for (const m of c.matchAll(/(\w*[Ss]tart\w*)\.slice\(\s*0\s*,\s*16\s*\)/g)) {
+        infractores.push(`${ruta}: ${m[0].slice(0, 60)}`)
+      }
+    }
+    expect(infractores, `vuelve a leerse la hora cortando el ISO: dira una hora distinta de la que enseña la pantalla, y solo para algunos calendarios:\n  ${infractores.join('\n  ')}`)
+      .toEqual([])
+    for (const ruta of ['src/lib/contextoHarvey.ts', 'src/lib/ai.ts']) {
+      expect(/cuandoEnMadrid\(/.test(leerCodigo(ruta)), `${ruta} ya no usa cuandoEnMadrid()`).toBe(true)
+    }
+  })
+
+  it('la ventana del calendario se decide en UN sitio', () => {
+    // La seccion deja navegar a cualquier mes y de Google solo se trae un tramo.
+    // Si el rango se escribe dos veces, el aviso de «mes no cargado» acaba mintiendo
+    // en la direccion contraria: diciendo que hay datos donde no los hay.
+    const g = leerCodigo('src/lib/gmail.ts')
+    expect(/ventanaCalendario\(\)/.test(g), 'gmail.ts vuelve a calcular la ventana por su cuenta').toBe(true)
+    expect(/new Date\(now\.getFullYear\(\), now\.getMonth\(\)/.test(g),
+      'gmail.ts vuelve a construir el rango a mano').toBe(false)
+    expect(/mesCargado\(/.test(leerCodigo('src/components/sections/CalendarioSection.tsx')),
+      'el calendario ya no avisa de los meses que no ha traido: los pinta vacios, que se lee como «no tienes nada»').toBe(true)
+  })
+})
+
+describe('el cliente no llama a metodos que la ruta no tiene', () => {
+  // ESTE ES EL BUG QUE ME COMI. La accion de cerrar el dia llamaba a
+  // `/api/diario` con PATCH y esa ruta exporta GET y POST: en produccion
+  // contestaba 405 y no se escribia nada. La prueba unitaria pasaba en verde
+  // porque su `fetch` de mentira aceptaba el metodo que le dieras — o sea que
+  // estaba de acuerdo con MI SUPOSICION, no con la ruta.
+  //
+  // Un doble solo comprueba lo que ya creias. Esto compara contra el fichero.
+  it('cada fetch a /api/... usa un metodo que ese route.ts exporta', () => {
+    const infractores: string[] = []
+    for (const ruta of TS) {
+      if (ruta.startsWith('src/app/api/')) continue      // el servidor no se llama a si mismo
+      const codigo = leerCodigo(ruta)
+      // `fetch('/api/loquesea', { ... method: 'X' ... })` — se mira la llamada
+      // entera, no el fichero: en un fichero grande hay muchos metodos sueltos.
+      for (const m of codigo.matchAll(/fetch\(\s*[`'"](\/api\/[^`'"?\s]*)[^)]*?\bmethod:\s*'(\w+)'/g)) {
+        const [, url, metodo] = m
+        // Se resuelve el fichero de esa ruta: primero literal, luego con el
+        // ultimo tramo como [id], que es como estan escritas las dinamicas.
+        const partes = url.replace(/^\//, '').split('/')
+        const candidatos = [
+          `src/app/${url.replace(/^\//, '')}/route.ts`,
+          `src/app/${[...partes.slice(0, -1), '[id]'].join('/')}/route.ts`,
+        ]
+        const fichero = candidatos.find(c => TS.includes(c))
+        // Una URL con interpolacion (`/api/tasks/${id}`) no se resuelve aqui:
+        // se salta en vez de dar un falso positivo.
+        if (!fichero) continue
+        if (!new RegExp(`export async function ${metodo}\\b`).test(leerCodigo(fichero))) {
+          infractores.push(`${ruta}: ${metodo} ${url} — ${fichero} no exporta ${metodo}`)
+        }
+      }
+    }
+    expect(infractores, `el cliente llama con un metodo que la ruta no tiene: en produccion es un 405 y no se escribe nada, sin que nadie lo vea:\n  ${infractores.join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
 describe('lo que emite Harvey se normaliza antes de guardarse', () => {
   // CLAUDE.md ya lo avisa —«lo que escribe el modelo no entra crudo en la base»— y
   // el aviso seguia vigente: de las CINCO acciones que Harvey podia emitir, SOLO la

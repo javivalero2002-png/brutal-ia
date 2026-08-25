@@ -1,4 +1,5 @@
 import { todayKey, localDayKey, madridDateLabel, estadoDeadline } from '@/components/shared/helpers'
+import { cuandoEnMadrid } from '@/lib/ventanaCalendario'
 import { memoriaRelevante, lineasDeMemoria } from '@/lib/memoriaRelevante'
 
 /**
@@ -77,10 +78,12 @@ export function construirContexto(data: DatosContexto, pregunta?: string): strin
   }).join('\n')
 
   const eventos = (data.calendarEvents || []).filter(e => txt(e.start) >= hoy).slice(0, 5)
-  const lineasEvento = eventos.map(e => {
-    const s = txt(e.start)
-    return `${txt(e.title)} (${s.slice(0, 10) || '?'}${s.includes('T') ? ` a las ${s.slice(11, 16)}` : ''})`
-  }).join(' · ')
+  // `cuandoEnMadrid` y NO cortar el ISO. Google devuelve cada evento en el
+  // desfase del calendario donde vive: el personal de Javi va en +01:00 y el
+  // compartido en +02:00. Cortando el texto, «reunion brutal» salía como las
+  // 10:30 aquí y como las 11:30 en la pantalla — la misma reunión.
+  const lineasEvento = eventos.map(e =>
+    `${txt(e.title)} (${cuandoEnMadrid(txt(e.start))})`).join(' · ')
 
   const lineasProyecto = activos.slice(0, 8).map(p =>
     `${txt(p.name)} ${txt(p.progress)}%${atrasados.some(o => o.id === p.id) ? ' [ATRASADO]' : ''}`).join(' | ')
