@@ -3839,6 +3839,100 @@ describe('el briefing dice donde mirar', () => {
   })
 })
 
+describe('la memoria llega entera a las dos IAs', () => {
+  // Javi: «quiero asegurarme de que Memoria es la base de datos y el cerebro de
+  // Brutal.IA, y de que la IA lo usa como contexto... si no existe ese contexto,
+  // crear un contexto resumido».
+  //
+  // Estaba conectada a las dos, pero con tres agujeros, y ninguno daba error:
+  //
+  //   1. `/api/chat` traia la memoria con `.limit(120)` por fecha. Cada PDF subido
+  //      entra como una nota, asi que al pasar de 120 filas las decisiones CURADAS
+  //      caian fuera ANTES de que `memoriaRelevante` pudiera salvarlas — el mismo
+  //      bug que esa funcion existe para evitar, reintroducido en SQL.
+  //   2. El orbe de Hoy elegia memoria SIN la pregunta, asi que devolvia siempre
+  //      las mismas notas preguntaras lo que preguntaras. Harvey ya lo hacia bien:
+  //      era su gemelo.
+  //   3. Nada garantizaba una base: `memoriaRelevante` solo trae lo que CASA con
+  //      la pregunta. «¿Como trabajamos con los clientes?» no casa con nada.
+  //
+  // La ficha del estudio cierra el 3, y va desde el SERVIDOR en las dos rutas: el
+  // contexto de Harvey lo arma el cliente, asi que si dejara de mandarlo Harvey se
+  // quedaria sin memoria y solo se notaria en que contesta peor.
+  const CHAT = leerCodigo('src/app/api/chat/route.ts')
+  const HARVEY = leerCodigo('src/app/api/harvey/chat/route.ts')
+  const HOY = leerCodigo('src/components/sections/HoySection.tsx')
+  const FICHA = leerCodigo('src/lib/fichaEstudio.ts')
+
+  it('nadie vuelve a recortar la memoria por fecha en una sola consulta', () => {
+    const i = CHAT.indexOf("from('memoria')")
+    expect(i, 'ya no se consulta memoria en /api/chat: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    // Lo curado y los documentos van por separado. Con una sola consulta limitada,
+    // los documentos desplazan a las decisiones y nadie se entera.
+    const consultas = [...CHAT.matchAll(/from\('memoria'\)[^\n]*/g)].map(m => m[0])
+    expect(consultas.length, 'la memoria vuelve a traerse en UNA sola consulta: los documentos desplazaran a lo curado')
+      .toBeGreaterThanOrEqual(2)
+    expect(consultas.some(c => /not\('category', 'ilike', 'documento'\)/.test(c)),
+      'ninguna consulta protege lo curado de los documentos')
+      .toBe(true)
+  })
+
+  it('las dos IAs reciben la ficha, y desde el servidor', () => {
+    for (const [nombre, src] of [['api/chat', CHAT], ['api/harvey/chat', HARVEY]] as const) {
+      expect(/leerFicha\(admin\)/.test(src),
+        `${nombre} no lee la ficha del estudio en el servidor: la IA se queda sin base cuando la pregunta no casa con ninguna nota`)
+        .toBe(true)
+    }
+    expect(/FICHA DEL ESTUDIO/.test(leerCodigo('src/lib/ai.ts')),
+      'el prompt de Brutal.IA ya no incluye la ficha')
+      .toBe(true)
+    expect(/FICHA DEL ESTUDIO/.test(HARVEY),
+      'el prompt de Harvey ya no incluye la ficha')
+      .toBe(true)
+  })
+
+  it('quien elige memoria lo hace CON la pregunta', () => {
+    // El gemelo: Harvey lo hacia bien y Hoy no.
+    for (const [nombre, src] of [['HoySection', HOY], ['HarveySection', leerCodigo('src/components/sections/HarveySection.tsx')]] as const) {
+      const usos = [...src.matchAll(/memoriaRelevante\(([^)]*)\)/g)].map(m => m[1].trim())
+      expect(usos.length, `${nombre} ya no elige memoria: revisa esta regla`).toBeGreaterThan(0)
+      // Una llamada es mala cuando pasa SOLO la lista y ninguna pregunta. En
+      // HarveySection `memoriaRelevante` es un envoltorio local que recibe la
+      // pregunta como unico argumento, asi que exigir una coma daba un falso
+      // positivo: la forma correcta alli es `memoriaRelevante(texto)`.
+      const sinPregunta = usos.filter(u => /^data\.memoria( as any)?$/.test(u))
+      expect(sinPregunta, `${nombre} elige memoria sin pasar la pregunta: devolvera siempre las mismas notas\n  ${sinPregunta.join('\n  ')}`)
+        .toEqual([])
+    }
+  })
+
+  it('el envoltorio de Harvey reenvia la pregunta, no se la come', () => {
+    // Sin esto, la regla de arriba pasa en verde mientras el envoltorio ignora su
+    // parametro: las llamadas se verian bien y la seleccion seria la de siempre.
+    const H = leerCodigo('src/components/sections/HarveySection.tsx')
+    expect(/const memoriaRelevante = \(pregunta\?: string\) => elegirMemoria\([^)]*, pregunta\)/.test(H),
+      'el envoltorio de HarveySection ya no le pasa la pregunta a elegirMemoria')
+      .toBe(true)
+  })
+
+  it('si el modelo falla, la ficha vieja se queda: nunca se escribe una vacia', () => {
+    // Una ficha vacia se lee como «el estudio no tiene nada guardado», que es
+    // mentira y es peor que una desactualizada.
+    const i = FICHA.indexOf('export async function regenerarFicha')
+    expect(i, 'ya no existe regenerarFicha').toBeGreaterThan(-1)
+    const cuerpo = FICHA.slice(i)
+    // Todo camino de fallo sale con ok:false ANTES del upsert.
+    const upsert = cuerpo.indexOf('.upsert(')
+    expect(upsert, 'regenerarFicha ya no escribe').toBeGreaterThan(-1)
+    const antes = cuerpo.slice(0, upsert)
+    for (const salida of ['motivo: \'lectura\'', 'motivo: \'modelo\'', 'motivo: \'vacia\'']) {
+      expect(antes.includes(salida),
+        `regenerarFicha ya no sale por «${salida}» antes de escribir: podria guardar una ficha vacia encima de una buena`)
+        .toBe(true)
+    }
+  })
+})
+
 describe('las plantillas de automatizacion no se esconden al usar una', () => {
   // Javi: «cuando seleccionas una y le das a usar, ya no te aparecen como ejemplo
   // para poder anadirlas. Quiero que sigan apareciendo».

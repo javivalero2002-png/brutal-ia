@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { leerFicha } from '@/lib/fichaEstudio'
 import { todayKey, localDayKey, ventanaDelDia, esTareaDe } from '@/components/shared/helpers'
 import { webSearch, needsWebSearch, formatSearchContextVoice } from '@/lib/ai'
 import { checkHarveyRateLimit } from '@/lib/rate-limit'
@@ -93,6 +94,13 @@ export async function POST(request: NextRequest) {
 
   const { createAdminClient } = await import('@/lib/supabase/server')
   const admin = await createAdminClient()
+  // LA FICHA DEL ESTUDIO, desde el servidor.
+  //
+  // El resto del contexto de Harvey lo arma el CLIENTE y llega en el body, asi
+  // que si un dia deja de mandarlo Harvey se queda sin memoria y nadie se
+  // entera: no da error, solo contesta peor. La ficha se lee aqui para que haya
+  // al menos una base que no dependa de eso.
+  const ficha = await leerFicha(admin)
   if (await checkHarveyRateLimit(admin, user.id)) {
     return NextResponse.json({ error: 'Demasiadas solicitudes. Espera un momento.' }, { status: 429 })
   }
@@ -313,7 +321,10 @@ SUGERENCIAS PROACTIVAS DESDE EL INBOX:
 - Si un email es de un posible cliente nuevo → sugiere darlo de alta y emite [ACCION:cliente|...].
 - Menciona de qué email sale la sugerencia ("El correo de X pide..."). El usuario siempre confirma antes de crear, así que sé decidido al sugerir. Sigue siendo UNA acción por respuesta: elige la más importante y ofrece las demás de palabra.
 
-${context ? `CONTEXTO ACTUAL DEL SISTEMA:\n${context}` : ''}`
+${ficha ? `FICHA DEL ESTUDIO (lo permanente: clientes, forma de trabajar, decisiones). Es tu punto de partida:
+${ficha}
+
+` : ''}${context ? `CONTEXTO ACTUAL DEL SISTEMA:\n${context}` : ''}`
 
     // Un único modelo vigente. Los antiguos (claude-3-haiku) están fuera de
     // soporte y solo servían de fallback histórico; ya no se usan.

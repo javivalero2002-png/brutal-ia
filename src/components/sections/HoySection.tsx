@@ -213,7 +213,7 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
       if (orbModeRef.current === 'speaking') setOrbMode('idle')
     } catch { setOrbMode('idle') }
   }
-  const buildCtx = () => {
+  const buildCtx = (pregunta?: string) => {
     const active = (data.projects as Project[]).filter(p=>p.status!=='completado')
     // El mismo criterio de dia que `overdueP`: marcar [ATRASADO] en el contexto de
     // Harvey algo que la pantalla pinta como «vence hoy» hacia que le contestara al
@@ -256,7 +256,11 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
     // subido entra como una nota más, a partir del documento trece el orbe de esta
     // pantalla —la portada de todo el mundo— ya no veía ni una decisión del
     // estudio. HarveySection tenía esto arreglado desde hace días: era el gemelo.
-    const memLines = lineasDeMemoria(memoriaRelevante(data.memoria as any))
+    // CON la pregunta. Sin ella, `memoriaRelevante` no puede emparejar nada y
+    // devuelve siempre las mismas: 10 curadas y los 4 documentos mas recientes,
+    // preguntes lo que preguntes. HarveySection ya lo hacia bien —le pasa el texto—
+    // y esto era su gemelo, con el bug que el otro ya no tenia.
+    const memLines = lineasDeMemoria(memoriaRelevante(data.memoria as any, pregunta))
 
     return `BRUTAL STUDIOS — ${madridDateLabel()}
 
@@ -295,7 +299,7 @@ ${memLines||'  sin documentos'}`
     setHarveyReply('')
     setShowTranscript(false)
     try {
-      const res = await fetch('/api/harvey/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:userMsg,context:buildCtx(),stream:true}),signal:AbortSignal.timeout(60000)})
+      const res = await fetch('/api/harvey/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:userMsg,context:buildCtx(userMsg),stream:true}),signal:AbortSignal.timeout(60000)})
       if (!aliveRef.current || run !== voiceRunRef.current) return
       if (!res.ok) { const j = await res.json().catch(()=>({})); throw new Error(j.error||'Error') }
 
