@@ -54,6 +54,16 @@
 @keyframes dot3 { 0%,40%,100% { transform:scale(.6);opacity:.3 } 70% { transform:scale(1);opacity:1 } }
 @keyframes shimmer { 0% { opacity:0.6 } 50% { opacity:1 } 100% { opacity:0.6 } }
 @keyframes riseT { from { transform:translate(-50%,10px) } to { transform:translate(-50%,0) } }
+/* El aviso. Entra con el mismo gesto que las tarjetas de la app —sube, aparece y
+   se asienta— en vez de solo deslizarse. El `scale` va de 0.96 a 1: lo justo para
+   que se note que ha aparecido algo y no tanto como para que rebote. */
+@keyframes avisoEntra {
+  from { opacity:0; transform:translate(-50%,14px) scale(0.96) }
+  to   { opacity:1; transform:translate(-50%,0) scale(1) }
+}
+/* La barra que se vacía. Sin ella el aviso desaparece de golpe y no sabes si se
+   ha ido solo o si has hecho algo. */
+@keyframes avisoTiempo { from { transform:scaleX(1) } to { transform:scaleX(0) } }
 @keyframes spin { to { transform: rotate(360deg) } }
 @keyframes orbBreath { 0%,100% { opacity:0.9;transform:scale(1) } 50% { opacity:1;transform:scale(1.02) } }
 @keyframes scanLine { 0% { transform:translateX(-100%) } 100% { transform:translateX(400%) } }
@@ -134,6 +144,8 @@ button, a[role="button"], [role="button"] { user-select: none; -webkit-user-sele
 .animate-wave4 { animation: wave4 0.6s ease-in-out infinite 0.3s; }
 .animate-wave5 { animation: wave5 0.6s ease-in-out infinite 0.15s; }
 .animate-riseT { animation: riseT 0.25s ease; }
+.animate-avisoEntra { animation: avisoEntra 0.28s cubic-bezier(0.2, 0.9, 0.3, 1); }
+.animate-avisoTiempo { animation: avisoTiempo linear forwards; transform-origin: left; }
 .animate-scanLine { animation: scanLine 1.4s ease-in-out infinite; }
 
 /* Las pilas apuntan a la fuente del sistema: ni Syne ni Figtree se cargan.

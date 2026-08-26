@@ -6565,3 +6565,24 @@ describe('el calendario no puede mentir sobre las tareas', () => {
       'se ordena DESPUES de cortar, que es no ordenar').toBe(true)
   })
 })
+
+
+describe('un solo aviso, no dos', () => {
+  // Verificada devolviendo el aviso propio a PreviewClient: roja.
+  it('el aviso de abajo se pinta en un unico sitio', () => {
+    // Estaba escrito en NexusDashboard y OTRA VEZ, distinto y mas pobre, en el
+    // harness de /preview. O sea que la pantalla donde se prueban las secciones
+    // enseñaba un aviso que el equipo no ve nunca, y cualquier arreglo en uno no
+    // llegaba al otro. Es el patron de gemelos que este repo ya ha pagado.
+    const ficheros = ['src/components/shared/Aviso.tsx', 'src/components/NexusDashboard.tsx', 'src/app/preview/PreviewClient.tsx']
+    const pintan = ficheros.filter(f => /animate-avisoEntra/.test(leerCodigo(f)))
+    expect(pintan, 'el aviso vuelve a estar escrito en mas de un sitio: /preview y produccion pueden divergir sin que nadie lo note')
+      .toEqual(['src/components/shared/Aviso.tsx'])
+
+    // Y que los dos lo USEN, que es la otra mitad: extraerlo y no llamarlo desde
+    // uno deja ese sitio sin aviso ninguno.
+    for (const f of ficheros.slice(1)) {
+      expect(/<Aviso\s/.test(leerCodigo(f)), `${f} ya no pinta el aviso compartido`).toBe(true)
+    }
+  })
+})

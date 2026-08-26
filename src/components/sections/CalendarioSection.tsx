@@ -37,6 +37,20 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
   // Ya nace en 'mes' —es el defecto— así que aquí no había parpadeo. El efecto de
   // abajo se queda para cuando se GIRA la pantalla estando en vista semana.
   const [calView, setCalView] = useState<'mes'|'semana'>('mes')
+  /**
+   * ¿Las tareas de todo el equipo, o solo las mías?
+   *
+   * Javi: «en el apartado calendario solo se deberían ver las tareas que tiene uno
+   * propio, no la de los demás. Si quieres ver la de los demás, ya lo ves en
+   * tareas». Tiene razón para el uso normal: este calendario es MI agenda —mis
+   * tareas, mis reuniones, lo que se publica—, y un mes con las tareas de siete
+   * personas encima no se lee.
+   *
+   * Con interruptor y no a secas porque la otra pregunta —«¿cómo va la semana del
+   * estudio?»— también se hace, y sin esto habría que irse a Tareas y reconstruir
+   * el mes a mano. Arranca en «solo las mías», que es el caso de todos los días.
+   */
+  const [tareasDeTodos, setTareasDeTodos] = useState(false)
   const [syncingCal, setSyncingCal] = useState(false)
   const [calEvents, setCalEvents] = useState<any[]>(data.calendarEvents || [])
   // Alta rápida de evento en Google Calendar (usa POST /api/calendar/events)
@@ -300,6 +314,9 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
   const tareasSinFecha: any[] = []
   let vencidas = 0
   data.tasks?.forEach((t: any) => {
+    // Mías = asignadas a mí. Una tarea sin responsable no es de nadie, así que
+    // tampoco es mía: si saliera, el «solo las mías» dejaría de significar algo.
+    if (!tareasDeTodos && t.assigned_to !== profile?.id) return
     if (!t.due_date) { if (!t.done) tareasSinFecha.push(t); return }
     const nivel = nivelTarea(t.level)
     const dia = String(t.due_date).split('T')[0]
@@ -475,6 +492,19 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
               {plural(vencidas, 'vencida')}
             </span>
           )}
+          {/* Mías / Todas. Va aquí y no en un menú porque los dos contadores de al
+              lado —vencidas y sin fecha— cambian con él, y hay que ver a la vez
+              qué se está contando y de quién. */}
+          <button onClick={()=>setTareasDeTodos(v=>!v)}
+            title={tareasDeTodos ? 'Viendo las tareas de todo el equipo' : 'Viendo solo tus tareas'}
+            className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-all active:scale-95"
+            style={tareasDeTodos
+              ? {background:`${BLU}18`,border:`1px solid ${BLU}38`,color:BLU}
+              : {background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.35)'}}>
+            <LucideIcon name={tareasDeTodos ? 'users' : 'user'} size={9} color={tareasDeTodos ? BLU : 'rgba(255,255,255,0.35)'} />
+            {tareasDeTodos ? 'TODO EL EQUIPO' : 'SOLO MÍAS'}
+          </button>
+
           {tareasSinFecha.length > 0 && (
             <span title="No se pintan en ningún día porque no tienen fecha límite. Se les puede poner desde Tareas."
               className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full"

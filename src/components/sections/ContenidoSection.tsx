@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, Fragment } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { rutaApp } from '@/lib/appUrl'
 import type { NexusData, ContentItem } from '@/types'
-import { Abanico, PLATAFORMA_COLOR, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, videoEsVertical, todayKey, buscaEnTexto } from '@/components/shared'
+import { Abanico, PLATAFORMA_COLOR, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, videoEmbed, proporcionEmbed, todayKey, buscaEnTexto } from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
 import BocetoPanel from '@/components/BocetoPanel'
 import type { IrASeccion } from '@/components/shared/secciones'
@@ -446,8 +446,26 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
   // Filter by account first, then platform
   const filteredByAccount = accountFilter === 'Todas' ? data.agenda : data.agenda.filter((a: any)=>_normalizeAcc(String(a.account_name||''))===_normalizeAcc(accountFilter))
   // Platforms available for the current account selection
-  const activePlatforms = [...new Set(filteredByAccount.filter((a: any)=>a.platform).map((a: any)=>String(a.platform).trim()))].filter(Boolean).sort() as string[]
+  // LAS SEIS PLATAFORMAS, SIEMPRE, no solo las que ya tienen una pieza.
+  //
+  // Javi: «aqui falta poder filtrar por LinkedIn y su logo». Y no faltaba el
+  // codigo: la lista salia de las piezas que YA existen, asi que con una sola
+  // pieza de Instagram publicada la fila entera era «Todas · Instagram». Para ver
+  // el chip de LinkedIn habia que crear antes una pieza de LinkedIn — el filtro
+  // solo aparecia cuando ya no hacia falta.
+  //
+  // Las que tienen pieza van primero y con su recuento; las demas, apagadas y al
+  // final, porque siguen siendo un filtro valido: pulsarlas responde «ninguna», que
+  // es una respuesta.
+  const conPiezas = [...new Set(filteredByAccount.filter((a: any)=>a.platform).map((a: any)=>String(a.platform).trim()))].filter(Boolean) as string[]
+  const activePlatforms = [
+    ...Object.keys(PLATAFORMA_COLOR).filter(p => conPiezas.includes(p)),
+    ...Object.keys(PLATAFORMA_COLOR).filter(p => !conPiezas.includes(p)),
+    // Una plataforma escrita a mano que no este en la lista de marca no se pierde.
+    ...conPiezas.filter(p => !PLATAFORMA_COLOR[p]).sort(),
+  ]
   const allPlatforms: string[] = ['Todas', ...activePlatforms]
+  const piezasPorPlataforma = (pl: string) => filteredByAccount.filter((a: any)=>String(a.platform||'').trim()===pl).length
   const filteredByPlatform = platformFilter === 'Todas' ? filteredByAccount : filteredByAccount.filter((a: any)=>String(a.platform||'').trim()===platformFilter)
   const filteredAgenda = !contentSearch.trim() ? filteredByPlatform : filteredByPlatform.filter((a: any)=>buscaEnTexto(`${a.title||''} ${a.account_name||''} ${a.platform||''}`, contentSearch))
   filteredAgendaRef.current = filteredAgenda
@@ -531,14 +549,19 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                 const isActive = platformFilter === pl
                 const platColors = PLATAFORMA_COLOR
                 const plColor = platColors[pl] || BLU
+                const n = isAll ? filteredByAccount.length : piezasPorPlataforma(pl)
                 return (
                   <button key={pl} onClick={()=>setPlatformFilter(pl)} className="flex items-center gap-1.5 font-syne text-[8.5px] font-black px-3 py-1.5 rounded-xl transition-all" style={{
                     background: isActive ? (isAll ? 'rgba(27,95,250,0.15)' : plColor+'18') : 'rgba(255,255,255,0.04)',
                     color: isActive ? (isAll ? BLU : plColor) : 'rgba(255,255,255,0.3)',
                     border: isActive ? `1px solid ${isAll ? 'rgba(27,95,250,0.3)' : plColor+'35'}` : '1px solid transparent',
+                    // Apagada la que no tiene ninguna pieza: se sigue pudiendo
+                    // pulsar, pero se ve de un vistazo dónde hay algo.
+                    opacity: !isActive && n === 0 ? 0.42 : 1,
                   }}>
                     {!isAll && <PlatformLogo platform={pl} size={10}/>}
                     {pl}
+                    {n > 0 && <span className="font-figtree text-[9px] font-bold" style={{color: isActive ? (isAll ? BLU : plColor) : 'rgba(255,255,255,0.22)'}}>{n}</span>}
                   </button>
                 )
               })}
@@ -1133,7 +1156,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                   {(editVideoUrl || activeItem.video_url) && (
                     <div className="rounded-xl overflow-hidden mt-2">
                       {videoEmbed(editVideoUrl||activeItem.video_url)
-                        ? <div className="mx-auto" style={{aspectRatio:videoEsVertical(editVideoUrl||activeItem.video_url)?'9/16':'16/9',maxWidth:videoEsVertical(editVideoUrl||activeItem.video_url)?'260px':'none'}}><iframe src={videoEmbed(editVideoUrl||activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>
+                        ? <div className="mx-auto" style={proporcionEmbed(editVideoUrl||activeItem.video_url)}><iframe src={videoEmbed(editVideoUrl||activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>
                         : <video src={editVideoUrl||activeItem.video_url} controls className="w-full" style={{maxHeight:'180px',objectFit:'contain',background:'#000'}} preload="metadata"/>
                       }
                     </div>
@@ -1377,7 +1400,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                   {(editCoverUrl||activeItem.cover_url) ? (
                     <a href={editVideoUrl||activeItem.video_url} target="_blank" rel="noopener noreferrer"
                       className="group relative block rounded-2xl overflow-hidden mx-auto"
-                      style={{aspectRatio:videoEsVertical(editVideoUrl||activeItem.video_url)?'9/16':'16/9',maxWidth:videoEsVertical(editVideoUrl||activeItem.video_url)?'320px':'none',background:'#000'}}>
+                      style={{...proporcionEmbed(editVideoUrl||activeItem.video_url),background:'#000'}}>
                       <SafeImg src={editCoverUrl||activeItem.cover_url} className="w-full h-full object-cover"/>
                       <div className="absolute inset-0 flex items-center justify-center transition-opacity" style={{background:'rgba(0,0,0,0.28)'}}>
                         <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{background:'rgba(255,255,255,0.92)'}}>
@@ -1386,10 +1409,10 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                       </div>
                     </a>
                   ) : videoEmbed(editVideoUrl) ? (
-                    <div className="rounded-2xl overflow-hidden mx-auto" style={{aspectRatio:videoEsVertical(editVideoUrl)?'9/16':'16/9',maxWidth:videoEsVertical(editVideoUrl)?'320px':'none',background:'#000'}}><iframe src={videoEmbed(editVideoUrl)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>
+                    <div className="rounded-2xl overflow-hidden mx-auto" style={{...proporcionEmbed(editVideoUrl),background:'#000'}}><iframe src={videoEmbed(editVideoUrl)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>
                   ) : null}
                   {!videoEmbed(editVideoUrl)&&editVideoUrl&&<div className="rounded-2xl overflow-hidden" style={{background:'#000'}}><video src={editVideoUrl} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/></div>}
-                  {!editVideoUrl&&activeItem.video_url&&<div className="rounded-2xl overflow-hidden" style={{background:'#000'}}>{videoEmbed(activeItem.video_url)?<div className="mx-auto" style={{aspectRatio:videoEsVertical(activeItem.video_url)?'9/16':'16/9',maxWidth:videoEsVertical(activeItem.video_url)?'320px':'none'}}><iframe src={videoEmbed(activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>:<video src={activeItem.video_url} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/>}</div>}
+                  {!editVideoUrl&&activeItem.video_url&&<div className="rounded-2xl overflow-hidden" style={{background:'#000'}}>{videoEmbed(activeItem.video_url)?<div className="mx-auto" style={proporcionEmbed(activeItem.video_url)}><iframe src={videoEmbed(activeItem.video_url)!} className="w-full h-full" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowFullScreen/></div>:<video src={activeItem.video_url} controls className="w-full rounded-2xl" style={{maxHeight:'240px',objectFit:'contain'}} preload="metadata"/>}</div>}
                   {!editVideoUrl&&!activeItem.video_url&&<div className="flex items-center gap-2 rounded-xl p-4" style={{background:'rgba(255,255,255,0.02)',border:`1px dashed rgba(255,255,255,0.07)`}}><LucideIcon name="film" size={14} color="rgba(255,255,255,0.12)"/><span className="font-syne text-[9px]" style={{color:'rgba(255,255,255,0.18)'}}>Pega un enlace de YouTube, Vimeo, Instagram o Drive</span></div>}
                 </div>
 
