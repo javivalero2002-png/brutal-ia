@@ -4194,6 +4194,52 @@ describe('el SQL del repo se puede aplicar de principio a fin', () => {
   })
 })
 
+describe('quitar un objetivo se lleva su tarea', () => {
+  // Javi: «acabo de borrar un objetivo que habia puesto en el apartado de fichar y
+  // no se ha borrado en el apartado de tareas. Eso no puede pasar».
+  //
+  // La X hacia solo dos cosas —sacar la fila de la lista y guardar el texto— y no
+  // tocaba la tarea NUNCA. Al fichar, cada linea se convierte en una tarea; al
+  // quitarla, esa tarea se quedaba viva y sin dueño: aparecia en Tareas como algo
+  // pendiente que ya no existe en ningun sitio, y seguia contando en el pipeline y
+  // en los resumenes que leen las dos IAs.
+  //
+  // Medido con sus datos: ficho a las 10:36, se crearon 3 tareas, borro el tercer
+  // objetivo y la tarea «acabé video, está para subir a tiktok» siguio ahi.
+  const D = leerCodigo('src/components/sections/DiarioSection.tsx')
+
+  it('el unico camino para quitar una fila borra tambien la tarea', () => {
+    const i = D.indexOf('const quitarObjetivo')
+    expect(i, 'ya no existe quitarObjetivo(): revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const cuerpo = D.slice(i, i + 1400)
+    expect(/deleteTask\(/.test(cuerpo),
+      'quitar un objetivo vuelve a dejar su tarea viva y sin dueño en Tareas').toBe(true)
+    // Y no puede borrar la de otra persona: si el objetivo se delego, esa tarea ya
+    // es suya y no puede desaparecer de su lista porque yo limpie mi diario.
+    expect(/assigned_to !== profile\.id/.test(cuerpo),
+      'se borraria la tarea de otra persona al quitar un objetivo delegado').toBe(true)
+  })
+
+  it('ningun sitio quita una fila sin pasar por ahi', () => {
+    // Habia DOS caminos —la X y el Backspace sobre una fila vacia— y cada uno es un
+    // sitio donde olvidarse de la tarea. Ahora los dos llaman a la misma funcion.
+    // CON EL INDICE DE CADA COINCIDENCIA, no con `indexOf`. La primera version
+    // buscaba cada texto con `D.indexOf(x)`, que devuelve SIEMPRE la primera
+    // aparicion — la de dentro de la propia `quitarObjetivo` — asi que todas las
+    // coincidencias caian en la excepcion y la regla paso en verde con el bug
+    // reintroducido: la X volvia a quitar la fila por su cuenta y nadie chistaba.
+    const iFuncion = D.indexOf('const quitarObjetivo')
+    const finFuncion = D.indexOf('\n  const ', iFuncion + 10)
+    // Solo el PREFIJO de la llamada. Con `[^)]*` la expresion se paraba en el
+    // parentesis de `(_, k)` y no casaba NUNCA — ni el codigo bueno ni el malo—,
+    // asi que la regla pasaba en verde con la X quitando la fila por su cuenta.
+    const sueltos = [...D.matchAll(/cambiarFilas\(filas\.filter\(/g)]
+      .filter(m => m.index! < iFuncion || m.index! > finFuncion)
+      .map(m => `linea ${D.slice(0, m.index!).split('\n').length}`)
+    expect(sueltos, `hay un camino que quita una fila sin borrar su tarea:\n  ${sueltos.join('\n  ')}`).toEqual([])
+  })
+})
+
 describe('el extractor no reescribe lo que tu ya has escrito', () => {
   // Javi: «cuando tu añades los objetivos, te aparece un boton de sugerir tareas.
   // Pues eso, en verdad, hace que quites».
