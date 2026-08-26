@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { normalizarObjetivo } from '@/components/shared/helpers'
 import RelojJornada from '@/components/shared/RelojJornada'
 import { BLU, GRN, AMBAR, RED, VIO, SURFACE, SURF2, BORDER } from '@/components/shared/design-tokens'
 import ActivarAvisos from '@/components/shared/ActivarAvisos'
@@ -80,8 +81,8 @@ const horaCorta = (iso?: string | null) =>
  * Para comparar textos de tarea sin que una tilde o una mayúscula los haga
  * distintos. Se usa para no volver a proponer lo que ya es una tarea.
  */
-const normalizar = (t: string) =>
-  (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+// Vive en `shared/helpers.ts`: estaba escrito aquí y en el otro sitio, byte por byte.
+const normalizar = normalizarObjetivo
 
 /**
  * Suma (o resta) días a una clave 'YYYY-MM-DD'.
@@ -285,6 +286,8 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
   })()
 
   /** Días seguidos fichando, hacia atrás desde hoy. Se corta en el primer hueco. */
+  /** Cambia cuando se crea, se borra o se completa una tarea. Nada más. */
+  const firmaTareas = `${(data.tasks || []).length}:${(data.tasks || []).filter((t: { done?: boolean }) => t.done).length}`
   const [mesFichado, setMesFichado] = useState<Record<string, { personas: { id: string }[] }>>({})
   useEffect(() => {
     if (demo) return
@@ -298,15 +301,27 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
         for (const p of partes) if (p?.dias) Object.assign(junto, p.dias)
         setMesFichado(junto)
       })
-  }, [dia, demo])
+    // SE VUELVE A PEDIR CUANDO CAMBIA LO QUE CUENTA, no solo al cambiar de día.
+    //
+    // Antes las dependencias eran `[dia, demo]`: se cargaba una vez y se quedaba
+    // así. Escribías tres objetivos y el «Resumen semanal» seguía diciendo el
+    // número de antes — Javi lo vio con «1 Objetivos totales» cuando tenía tres.
+    //
+    // La firma y no una lista de sitios donde acordarse de recargar: `fichar`,
+    // `quitarObjetivo`, el toggle de la burbuja y aceptar sugerencias cambian todos
+    // el recuento o el estado de las tareas, y olvidarse de uno es exactamente cómo
+    // nacen estos fallos. Solo cambia cuando cambia un número, así que no hay
+    // peticiones de más.
+  }, [dia, demo, firmaTareas, miEntrada?.entrada])
 
   /**
    * La semana, en tres números.
    *
    * Sale de los mismos dos meses que ya se descargan para la racha — no hay una
-   * consulta más. `objetivos` es cuántos se propuso el equipo y `cerrados` cuántos
-   * días se cerraron; el porcentaje es de OBJETIVOS, no de días, porque cerrar un
-   * día con la mitad sin hacer no es cumplir.
+   * consulta más. `objetivos` es cuántos se propuso el equipo y `objetivosHechos`
+   * cuántos de esos tienen su tarea terminada. El porcentaje es de OBJETIVOS, no de
+   * días, porque cerrar un día con la mitad sin hacer no es cumplir — y hasta ahora
+   * el código usaba `cerrados` (días cerrados) diciendo esto mismo en el comentario.
    */
   const semana = (() => {
     const l = new Date(`${dia}T12:00:00`)
@@ -314,9 +329,14 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
     let totales = 0, hechos = 0
     for (let i = 0; i < 7; i++) {
       const k = `${l.getFullYear()}-${String(l.getMonth() + 1).padStart(2, '0')}-${String(l.getDate()).padStart(2, '0')}`
-      const r = mesFichado[k] as { objetivos?: number; cerrados?: number } | undefined
+      const r = mesFichado[k] as { objetivos?: number; objetivosHechos?: number } | undefined
       totales += r?.objetivos || 0
-      hechos += r?.cerrados || 0
+      // `objetivosHechos`, NO `cerrados`. `cerrados` son DÍAS que alguien cerró, y
+      // esto se pinta bajo la etiqueta «Objetivos completados»: el número decía una
+      // cosa y el rótulo otra, y el porcentaje salía de dividir días entre
+      // objetivos. El comentario de aquí arriba ya decía «el porcentaje es de
+      // OBJETIVOS, no de días» mientras el código hacía justo lo contrario.
+      hechos += r?.objetivosHechos || 0
       l.setDate(l.getDate() + 1)
     }
     return { totales, hechos, pct: totales ? Math.round((hechos / totales) * 100) : 0 }

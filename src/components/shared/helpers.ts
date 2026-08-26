@@ -402,6 +402,19 @@ export function mensajeErrorTranscripcion(status: number, delServidor?: string |
  * Había TRES criterios distintos repartidos por la app para la misma pregunta.
  * Este es el único.
  */
+/**
+ * Cómo se compara el texto de un objetivo con el de su tarea.
+ *
+ * Sin tildes, sin signos y sin dobles espacios, porque las dos cosas las escribe
+ * una persona y no siempre igual. Estaba escrito DOS veces —en `DiarioSection` y
+ * en `/api/diario/pendientes`— byte por byte, que es la fábrica de gemelos de este
+ * repo: el día que una de las dos empiece a conservar los dígitos o los guiones, el
+ * diario y los pendientes dejarán de emparejar lo mismo y nadie lo verá.
+ */
+export const normalizarObjetivo = (t: string) =>
+  (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+
 export const haFichado = (d: { entrada_at?: string | null } | null | undefined) =>
   !!d?.entrada_at
 

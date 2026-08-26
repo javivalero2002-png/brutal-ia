@@ -1,5 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { todayKey, localDayKey } from '@/components/shared/helpers'
+import { todayKey, localDayKey, normalizarObjetivo } from '@/components/shared/helpers'
 import { NextResponse } from 'next/server'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -22,9 +22,8 @@ import { NextResponse } from 'next/server'
 const lineas = (t?: string | null) =>
   (t || '').split('\n').map(l => l.replace(/^[-•*\s]+/, '').trim()).filter(Boolean)
 
-const normalizar = (t: string) =>
-  (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()
+// Vive en `shared/helpers.ts`: estaba escrito aquí y en el otro sitio, byte por byte.
+const normalizar = normalizarObjetivo
 
 export async function GET() {
   const supabase = await createClient()
