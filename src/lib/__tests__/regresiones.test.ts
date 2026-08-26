@@ -6450,4 +6450,20 @@ describe('el motor de automatizaciones recibe lo que mira', () => {
       'el evaluador lee campos que el snapshot no carga: esos disparadores no saltaran NUNCA y no habra ningun error')
       .toEqual([])
   })
+  // Verificada reintroduciendo el bug: con `- 6` en resumenEquipo, roja.
+  it('la semana de las IAs es la MISMA que la de la pantalla (lunes), no los últimos 7 días', () => {
+    const bloque = leerCodigo('src/lib/resumenEquipo.ts')
+    const brief = leerCodigo('src/app/api/diario/briefing/route.ts')
+
+    // Las dos calculan el lunes con el mismo desplazamiento. El panel enseña la
+    // semana natural; si el bloque que leen Harvey y Brutal.IA usa otra ventana,
+    // la IA cita días que en la pantalla ya no están — pasó con el sábado 22.
+    for (const [donde, src] of [['resumenEquipo', bloque], ['briefing', brief]] as const) {
+      expect(src, `${donde} ya no calcula el lunes: si vuelve a una ventana rodante, la IA y el panel dejan de cuadrar`)
+        .toMatch(/\(\s*\w+\.getUTCDay\(\)\s*\+\s*6\s*\)\s*%\s*7/)
+    }
+    // Y el bloque no puede volver a anunciarse como «últimos 7 días».
+    expect(bloque).not.toMatch(/últimos 7 días/)
+  })
+
 })
