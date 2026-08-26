@@ -6,7 +6,7 @@ import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { NexusData } from '@/types'
 import { PLATAFORMA_COLOR, useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, dlDate, AMBAR, NIVEL_TAREA, rotuloNivel, nivelTarea } from '@/components/shared'
 // `plural` no se reexporta desde el índice de shared: se importa del módulo.
-import { plural } from '@/components/shared/helpers'
+import { plural, todayKey as claveDeHoyMadrid, localDayKey } from '@/components/shared/helpers'
 import { PlatformLogo } from '@/components/PlatformLogo'
 
 interface PropsCalendario {
@@ -18,7 +18,19 @@ interface PropsCalendario {
 
 function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalendario) {
   const isMobile = useIsMobile()
-  const today = new Date()
+  // EL DÍA DE MADRID, no el del portátil.
+  //
+  // Aquí ponía `new Date()` y la clave de cada casilla salía de `getDate()`, que
+  // devuelve el día de quien ejecuta. Desde un rodaje fuera de España —o con la
+  // zona del portátil mal puesta— el recuadro de HOY cae en una casilla y las
+  // tareas de hoy en la de al lado. Es exactamente la trampa que CLAUDE.md manda
+  // no repetir, y estaba aquí.
+  //
+  // Se construye una fecha LOCAL con los números del día de Madrid: así toda la
+  // aritmética de abajo (`getDate() + 1`, la semana, los próximos 14 días) sigue
+  // funcionando igual y queda anclada a Madrid.
+  const claveHoy = claveDeHoyMadrid()
+  const today = (() => { const [a, m, d] = claveHoy.split('-').map(Number); return new Date(a, m - 1, d) })()
   const [viewMonth, setViewMonth] = useState(today.getMonth())
   const [viewYear, setViewYear] = useState(today.getFullYear())
   const [selectedDay, setSelectedDay] = useState<Date|null>(today)
@@ -160,8 +172,34 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
   const startOffset = (firstDay.getDay() + 6) % 7
   const totalCells = Math.ceil((startOffset + lastDay.getDate()) / 7) * 7
 
-  const prevMonth = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear(y=>y-1) } else setViewMonth(m=>m-1) }
-  const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear(y=>y+1) } else setViewMonth(m=>m+1) }
+  const irAlMes = (dir: -1 | 1) => {
+    if (dir === -1) { if (viewMonth === 0) { setViewMonth(11); setViewYear(y=>y-1) } else setViewMonth(m=>m-1) }
+    else { if (viewMonth === 11) { setViewMonth(0); setViewYear(y=>y+1) } else setViewMonth(m=>m+1) }
+  }
+
+  /**
+   * Las flechas ← →, que en vista SEMANA no movían la semana.
+   *
+   * `prevMonth`/`nextMonth` solo tocaban `viewMonth`, y las siete columnas se
+   * calculan a partir de `selectedDay`. O sea que en vista semana pulsabas la
+   * flecha, las columnas no se movían ni una tarea, pero el título pasaba a decir
+   * «Septiembre» y el contador de eventos cambiaba. La pantalla decía que te
+   * habías movido y no te habías movido.
+   */
+  const mover = (dir: -1 | 1) => {
+    if (calView !== 'semana') { irAlMes(dir); return }
+    const base = selectedDay || today
+    const destino = new Date(base)
+    destino.setDate(base.getDate() + dir * 7)
+    setSelectedDay(destino)
+    // El mes de detrás va con la semana: si no, el rótulo y el chip de «mes no
+    // cargado» siguen hablando del mes anterior.
+    if (destino.getMonth() !== viewMonth || destino.getFullYear() !== viewYear) {
+      setViewMonth(destino.getMonth()); setViewYear(destino.getFullYear())
+    }
+  }
+  const prevMonth = () => mover(-1)
+  const nextMonth = () => mover(1)
 
   const selectedDayRef = useRef<Date|null>(selectedDay)
   selectedDayRef.current = selectedDay
@@ -183,7 +221,10 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
       if (e.key === 'ArrowLeft') { e.preventDefault(); prevMonth() }
       else if (e.key === 'ArrowRight') { e.preventDefault(); nextMonth() }
       else if (e.key === 't') { e.preventDefault(); setViewMonth(today.getMonth()); setViewYear(today.getFullYear()); setSelectedDay(today) }
-      else if (e.key === 'n') { e.preventDefault(); onOpenModal('tarea') }
+      // Con la fecha del día seleccionado, igual que el botón «Tarea» del panel.
+      // El atajo abría el modal con la fecha límite vacía, así que la tecla que el
+      // encabezado anuncia como «N TAREA» hacía algo distinto que el botón.
+      else if (e.key === 'n') { e.preventDefault(); onOpenModal('tarea', selectedDayRef.current ? { due_date: toKey(selectedDayRef.current) } : undefined) }
       else if (e.key === 'j' || e.key === 'k') {
         e.preventDefault()
         const base = selectedDayRef.current || today
@@ -201,8 +242,14 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
   }, [viewMonth, viewYear])
 
   // Helpers
-  const toKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-  const todayKey = toKey(today)
+  // Las casillas del mes se construyen con `new Date(año, mes, dia)`, o sea con
+  // números de calendario: `getDate()` devuelve el mismo número que se le puso,
+  // en cualquier zona. El riesgo estaba solo en el «hoy», y ya está resuelto
+  // arriba. La constante que había aquí se llamaba `todayKey` y TAPABA al helper
+  // del mismo nombre: quien lo importara en este fichero se llevaba el del
+  // portátil sin enterarse.
+  const toKey = (d: Date) => localDayKey(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12))
+  const todayKey = claveHoy
   const selKey = selectedDay ? toKey(selectedDay) : ''
 
   // Build event map by date
@@ -227,13 +274,44 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
     }
   })
 
-  // Tasks with due_date — enrich with resolved assignee from team
+  // LAS TAREAS. Tres cosas que estaban mal aquí y se veían en pantalla:
+  //
+  // 1. `!t.done` las quitaba del calendario al completarlas. Pulsabas «marcar como
+  //    hecha» y la ficha se esfumaba en el mismo instante: indistinguible de
+  //    haberla borrado. Y peor a la larga — navegabas a julio para ver cómo fue el
+  //    mes de una campaña y el mes salía EN BLANCO, como si nadie hubiera
+  //    trabajado. Ahora salen, apagadas y tachadas, y no cuentan como carga.
+  //
+  // 2. El color salía de un ternario crudo y el panel del día pasa por
+  //    `nivelTarea()`: dos caminos para lo mismo. Escribí que un `level` vacío se
+  //    pintaba azul en uno y ámbar en el otro, y ERA FALSO — `schema.sql:83` tiene
+  //    `check (level in ('urgent','high','normal'))`, así que de la base no sale
+  //    un valor raro nunca. Lo corrijo aquí porque un comentario que afirma un bug
+  //    que no existe se cree igual que uno que sí.
+  //
+  //    Lo que sí puede pasar, y es el motivo de verdad: `createTask` pinta la
+  //    tarea ANTES de que conteste el servidor. Si Harvey emite «urgente» en
+  //    español —el caso que CLAUDE.md documenta, con el INSERT rebotando después—
+  //    ese valor llega al render durante esa ventana. `nivelTarea()` es la
+  //    frontera que el repo ya usa para eso; aquí faltaba.
+  //
+  // 3. Nada distinguía una tarea vencida. No había una sola comparación contra hoy
+  //    en todo el fichero.
+  const tareasSinFecha: any[] = []
+  let vencidas = 0
   data.tasks?.forEach((t: any) => {
-    if (t.due_date && !t.done) {
-      const c = t.level==='urgent'?RED:t.level==='high'?AMBAR:BLU
-      const assignee = data.team?.find((p: any) => p.id === t.assigned_to) || null
-      addEvent(t.due_date.split('T')[0], {type:'task', label:t.text, color:c, raw:{...t, assignee}})
-    }
+    if (!t.due_date) { if (!t.done) tareasSinFecha.push(t); return }
+    const nivel = nivelTarea(t.level)
+    const dia = String(t.due_date).split('T')[0]
+    const vencida = !t.done && dia < claveHoy
+    if (vencida) vencidas++
+    const assignee = data.team?.find((p: any) => p.id === t.assigned_to) || null
+    addEvent(dia, {
+      type: 'task',
+      label: t.text,
+      color: t.done ? 'rgba(255,255,255,0.28)' : NIVEL_TAREA[nivel].color,
+      raw: { ...t, assignee, nivel, vencida, hecha: !!t.done },
+    })
   })
 
   // Project deadlines
@@ -272,6 +350,32 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
     }
     return ids
   })()
+
+  // EL ORDEN DE CADA DÍA, antes de que nadie corte.
+  //
+  // Los cuatro orígenes se empujan al mismo array en orden fijo —Google, luego
+  // contenido, luego tareas, luego proyectos— y los tres sitios que pintan cortan
+  // por `slice(0,3)`. O sea que un jueves con tres reuniones escondía la entrega
+  // urgente de un cliente detrás de un «+1 más». El calendario servía para
+  // enterarse de las reuniones y para NO enterarse de lo urgente.
+  //
+  // Lo que se esconde detrás del «+N» tiene que ser siempre lo menos grave.
+  const PESO_TIPO: Record<string, number> = { task: 0, project: 1, gcal: 2, content: 3 }
+  for (const k of Object.keys(eventsByDay)) {
+    eventsByDay[k].sort((a, b) => {
+      // Lo hecho, al final: ya no reclama nada.
+      const hechaA = a.raw?.hecha ? 1 : 0, hechaB = b.raw?.hecha ? 1 : 0
+      if (hechaA !== hechaB) return hechaA - hechaB
+      // Lo vencido, delante de todo.
+      const venA = a.raw?.vencida ? 0 : 1, venB = b.raw?.vencida ? 0 : 1
+      if (venA !== venB) return venA - venB
+      // Por gravedad de la tarea.
+      const gA = a.type === 'task' ? ['urgent', 'high', 'normal'].indexOf(a.raw?.nivel || 'normal') : 9
+      const gB = b.type === 'task' ? ['urgent', 'high', 'normal'].indexOf(b.raw?.nivel || 'normal') : 9
+      if (gA !== gB) return gA - gB
+      return (PESO_TIPO[a.type] ?? 9) - (PESO_TIPO[b.type] ?? 9)
+    })
+  }
 
   // Get current week for week view
   const getWeekDays = () => {
@@ -357,12 +461,53 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
             const monthEventCount = Object.keys(eventsByDay).filter(k=>k.startsWith(monthKey)).reduce((s,k)=>s+eventsByDay[k].length,0)
             return monthEventCount > 0 ? <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full" style={{background:'rgba(255,255,255,0.04)',color:'rgba(255,255,255,0.25)'}}>{plural(monthEventCount, 'evento')}</span> : null
           })()}
-          {/* Legend — oculta en móvil, no cabe */}
+          {/* LO QUE NO SE PINTA EN NINGÚN DÍA, dicho en voz alta.
+              Una tarea vencida se queda en el día en que vencía —copiarla a hoy la
+              multiplicaría por cada día de retraso y haría mentir al pasado—, así
+              que si cambias de mes desaparece de la vista sin dejar rastro. Y una
+              tarea sin fecha límite no se pinta en ninguna casilla: el mes se veía
+              despejado mientras Tareas decía otra cosa. Dos pantallas del mismo
+              dato dando respuestas opuestas. */}
+          {vencidas > 0 && (
+            <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full flex items-center gap-1.5"
+              style={{background:`${RED}18`,border:`1px solid ${RED}38`,color:RED}}>
+              <span className="w-1 h-1 rounded-full" style={{background:RED}}/>
+              {plural(vencidas, 'vencida')}
+            </span>
+          )}
+          {tareasSinFecha.length > 0 && (
+            <span title="No se pintan en ningún día porque no tienen fecha límite. Se les puede poner desde Tareas."
+              className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full"
+              style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.35)'}}>
+              {tareasSinFecha.length} sin fecha
+            </span>
+          )}
+
+          {/* La leyenda va por FORMA, no por color.
+              Decía «ámbar = Tarea, azul = Contenido» y ninguna de las dos era
+              cierta: una tarea sale roja, ámbar o azul según su nivel, y una pieza
+              sale del color de su plataforma —rosa TikTok, rojo YouTube—. Una
+              leyenda que miente es peor que no tenerla, porque se cree.
+              El icono sí es fijo, y es lo que la rejilla usa de verdad. */}
           {!isMobile && <div className="ml-auto flex items-center gap-4 text-[10px]" style={{color:'rgba(255,255,255,0.3)'}}>
-            {[{c:'#a78bfa',l:'Google Cal'},{c:BLU,l:'Contenido'},{c:'rgba(255,176,32,0.8)',l:'Tarea'},{c:GRN,l:'Proyecto'}].map(x=>(
-              <div key={x.l} className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full" style={{background:x.c}}/>{x.l}</div>
+            {[{i:'check-circle',l:'Tarea'},{i:'calendar',l:'Google Cal'},{i:'film',l:'Contenido'},{i:'folder-open',l:'Proyecto'}].map(x=>(
+              <div key={x.l} className="flex items-center gap-1.5"><LucideIcon name={x.i} size={10} color="rgba(255,255,255,0.35)"/>{x.l}</div>
             ))}
           </div>}
+
+          {/* SINCRONIZAR. La función estaba escrita entera, con su tratamiento de
+              errores comentado al detalle, y no la llamaba nadie: `syncCalendar`
+              aparecía UNA vez en el fichero, la definición. Es el tercer caso hoy
+              de código escrito y nunca cableado. Recarga también las tareas: traer
+              solo los eventos de Google deja media pantalla vieja. */}
+          {!isMobile && (
+            <button onClick={()=>{ syncCalendar(); data.reload?.() }} disabled={syncingCal}
+              className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-40"
+              style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.35)'}}>
+              <LucideIcon name="refresh-cw" size={9} color="rgba(255,255,255,0.35)"/>
+              {syncingCal ? 'SINCRONIZANDO…' : 'SINCRONIZAR'}
+            </button>
+          )}
         </div>
 
         {/* Aviso: token sin permiso de Calendar (reconectar Gmail) */}
@@ -432,7 +577,8 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
                                   ? <span className="flex-shrink-0 ml-1"><LucideIcon name="calendar" size={8} color={e.color}/></span>
                                   : <div className="w-1 h-1 rounded-full flex-shrink-0 ml-1.5" style={{background:e.color}}/>
                             }
-                            <span className="text-[9px] truncate font-medium px-1 py-0.5" style={{color:e.color+'cc'}}>{e.label}</span>
+                            <span className="text-[9px] truncate font-medium px-1 py-0.5"
+                              style={{color:e.color+'cc', textDecoration:e.raw?.hecha?'line-through':'none', opacity:e.raw?.hecha?0.55:1}}>{e.label}</span>
                           </div>
                         ))}
                         {evs.length > 3 && <div className="text-[8px] px-1.5" style={{color:'rgba(255,255,255,0.25)'}}>+{evs.length-3} más</div>}
