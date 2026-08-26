@@ -145,9 +145,12 @@ protege.
 |---|---|---|
 | Cada hora | `/api/cron/sync-colabs` — trae el correo del buzón compartido, lo analiza y ejecuta las automatizaciones | Dejan de entrar correos nuevos y no salen avisos |
 | Miércoles (04:00 UTC) | `/api/cron/backup` — copia de la base y poda del histórico de avisos | Se deja de tener red debajo, en silencio |
+| L-V (08:00 y 09:00 UTC) | `/api/cron/recordatorio-fichar` — avisa a quien no ha empezado el día. Se dispara dos veces y la ruta comprueba dentro que en Madrid sean las 10:00 | Nadie recibe el aviso de fichar, y no hay error |
+| L-V (18:00 y 19:00 UTC) | `/api/cron/recordatorio-cerrar` — avisa a quien fichó y no ha cerrado. Mismo truco con la hora de Madrid (20:00) | Nadie recibe el aviso de cerrar el día. **Ya pasó**: el `select` no traía `entrada_at`, el filtro daba false para todo el mundo y el cron respondía `{ok:true, avisados:0}` — indistinguible de «hoy todos habían cerrado» |
 
-Los dos se autentican con `CRON_SECRET`, que Vercel manda en la cabecera. Los dos
-usan cerrojo (`job_locks`) para no pisarse consigo mismos.
+Todos se autentican con `CRON_SECRET`, que Vercel manda en la cabecera. Los dos
+primeros usan cerrojo (`job_locks`) para no pisarse consigo mismos; los
+recordatorios no lo necesitan porque cada persona solo recibe un aviso por día.
 
 **Si cambias la frecuencia de un proceso en `vercel.json`, cambia también su
 cadencia esperada en `/api/admin/latido`.** Si no, el panel de Sincronización
