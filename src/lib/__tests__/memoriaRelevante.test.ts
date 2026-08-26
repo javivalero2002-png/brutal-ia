@@ -109,6 +109,37 @@ describe('lineasDeMemoria', () => {
 
   it('corta al límite pedido', () => {
     const salida = lineasDeMemoria([{ title: 'T', content: 'x'.repeat(999) }], 20)
-    expect(salida.endsWith('x'.repeat(20))).toBe(true)
+    expect(salida).toContain('x'.repeat(20))
+  })
+
+  // Medido sobre la memoria real: de las cinco notas con línea de datos, las
+  // CINCO la perdían por el corte. Las dos IAs contestaban «no tengo ese dato»
+  // al importe de EL TRAIDOR, teniéndolo ochenta caracteres más allá.
+  it('el cliente, las fechas y el importe llegan aunque caigan fuera del corte', () => {
+    const nota = {
+      title: 'Propuesta',
+      category: 'Documento',
+      content: `${'x'.repeat(600)}\n\nTipo: informe · Cliente: ClipBoom · Fechas: 22/07/2026 · Importe: 40.000–100.000€`,
+    }
+    const salida = lineasDeMemoria([nota], 400, 400)
+    expect(salida).toContain('Cliente: ClipBoom')
+    expect(salida).toContain('Importe: 40.000–100.000€')
+    expect(salida).toContain('Fechas: 22/07/2026')
+  })
+
+  it('no repite los datos cuando ya caben dentro del corte', () => {
+    const salida = lineasDeMemoria([{ title: 'P', category: 'Documento', content: 'Cliente: ClipBoom' }])
+    expect(salida.match(/Cliente: ClipBoom/g)).toHaveLength(1)
+  })
+
+  // Un documento es el resumen de un PDF entero; una nota a mano son dos frases.
+  // Con 400 para los dos, de un resumen de 1.380 caracteres llegaban 400.
+  it('a un documento le cabe más que a una nota escrita a mano', () => {
+    const largo = 'y'.repeat(1200)
+    const doc = lineasDeMemoria([{ title: 'D', category: 'Documento', content: largo }])
+    const mano = lineasDeMemoria([{ title: 'N', category: 'Proceso', content: largo }])
+    expect(doc.length).toBeGreaterThan(mano.length)
+    expect(doc).toContain('y'.repeat(1200))
+    expect(mano).not.toContain('y'.repeat(401))
   })
 })
