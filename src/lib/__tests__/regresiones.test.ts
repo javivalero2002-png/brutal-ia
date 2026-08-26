@@ -4194,6 +4194,50 @@ describe('el SQL del repo se puede aplicar de principio a fin', () => {
   })
 })
 
+describe('«objetivos completados» cuenta objetivos, no dias', () => {
+  // El panel «Resumen semanal» pintaba `cerrados` bajo la etiqueta «Objetivos
+  // completados». Y `cerrados` son DIAS QUE ALGUIEN CERRO: dos cosas distintas. El
+  // porcentaje salia de dividir dias entre objetivos, que no significa nada.
+  //
+  // Lo mas llamativo: el comentario que hay justo encima YA decia «el porcentaje es
+  // de OBJETIVOS, no de dias, porque cerrar un dia con la mitad sin hacer no es
+  // cumplir» — mientras el codigo hacia exactamente lo contrario, tres lineas mas
+  // abajo. Una prosa que se contradice con su codigo es peor que no tener prosa.
+  it('la semana suma objetivosHechos, no dias cerrados', () => {
+    const D = leerCodigo('src/components/sections/DiarioSection.tsx')
+    const i = D.indexOf('const semana = ')
+    expect(i, 'ya no existe el resumen semanal: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const cuerpo = D.slice(i, i + 1400)
+    expect(/hechos \+= r\?\.objetivosHechos/.test(cuerpo),
+      '«Objetivos completados» vuelve a contar dias cerrados: el numero dira una cosa y el rotulo otra').toBe(true)
+    expect(/hechos \+= r\?\.cerrados/.test(cuerpo), 'vuelve a sumarse `cerrados` como si fueran objetivos').toBe(false)
+  })
+
+  it('la ruta del mes calcula los completados mirando las tareas', () => {
+    // `diario` por si solo NO puede saber que objetivo se cumplio: eso vive en la
+    // tarea. Sin este join, el numero solo puede ser una aproximacion o una mentira.
+    const R = leerCodigo('src/app/api/diario/mes/route.ts')
+    expect(/objetivosHechos/.test(R), 'la ruta ya no devuelve los objetivos completados').toBe(true)
+    expect(/from\('tasks'\)/.test(R), 'la ruta vuelve a contar sin mirar las tareas').toBe(true)
+    // Y `cerrados` se queda como estaba: el calendario lo usa para «todos cerraron»,
+    // y ahi si significa dias.
+    expect(/cerrados\+\+/.test(R), 'se ha perdido el recuento de dias cerrados, que el calendario si usa').toBe(true)
+  })
+
+  it('el resumen se vuelve a pedir cuando cambia lo que cuenta', () => {
+    // Las dependencias eran `[dia, demo]`: se cargaba una vez y se quedaba asi.
+    // Javi escribio tres objetivos y el panel seguia diciendo «1».
+    const D = leerCodigo('src/components/sections/DiarioSection.tsx')
+    const i = D.indexOf('setMesFichado(junto)')
+    expect(i, 'ya no se carga el mes: revisa esta regla').toBeGreaterThan(-1)
+    const deps = D.slice(i, i + 700).match(/\}, \[([^\]]*)\]\)/)
+    expect(deps, 'no se reconocen las dependencias del efecto').toBeTruthy()
+    expect(/firmaTareas/.test(deps![1]),
+      `el resumen semanal vuelve a quedarse caducado: se carga una vez y no se entera de que creas, borras o completas tareas. Dependencias ahora: [${deps![1]}]`)
+      .toBe(true)
+  })
+})
+
 describe('quitar un objetivo se lleva su tarea', () => {
   // Javi: «acabo de borrar un objetivo que habia puesto en el apartado de fichar y
   // no se ha borrado en el apartado de tareas. Eso no puede pasar».
