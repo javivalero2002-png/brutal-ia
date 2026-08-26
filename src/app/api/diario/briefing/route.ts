@@ -34,7 +34,21 @@ export async function GET(request: NextRequest) {
   // cambio de hora y se sale por un día en octubre y en marzo.
   const hoy = todayKey()
   const dias: string[] = []
-  const n = rango === 'semana' ? 7 : 1
+  // LA SEMANA ES LA SEMANA, DE LUNES A HOY. No «los últimos 7 días».
+  //
+  // Eran dos cosas distintas con la misma etiqueta: este panel enseñaba una franja
+  // que empezaba en JUEVES —hoy menos seis— mientras el «Resumen semanal» de MI DÍA
+  // sumaba de lunes a domingo. Dos números para lo mismo, en la misma sección, y la
+  // franja de letras leyéndose «J V S D L M X», que es lo primero que chirría.
+  //
+  // Se corta en HOY y no en el domingo: los días que aún no han pasado no son «sin
+  // fichar», y pintarlos grises acusa a alguien de no haber hecho algo que todavía
+  // no tocaba.
+  const lunes = new Date(`${hoy}T12:00:00Z`)
+  // getUTCDay: 0 es domingo. `(d + 6) % 7` da los días que han pasado desde el lunes.
+  lunes.setUTCDate(lunes.getUTCDate() - ((lunes.getUTCDay() + 6) % 7))
+  const desdeLunes = Math.round((Date.parse(`${hoy}T12:00:00Z`) - lunes.getTime()) / 86400000) + 1
+  const n = rango === 'semana' ? desdeLunes : 1
   for (let i = 0; i < n; i++) {
     // Mediodía UTC como ancla: a esa hora Madrid va por la tarde, así que restar
     // días nunca cruza una frontera de día ni la tropieza el cambio de hora. Y el
