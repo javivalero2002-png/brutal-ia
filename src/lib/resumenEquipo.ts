@@ -112,9 +112,20 @@ export async function resumenDelEquipo(
 ): Promise<string> {
   if (!preguntaPorElEquipo(pregunta, plantilla)) return SIN_DIARIO
 
-  const desde = new Date(`${todayKey()}T12:00:00Z`)
-  desde.setUTCDate(desde.getUTCDate() - 6)
-  const desdeClave = localDayKey(desde)
+  // LA MISMA SEMANA QUE ENSEÑA LA PANTALLA. Antes eran los últimos 7 días y el
+  // panel de equipo la semana natural, así que a «¿qué ha hecho Javi esta semana?»
+  // la IA contestaba «el único día sin cerrar fue el 22» — un sábado que en la
+  // pantalla ya no aparece. El jefe lee un dato que no puede ir a comprobar.
+  //
+  // Con un suelo en AYER: el lunes, la semana natural es un solo día y «¿qué hizo
+  // ayer?» —domingo— se quedaría sin respuesta. El día de más solo existe los
+  // lunes, y va etiquetado (AYER), así que no se confunde con «esta semana».
+  const hoyClave = todayKey()
+  const lunes = new Date(`${hoyClave}T12:00:00Z`)
+  lunes.setUTCDate(lunes.getUTCDate() - ((lunes.getUTCDay() + 6) % 7))
+  const ayerD0 = new Date(`${hoyClave}T12:00:00Z`)
+  ayerD0.setUTCDate(ayerD0.getUTCDate() - 1)
+  const desdeClave = localDayKey(lunes) <= localDayKey(ayerD0) ? localDayKey(lunes) : localDayKey(ayerD0)
 
   const q = await Promise.all([
     // `.lte` con hoy: el calendario del Diario deja PLANIFICAR días futuros a
@@ -198,7 +209,12 @@ export async function resumenDelEquipo(
       // cualquiera: con el día cerrado a las 13:22, Harvey contestó «no, no lo has
       // cerrado; tu último cierre fue el 26 de agosto» — negando y afirmando lo
       // mismo en dos frases seguidas, porque no sabía que el 26 era hoy.
-      const cuando = d.dia === hoy ? `${d.dia} (HOY)` : d.dia === ayer ? `${d.dia} (AYER)` : d.dia
+      // El día de la semana YA CALCULADO. Pidiéndole la fecha a secas, el modelo lo
+    // deduce mal: con el bloque de hoy (miércoles 26) contestó «no tengo datos del
+    // lunes, martes, jueves». Un jueves que aún no ha pasado.
+    const diaSem = new Intl.DateTimeFormat('es-ES', { weekday: 'long', timeZone: 'Europe/Madrid' })
+      .format(new Date(`${d.dia}T12:00:00Z`))
+    const cuando = d.dia === hoy ? `${diaSem} ${d.dia} (HOY)` : d.dia === ayer ? `${diaSem} ${d.dia} (AYER)` : `${diaSem} ${d.dia}`
       // EL ESTADO COMO ETIQUETA, no como prosa dentro de una lista.
       //
       // Con la frase «hizo (cierre del día): ... · fichó a las 12:36 y cerró a las
@@ -217,15 +233,15 @@ export async function resumenDelEquipo(
     // voz alta con veinte títulos de tarea no la escucha nadie.
     const lista = tareas.slice(0, 5).map((t: any) => t.text).join(' · ')
     const mas = tareas.length > 5 ? ` y ${tareas.length - 5} más` : ''
-    return `  ${p.name}: ${tareas.length} tarea(s) completada(s) en 7 días${lista ? ` (ejemplos: ${lista}${mas})` : ''}\n${porDia.join('\n')}`
+    return `  ${p.name}: ${tareas.length} tarea(s) completada(s) esta semana${lista ? ` (ejemplos: ${lista}${mas})` : ''}\n${porDia.join('\n')}`
   }).filter(Boolean)
 
   // Traido y vacio NO es lo mismo que no traido: aqui si se ha mirado, y que no
   // haya nada es una respuesta legitima que el modelo puede dar con seguridad.
   if (!lineasEquipo.length) {
-    return `\n\nDIARIO DEL EQUIPO (últimos 7 días, desde ${desdeClave}): no hay nada escrito. Se ha mirado y está vacío.`
+    return `\n\nDIARIO DEL EQUIPO (esta semana, desde el lunes ${desdeClave}): no hay nada escrito. Se ha mirado y está vacío.`
   }
-  return `\n\nDIARIO DEL EQUIPO (últimos 7 días, desde ${desdeClave}):\n${lineasEquipo.join('\n')}`
+  return `\n\nDIARIO DEL EQUIPO (esta semana, desde el lunes ${desdeClave}):\n${lineasEquipo.join('\n')}`
 }
 
 /**
