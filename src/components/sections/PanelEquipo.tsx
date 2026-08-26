@@ -107,6 +107,16 @@ export default function PanelEquipo({ profile }: { profile: { id?: string } | nu
 
   const delDia = brief.equipo.map(f => ({ ...f, hoy: f.entradas.find(e => e.dia === dia) }))
   const fichados = delDia.filter(f => f.hoy?.entrada_at).length
+  // EL DENOMINADOR ES EL EQUIPO ENTERO, no la gente que tuvo actividad.
+  //
+  // `brief.equipo` solo trae a quien ficho o cerro algo —el briefing lo filtra a
+  // proposito, «quien no ha hecho nada no ensucia el panel»— asi que dividir entre
+  // su longitud daba «1/1 HAN FICHADO» EN VERDE con dos personas en el estudio y
+  // una sin fichar. La pantalla afirmaba que habia fichado todo el equipo.
+  //
+  // `sinActividad` ya venia en la respuesta y estaba declarado en el tipo de aqui
+  // arriba; simplemente no lo usaba nadie.
+  const enElEquipo = brief.equipo.length + (brief.sinActividad?.length || 0)
   const bloqueados = delDia.filter(f => f.hoy?.animo === 'bloqueado').length
   const objetivos = delDia.reduce((n, f) => n + (f.hoy?.entrada || '').split('\n').filter(l => l.trim()).length, 0)
   const completadas = delDia.reduce((n, f) => n + f.tareas.filter(t => t.completed_at && localDayKey(t.completed_at) === dia).length, 0)
@@ -117,7 +127,7 @@ export default function PanelEquipo({ profile }: { profile: { id?: string } | nu
       {/* ── LAS CIFRAS DEL DÍA ────────────────────────────────────────── */}
       <div className="grid grid-cols-4 rounded-2xl overflow-hidden mb-4" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
         {[
-          { v: `${fichados}/${delDia.length}`, l: 'HAN FICHADO', c: fichados === delDia.length ? GRN : AMBAR },
+          { v: `${fichados}/${enElEquipo}`, l: 'HAN FICHADO', c: fichados === enElEquipo ? GRN : AMBAR },
           { v: String(bloqueados), l: 'BLOQUEADOS', c: bloqueados ? RED : 'rgba(255,255,255,0.25)' },
           { v: String(objetivos), l: 'OBJETIVOS', c: '#FFFFFF' },
           { v: String(completadas), l: 'COMPLETADAS', c: completadas ? BLU : 'rgba(255,255,255,0.25)' },
@@ -157,12 +167,31 @@ export default function PanelEquipo({ profile }: { profile: { id?: string } | nu
                 <span className="font-figtree text-[12px] font-bold truncate" style={{ color: 'rgba(255,255,255,0.82)' }}>{f.persona.name}</span>
               </div>
               <div className="flex-1 min-w-0 relative rounded-lg" style={{ height: 19, background: 'rgba(255,255,255,0.035)' }}>
-                {ini !== null && fin !== null ? (
-                  <div className="absolute top-0 bottom-0 rounded-lg flex items-center px-2 font-syne text-[8.5px] font-black whitespace-nowrap overflow-hidden"
-                    style={{ left: `${ini}%`, width: `${Math.max(6, fin - ini)}%`, background: `${est.c}33`, color: est.c }}>
-                    {hhmm(e!.entrada_at!)}{e?.cierre_at ? ` — ${hhmm(e.cierre_at)}` : ' — en curso'}
-                  </div>
-                ) : (
+                {ini !== null && fin !== null ? (() => {
+                  // LA ETIQUETA VA FUERA SI NO CABE. La barra se dibuja sobre una
+                  // escala de 8:00 a 20:00 —720 minutos— así que una jornada de 46
+                  // minutos ocupa el 6% y «12:36 — 13:22» se cortaba a «12:36 — 13:2».
+                  // Un rango de horas a medias es peor que ninguno: parece un dato.
+                  const ancho = Math.max(6, fin - ini)
+                  const rotulo = `${hhmm(e!.entrada_at!)}${e?.cierre_at ? ` — ${hhmm(e.cierre_at)}` : ' — en curso'}`
+                  const cabe = ancho >= 22
+                  return (<>
+                    <div className="absolute top-0 bottom-0 rounded-lg flex items-center px-2 font-syne text-[8.5px] font-black whitespace-nowrap overflow-hidden"
+                      style={{ left: `${ini}%`, width: `${ancho}%`, background: `${est.c}33`, color: est.c }}>
+                      {cabe ? rotulo : ''}
+                    </div>
+                    {!cabe && (
+                      // Del lado donde quepa: con la jornada al final del día, ponerla
+                      // siempre a la derecha la sacaría del panel.
+                      <div className="absolute top-0 bottom-0 flex items-center font-syne text-[8.5px] font-black whitespace-nowrap"
+                        style={ini + ancho > 62
+                          ? { right: `${100 - ini}%`, paddingRight: 6, color: est.c }
+                          : { left: `${ini + ancho}%`, paddingLeft: 6, color: est.c }}>
+                        {rotulo}
+                      </div>
+                    )}
+                  </>)
+                })() : (
                   <div className="absolute inset-0 flex items-center pl-2 font-syne text-[8.5px] font-black" style={{ color: 'rgba(255,255,255,0.28)' }}>
                     sin fichar
                   </div>
@@ -246,6 +275,16 @@ export default function PanelEquipo({ profile }: { profile: { id?: string } | nu
 
       {/* ── LA SEMANA, Y SE PUEDE PULSAR ──────────────────────────────── */}
       <div className="mt-5 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+        {/* QUIEN NO APARECE ARRIBA, SE DICE. El briefing filtra a quien no ha
+            fichado ni cerrado nada para no ensuciar el panel —y está bien— pero si
+            además no se le nombra, la pantalla entera se lee como si el equipo
+            fuera solo la gente que trabajó ese día. */}
+        {(brief.sinActividad?.length || 0) > 0 && (
+          <div className="mb-3 rounded-xl px-3.5 py-2.5 font-figtree text-[12px]"
+            style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.4)' }}>
+            Sin fichar {esHoy ? 'hoy' : 'ese día'}: <span style={{ color: 'rgba(255,255,255,0.62)' }}>{brief.sinActividad.join(', ')}</span>
+          </div>
+        )}
         <div className="font-syne text-[8px] font-black tracking-[0.24em] mb-2.5" style={{ color: 'rgba(255,255,255,0.26)' }}>
           LA SEMANA · PULSA UN DÍA
         </div>

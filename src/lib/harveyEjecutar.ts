@@ -168,6 +168,7 @@ export async function ejecutarAccionHarvey(
         // saber qué había es exactamente el caso que hay que evitar.
         const hoy = todayKey()
         let previo = ''
+        let abierta = false
         try {
           const r = await fetch(`/api/diario?dia=${hoy}`)
           if (!r.ok) throw new Error(String(r.status))
@@ -177,6 +178,12 @@ export async function ejecutarAccionHarvey(
           const mio = (Array.isArray(j?.entradas) ? j.entradas : [])
             .find((d: { user_id?: string }) => d?.user_id && perfil?.id && d.user_id === perfil.id)
           previo = String(mio?.cierre || '').trim()
+          // Y si la jornada está ABIERTA, cerrarla: «cierra mi día» significa eso.
+          // Antes esto solo escribía el balance, y el prompt lo llamaba «cerrar el
+          // día en el diario» — así que Harvey se inventó dos cierres distintos y
+          // contestaba «cerraste la sesión a las 13:22, pero el cierre del día en el
+          // diario no está registrado». Una sola cosa.
+          abierta = !!mio?.entrada_at && !mio?.cierre_at
         } catch {
           showToast('No he podido leer tu diario de hoy, así que no escribo nada para no pisarlo')
           return false
@@ -191,7 +198,14 @@ export async function ejecutarAccionHarvey(
         const res = await fetch('/api/diario', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dia: hoy, cierre: previo ? `${previo}\n${texto}` : texto }),
+          body: JSON.stringify({
+            dia: hoy,
+            cierre: previo ? `${previo}\n${texto}` : texto,
+            // Solo si estaba abierta: el servidor rechaza con 400 cerrar un día que
+            // no se abrió, y con razón — eso dejaba `cierre_at` sin `entrada_at` y
+            // el reloj roto para siempre.
+            ...(abierta ? { cerrar: true } : {}),
+          }),
         })
         if (!res.ok) {
           const json = await res.json().catch(() => null)
@@ -200,7 +214,9 @@ export async function ejecutarAccionHarvey(
             : 'No se ha podido guardar en el diario')
           return false
         }
-        showToast(previo ? 'Añadido al cierre de tu día' : 'Día cerrado')
+        showToast(abierta
+          ? (previo ? 'Añadido y jornada cerrada' : 'Día cerrado y jornada guardada')
+          : (previo ? 'Añadido al cierre de tu día' : 'Apuntado en el cierre de tu día'))
         return true
       }
       case 'completar': {

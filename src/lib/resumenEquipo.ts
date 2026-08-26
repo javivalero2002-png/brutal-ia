@@ -36,17 +36,81 @@ export function preguntaPorElEquipo(pregunta: string, plantilla: Perfil[]): bool
   // cubre las de equipo SIN nombre. Se amplía con lo que un jefe dice de verdad
   // —«cómo anda el equipo», «dame el parte», «quién está liado»— y no con palabras
   // corrientes como «hoy» o «tarea», que dispararían en la mayoría de preguntas.
-  const porTrabajo = /\b(hizo|hicieron|hecho|hiciste|avanz|complet|equipo|semana|ayer|diario|fich|anda|liad|parte|trabaj|progres|rendimiento|objetiv)/.test(p)
+  // Se amplía con lo que se pregunta de verdad sobre una jornada. Faltaban las
+  // palabras del CIERRE, y ese hueco tenía la peor consecuencia posible: a «¿he
+  // cerrado el día?» —con el día cerrado a las 11:22— las dos IAs contestaban «no,
+  // todavía no», porque el diario no les llegaba y respondían de memoria.
+  //
+  // Siguen fuera las palabras corrientes («hoy», «tarea») que dispararían en la
+  // mayoría de preguntas y se pagan en tokens cada vez.
+  const porTrabajo = /\b(hizo|hicieron|hecho|hiciste|avanz|complet|equipo|semana|ayer|diario|fich|anda|liad|parte|trabaj|progres|rendimiento|objetiv|cerr|jornada|horas|cuanto tiempo|cuánto tiempo|balance)/.test(p)
   return nombraAAlguien || porTrabajo
 }
 
+/**
+ * TU JORNADA DE HOY, en una línea, SIEMPRE.
+ *
+ * El bloque grande del diario solo se trae cuando la pregunta casa con una lista de
+ * palabras — y esa lista siempre tendrá huecos. El agujero se vio con «¿he cerrado
+ * el día?»: la palabra «cerrado» no estaba, el diario no llegaba, y las dos IAs
+ * contestaban «no, todavía no» con el día cerrado a las 13:22.
+ *
+ * Se amplió la lista, pero eso solo tapa el caso conocido. Esto lo cierra de raíz:
+ * el estado de la jornada de QUIEN PREGUNTA cabe en una línea, es lo que más se
+ * pregunta, y va en todas las respuestas. Veinte tokens.
+ *
+ * Y va literal —«CERRADA», «ABIERTA»— y no en prosa: con la frase «hizo (cierre del
+ * día): ... · cerró a las 13:22» delante, Harvey seguía diciendo «tu día sigue
+ * abierto». Era un dato más en una lista de cuatro separados por puntos.
+ */
+export async function miJornadaHoy(admin: any, userId: string): Promise<string> {
+  const dia = todayKey()
+  const { data, error } = await admin
+    .from('diario').select('entrada_at, cierre_at').eq('user_id', userId).eq('dia', dia).maybeSingle()
+  if (error) {
+    console.error('[jornada] no se pudo leer:', error.message)
+    // Ni se afirma ni se niega: es el mismo criterio que el resto del contexto.
+    return '\nTU JORNADA DE HOY: no se ha podido leer. No digas ni que has fichado ni que no.'
+  }
+  if (!data?.entrada_at) return '\nTU JORNADA DE HOY: SIN FICHAR. Todavía no has fichado hoy.'
+  const reloj = new Intl.DateTimeFormat('es-ES', {
+    timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+  const entro = reloj.format(new Date(data.entrada_at))
+  const ms = (data.cierre_at ? new Date(data.cierre_at).getTime() : Date.now()) - new Date(data.entrada_at).getTime()
+  const min = Math.max(0, Math.round(ms / 60000))
+  const dur = min >= 60 ? `${Math.floor(min / 60)}h ${min % 60}m` : `${min}m`
+  return data.cierre_at
+    ? `\nTU JORNADA DE HOY: CERRADA. Fichaste a las ${entro} y cerraste a las ${reloj.format(new Date(data.cierre_at))} (${dur}).`
+    : `\nTU JORNADA DE HOY: ABIERTA, sin cerrar. Fichaste a las ${entro} y llevas ${dur}.`
+}
+
 /** El bloque listo para pegar en el prompt, o cadena vacía si no hay nada que contar. */
+/**
+ * Lo que se pone en el prompt cuando el diario NO se ha traido.
+ *
+ * Devolver cadena vacia dejaba al modelo sin nada Y SIN SABERLO, y entonces
+ * rellena el hueco con lo que le parece. Medido, con el dia cerrado a las 11:22:
+ * a «¿he cerrado el dia?» las dos IAs contestaron «no, todavia no» —Harvey ademas
+ * se contradijo en la misma frase: «no tengo registrado un cierre... el ultimo que
+ * veo es del 26, donde estuviste 46 minutos»—.
+ *
+ * Negar con seguridad algo que no has mirado es peor que decir que no lo sabes. Es
+ * el mismo arreglo que ya se hizo con el calendario, y por el mismo motivo.
+ */
+const SIN_DIARIO = `
+
+DIARIO DEL EQUIPO: no lo he traído en esta respuesta.
+Si te preguntan si alguien fichó, si cerró su día, cuánto estuvo o qué escribió:
+NO lo niegues y NO lo afirmes. Di que no tienes el diario delante ahora mismo y
+pide que te lo pregunten de otra forma (por ejemplo «¿qué he hecho hoy?»).`
+
 export async function resumenDelEquipo(
   admin: any,
   plantilla: Perfil[],
   pregunta: string,
 ): Promise<string> {
-  if (!preguntaPorElEquipo(pregunta, plantilla)) return ''
+  if (!preguntaPorElEquipo(pregunta, plantilla)) return SIN_DIARIO
 
   const desde = new Date(`${todayKey()}T12:00:00Z`)
   desde.setUTCDate(desde.getUTCDate() - 6)
@@ -66,6 +130,11 @@ export async function resumenDelEquipo(
   // como «esta persona no ha hecho nada», que no es un hueco, es una acusación.
   logQueryErrors('resumenEquipo', q)
   const [{ data: diarios }, { data: hechas }] = q
+
+  const hoy = todayKey()
+  const ayerD = new Date(`${hoy}T12:00:00Z`)
+  ayerD.setUTCDate(ayerD.getUTCDate() - 1)
+  const ayer = localDayKey(ayerD)
 
   const lineasEquipo = (plantilla ?? []).map(p => {
     // Solo las filas que SON algo. Una fila vacía —abrir Fichar y borrar lo
@@ -97,7 +166,22 @@ export async function resumenDelEquipo(
         const h = Math.floor(ms / 3_600_000)
         const m = Math.round((ms % 3_600_000) / 60_000)
         const dur = h > 0 ? `${h}h${m ? ` ${m}m` : ''}` : `${m}m`
-        return d.cierre_at ? `estuvo ${dur}` : `lleva ${dur} (sin cerrar)`
+        // CON LAS HORAS, no solo la duración. Preguntado a las dos: «¿a qué hora he
+        // fichado hoy y a qué hora he salido?» — ninguna sabía contestar, y Harvey
+        // llegó a decir que «el diario no está sincronizado con los datos de fichar
+        // entrada y salida», que es falso y además le quita a la app una capacidad
+        // que tiene. El dato estaba a mano: es el mismo `entrada_at` del que sale la
+        // duración.
+        //
+        // En hora de MADRID, como todo lo que se le enseña a un modelo: cortar el
+        // ISO daría UTC, que de 00:00 a 02:00 ni siquiera es el mismo día.
+        const reloj = new Intl.DateTimeFormat('es-ES', {
+          timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', hour12: false,
+        })
+        const entro = reloj.format(new Date(d.entrada_at))
+        return d.cierre_at
+          ? `fichó a las ${entro} y cerró a las ${reloj.format(new Date(d.cierre_at))} (${dur})`
+          : `fichó a las ${entro} y lleva ${dur} sin cerrar`
       })()
       const ANIMO: Record<string, string> = {
         productivo: 'lo calificó de día productivo',
@@ -110,7 +194,22 @@ export async function resumenDelEquipo(
         ...(horas ? [horas] : []),
         ...(d.animo && ANIMO[d.animo as string] ? [ANIMO[d.animo as string]] : []),
       ]
-      return `    ${d.dia} — ${partes.join(' · ')}`
+      // CUÁL ES HOY, dicho. Sin esto el modelo lee «2026-08-26» como una fecha
+      // cualquiera: con el día cerrado a las 13:22, Harvey contestó «no, no lo has
+      // cerrado; tu último cierre fue el 26 de agosto» — negando y afirmando lo
+      // mismo en dos frases seguidas, porque no sabía que el 26 era hoy.
+      const cuando = d.dia === hoy ? `${d.dia} (HOY)` : d.dia === ayer ? `${d.dia} (AYER)` : d.dia
+      // EL ESTADO COMO ETIQUETA, no como prosa dentro de una lista.
+      //
+      // Con la frase «hizo (cierre del día): ... · fichó a las 12:36 y cerró a las
+      // 13:22» delante, Harvey seguía contestando «no, todavía no lo has cerrado,
+      // pero no está registrado el cierre formal». Lo tenía escrito y no lo veía:
+      // era un dato más en una lista de cuatro, separados por puntos.
+      //
+      // Tres palabras en mayúsculas al principio de la línea no se pueden leer de
+      // dos maneras.
+      const estado = d.cierre_at ? '[DÍA CERRADO]' : d.entrada_at ? '[DÍA ABIERTO, sin cerrar]' : '[SIN FICHAR]'
+      return `    ${cuando} ${estado} — ${partes.join(' · ')}`
     })
     // Se recorta a 5 y se dice el TOTAL aparte: lo que se pide cuando alguien
     // pregunta «qué ha hecho X» es un juicio, no un inventario. Con la lista
@@ -121,7 +220,11 @@ export async function resumenDelEquipo(
     return `  ${p.name}: ${tareas.length} tarea(s) completada(s) en 7 días${lista ? ` (ejemplos: ${lista}${mas})` : ''}\n${porDia.join('\n')}`
   }).filter(Boolean)
 
-  if (!lineasEquipo.length) return ''
+  // Traido y vacio NO es lo mismo que no traido: aqui si se ha mirado, y que no
+  // haya nada es una respuesta legitima que el modelo puede dar con seguridad.
+  if (!lineasEquipo.length) {
+    return `\n\nDIARIO DEL EQUIPO (últimos 7 días, desde ${desdeClave}): no hay nada escrito. Se ha mirado y está vacío.`
+  }
   return `\n\nDIARIO DEL EQUIPO (últimos 7 días, desde ${desdeClave}):\n${lineasEquipo.join('\n')}`
 }
 

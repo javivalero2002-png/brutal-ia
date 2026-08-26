@@ -1243,7 +1243,9 @@ describe('una comprobación no puede cambiar lo que ya funcionaba', () => {
     // La regla lo detectó sola —se puso roja— y por eso se reapunta en vez de
     // borrarse: la que se borra al mudar el código es la que deja de proteger.
     const C = leerCodigo('src/lib/resumenEquipo.ts')
-    const i = C.indexOf("from('diario')")
+    // La consulta DEL RESUMEN, no la primera del fichero: `miJornadaHoy` añadió otra
+    // más arriba (la jornada de quien pregunta, que es de HOY y no necesita tope).
+    const i = C.indexOf("from('diario').select('dia,user_id")
     expect(i, 'harvey ya no lee el diario: revisa esta regla').toBeGreaterThan(-1)
     const consulta = C.slice(i, i + 260)
     expect(/lte\('dia'/.test(consulta),
@@ -3658,7 +3660,8 @@ describe('Harvey sabe lo que pasa en Fichar', () => {
     // El resumen del equipo ya traia lo que cada uno ESCRIBIO, pero no cuanto
     // estuvo ni como le fue — y eso es media respuesta: «se propuso tres cosas y
     // cerro con una» significa algo muy distinto si estuvo dos horas o nueve.
-    const i = R.indexOf("from('diario').select(")
+    // Igual: la consulta del RESUMEN, que es la que alimenta el bloque de las IAs.
+    const i = R.indexOf("from('diario').select('dia,user_id")
     expect(i, 'ya no se lee el diario aqui: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
     const select = R.slice(i, i + 120)
     expect(/entrada_at/.test(select), 'no trae la hora de entrada: no puede decir cuanto estuvo').toBe(true)
@@ -3668,9 +3671,13 @@ describe('Harvey sabe lo que pasa en Fichar', () => {
   it('un dia sin cerrar dice «lleva», no «estuvo»', () => {
     // El dia no ha terminado: dar un total cerrado sobre algo en curso es afirmar
     // de mas, y ese numero se lo lee un jefe como si fuera definitivo.
-    expect(/lleva \$\{dur\} \(sin cerrar\)/.test(R),
+    // La frase cambió al añadir las horas de entrada y salida, pero el invariante es
+    // el mismo: un día en curso dice «lleva», no «estuvo».
+    expect(/lleva \$\{dur\} sin cerrar/.test(R),
       'un dia en curso se reporta como si estuviera cerrado')
       .toBe(true)
+    expect(/ABIERTA, sin cerrar/.test(R),
+      'la jornada en curso de quien pregunta se reporta como cerrada').toBe(true)
   })
 })
 
@@ -4194,6 +4201,80 @@ describe('el SQL del repo se puede aplicar de principio a fin', () => {
   })
 })
 
+describe('las IAs saben si has cerrado tu jornada', () => {
+  // Javi cerro su dia a las 13:22 y pregunto. Las DOS contestaron «no, todavia no».
+  // Harvey ademas se contradijo en la misma frase: «no tengo registrado un cierre...
+  // el ultimo que veo es del 26, donde estuviste 46 minutos».
+  //
+  // Tres causas, encontradas una detras de otra interceptando el prompt de verdad:
+  //
+  //  1. El bloque del diario solo se trae si la pregunta casa con una lista de
+  //     palabras, y «cerrado» no estaba. Llegaba VACIO y el modelo respondia de
+  //     memoria — negando con seguridad algo que no habia mirado.
+  //  2. El bloque no decia cual de las fechas era HOY, ni a que hora se ficho: solo
+  //     la duracion. A «¿a que hora he fichado?» Harvey llego a decir que «el diario
+  //     no esta sincronizado con los datos de fichar», que es falso.
+  //  3. Y el contrato de acciones llamaba a una accion «Cerrar el dia en el diario»
+  //     cuando solo escribia el balance: Harvey se invento DOS cierres distintos y
+  //     contestaba «cerraste la sesion a las 13:22, pero el cierre del dia en el
+  //     diario no esta registrado». La etiqueta creaba el concepto.
+  const R = leerCodigo('src/lib/resumenEquipo.ts')
+
+  it('la jornada de quien pregunta va SIEMPRE, sin depender de palabras clave', () => {
+    // Ampliar la lista de palabras solo tapa el caso conocido; siempre tendra
+    // huecos. El estado de la jornada cabe en una linea y es lo que mas se pregunta.
+    expect(/export async function miJornadaHoy/.test(R),
+      'ya no existe miJornadaHoy(): la respuesta volvera a depender de que la pregunta case con una lista de palabras').toBe(true)
+    // Y que llegue AL PROMPT, no solo que se llame. La primera version comprobaba
+    // `miJornadaHoy(` en el fichero y paso en verde con `${miJornada}` borrado del
+    // texto del prompt: la funcion se seguia llamando y el resultado se tiraba.
+    const H = leerCodigo('src/app/api/harvey/chat/route.ts')
+    expect(/miJornadaHoy\(/.test(H), 'harvey ya no lee el estado de la jornada').toBe(true)
+    expect(/\$\{miJornada\}/.test(H), 'harvey lee el estado de la jornada y NO lo mete en el prompt').toBe(true)
+    const C = leerCodigo('src/app/api/chat/route.ts')
+    expect(/miJornadaHoy\(/.test(C), 'brutal.ia ya no lee el estado de la jornada').toBe(true)
+    // Aqui viaja dentro de `diarioEquipo`, que si entra en el prompt.
+    expect(/\(await miJornadaHoy\([^)]*\)\)\s*\n?\s*\+/.test(C),
+      'brutal.ia lee el estado de la jornada y no lo concatena al contexto').toBe(true)
+  })
+
+  it('el estado va como ETIQUETA, no como prosa', () => {
+    // Con «hizo (cierre del dia): ... · cerro a las 13:22» delante, Harvey seguia
+    // diciendo «tu dia sigue abierto»: era un dato mas en una lista de cuatro
+    // separados por puntos. Tres palabras en mayusculas no se leen de dos maneras.
+    expect(/CERRADA\./.test(R), 'el estado de la jornada vuelve a ir en prosa').toBe(true)
+    expect(/\[DÍA CERRADO\]/.test(R), 'las lineas del diario ya no marcan el estado del dia').toBe(true)
+    expect(/\(HOY\)/.test(R), 'las lineas del diario ya no dicen cual es hoy: el modelo lee la fecha como pasada').toBe(true)
+  })
+
+  it('la linea del diario lleva las HORAS, no solo la duracion', () => {
+    // LAS DOS RAMAS. La primera version solo pedia `fichó a las ${entro}` y paso en
+    // verde con el bug puesto, porque la rama del dia SIN cerrar tambien lo lleva:
+    // se puede romper la del dia cerrado y la regla no se entera.
+    expect(/fichó a las \$\{entro\} y cerró a las/.test(R),
+      'el dia CERRADO vuelve a dar solo la duracion: a «¿a que hora he salido?» la IA dira que no lo sabe').toBe(true)
+    expect(/fichó a las \$\{entro\} y lleva/.test(R),
+      'el dia ABIERTO vuelve a dar solo la duracion: a «¿a que hora he fichado?» la IA dira que no lo sabe').toBe(true)
+  })
+
+  it('el disparador reconoce las palabras del cierre', () => {
+    const m = R.match(/const porTrabajo = \/[^/]*\//)
+    expect(m, 'ya no existe el disparador: revisa esta regla').toBeTruthy()
+    for (const palabra of ['cerr', 'jornada', 'horas']) {
+      expect(m![0].includes(palabra), `el disparador no reconoce «${palabra}»`).toBe(true)
+    }
+  })
+
+  it('no se anuncian dos cierres distintos', () => {
+    // La accion se llamaba «Cerrar el dia en el diario» y solo escribia el balance.
+    const H = leerCodigo('src/app/api/harvey/chat/route.ts')
+    expect(/Cerrar el día en el diario/.test(H),
+      'vuelve a anunciarse un «cierre en el diario» aparte del de fichar: la IA se inventara que hay dos').toBe(false)
+    const E = leerCodigo('src/lib/harveyEjecutar.ts')
+    expect(/cerrar: true/.test(E), 'la accion de cerrar el dia ya no cierra la jornada').toBe(true)
+  })
+})
+
 describe('«objetivos completados» cuenta objetivos, no dias', () => {
   // El panel «Resumen semanal» pintaba `cerrados` bajo la etiqueta «Objetivos
   // completados». Y `cerrados` son DIAS QUE ALGUIEN CERRO: dos cosas distintas. El
@@ -4707,6 +4788,8 @@ describe('un select trae las columnas que el codigo va a leer', () => {
   const EXCEPCIONES: Record<string, string> = {
     "src/app/api/diario/route.ts::entrada_at, cierre_at":
       'POST lee la fila previa solo para conservar entrada_at/cierre_at al reescribir; no lo filtra con nada',
+    "src/lib/resumenEquipo.ts::entrada_at, cierre_at":
+      'miJornadaHoy lee SOLO las dos horas de la jornada de quien pregunta, para una linea del prompt; no pasa por ningun ayudante',
   }
 
   it('quien filtra con haFichado o diarioTieneAlgo pide esas columnas', () => {

@@ -3,7 +3,7 @@ import { memoriaRelevante, lineasDeMemoria } from '@/lib/memoriaRelevante'
 import { leerFicha } from '@/lib/fichaEstudio'
 import { chat } from '@/lib/ai'
 import { checkChatRateLimit } from '@/lib/rate-limit'
-import { resumenDelEquipo } from '@/lib/resumenEquipo'
+import { resumenDelEquipo, miJornadaHoy } from '@/lib/resumenEquipo'
 import { logQueryErrors } from '@/lib/queryLog'
 import { NextRequest, NextResponse } from 'next/server'
 import { madridDateLabel } from '@/components/shared/helpers'
@@ -160,7 +160,8 @@ export async function POST(request: NextRequest) {
         eventos,
         // El diario del equipo, con el MISMO módulo que Harvey. Se decide dentro
         // si la pregunta lo pide: la mayoría no, y son cientos de tokens.
-        diarioEquipo: await resumenDelEquipo(admin, (team || []) as any, message) || undefined,
+        diarioEquipo: (await miJornadaHoy(admin, user.id))
+          + (await resumenDelEquipo(admin, (team || []) as any, message) || ''),
         // Elegidas con la MISMA función que usa Harvey. Pasarlas todas reventaría el
         // contexto —hay notas largas— y elegirlas con otro criterio aquí sería
         // volver a tener dos IAs que saben cosas distintas.
