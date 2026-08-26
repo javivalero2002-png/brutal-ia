@@ -764,6 +764,49 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
    * Medido en el navegador.
    */
   const [focoPendiente, setFocoPendiente] = useState<number | null>(null)
+  /**
+   * QUITAR UN OBJETIVO SE LLEVA SU TAREA.
+   *
+   * Javi: «acabo de borrar un objetivo que había puesto en el apartado de fichar y
+   * no se ha borrado en el apartado de tareas. Eso no puede pasar».
+   *
+   * La X hacía solo dos cosas —sacar la fila de la lista y guardar el texto— y no
+   * tocaba la tarea nunca. Al fichar, cada línea se convierte en una tarea; al
+   * quitarla, esa tarea se quedaba viva y sin dueño: aparecía en Tareas como algo
+   * pendiente que ya no existe en ningún sitio, y seguía contando en el pipeline y
+   * en los resúmenes que leen las dos IAs.
+   *
+   * Se borra AUNQUE ESTÉ HECHA, y a propósito: el objetivo y la tarea son la misma
+   * cosa, así que si lo quitas se va de los dos lados. Es lo que permite usar
+   * cualquiera de los dos apartados sin llevar la cuenta en la cabeza. El aviso
+   * dice lo que ha pasado, para que borrar trabajo terminado nunca sea mudo.
+   *
+   * LO QUE NO SE BORRA es la tarea de OTRA PERSONA. Si un objetivo se delegó, esa
+   * tarea ya es suya: quitarla de mi diario no puede hacerla desaparecer de su
+   * lista. Se desengancha y se dice.
+   */
+  const quitarObjetivo = async (i: number) => {
+    const texto = (filas[i] || '').trim()
+    const suya = texto
+      ? (tareaDe(texto) as { id: string; done?: boolean; assigned_to?: string } | undefined)
+      : undefined
+    cambiarFilas(filas.filter((_, k) => k !== i))
+    setFocoPendiente(Math.max(0, i - 1))
+    if (!suya || demo) return
+    if (suya.assigned_to && profile?.id && suya.assigned_to !== profile.id) {
+      showToast('Objetivo quitado. Su tarea es de otra persona, así que se queda en su lista')
+      return
+    }
+    try {
+      await data.deleteTask(suya.id)
+      showToast(suya.done ? 'Objetivo y su tarea borrados (estaba hecha)' : 'Objetivo y su tarea borrados')
+    } catch {
+      // Se dice. Callarlo dejaría exactamente el estado que este arreglo persigue:
+      // una tarea viva cuyo objetivo ya no existe.
+      showToast('El objetivo se quitó, pero su tarea sigue en Tareas')
+    }
+  }
+
   const enfocarFila = (i: number) => setFocoPendiente(i)
   useEffect(() => {
     if (focoPendiente === null) return
@@ -1372,8 +1415,10 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
                           enfocarFila(i + 1)
                         } else if (e.key === 'Backspace' && !fila && filas.length > 1) {
                           e.preventDefault()
-                          cambiarFilas(filas.filter((_, k) => k !== i))
-                          enfocarFila(Math.max(0, i - 1))
+                            // Mismo camino que la X: aquí la fila está vacía, así que no
+                            // hay tarea que borrar, pero un solo camino es un sitio menos
+                            // donde olvidarse de la tarea la próxima vez.
+                            void quitarObjetivo(i)
                         }
                       }}
                       placeholder={EJEMPLOS[i] || 'Otro objetivo…'}
@@ -1382,7 +1427,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
                     />
                     {(filas.length > 1 || !!fila) && (
                       <button
-                        onClick={() => { cambiarFilas(filas.filter((_, k) => k !== i)); enfocarFila(Math.max(0, i - 1)) }}
+                        onClick={() => { void quitarObjetivo(i) }}
                         aria-label={`Quitar objetivo ${i + 1}`}
                         className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 transition-opacity opacity-0 group-hover:opacity-100 focus:opacity-100"
                         style={{ opacity: isMobile ? 1 : undefined }}>
