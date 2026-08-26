@@ -4194,6 +4194,34 @@ describe('el SQL del repo se puede aplicar de principio a fin', () => {
   })
 })
 
+describe('el extractor no reescribe lo que tu ya has escrito', () => {
+  // Javi: «cuando tu añades los objetivos, te aparece un boton de sugerir tareas.
+  // Pues eso, en verdad, hace que quites».
+  //
+  // Medido con sus datos reales: escribio 3 objetivos y acabo con 5 tareas. Al
+  // fichar, cada linea YA se convierte en una tarea —el propio codigo lo dice: «una
+  // linea es una tarea y punto»—, asi que pasarle ademas los objetivos al modelo
+  // solo puede producir una SEGUNDA version reescrita de algo que ya existe.
+  //
+  // Y reescrita de verdad: «generacion video higgfield 1-2h» volvio como
+  // «Generación video higgfield» —perdiendo el «1-2h» que el habia puesto a
+  // proposito— y normalizando distinto, asi que el filtro de duplicados no podia
+  // cazarlo NUNCA. El balance es otra cosa: ahi cuentas en prosa lo que hiciste, y
+  // sacar tareas de ahi si aporta.
+  it('solo mira el balance, nunca los objetivos', () => {
+    const D = leerCodigo('src/components/sections/DiarioSection.tsx')
+    const i = D.indexOf("'/api/diario/extraer'")
+    expect(i, 'ya no se llama al extractor: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    // El texto que se le manda se compone justo antes, en el mismo efecto.
+    const antes = D.slice(Math.max(0, i - 2600), i)
+    const m = antes.match(/const texto = ([^\n]*)/)
+    expect(m, 'ya no se compone el texto del extractor donde esta regla lo busca').toBeTruthy()
+    expect(/objetivos/.test(m![1]),
+      `el extractor vuelve a leer los objetivos: te devolvera reescrito lo que acabas de escribir, y como no normaliza igual el filtro de duplicados no podra cazarlo. Lo que se le manda ahora es: ${m![1]}`)
+      .toBe(false)
+  })
+})
+
 describe('el cronometro de la jornada late de verdad', () => {
   // Javi lo pidio asi: «un contador de cuanto tiempo llevo trabajando: un minuto,
   // dos minutos, tres minutos, que se vaya actualizando». Lo que habia:

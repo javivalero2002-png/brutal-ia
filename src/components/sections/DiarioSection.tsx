@@ -516,7 +516,24 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
 
   // ── Las tareas se proponen solas ──────────────────────────────────────────
   useEffect(() => {
-    const texto = [objetivos, balance].filter(Boolean).join('\n').trim()
+    // EL EXTRACTOR NO MIRA LOS OBJETIVOS. Solo el balance.
+    //
+    // Javi lo dijo así: «cuando tú añades los objetivos, te aparece un botón de
+    // sugerir tareas. Pues eso, en verdad, hace que quites».
+    //
+    // Y tenía razón, con números: escribió 3 objetivos y acabó con 5 tareas. Al
+    // fichar, cada línea ya se convierte en una tarea —lo dice el comentario de
+    // `fichar`: «una línea es una tarea y punto»—, así que pasarle además los
+    // objetivos al modelo solo puede producir una SEGUNDA versión reescrita de
+    // algo que ya existe. Y reescrita de verdad: «generacion video higgfield 1-2h»
+    // volvió como «Generación video higgfield», perdiendo el «1-2h» que él había
+    // puesto a propósito, y normalizando distinto — así que el filtro de
+    // duplicados no podía cazarlo NUNCA.
+    //
+    // Una línea que tú escribes ya está estructurada. Pagar por que un modelo la
+    // reescriba solo puede empeorarla. El balance es otra cosa: ahí cuentas en
+    // prosa lo que hiciste, y sacar tareas de ahí sí aporta.
+    const texto = balance.trim()
     if (demo || sesionCaida.current) return
     // Un día pasado es de solo lectura: `crearTodas` lo rechaza. Llamar al modelo
     // ahí paga por un panel cuyo botón no puede funcionar.
@@ -553,7 +570,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
       finally { setLeyendo(false) }
     }, 2500)
     return () => { if (extraerTimer.current) clearTimeout(extraerTimer.current) }
-  }, [objetivos, balance])
+  }, [balance])
 
   /**
    * Fichar. Y aquí está lo que hace que el diario sirva para algo:
@@ -661,7 +678,13 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
     let ok = 0
     for (const p of propuestas) {
       try {
-        await data.createTask({ text: p.text, level: p.level, done: esFuturo ? false : p.hecha, assigned_to: profile?.id, source: 'ai', diario_dia: dia, diario_objetivo: p.text })
+        // SIN `diario_objetivo`. Una sugerencia no viene de una línea concreta: el
+        // modelo recibe el texto como un bloque y encima se le pide partir frases en
+        // dos. Antes se ataba a `p.text` —el texto que el modelo acababa de
+        // reescribir— así que el vínculo apuntaba a algo que no era ningún objetivo:
+        // la burbuja nunca se ponía verde y la tarea aparecía suelta. Fingir un
+        // vínculo es peor que no tenerlo. Sigue siendo tarea DEL DÍA (`diario_dia`).
+        await data.createTask({ text: p.text, level: p.level, done: esFuturo ? false : p.hecha, assigned_to: profile?.id, source: 'ai', diario_dia: dia })
         ok++
       } catch { /* se cuenta abajo */ }
     }
@@ -962,8 +985,12 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
    * propuso por la mañana y lo que fue apareciendo no son lo mismo, y fundirlos
    * borraría justo la distancia que el Diario existe para enseñar.
    */
-  const otrasDelDia = misTareasDelDia.filter((t: { text?: string }) =>
-    !objetivosDeHoy.some(o => normalizar(o) === normalizar(t.text || '')),
+  // POR ID, no por texto. Comparando el texto, en cuanto un objetivo y su tarea
+  // dejaban de decir lo mismo —basta con corregir una falta en Tareas— la MISMA
+  // tarea se pintaba dos veces: verde arriba como objetivo cumplido y otra vez
+  // abajo en «TAMBIÉN HOY». Un trabajo, una fila.
+  const otrasDelDia = misTareasDelDia.filter((t: { id: string }) =>
+    !objetivosDeHoy.some(o => tareaDe(o)?.id === t.id),
   ) as { id: string; text?: string; done?: boolean }[]
 
   const cumplidosVivos = objetivosDeHoy.filter(estaHecho).length
