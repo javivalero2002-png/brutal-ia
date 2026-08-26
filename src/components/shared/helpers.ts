@@ -312,6 +312,28 @@ export const videoEmbed = (url: string) => {
 export const videoEsVertical = (url: string) =>
   /instagram\.com\/(reel|reels|tv)\//.test(url || '')
 
+/**
+ * La forma del hueco donde se pinta un vídeo incrustado.
+ *
+ * Javi: «cuando quiero ver un vídeo después de poner el enlace, no se me
+ * reproduce». No era eso: el vídeo estaba y se reproducía. Medido abriendo el
+ * embed a pelo —hay un `<video>` de cdninstagram, 37,5 s, y arranca al pulsar—.
+ * Lo que fallaba era el MARCO.
+ *
+ * A un reel se le ponía 9/16 porque es vídeo vertical, pero lo que se incrusta no
+ * es el vídeo: es la TARJETA de Instagram, con su cabecera de cuenta y su pie de
+ * «me gusta». Esa tarjeta mide 1 : 1,46 —medido en el navegador—, así que en un
+ * hueco de 1 : 1,78 sobraban casi veinte de cada cien píxeles de alto y salían en
+ * NEGRO, justo debajo de la portada. Parecía un vídeo que no carga.
+ *
+ * YouTube, Vimeo y Drive sí son marcos de vídeo puros y siguen en 16/9.
+ */
+export const proporcionEmbed = (url: string): { aspectRatio: string; maxWidth: string } => {
+  if (/instagram\.com\//.test(url || '')) return { aspectRatio: '1 / 1.46', maxWidth: '340px' }
+  if (videoEsVertical(url)) return { aspectRatio: '9 / 16', maxWidth: '320px' }
+  return { aspectRatio: '16 / 9', maxWidth: 'none' }
+}
+
 // Estado de un deadline en DÍAS, no en instantes.
 //
 // Existía tres veces escrito a mano en ProyectosSection, siempre así:

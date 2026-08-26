@@ -488,10 +488,25 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
               {(buzones === null ? !!profile?.gmail_connected : buzones.length > 0) ? (
                 <div className="flex flex-col gap-1.5">
                   {(buzones && buzones.length ? buzones : [{ email: profile?.gmail_account || '', compartida: false }]).map(b => (
-                    <div key={b.email} className="flex items-center gap-2 px-3.5 py-3 rounded-2xl font-figtree text-[12.5px]"
-                      style={{ background: `${GRN}10`, border: `1px solid ${GRN}30`, color: GRN }}>
+                    // `break-all` partía la dirección por donde cayera —«comparti /
+                    // do»— y eso, en la primera pantalla que ve alguien, se lee como
+                    // que la app está mal hecha. La dirección se recorta por el final
+                    // con puntos suspensivos, que es como se recorta un correo en
+                    // todas partes, y «compartido» baja a su propia línea como lo que
+                    // es: una etiqueta, no parte de la dirección.
+                    <div key={b.email} className="flex items-center gap-2.5 px-3.5 py-3 rounded-2xl"
+                      style={{ background: `${GRN}10`, border: `1px solid ${GRN}30` }}>
                       <LucideIcon name="check" size={14} color={GRN} />
-                      <span className="break-all">{b.email || 'Ya está conectado'}{b.compartida ? ' · compartido' : ''}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-figtree text-[12.5px] truncate" style={{ color: GRN }} title={b.email || ''}>
+                          {b.email || 'Ya está conectado'}
+                        </div>
+                        {b.compartida && (
+                          <div className="font-syne text-[7px] font-black tracking-[0.18em] mt-0.5" style={{ color: `${GRN}99` }}>
+                            BUZÓN COMPARTIDO DEL EQUIPO
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                   {/* Conectar OTRA sigue disponible aquí: es donde la gente se da

@@ -4,6 +4,7 @@
 // para poder revisarlas/capturarlas sin necesidad de login. NO se sirve en prod.
 // ─────────────────────────────────────────────────────────────────────────────
 import { useState, useCallback, useRef, useEffect } from 'react'
+import Aviso from '@/components/shared/Aviso'
 import type { Task, Project, Client, Profile, Regla, InboxMessage, ContentItem, MemoriaEntry, ChatMessage, CalendarEvent, NexusData } from '@/types'
 import { SectionErrorBoundary } from '@/components/shared/ErrorBoundary'
 import CreateModal from '@/components/CreateModal'
@@ -441,11 +442,10 @@ export default function PreviewClient({
         </>)}
       </div>
 
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-xl font-figtree text-[13px] z-[200]" style={{ background:'#0F0F1E', border:`1px solid ${BLU}44`, color:'white', boxShadow:'0 10px 40px rgba(0,0,0,0.5)' }}>
-          {toast}
-        </div>
-      )}
+      {/* El MISMO aviso que ve el equipo. Aqui habia otro distinto y mas pobre,
+          asi que la pantalla donde se prueban las secciones no podia enseñar lo
+          que se ve en produccion — y cualquier arreglo alli no llegaba aqui. */}
+      {toast && <Aviso texto={toast} />}
 
       {modal && (
         <CreateModal

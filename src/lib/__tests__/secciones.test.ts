@@ -983,9 +983,19 @@ describe('diario · la racha es personal y salta los fines de semana', () => {
       expect(frases, `la pantalla «${id}» del recorrido se quedo sin frases de ejemplo: explicar que se le puede preguntar no hace que nadie pregunte`)
         .toBeGreaterThanOrEqual(3)
     }
-    // Y que TODAS tengan al menos uno, sea frase o no.
-    const conEjemplos = [...lista.matchAll(/ejemplos:\s*\[\s*'/g)].length
-    expect(conEjemplos, 'hay pantallas del recorrido sin ningun ejemplo').toBe(dibujadas.length)
+    // TRES en todas, ni dos ni cuatro.
+    //
+    // Javi: «parece que se ha mezclado entre lo anterior y lo nuevo; mas o menos
+    // tiene que ser igual». Y lo era: Harvey y Brutal.IA llevaban cuatro frases y
+    // Fichar una etiqueta suelta, asi que el recorrido parecia dos recorridos
+    // pegados. La simetria aqui no es estetica: es lo que hace que se lea como UN
+    // apartado y no como una lista de notas de distintos dias.
+    const bloques = [...lista.matchAll(/ejemplos:\s*\[([\s\S]*?)\],/g)].map(m => m[1])
+    expect(bloques.length, 'hay pantallas del recorrido sin ningun ejemplo').toBe(dibujadas.length)
+    const desiguales = bloques
+      .map((b, i) => ({ i, n: [...b.matchAll(/'[^']+'/g)].length }))
+      .filter(x => x.n !== 3)
+    expect(desiguales, 'hay pantallas del recorrido que no tienen exactamente 3 cosas que probar: el recorrido vuelve a leerse como dos recorridos pegados').toEqual([])
   })
 
 })

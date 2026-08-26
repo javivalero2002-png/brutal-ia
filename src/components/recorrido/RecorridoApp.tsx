@@ -32,49 +32,81 @@ export const RECORRIDO = [
     id: 'hoy', icono: 'sun', nombre: 'Hoy', Mini: MiniHoy,
     que: 'La portada. Al abrir la app te dice en cinco líneas qué reclama tu atención hoy: lo urgente del correo, lo que vence y lo que dejaste a medias ayer.',
     truco: 'No hay que ir a buscar nada. Si algo importa, sale aquí — y si aquí no sale nada, es que no hay nada ardiendo.',
-    ejemplos: ['La bola azul del centro es Harvey', 'Se abre sola al entrar'],
+    ejemplos: [
+      'Pulsa el orbe y habla con Harvey',
+      'Toca una cifra para ir a su sección',
+      'Es lo que se abre al entrar',
+    ],
   },
   {
     id: 'diario', icono: 'pen-line', nombre: 'Fichar', Mini: MiniFichar,
     que: 'Al entrar marcas entrada y escribes qué te propones hacer. Al salir tachas lo que has hecho y cuentas en dos líneas qué se quedó a medias.',
     truco: 'Lo que escribes como objetivo no se queda aquí: pasa a Tareas como tarea de verdad. Si la tachas en un sitio, se tacha en el otro — son la misma cosa vista desde dos pantallas, no dos listas que hay que mantener a mano.',
-    ejemplos: ['Mientras la jornada está abierta corre un reloj con tus horas'],
+    ejemplos: [
+      'Marca entrada y escribe tres objetivos',
+      'Míralos aparecer solos en Tareas',
+      'Al salir, cuenta qué quedó a medias',
+    ],
   },
   {
     id: 'tareas', icono: 'check-square', nombre: 'Tareas', Mini: MiniTareas,
     que: 'Todo lo que hay que hacer, tuyo y del equipo, con quién lo lleva, para cuándo y con qué prioridad. En lista o en tablero, como prefieras mirarlo.',
     truco: 'El botón «Mi día» deja en pantalla solo lo tuyo urgente o ya vencido. Es el atajo para cuando abres la app y no sabes por dónde empezar.',
-    ejemplos: ['Mi día', 'Agrupar por proyecto', 'Agrupar por prioridad'],
+    ejemplos: [
+      'Pulsa «Mi día»',
+      'Cambia entre lista y tablero',
+      'Agrupa por proyecto o por prioridad',
+    ],
   },
   {
     id: 'inbox', icono: 'inbox', nombre: 'Inbox', Mini: MiniInbox,
     que: 'Tu correo de Gmail y el buzón compartido de colaboraciones, en una sola lista. También los mensajes internos que os mandáis entre vosotros.',
     truco: 'Cada correo llega ya leído por la IA: la línea azul de debajo del asunto es su resumen, y la barra de color de la izquierda marca lo urgente. Puedes saber si algo corre sin abrir un solo email.',
-    ejemplos: ['Al responder, Harvey te escribe el borrador', 'Y ya sabe de qué ibais hablando'],
+    ejemplos: [
+      'Lee la línea azul, no el correo entero',
+      'Filtra por «Urgente»',
+      'Responde y deja que Harvey lo redacte',
+    ],
   },
   {
     id: 'calendario', icono: 'calendar', nombre: 'Calendario', Mini: MiniCalendario,
     que: 'El mes entero con todo lo que tiene fecha, y el detalle del día al pinchar en él.',
     truco: 'No es solo tu Google Calendar: en el mismo día se pintan los eventos, las piezas que se publican, las tareas que vencen y los cierres de proyecto. Cada cosa con su color.',
-    ejemplos: ['Lo que crees aquí aparece en tu Google de verdad'],
+    ejemplos: [
+      'Pincha un día para ver el detalle',
+      'Cambia entre «solo mías» y «todo el equipo»',
+      'Crea un evento y saldrá en tu Google',
+    ],
   },
   {
     id: 'clientes', icono: 'users', nombre: 'Clientes', Mini: MiniClientes,
     que: 'La ficha de cada cliente: a qué se dedica, cuánto factura al mes y todo lo que tenéis abierto con él.',
     truco: 'Se cruza sola con el correo. La ficha te dice cuándo fue el último contacto y cuántos emails suyos siguen sin leer — que es la forma rápida de ver a quién tenéis olvidado.',
-    ejemplos: ['HOY · HACE 3D · HACE 3 SEMANAS'],
+    ejemplos: [
+      'Mira cuándo fue el último contacto',
+      'Filtra por «Activo»',
+      'Abre un cliente y ve todo lo suyo',
+    ],
   },
   {
     id: 'proyectos', icono: 'folder-open', nombre: 'Proyectos', Mini: MiniProyectos,
     que: 'Cada trabajo grande con su cliente, su porcentaje de avance, su fecha límite y las tareas que cuelgan de él.',
     truco: 'Suelta un PDF encima de un proyecto y la IA lo lee entero: saca la portada, lo resume, lo guarda en la memoria del estudio y después le puedes hacer preguntas al documento sin volver a abrirlo.',
-    ejemplos: ['«¿Qué plazos pone el contrato?»', '«¿Cuánto presupuestamos aquí?»'],
+    ejemplos: [
+      'Suelta un PDF encima de un proyecto',
+      'Pregúntale al documento',
+      'Mira el porcentaje de avance',
+    ],
   },
   {
     id: 'contenido', icono: 'film', nombre: 'Contenido', Mini: MiniContenido,
     que: 'El tablero de las piezas que se publican en redes: van pasando de idea a en producción, a listo, a publicado.',
     truco: 'Cada pieza tiene un enlace de revisión que se copia con un botón. Se lo mandas a un cliente, lo abre fuera de la app y deja su opinión ahí mismo — sin cuenta, sin contraseña y sin ver nada más del estudio.',
-    ejemplos: ['Copiar enlace de revisión'],
+    ejemplos: [
+      'Mueve una pieza a «Listo»',
+      'Copia el enlace de revisión',
+      'Filtra por plataforma',
+    ],
   },
   {
     id: 'harvey', icono: 'cpu', nombre: 'Harvey', Mini: MiniHarvey,
@@ -84,7 +116,6 @@ export const RECORRIDO = [
     truco: 'No solo contesta: HACE. Crea tareas, proyectos, clientes, piezas y reuniones, marca cosas como hechas y te cierra la jornada. Y antes de tocar nada te enseña una tarjeta con lo que ha entendido: hasta que no la confirmas, no existe.',
     ejemplos: [
       '«Crea una tarea urgente para Jorge»',
-      '«Ya está el montaje del teaser»',
       '«Reunión con Zara el martes a las 10»',
       '«Cierra mi día: he montado el teaser»',
     ],
@@ -98,14 +129,17 @@ export const RECORRIDO = [
       '«¿Qué ha hecho Jorge esta semana?»',
       '«¿Qué campaña hicimos con Nutella?»',
       '«¿Cuánto cuesta alquilar un dron en Valencia?»',
-      '«Resúmeme los correos sin leer»',
     ],
   },
   {
     id: 'ajustes', icono: 'settings', nombre: 'Operativa', Mini: MiniOperativa,
     que: 'La trastienda: tu ficha y tu color, los avisos, conectar el correo y el calendario, la memoria del estudio y las copias de seguridad.',
     truco: 'La Memoria es lo que hace que las IAs sepan cómo trabajáis: notas, decisiones, procesos y PDFs que se leen enteros. Lo que apuntes ahí lo saben las dos, y lo saben al momento.',
-    ejemplos: ['Aquí se vuelve a abrir esta puesta en marcha cuando quieras'],
+    ejemplos: [
+      'Conecta tu Gmail y tu calendario',
+      'Sube un PDF a Memoria',
+      'Vuelve a abrir esta puesta en marcha',
+    ],
   },
 ]
 
@@ -138,11 +172,18 @@ export function TarjetaRecorrido({ i }: { i: number }) {
         <p className="font-figtree text-[11.5px] leading-snug" style={{ color: 'rgba(255,255,255,0.5)' }}>{p.truco}</p>
       </div>
 
-      {/* Las frases literales. Explicar que «se le puede pedir cosas» no hace que
-          nadie se lo pida: la gente prueba lo que ve escrito. Por eso van entre
-          comillas y tal cual se dicen — son para copiar, no para entender. */}
+      {/* PRUEBA ESTO — tres cosas, siempre tres, en las once pantallas.
+          Javi: «parece que se ha mezclado entre lo anterior y lo nuevo; tiene que
+          haber un único apartado donde pone un repaso de qué hace cada pantalla,
+          más o menos tiene que ser igual». Y era verdad: unas llevaban cuatro
+          frases entrecomilladas y otras una etiqueta suelta de adorno, así que el
+          recorrido parecía dos recorridos pegados.
+          Ahora las once tienen la misma forma —maqueta, qué es, lo que no se ve, y
+          tres cosas que probar— y el rótulo lo hace evidente. */}
       {p.ejemplos.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-2.5">
+        <div className="mt-2.5">
+        <div className="font-syne text-[7px] font-black tracking-[0.2em] mb-1.5" style={{ color: 'rgba(255,255,255,0.25)' }}>PRUEBA ESTO</div>
+        <div className="flex flex-wrap gap-1.5">
           {p.ejemplos.map(e => {
             // Lo entrecomillado es algo que se DICE; lo demás es algo que hay.
             const seDice = e.startsWith('«')
@@ -155,6 +196,7 @@ export function TarjetaRecorrido({ i }: { i: number }) {
               </div>
             )
           })}
+        </div>
         </div>
       )}
 

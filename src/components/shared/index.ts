@@ -1,6 +1,6 @@
 export { BLU, RED, GRN, AMBAR, VIO, SURFACE, SURF2, BORDER, ACCENT_COLORS, PLATAFORMA_COLOR } from './design-tokens'
 export { useIsMobile, useBackClosable } from './hooks'
-export { dlDate, dlLabel, strColor, relTime, videoEmbed, videoEsVertical, todayKey, localDayKey, daysBetweenKeys, estadoDeadline, madridHour, madridDateLabel, plural, parseImporte, buscaEnTexto, NIVEL_TAREA, rotuloNivel, nivelTarea, mensajeErrorTranscripcion } from './helpers'
+export { dlDate, dlLabel, strColor, relTime, videoEmbed, videoEsVertical, proporcionEmbed, todayKey, localDayKey, daysBetweenKeys, estadoDeadline, madridHour, madridDateLabel, plural, parseImporte, buscaEnTexto, NIVEL_TAREA, rotuloNivel, nivelTarea, mensajeErrorTranscripcion } from './helpers'
 export { getSharedAudio, playAck, isIOSDevice, matchTeamMember, splitForTTS, stopAllVoices, unlockAudio, isSRBroken, markSRBroken } from './audio'
 export { default as LucideIcon } from './LucideIcon'
 export { AjGroup, AjCard, ProgressRing, SafeImg } from './ui'
