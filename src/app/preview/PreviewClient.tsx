@@ -170,7 +170,10 @@ const DIARIO_DEMO = [
     id: 'd1', user_id: 'u1', dia: 'hoy',
     entrada: 'Crear el vídeo de Instagram de Higgsfield\nPensar el guion del siguiente',
     cierre: 'Vídeo montado y subido. El guion se queda a medias.',
-    entrada_at: new Date().toISOString(), cierre_at: new Date().toISOString(),
+    // JORNADA ABIERTA hace 2h 34m: es el estado interesante, y el unico en el que
+    // se puede ver el cronometro correr. Con entrada y cierre en el mismo instante
+    // el banco enseñaba «DÍA COMPLETADO 00:00», que no prueba nada.
+    entrada_at: new Date(Date.now() - (2 * 3600 + 34 * 60 + 12) * 1000).toISOString(), cierre_at: null,
     autor: { id: 'u1', name: 'Javier Valero', initials: 'JV', avatar_color: '#1B5FFA' },
   },
   {

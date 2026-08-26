@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import RelojJornada from '@/components/shared/RelojJornada'
 import { BLU, GRN, AMBAR, RED, VIO, SURFACE, SURF2, BORDER } from '@/components/shared/design-tokens'
 import ActivarAvisos from '@/components/shared/ActivarAvisos'
 import PanelEquipo from '@/components/sections/PanelEquipo'
@@ -571,13 +572,28 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
     // Un día pasado no se reescribe; uno futuro SÍ se planifica.
     if (esPasado) { showToast('Un día pasado no se puede modificar'); return }
     const valor = campo === 'entrada' ? objetivos : balance
-    if (!valor.trim()) { showToast(campo === 'entrada' ? 'Escribe tus objetivos primero' : 'Cuenta qué has hecho'); return }
+    // PARAR CIERRA LA JORNADA SIEMPRE. Javi lo pidió así: «cuando le dé a parar,
+    // que guarde la jornada».
+    //
+    // Antes, cerrar exigía haber escrito el balance: pulsabas TERMINAR, salía un
+    // aviso de tres segundos y el contador SEGUÍA CORRIENDO. Y el campo que había
+    // que rellenar está en otro panel más abajo — en móvil, fuera de pantalla. O
+    // sea que el botón de parar no paraba y no se veía por qué.
+    //
+    // El balance es valioso, pero es una nota sobre el día; la hora de salida es un
+    // hecho. Un hecho no puede depender de que te apetezca escribir. Se pide
+    // después, con el día ya cerrado, que es cuando se contesta mejor.
+    if (campo === 'entrada' && !valor.trim()) { showToast('Escribe tus objetivos primero'); return }
     setFichando(true)
     try {
       const res = await fetch('/api/diario', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [campo]: valor.trim(), dia }),
+        // En el cierre el texto viaja solo si lo hay: mandar `cierre: ''` borraría
+        // un balance ya escrito al volver a pulsar.
+        body: JSON.stringify(campo === 'entrada'
+          ? { entrada: valor.trim(), dia }
+          : { dia, cerrar: true, ...(valor.trim() ? { cierre: valor.trim() } : {}) }),
       })
       if (!res.ok) { showToast('No se pudo fichar'); return }
 
@@ -1162,9 +1178,11 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
                     <div className="font-syne text-[7.5px] font-black tracking-[0.18em] mb-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
                       {yaCerrado ? 'DÍA COMPLETADO' : 'EN LA OFICINA'}
                     </div>
-                    <div className="font-figtree font-black text-white" style={{ fontSize: isMobile ? '30px' : '26px', letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-                      {tiempoSesion || '—'}
-                    </div>
+                      <div style={{ lineHeight: 1 }}>
+                        <RelojJornada entradaAt={miEntrada.entrada_at as string}
+                                      cierreAt={miEntrada.cierre_at as string | null}
+                                      isMobile={isMobile} />
+                      </div>
                     <div className="font-figtree text-[11px] mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
                       desde las {horaCorta(miEntrada.entrada_at)}
                       {racha > 1 && ` · 🔥 ${racha} días`}
@@ -1452,7 +1470,13 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
               />
               {/* Cerrar el día, dentro del propio campo: es la acción que sigue a
                   escribirlo, y así no hace falta bajar la vista a otro botón. */}
-              {!yaCerrado && (
+                {/* Y SOLO SI EL DÍA ESTÁ ABIERTO. Sin comprobarlo, escribir aquí y
+                    pulsar la marca sellaba `cierre_at` con `entrada_at` a null: al
+                    fichar después, `entrada_at > cierre_at`, la resta salía negativa
+                    y el reloj quedaba roto para siempre — no hay ninguna ruta que
+                    ponga `cierre_at` a null. El servidor ya lo rechaza con un 400;
+                    esto es para no ofrecer un botón que no puede funcionar. */}
+                {!yaCerrado && !!miEntrada?.entrada_at && (
                 <button onClick={() => fichar('cierre')} disabled={fichando} aria-label="Cerrar el día"
                   className="absolute bottom-3 right-3 w-8 h-8 rounded-xl flex items-center justify-center transition-all active:scale-90 disabled:opacity-40"
                   style={{ background: `${GRN}1E`, border: `1px solid ${GRN}45` }}>

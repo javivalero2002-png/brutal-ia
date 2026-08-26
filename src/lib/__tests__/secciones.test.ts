@@ -188,8 +188,15 @@ describe('Diario · cableado completo', () => {
     expect(/const esFuturo = dia > hoy/.test(R), 'ya no se distingue un día futuro').toBe(true)
     expect(/!esFuturo && campos\.entrada[\s\S]{0,60}entrada_at = ahora/.test(R),
       'un día futuro fichará hora de entrada: un plan quedaría como trabajo hecho').toBe(true)
-    expect(/!esFuturo && campos\.cierre[\s\S]{0,60}cierre_at = ahora/.test(R),
-      'un día futuro fichará hora de cierre').toBe(true)
+    // El cierre ya no se sella porque llegue texto en `cierre`, sino con un
+    // `cerrar: true` explicito — pulsar TERMINAR sin haber escrito el balance no
+    // cerraba nada, y escribir el balance sin haber fichado dejaba `cierre_at` con
+    // `entrada_at` a null (y el reloj roto para siempre). La condicion de dia
+    // futuro sigue siendo la misma y es lo que esta regla protege.
+    expect(/quiereCerrar && !esBorrador && !esFuturo/.test(R),
+      'un día futuro fichará hora de cierre: un plan quedaría como jornada cerrada').toBe(true)
+    expect(/!previo\?\.entrada_at[\s\S]{0,200}status: 400/.test(R),
+      'se puede cerrar un día que no se ha abierto: eso deja entrada_at > cierre_at y el reloj en negativo para siempre').toBe(true)
     // Y la forma se valida antes: entra en un filtro de la consulta.
     expect(/\\d\{4\}-\\d\{2\}-\\d\{2\}/.test(R), 'el día del cuerpo no se valida').toBe(true)
   })
