@@ -148,6 +148,39 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
 
   useEffect(() => { load() }, [load])
 
+  // Supabase Realtime — la MEMORIA del estudio.
+  //
+  // Harvey no lee `memoria` del servidor: la lee del estado de este hook y la mete
+  // en el contexto que manda desde el navegador (`contextoHarvey.ts`). O sea que
+  // sin esto, la memoria era una foto del momento en que se cargó la app.
+  //
+  // El caso real, que es el que lo destapó: subes un documento desde el móvil y le
+  // preguntas a Harvey en el portátil, que lleva la pestaña abierta desde por la
+  // mañana. Harvey contesta que no lo tiene. Y es peor que un error, porque
+  // contesta con seguridad —tiene una lista de notas, solo que vieja— y al recargar
+  // acierta, así que parece cosa de la IA y no de que no le había llegado el dato.
+  //
+  // UPDATE y DELETE también: corregir una nota mal escrita o borrar algo que no
+  // debía estar ahí tiene que llegarle a la IA sin recargar. Justo lo que se borra
+  // es lo que no quieres que siga contestando.
+  useEffect(() => {
+    if (!profile) return
+    const canal = supabase
+      .channel(`memoria-${profile.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'memoria' }, (payload) => {
+        const fila = (payload.new || payload.old) as MemoriaEntry
+        if (!fila?.id) return
+        setMemoria(prev => {
+          if (payload.eventType === 'DELETE') return prev.filter(m => m.id !== fila.id)
+          if (payload.eventType === 'UPDATE') return prev.map(m => m.id === fila.id ? { ...m, ...fila } : m)
+          return prev.some(m => m.id === fila.id) ? prev : [fila, ...prev]
+        })
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(canal) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id])
+
   // Supabase Realtime — own inbox messages
   useEffect(() => {
     if (!profile) return
