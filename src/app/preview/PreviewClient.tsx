@@ -15,6 +15,7 @@ import TareasSection from '@/components/sections/TareasSection'
 import AutomatizacionesSection from '@/components/sections/AutomatizacionesSection'
 import ReportesSection from '@/components/sections/ReportesSection'
 import InboxSection from '@/components/sections/InboxSection'
+import PuestaEnMarcha from '@/components/PuestaEnMarcha'
 import ClientesSection from '@/components/sections/ClientesSection'
 // Las 8 restantes: /preview cubria 6 de 14, asi que media app no se podia mirar
 // sin credenciales — y es la unica via para revisar la UI en una sesion de Claude.
@@ -376,6 +377,10 @@ export default function PreviewClient({
     { id:'chat', label:'Brutal.IA' },
     { id:'harvey', label:'Harvey' },
     { id:'ajustes', label:'Operativa' },
+    // La puesta en marcha solo la ve quien entra por primera vez, asi que sin
+    // esto no habia forma de mirarla —ni de revisar un cambio— sin reiniciar una
+    // cuenta de verdad. Aqui sale con los datos de muestra, como todo lo demas.
+    { id:'puesta', label:'Puesta en marcha' },
   ]
 
   const filteredProjects = projStatusFilter === 'Todos' ? projects : projects.filter(p => p.status === projStatusFilter)
@@ -422,6 +427,7 @@ export default function PreviewClient({
         {section==='proyectos' && <SectionErrorBoundary section="proyectos"><ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={abrirModal} showToast={showToast} isOwner onNavigate={setSection} onSelectClient={()=>{}} justCreatedId={null} onJustCreatedScrolled={()=>{}}/></SectionErrorBoundary>}
         {section==='contenido' && <SectionErrorBoundary section="contenido"><ContenidoSection data={data} onOpenModal={abrirModal} showToast={showToast} onNavigate={setSection} onSelectClient={()=>{}} profile={profile}/></SectionErrorBoundary>}
         {section==='calendario' && <SectionErrorBoundary section="calendario"><CalendarioSection data={data} profile={profile} showToast={showToast} onOpenModal={abrirModal}/></SectionErrorBoundary>}
+        {section==='puesta' && <SectionErrorBoundary section="puesta"><PuestaEnMarcha profile={profile} onTerminar={()=>showToast('(en el preview no se guarda nada)')} showToast={showToast}/></SectionErrorBoundary>}
         {section==='memoria' && <SectionErrorBoundary section="memoria"><MemoriaSection data={data} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={abrirModal} showToast={showToast}/></SectionErrorBoundary>}
         {section==='equipo' && <SectionErrorBoundary section="equipo"><EquipoSection data={data} profile={profile} showToast={showToast}/></SectionErrorBoundary>}
         {section==='chat' && <SectionErrorBoundary section="chat"><ChatSection profile={profile} data={data} chatInput={chatInput} setChatInput={setChatInput} chatLoading={chatLoading} setChatLoading={setChatLoading} showToast={showToast} onNavigate={setSection}/></SectionErrorBoundary>}
