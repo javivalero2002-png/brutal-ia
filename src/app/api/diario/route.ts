@@ -121,7 +121,30 @@ export async function POST(request: NextRequest) {
   // poner la hora ahí convertiría un plan en un registro de trabajo falso, que es
   // justo lo que no debe poder hacerse.
   if (!esBorrador && !esFuturo && campos.entrada !== undefined && !previo?.entrada_at) fila.entrada_at = ahora
-  if (!esBorrador && !esFuturo && campos.cierre !== undefined && !previo?.cierre_at) fila.cierre_at = ahora
+
+  // CERRAR EL DÍA ES UN GESTO, NO UN EFECTO SECUNDARIO DE ESCRIBIR.
+  //
+  // Antes la hora de salida se sellaba porque llegara texto en `cierre`. Dos cosas
+  // salían mal:
+  //
+  //   · pulsar TERMINAR sin haber escrito el balance no cerraba nada — el cliente
+  //     ni siquiera llegaba a llamar—, así que el botón de parar no paraba;
+  //   · y escribir el balance SIN haber fichado dejaba `cierre_at` con `entrada_at`
+  //     a null. Si luego fichabas, `entrada_at > cierre_at`, la resta salía
+  //     negativa y el reloj se quedaba roto PARA SIEMPRE: no hay ninguna ruta que
+  //     ponga `cierre_at` a null.
+  //
+  // Ahora se cierra con `cerrar: true` y punto, y no se puede cerrar un día que no
+  // se abrió. El texto del balance sigue guardándose por su cuenta, como cualquier
+  // otro campo.
+  const quiereCerrar = body?.cerrar === true
+  if (quiereCerrar && !esBorrador && !esFuturo) {
+    if (!previo?.entrada_at) {
+      return NextResponse.json(
+        { error: 'No puedes cerrar un día que no has abierto' }, { status: 400 })
+    }
+    if (!previo?.cierre_at) fila.cierre_at = ahora
+  }
 
   const { data, error } = await admin
     .from('diario')

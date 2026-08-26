@@ -4194,6 +4194,107 @@ describe('el SQL del repo se puede aplicar de principio a fin', () => {
   })
 })
 
+describe('el extractor no reescribe lo que tu ya has escrito', () => {
+  // Javi: «cuando tu añades los objetivos, te aparece un boton de sugerir tareas.
+  // Pues eso, en verdad, hace que quites».
+  //
+  // Medido con sus datos reales: escribio 3 objetivos y acabo con 5 tareas. Al
+  // fichar, cada linea YA se convierte en una tarea —el propio codigo lo dice: «una
+  // linea es una tarea y punto»—, asi que pasarle ademas los objetivos al modelo
+  // solo puede producir una SEGUNDA version reescrita de algo que ya existe.
+  //
+  // Y reescrita de verdad: «generacion video higgfield 1-2h» volvio como
+  // «Generación video higgfield» —perdiendo el «1-2h» que el habia puesto a
+  // proposito— y normalizando distinto, asi que el filtro de duplicados no podia
+  // cazarlo NUNCA. El balance es otra cosa: ahi cuentas en prosa lo que hiciste, y
+  // sacar tareas de ahi si aporta.
+  it('solo mira el balance, nunca los objetivos', () => {
+    const D = leerCodigo('src/components/sections/DiarioSection.tsx')
+    const i = D.indexOf("'/api/diario/extraer'")
+    expect(i, 'ya no se llama al extractor: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    // El texto que se le manda se compone justo antes, en el mismo efecto.
+    const antes = D.slice(Math.max(0, i - 2600), i)
+    const m = antes.match(/const texto = ([^\n]*)/)
+    expect(m, 'ya no se compone el texto del extractor donde esta regla lo busca').toBeTruthy()
+    expect(/objetivos/.test(m![1]),
+      `el extractor vuelve a leer los objetivos: te devolvera reescrito lo que acabas de escribir, y como no normaliza igual el filtro de duplicados no podra cazarlo. Lo que se le manda ahora es: ${m![1]}`)
+      .toBe(false)
+  })
+})
+
+describe('el cronometro de la jornada late de verdad', () => {
+  // Javi lo pidio asi: «un contador de cuanto tiempo llevo trabajando: un minuto,
+  // dos minutos, tres minutos, que se vaya actualizando». Lo que habia:
+  //
+  //  · un `setInterval` de 30 SEGUNDOS con formato HH:MM, o sea que el primer
+  //    cambio visible («00:01») llegaba entre 60 y 90 s despues de fichar y entre
+  //    tick y tick no se movia nada;
+  //  · y peor: el «ahora» se sembraba al MONTAR la seccion. Como los objetivos se
+  //    escriben durante minutos antes de pulsar, ese instante era ANTERIOR a
+  //    `entrada_at`, la resta salia negativa, el codigo devolvia null y el numero
+  //    grande ponia «—». El reloj no arrancaba en 00:00: arrancaba en una raya,
+  //    justo en el segundo en que acabas de fichar.
+  const R = leerCodigo('src/components/shared/RelojJornada.tsx')
+
+  it('late cada segundo y se pone en hora ANTES del primer intervalo', () => {
+    expect(R.length, 'ya no existe RelojJornada.tsx: revisa esta regla en vez de borrarla').toBeGreaterThan(200)
+    expect(/setInterval\(\s*tick\s*,\s*1000\s*\)/.test(R), 'el reloj ya no late cada segundo').toBe(true)
+    // `tick()` TIENE que ir antes del setInterval: es la linea que mata la raya.
+    const iTick = R.indexOf('tick()')
+    const iInt = R.indexOf('setInterval(')
+    expect(iTick, 'ya no se llama a tick(): el reloj volvera a arrancar con la hora del montaje').toBeGreaterThan(-1)
+    expect(iTick).toBeLessThan(iInt)
+  })
+
+  it('no tiene estado roto: un negativo es un cero, no una raya', () => {
+    expect(/Math\.max\(0,/.test(R), 'vuelve a poder salir un tiempo negativo').toBe(true)
+    expect(/return null/.test(R), 'el reloj vuelve a poder no pintar nada').toBe(false)
+    expect(/\|\| '—'/.test(R), 'vuelve la raya').toBe(false)
+  })
+
+  it('se pone en hora al volver de segundo plano', () => {
+    // Los navegadores estrangulan setInterval a ~1/min con la pestaña oculta y la
+    // PWA de iOS lo congela: sin esto, al volver ves un numero caducado justo en el
+    // instante en que lo miras.
+    expect(/visibilitychange/.test(R), 'no se refresca al volver a la pestaña').toBe(true)
+  })
+
+  it('vive fuera de la seccion, que es lo que permite el segundero', () => {
+    // Cada tick repintaba las 2.000 lineas de DiarioSection —incluido el bucle de
+    // 400 iteraciones de la racha—. A 30 s se toleraba; a 1 s, no.
+    const D = leerCodigo('src/components/sections/DiarioSection.tsx')
+    expect(/<RelojJornada/.test(D), 'la seccion ya no usa el reloj aislado').toBe(true)
+    const inline = [...D.matchAll(/setInterval\([^)]*Date\.now\(\)/g)].map(m => m[0])
+    expect(inline, `vuelve a haber un cronometro dentro de la seccion: cada tick repinta las 2.000 lineas\n  ${inline.join('\n  ')}`).toEqual([])
+  })
+})
+
+describe('parar guarda la jornada, y no se cierra lo que no se abrio', () => {
+  // Javi: «cuando le de a parar, que guarde la jornada». Antes cerrar exigia haber
+  // escrito el balance: pulsabas TERMINAR, salia un aviso de tres segundos y el
+  // contador SEGUIA CORRIENDO. Y el campo que habia que rellenar esta en otro panel
+  // mas abajo — en movil, fuera de pantalla.
+  it('cerrar no depende de haber escrito el balance', () => {
+    const D = leerCodigo('src/components/sections/DiarioSection.tsx')
+    const i = D.indexOf('const fichar = async')
+    expect(i, 'ya no existe fichar(): revisa esta regla').toBeGreaterThan(-1)
+    const cuerpo = D.slice(i, i + 1800)
+    expect(/campo === 'entrada' && !valor\.trim\(\)/.test(cuerpo),
+      'vuelve a exigirse el balance para cerrar: el boton de parar no parara y no se vera por que').toBe(true)
+  })
+
+  it('el servidor rechaza cerrar un dia que no se ha abierto', () => {
+    // Escribir el balance sin haber fichado dejaba `cierre_at` con `entrada_at` a
+    // null. Al fichar despues, `entrada_at > cierre_at`, la resta sale negativa y el
+    // reloj queda roto PARA SIEMPRE: no hay ninguna ruta que ponga `cierre_at` a null.
+    const R = leerCodigo('src/app/api/diario/route.ts')
+    const iGuarda = R.search(/!previo\?\.entrada_at[\s\S]{0,200}status: 400/)
+    const iSella = R.indexOf('fila.cierre_at = ahora')
+    expect(iGuarda, 'no hay guarda: se puede cerrar un dia sin abrirlo y dejar el reloj en negativo').toBeGreaterThan(-1)
+    expect(iGuarda, 'la guarda esta DESPUES de sellar la hora: no sirve de nada').toBeLessThan(iSella)
+  })
+})
+
 describe('dos contadores que subian solos', () => {
   it('«completadas esta semana» se cuenta por completed_at', () => {
     // Se contaba por `updated_at`: retocar el texto de una tarea vieja ya terminada

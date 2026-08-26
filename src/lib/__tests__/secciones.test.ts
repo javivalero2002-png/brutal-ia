@@ -188,8 +188,15 @@ describe('Diario · cableado completo', () => {
     expect(/const esFuturo = dia > hoy/.test(R), 'ya no se distingue un día futuro').toBe(true)
     expect(/!esFuturo && campos\.entrada[\s\S]{0,60}entrada_at = ahora/.test(R),
       'un día futuro fichará hora de entrada: un plan quedaría como trabajo hecho').toBe(true)
-    expect(/!esFuturo && campos\.cierre[\s\S]{0,60}cierre_at = ahora/.test(R),
-      'un día futuro fichará hora de cierre').toBe(true)
+    // El cierre ya no se sella porque llegue texto en `cierre`, sino con un
+    // `cerrar: true` explicito — pulsar TERMINAR sin haber escrito el balance no
+    // cerraba nada, y escribir el balance sin haber fichado dejaba `cierre_at` con
+    // `entrada_at` a null (y el reloj roto para siempre). La condicion de dia
+    // futuro sigue siendo la misma y es lo que esta regla protege.
+    expect(/quiereCerrar && !esBorrador && !esFuturo/.test(R),
+      'un día futuro fichará hora de cierre: un plan quedaría como jornada cerrada').toBe(true)
+    expect(/!previo\?\.entrada_at[\s\S]{0,200}status: 400/.test(R),
+      'se puede cerrar un día que no se ha abierto: eso deja entrada_at > cierre_at y el reloj en negativo para siempre').toBe(true)
     // Y la forma se valida antes: entra en un filtro de la consulta.
     expect(/\\d\{4\}-\\d\{2\}-\\d\{2\}/.test(R), 'el día del cuerpo no se valida').toBe(true)
   })
@@ -287,7 +294,10 @@ describe('Diario · no se pierde lo escrito', () => {
     expect(/diario\/extraer/.test(D)).toBe(true)
     // Se dispara desde un efecto sobre el texto, no desde un onClick.
     const i = D.indexOf('diario/extraer')
-    expect(/useEffect/.test(D.slice(Math.max(0, i - 1200), i)),
+    // Ventana de 2.500 y no 1.200: el efecto lleva ahora el comentario que explica
+    // por que el extractor NO mira los objetivos, y eso alejo el `useEffect` de la
+    // llamada. La regla comprobaba una distancia, no un hecho.
+    expect(/useEffect/.test(D.slice(Math.max(0, i - 2500), i)),
       'la extracción vuelve a depender de que el usuario pulse un botón').toBe(true)
   })
 })
@@ -361,9 +371,23 @@ describe('Diario · no repite tareas ya creadas', () => {
     // todo sigue cayendo al respaldo por texto sin que nada falle.
     const creaciones = [...D.matchAll(/createTask\(\{[^}]*\}/g)].map(m => m[0])
     expect(creaciones.length, 'ya no se crean tareas desde el Diario: revisa esta regla').toBeGreaterThan(0)
-    const sinVinculo = creaciones.filter(c => !/diario_dia:/.test(c) || !/diario_objetivo:/.test(c))
+    // TODAS deben llevar `diario_dia` — son tareas de ese día, sin excepción.
+    const sinDia = creaciones.filter(c => !/diario_dia:/.test(c))
+    expect(sinDia, 'alguna creación no dice de qué día es').toEqual([])
+
+    // Y `diario_objetivo` todas MENOS las que nacen de una sugerencia de la IA.
+    //
+    // Una sugerencia NO viene de una línea concreta: el modelo recibe el texto como
+    // un bloque y encima se le pide partir frases en dos. Antes se ataba a `p.text`
+    // —el texto que el modelo acababa de reescribir— así que el vínculo apuntaba a
+    // algo que no era ningún objetivo de nadie: la burbuja nunca se ponía verde y la
+    // tarea salía suelta. Medido con los datos reales de Javi: 3 objetivos y 5
+    // tareas. Fingir un vínculo es peor que no tenerlo.
+    const deObjetivo = creaciones.filter(c => !/text: p\.text/.test(c))
+    expect(deObjetivo.length, 'ya no se crean tareas desde una línea de objetivo: revisa esta regla').toBeGreaterThan(0)
+    const sinVinculo = deObjetivo.filter(c => !/diario_objetivo:/.test(c))
     expect(sinVinculo,
-      'alguna creación no guarda de qué línea de diario nació: esa tarea solo podrá emparejarse por texto').toEqual([])
+      'una creación que SÍ nace de una línea de objetivo no guarda cuál: solo podrá emparejarse por texto, y el texto es editable desde Tareas').toEqual([])
   })
 
   it('y lo que quitas a mano no vuelve', () => {

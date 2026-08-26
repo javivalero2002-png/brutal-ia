@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import RelojJornada from '@/components/shared/RelojJornada'
 import { BLU, GRN, AMBAR, RED, VIO, SURFACE, SURF2, BORDER } from '@/components/shared/design-tokens'
 import ActivarAvisos from '@/components/shared/ActivarAvisos'
 import PanelEquipo from '@/components/sections/PanelEquipo'
@@ -515,7 +516,24 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
 
   // ── Las tareas se proponen solas ──────────────────────────────────────────
   useEffect(() => {
-    const texto = [objetivos, balance].filter(Boolean).join('\n').trim()
+    // EL EXTRACTOR NO MIRA LOS OBJETIVOS. Solo el balance.
+    //
+    // Javi lo dijo así: «cuando tú añades los objetivos, te aparece un botón de
+    // sugerir tareas. Pues eso, en verdad, hace que quites».
+    //
+    // Y tenía razón, con números: escribió 3 objetivos y acabó con 5 tareas. Al
+    // fichar, cada línea ya se convierte en una tarea —lo dice el comentario de
+    // `fichar`: «una línea es una tarea y punto»—, así que pasarle además los
+    // objetivos al modelo solo puede producir una SEGUNDA versión reescrita de
+    // algo que ya existe. Y reescrita de verdad: «generacion video higgfield 1-2h»
+    // volvió como «Generación video higgfield», perdiendo el «1-2h» que él había
+    // puesto a propósito, y normalizando distinto — así que el filtro de
+    // duplicados no podía cazarlo NUNCA.
+    //
+    // Una línea que tú escribes ya está estructurada. Pagar por que un modelo la
+    // reescriba solo puede empeorarla. El balance es otra cosa: ahí cuentas en
+    // prosa lo que hiciste, y sacar tareas de ahí sí aporta.
+    const texto = balance.trim()
     if (demo || sesionCaida.current) return
     // Un día pasado es de solo lectura: `crearTodas` lo rechaza. Llamar al modelo
     // ahí paga por un panel cuyo botón no puede funcionar.
@@ -552,7 +570,7 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
       finally { setLeyendo(false) }
     }, 2500)
     return () => { if (extraerTimer.current) clearTimeout(extraerTimer.current) }
-  }, [objetivos, balance])
+  }, [balance])
 
   /**
    * Fichar. Y aquí está lo que hace que el diario sirva para algo:
@@ -571,13 +589,28 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
     // Un día pasado no se reescribe; uno futuro SÍ se planifica.
     if (esPasado) { showToast('Un día pasado no se puede modificar'); return }
     const valor = campo === 'entrada' ? objetivos : balance
-    if (!valor.trim()) { showToast(campo === 'entrada' ? 'Escribe tus objetivos primero' : 'Cuenta qué has hecho'); return }
+    // PARAR CIERRA LA JORNADA SIEMPRE. Javi lo pidió así: «cuando le dé a parar,
+    // que guarde la jornada».
+    //
+    // Antes, cerrar exigía haber escrito el balance: pulsabas TERMINAR, salía un
+    // aviso de tres segundos y el contador SEGUÍA CORRIENDO. Y el campo que había
+    // que rellenar está en otro panel más abajo — en móvil, fuera de pantalla. O
+    // sea que el botón de parar no paraba y no se veía por qué.
+    //
+    // El balance es valioso, pero es una nota sobre el día; la hora de salida es un
+    // hecho. Un hecho no puede depender de que te apetezca escribir. Se pide
+    // después, con el día ya cerrado, que es cuando se contesta mejor.
+    if (campo === 'entrada' && !valor.trim()) { showToast('Escribe tus objetivos primero'); return }
     setFichando(true)
     try {
       const res = await fetch('/api/diario', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [campo]: valor.trim(), dia }),
+        // En el cierre el texto viaja solo si lo hay: mandar `cierre: ''` borraría
+        // un balance ya escrito al volver a pulsar.
+        body: JSON.stringify(campo === 'entrada'
+          ? { entrada: valor.trim(), dia }
+          : { dia, cerrar: true, ...(valor.trim() ? { cierre: valor.trim() } : {}) }),
       })
       if (!res.ok) { showToast('No se pudo fichar'); return }
 
@@ -645,7 +678,13 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
     let ok = 0
     for (const p of propuestas) {
       try {
-        await data.createTask({ text: p.text, level: p.level, done: esFuturo ? false : p.hecha, assigned_to: profile?.id, source: 'ai', diario_dia: dia, diario_objetivo: p.text })
+        // SIN `diario_objetivo`. Una sugerencia no viene de una línea concreta: el
+        // modelo recibe el texto como un bloque y encima se le pide partir frases en
+        // dos. Antes se ataba a `p.text` —el texto que el modelo acababa de
+        // reescribir— así que el vínculo apuntaba a algo que no era ningún objetivo:
+        // la burbuja nunca se ponía verde y la tarea aparecía suelta. Fingir un
+        // vínculo es peor que no tenerlo. Sigue siendo tarea DEL DÍA (`diario_dia`).
+        await data.createTask({ text: p.text, level: p.level, done: esFuturo ? false : p.hecha, assigned_to: profile?.id, source: 'ai', diario_dia: dia })
         ok++
       } catch { /* se cuenta abajo */ }
     }
@@ -946,8 +985,12 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
    * propuso por la mañana y lo que fue apareciendo no son lo mismo, y fundirlos
    * borraría justo la distancia que el Diario existe para enseñar.
    */
-  const otrasDelDia = misTareasDelDia.filter((t: { text?: string }) =>
-    !objetivosDeHoy.some(o => normalizar(o) === normalizar(t.text || '')),
+  // POR ID, no por texto. Comparando el texto, en cuanto un objetivo y su tarea
+  // dejaban de decir lo mismo —basta con corregir una falta en Tareas— la MISMA
+  // tarea se pintaba dos veces: verde arriba como objetivo cumplido y otra vez
+  // abajo en «TAMBIÉN HOY». Un trabajo, una fila.
+  const otrasDelDia = misTareasDelDia.filter((t: { id: string }) =>
+    !objetivosDeHoy.some(o => tareaDe(o)?.id === t.id),
   ) as { id: string; text?: string; done?: boolean }[]
 
   const cumplidosVivos = objetivosDeHoy.filter(estaHecho).length
@@ -1162,9 +1205,11 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
                     <div className="font-syne text-[7.5px] font-black tracking-[0.18em] mb-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
                       {yaCerrado ? 'DÍA COMPLETADO' : 'EN LA OFICINA'}
                     </div>
-                    <div className="font-figtree font-black text-white" style={{ fontSize: isMobile ? '30px' : '26px', letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-                      {tiempoSesion || '—'}
-                    </div>
+                      <div style={{ lineHeight: 1 }}>
+                        <RelojJornada entradaAt={miEntrada.entrada_at as string}
+                                      cierreAt={miEntrada.cierre_at as string | null}
+                                      isMobile={isMobile} />
+                      </div>
                     <div className="font-figtree text-[11px] mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
                       desde las {horaCorta(miEntrada.entrada_at)}
                       {racha > 1 && ` · 🔥 ${racha} días`}
@@ -1452,7 +1497,13 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
               />
               {/* Cerrar el día, dentro del propio campo: es la acción que sigue a
                   escribirlo, y así no hace falta bajar la vista a otro botón. */}
-              {!yaCerrado && (
+                {/* Y SOLO SI EL DÍA ESTÁ ABIERTO. Sin comprobarlo, escribir aquí y
+                    pulsar la marca sellaba `cierre_at` con `entrada_at` a null: al
+                    fichar después, `entrada_at > cierre_at`, la resta salía negativa
+                    y el reloj quedaba roto para siempre — no hay ninguna ruta que
+                    ponga `cierre_at` a null. El servidor ya lo rechaza con un 400;
+                    esto es para no ofrecer un botón que no puede funcionar. */}
+                {!yaCerrado && !!miEntrada?.entrada_at && (
                 <button onClick={() => fichar('cierre')} disabled={fichando} aria-label="Cerrar el día"
                   className="absolute bottom-3 right-3 w-8 h-8 rounded-xl flex items-center justify-center transition-all active:scale-90 disabled:opacity-40"
                   style={{ background: `${GRN}1E`, border: `1px solid ${GRN}45` }}>
