@@ -122,6 +122,7 @@ Los campos "keyPoints" y "actions" son strings cortos (máx 10 palabras cada uno
 
 {
   "summary": "Texto fluido en español. Sin markdown. Sin asteriscos. 3-4 frases que expliquen el proyecto de forma clara y práctica.",
+  "contenido": "el documento ENTERO en texto plano, hasta 4000 caracteres. NO es un resumen: lo lee una IA para contestar preguntas concretas, asi que tienen que estar los NOMBRES PROPIOS tal cual (marcas, personas, agencias, formatos), los estados de cada cosa, las cifras y las fechas. Condensa solo si se pasa, quitando relleno y nunca nombres ni cifras.",
   "keyPoints": ["punto breve 1", "punto breve 2", "punto breve 3", "punto breve 4", "punto breve 5"],
   "actions": ["acción ejecutable 1", "acción ejecutable 2", "acción ejecutable 3", "acción ejecutable 4"],
   "risks": ["riesgo 1", "riesgo 2"],
@@ -139,7 +140,10 @@ Si el documento está en otro idioma, responde en español. Si un campo no tiene
   try {
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: isChat ? 400 : 1800,
+      // 1800 se quedaba corto en cuanto se pide `contenido` ademas del analisis:
+      // el JSON salia cortado y no parseaba, asi que se perdia TODO el analisis,
+      // no solo el contenido.
+      max_tokens: isChat ? 400 : 4200,
       messages: [
         ...((body.history || []).map(h => ({ role: h.role as 'user' | 'assistant', content: h.content }))),
         { role: 'user', content: isChat

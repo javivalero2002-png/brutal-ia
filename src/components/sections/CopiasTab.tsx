@@ -81,6 +81,42 @@ export default function CopiasTab({ showToast }: { showToast: (m: string) => voi
   }, [])
   useEffect(() => { revisarEnlaces() }, [revisarEnlaces])
 
+  /**
+   * Documentos de Memoria de los que solo se guardó el RESUMEN.
+   *
+   * Vive aquí por lo mismo que el panel de arriba: es la pregunta «¿están tus
+   * datos como deben?», y la respuesta —que las IAs sepan lo que pone dentro de
+   * un PDF y no solo de qué va— no se descubre mirando la pantalla de Memoria,
+   * porque la nota se ve igual de bien con contenido que sin él.
+   */
+  const [docs, setDocs] = useState<{ total: number; pendientes: { id: string; title: string }[] } | null>(null)
+  const [releyendo, setReleyendo] = useState(false)
+  const revisarDocs = useCallback(async () => {
+    try {
+      const r = await fetch('/api/admin/memoria-releer')
+      if (!r.ok) return
+      setDocs(await r.json())
+    } catch { /* si no se puede comprobar, no se afirma que estén todos */ }
+  }, [])
+  useEffect(() => { revisarDocs() }, [revisarDocs])
+
+  const releerDocs = async () => {
+    setReleyendo(true)
+    try {
+      const r = await fetch('/api/admin/memoria-releer', { method: 'POST' })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { showToast(j.error || 'No se pudieron releer'); return }
+      // «Quedan» sale en el aviso a propósito: la ruta se acota en el tiempo y
+      // para de leer si no cabe otro. Decir solo «3 releídos» haría pensar que
+      // ya está cuando puede faltar la mitad.
+      showToast(j.quedan > 0
+        ? `${j.releidos} releídos · quedan ${j.quedan}, vuelve a pulsar`
+        : `${j.releidos} ${j.releidos === 1 ? 'documento releído' : 'documentos releídos'}`)
+      await revisarDocs()
+    } catch { showToast('No se pudieron releer') }
+    finally { setReleyendo(false) }
+  }
+
   const arreglarEnlaces = async () => {
     setArreglando(true)
     try {
@@ -224,6 +260,31 @@ export default function CopiasTab({ showToast }: { showToast: (m: string) => voi
             style={{ background: `${AMBAR}18`, border: `1px solid ${AMBAR}3A`, color: AMBAR }}>
             <LucideIcon name={arreglando ? 'refresh-cw' : 'shield-check'} size={12} color={AMBAR} />
             {arreglando ? 'ARREGLANDO…' : 'ARREGLARLOS'}
+          </button>
+        </div>
+      )}
+
+      {/* Documentos de los que la IA solo tiene el resumen. Solo si quedan. */}
+      {docs && docs.total > 0 && (
+        <div className="rounded-2xl p-5" style={{ background: SURFACE, border: `1px solid ${AMBAR}35` }}>
+          <div className="font-syne text-[8.5px] font-black tracking-[0.2em] mb-2" style={{ color: AMBAR }}>
+            DOCUMENTOS A MEDIO LEER
+          </div>
+          <div className="font-figtree text-[13px] leading-relaxed" style={{ color: 'rgba(255,255,255,0.6)' }}>
+            De {docs.total} {docs.total === 1 ? 'documento' : 'documentos'} solo se guardó
+            el <span className="text-white font-semibold">resumen</span>, así que Harvey y Brutal.IA saben de qué
+            van pero no lo que pone dentro: no pueden contestar por una marca o una cifra concreta.
+            Se vuelven a leer y el contenido se añade a la nota — lo que ya había no se toca.
+          </div>
+          <div className="font-figtree text-[11.5px] mt-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            {docs.pendientes.slice(0, 4).map(d => d.title).join(' · ')}
+            {docs.pendientes.length > 4 ? ` y ${docs.pendientes.length - 4} más` : ''}
+          </div>
+          <button onClick={releerDocs} disabled={releyendo}
+            className="mt-4 flex items-center gap-2 px-4 py-2.5 rounded-xl font-syne text-[9px] font-black tracking-widest transition-all active:scale-95 disabled:opacity-40"
+            style={{ background: `${AMBAR}18`, border: `1px solid ${AMBAR}3A`, color: AMBAR }}>
+            <LucideIcon name={releyendo ? 'refresh-cw' : 'database'} size={12} color={AMBAR} />
+            {releyendo ? 'LEYENDO…' : 'VOLVER A LEERLOS'}
           </button>
         </div>
       )}

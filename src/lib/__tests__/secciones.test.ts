@@ -889,29 +889,46 @@ describe('diario · la racha es personal y salta los fines de semana', () => {
       'la racha aparece en Equipo: ahí es una tabla comparativa, que es justo lo que se descartó').toBe(false)
   })
   // Verificada poniendo 'compass' —que fue el fallo real— y viendola roja.
-  it('todos los iconos de la puesta en marcha y del recorrido existen', () => {
+  it('todos los iconos que se piden existen en LucideIcon', () => {
     const mapa = readFileSync(join(process.cwd(), 'src/components/shared/LucideIcon.tsx'), 'utf8')
-    const fuentes = [
-      'src/components/PuestaEnMarcha.tsx',
-      'src/components/recorrido/RecorridoApp.tsx',
-    ]
+    // TODO el codigo, no dos ficheros. Nacio mirando solo la puesta en marcha, y
+    // media hora despues puse `book-open` en CopiasTab —que tampoco existe— y la
+    // regla no dijo nada. Una regla que solo mira donde ya sabes que hay un bug
+    // no vigila: acompaña.
+    const fuentes: string[] = []
+    const recorrer = (dir: string) => {
+      for (const e of readdirSync(join(process.cwd(), dir), { withFileTypes: true })) {
+        if (e.isDirectory()) recorrer(join(dir, e.name))
+        else if (e.name.endsWith('.tsx')) fuentes.push(join(dir, e.name))
+      }
+    }
+    recorrer('src')
+    expect(fuentes.length, 'la regla ya no encuentra componentes').toBeGreaterThan(30)
+
+    // Las claves del mapa van con comillas solo si llevan guion (`'folder-open':`)
+    // y sin ellas si no (`sun:`). Buscar la palabra entre comillas dejaba fuera la
+    // mitad del mapa y daba por rotos iconos que existen — este test se escribio
+    // mal a la primera y lo dijo.
+    const claves = new Set([...mapa.matchAll(/^\s*'?([a-z0-9-]+)'?\s*:\s*'/gm)].map(m => m[1]))
+    expect(claves.size, 'la regla ya no encuentra las claves de LucideIcon: mira el formato del mapa').toBeGreaterThan(30)
+    let vistos = 0
     for (const f of fuentes) {
       const src = readFileSync(join(process.cwd(), f), 'utf8')
-      // Los dos sitios donde se declara un icono: `icono: 'x'` en los datos del
-      // recorrido y `i: 'x'` en la lista de la bienvenida.
-      const nombres = [...src.matchAll(/\b(?:icono|i):\s*'([a-z0-9-]+)'/g)].map(m => m[1])
-      expect(nombres.length, `${f} ya no declara iconos: la regla dejo de mirar donde debia`).toBeGreaterThan(3)
-      // Las claves del mapa van con comillas solo si llevan guion (`'folder-open':`)
-      // y sin ellas si no (`sun:`). Buscar la palabra entre comillas dejaba fuera
-      // la mitad del mapa y daba por rotos iconos que existen — este test se
-      // escribio mal a la primera y lo dijo.
-      const claves = new Set([...mapa.matchAll(/^\s*'?([a-z0-9-]+)'?\s*:\s*'/gm)].map(m => m[1]))
-      expect(claves.size, 'la regla ya no encuentra las claves de LucideIcon: mira el formato del mapa').toBeGreaterThan(30)
+      // Los tres sitios donde se nombra un icono: la prop directa
+      // (`name="x"` / `name={'x'}`), `icono: 'x'` en los datos del recorrido y
+      // `i: 'x'` / `ic: 'x'` en las listas de pestañas y carpetas.
+      const nombres = [
+        ...[...src.matchAll(/<LucideIcon[^>]*?\bname=\{?['"]([a-z0-9-]+)['"]/g)].map(m => m[1]),
+        ...[...src.matchAll(/\b(?:icono|ic|i):\s*'([a-z0-9-]+)'/g)].map(m => m[1]),
+      ]
+      if (!nombres.length) continue
+        vistos += nombres.length
       const rotos = [...new Set(nombres.filter(n => !claves.has(n)))]
       // Un icono que LucideIcon no conoce no revienta: pinta un hueco. La fila se
       // queda con su texto y un espacio vacio a la izquierda, y nadie lo mira.
       expect(rotos, `${f} usa iconos que LucideIcon no conoce: se pintan como un hueco, sin error`).toEqual([])
     }
+    expect(vistos, 'la regla no ha encontrado ni un icono: los patrones dejaron de casar').toBeGreaterThan(100)
   })
 
   // Verificada quitando MiniInbox del recorrido: roja.
