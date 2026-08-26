@@ -888,4 +888,62 @@ describe('diario · la racha es personal y salta los fines de semana', () => {
     expect(/racha|SEGUIDOS/i.test(E),
       'la racha aparece en Equipo: ahí es una tabla comparativa, que es justo lo que se descartó').toBe(false)
   })
+  // Verificada poniendo 'compass' —que fue el fallo real— y viendola roja.
+  it('todos los iconos de la puesta en marcha y del recorrido existen', () => {
+    const mapa = readFileSync(join(process.cwd(), 'src/components/shared/LucideIcon.tsx'), 'utf8')
+    const fuentes = [
+      'src/components/PuestaEnMarcha.tsx',
+      'src/components/recorrido/RecorridoApp.tsx',
+    ]
+    for (const f of fuentes) {
+      const src = readFileSync(join(process.cwd(), f), 'utf8')
+      // Los dos sitios donde se declara un icono: `icono: 'x'` en los datos del
+      // recorrido y `i: 'x'` en la lista de la bienvenida.
+      const nombres = [...src.matchAll(/\b(?:icono|i):\s*'([a-z0-9-]+)'/g)].map(m => m[1])
+      expect(nombres.length, `${f} ya no declara iconos: la regla dejo de mirar donde debia`).toBeGreaterThan(3)
+      // Las claves del mapa van con comillas solo si llevan guion (`'folder-open':`)
+      // y sin ellas si no (`sun:`). Buscar la palabra entre comillas dejaba fuera
+      // la mitad del mapa y daba por rotos iconos que existen — este test se
+      // escribio mal a la primera y lo dijo.
+      const claves = new Set([...mapa.matchAll(/^\s*'?([a-z0-9-]+)'?\s*:\s*'/gm)].map(m => m[1]))
+      expect(claves.size, 'la regla ya no encuentra las claves de LucideIcon: mira el formato del mapa').toBeGreaterThan(30)
+      const rotos = [...new Set(nombres.filter(n => !claves.has(n)))]
+      // Un icono que LucideIcon no conoce no revienta: pinta un hueco. La fila se
+      // queda con su texto y un espacio vacio a la izquierda, y nadie lo mira.
+      expect(rotos, `${f} usa iconos que LucideIcon no conoce: se pintan como un hueco, sin error`).toEqual([])
+    }
+  })
+
+  // Verificada quitando MiniInbox del recorrido: roja.
+  it('ninguna maqueta del recorrido se queda sin pintar', () => {
+    // Esta regla existe por lo que paso HOY en el inbox: `const tabs` estaba
+    // escrito, comentado y hasta cubierto por un test, y no se renderizaba en
+    // ningun sitio — durante los 30 commits que toco el fichero. Compilaba en
+    // silencio porque el tsconfig no lleva `noUnusedLocals`.
+    //
+    // Aqui hay diez maquetas dibujadas a mano en un fichero y consumidas desde
+    // otro. Es exactamente la misma forma, asi que merece la misma vigilancia.
+    const piezas = readFileSync(join(process.cwd(), 'src/components/recorrido/piezas.tsx'), 'utf8')
+    const app = readFileSync(join(process.cwd(), 'src/components/recorrido/RecorridoApp.tsx'), 'utf8')
+
+    const dibujadas = [...piezas.matchAll(/export function (Mini\w+)/g)].map(m => m[1])
+    expect(dibujadas.length, 'la regla ya no encuentra las maquetas: mira como se declaran en piezas.tsx').toBeGreaterThan(5)
+
+    // Que se use no basta: tiene que estar DENTRO de RECORRIDO, que es la lista
+    // que se pinta. Importarla y no meterla en la lista es el codigo muerto.
+    const lista = app.slice(app.indexOf('export const RECORRIDO'), app.indexOf('export function TarjetaRecorrido'))
+    const sinPintar = dibujadas.filter(m => !new RegExp(`Mini:\\s*${m}\\b`).test(lista))
+    expect(sinPintar, 'hay maquetas dibujadas que no estan en RECORRIDO: existen, compilan y no las ve nadie').toEqual([])
+
+    // Y al reves: una entrada de RECORRIDO que apunte a una maqueta que no existe.
+    const pedidas = [...lista.matchAll(/Mini:\s*(Mini\w+)/g)].map(m => m[1])
+    expect(pedidas.length, 'RECORRIDO ya no declara maquetas').toBe(dibujadas.length)
+    expect(pedidas.filter(m => !dibujadas.includes(m)),
+      'RECORRIDO pide maquetas que piezas.tsx no exporta').toEqual([])
+
+    // Cada pantalla dice QUE ES y QUE ESCONDE. Sin lo segundo esto es el menu.
+    const trucos = [...lista.matchAll(/truco:\s*'([^']{20,})'/g)].length
+    expect(trucos, 'hay pantallas del recorrido sin «lo que no se ve»: un recorrido que solo nombra las secciones no hace falta').toBe(dibujadas.length)
+  })
+
 })

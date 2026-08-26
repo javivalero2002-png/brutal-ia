@@ -6,6 +6,7 @@ import LucideIcon from '@/components/shared/LucideIcon'
 import type { Profile } from '@/types'
 import { promptGuardado, alCambiarPrompt, lanzarInstalacion, type PromptInstalacion } from '@/lib/instalarPwa'
 import { activarPush } from '@/lib/activarPush'
+import { RECORRIDO, TarjetaRecorrido } from '@/components/recorrido/RecorridoApp'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUESTA EN MARCHA — lo primero que ve cada persona del equipo.
@@ -43,7 +44,7 @@ const CLAVE_PASO = 'nx_onboarding_paso'
 // No se pierde nada: cambiar la contraseña sigue estando en Operativa →
 // Ajustes, que es donde se busca cuando se quiere cambiar — no en un recorrido
 // de bienvenida.
-const PASOS = ['Bienvenida', 'Tu ficha', 'Instalar', 'Gmail', 'Avisos', 'Listo']
+const PASOS = ['Bienvenida', 'Tu ficha', 'Instalar', 'Gmail', 'Avisos', 'La app']
 
 
 /**
@@ -127,6 +128,9 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
   const [color, setColor] = useState(profile?.avatar_color || BLU)
 
   const [avisos, setAvisos] = useState(false)
+  // En qué pantalla del recorrido va. Vive aquí y no dentro de `TarjetaRecorrido`
+  // porque quien lo mueve son los botones del pie, que son de esta ventana.
+  const [tour, setTour] = useState(0)
 
 
   // LAS CUENTAS DE VERDAD, no la columna vieja.
@@ -373,10 +377,10 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
               <div className="flex flex-col gap-2">
                 {[
                   { i: 'user', t: 'Tu ficha', d: 'Nombre, iniciales y color con los que te verá el equipo' },
-                  { i: 'key', t: 'Tu contraseña', d: 'Opcional — si entraste por el enlace, ya la pusiste' },
                   { i: 'download', t: 'Instalar la app', d: 'Acceso directo, sin barra del navegador' },
                   { i: 'mail', t: 'Gmail', d: 'Para que tu correo entre en la app' },
                   { i: 'bell', t: 'Avisos', d: 'Notificaciones de lo urgente' },
+                  { i: 'layout-grid', t: 'La app', d: 'Un repaso de qué hace cada pantalla' },
                 ].map(x => (
                   <div key={x.t} className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl" style={{ background: SURF2, border: `1px solid ${BORDER}` }}>
                     <LucideIcon name={x.i} size={14} color="rgba(255,255,255,0.35)" />
@@ -541,20 +545,7 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
             </>
           )}
 
-          {paso === ultimo && (
-            <>
-              <Cabecera icono="check-circle" eyebrow="LISTO" titulo="Ya está"
-                bajada="Todo lo que has elegido se puede cambiar en Operativa. Si te has saltado algo, está ahí." />
-              <div className="rounded-2xl px-4 py-3.5" style={{ background: SURF2, border: `1px solid ${BORDER}` }}>
-                <div className="font-syne text-[7.5px] font-black tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.3)' }}>POR DÓNDE EMPEZAR</div>
-                <div className="flex flex-col gap-1.5 font-figtree text-[12px]" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                  <span>· <strong className="text-white">Hoy</strong> — tu resumen del día y Harvey</span>
-                  <span>· <strong className="text-white">Fichar</strong> — al entrar dices qué vas a hacer, al salir qué hiciste</span>
-                  <span>· <strong className="text-white">Inbox</strong> — tu correo, con lo urgente marcado</span>
-                </div>
-              </div>
-            </>
-          )}
+          {paso === ultimo && <TarjetaRecorrido i={tour} />}
         </div>
 
         {/* Nada bloquea: siempre se puede saltar. Un proceso que retiene a alguien
@@ -562,6 +553,12 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
         <div className="flex items-center gap-2 px-5 py-4" style={{ borderTop: `1px solid ${BORDER}` }}>
           {paso > 0 && paso < ultimo && (
             <Boton onClick={() => irA(paso - 1)}>ATRÁS</Boton>
+          )}
+          {/* En el recorrido, ATRÁS retrocede una PANTALLA del recorrido, no un
+              paso. Volver a Avisos desde la sexta maqueta seria perder las cinco
+              anteriores por querer ver la anterior. */}
+          {paso === ultimo && tour > 0 && (
+            <Boton onClick={() => setTour(tour - 1)}>ATRÁS</Boton>
           )}
           <div className="flex-1" />
           {paso < ultimo && (
@@ -571,10 +568,21 @@ export default function PuestaEnMarcha({ profile, onTerminar, showToast }: Props
               SALTAR
             </button>
           )}
+          {/* Tambien se salta el recorrido, por lo mismo que todo lo demas: nada
+              retiene a nadie fuera de la app el primer dia. */}
+          {paso === ultimo && tour < RECORRIDO.length - 1 && (
+            <button onClick={terminar}
+              className="px-3 py-2.5 font-syne text-[9px] font-black tracking-widest"
+              style={{ color: 'rgba(255,255,255,0.3)' }}>
+              SALTAR
+            </button>
+          )}
           {paso === 0 && <Boton primario onClick={() => irA(1)}>EMPEZAR</Boton>}
           {paso === 1 && <Boton primario onClick={guardarPerfil}>GUARDAR</Boton>}
           {(paso === 2 || paso === 3 || paso === 4) && <Boton primario onClick={() => irA(paso + 1)}>SIGUIENTE</Boton>}
-          {paso === ultimo && <Boton primario onClick={terminar}>ENTRAR EN NEXUS</Boton>}
+          {paso === ultimo && (tour < RECORRIDO.length - 1
+            ? <Boton primario onClick={() => setTour(tour + 1)}>SIGUIENTE</Boton>
+            : <Boton primario onClick={terminar}>ENTRAR EN NEXUS</Boton>)}
         </div>
       </div>
     </div>
