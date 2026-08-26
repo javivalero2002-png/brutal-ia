@@ -215,6 +215,8 @@ export interface NexusData {
   createMemoria: (data: Partial<MemoriaEntry>) => Promise<void>
   updateMemoria: (id: string, data: Partial<MemoriaEntry>) => Promise<void>
   deleteMemoria: (id: string) => Promise<void>
+  /** Vuelve a traer solo la memoria. La llaman Harvey y Brutal.IA al abrirse. */
+  refrescarMemoria: () => Promise<void>
   createAgenda: (data: Partial<ContentItem>) => Promise<void>
   /** Columnas que el PATCH no pudo escribir (guardado parcial); vacio si fue completo. */
   updateAgenda: (id: string, data: Partial<ContentItem>) => Promise<string[]>

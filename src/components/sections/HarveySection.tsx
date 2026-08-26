@@ -69,6 +69,18 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
   const arrancandoRef = useRef(false)
   const abriendoMicRef = useRef(false)
 
+  // La memoria, fresca, al abrir la IA.
+  //
+  // Harvey y Brutal.IA no leen `memoria` del servidor: la leen del estado de
+  // useNexusData, que se llena UNA vez al arrancar la app. Subes un documento en
+  // el movil, preguntas en el portatil con la pestaña abierta desde por la
+  // mañana, y te dice que no lo tiene — con seguridad, porque tiene una lista de
+  // notas: solo que vieja.
+  //
+  // Aqui y no en el arranque porque es el momento exacto en que importa, y porque
+  // asi vale tambien para lo que suba OTRA persona del equipo.
+  useEffect(() => { data.refrescarMemoria?.() }, [data.refrescarMemoria])
+
   useEffect(() => {
     const c = convScrollRef.current
     if (!c) return

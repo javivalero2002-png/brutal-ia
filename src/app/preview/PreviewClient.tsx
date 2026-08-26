@@ -351,7 +351,7 @@ export default function PreviewClient({
     createClient, updateClient, deleteClient,
     createProject, updateProject, deleteProject,
     createAgenda, updateAgenda, deleteAgenda, aplicarAgendaLocal,
-    createMemoria, updateMemoria, deleteMemoria,
+    createMemoria, updateMemoria, deleteMemoria, refrescarMemoria: noop,
     sendChatMessage, clearChat, syncGmail,
     sendInternalMessage:noop, reloadInbox, reloadTeam,
     reload:noop, reloadCalendar,
