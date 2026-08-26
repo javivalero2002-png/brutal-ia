@@ -961,6 +961,31 @@ describe('diario · la racha es personal y salta los fines de semana', () => {
     // Cada pantalla dice QUE ES y QUE ESCONDE. Sin lo segundo esto es el menu.
     const trucos = [...lista.matchAll(/truco:\s*'([^']{20,})'/g)].length
     expect(trucos, 'hay pantallas del recorrido sin «lo que no se ve»: un recorrido que solo nombra las secciones no hace falta').toBe(dibujadas.length)
+
+    // Y las FRASES LITERALES. Javi: «hay que explicar mejor a Harvey que le puedes
+    // preguntar cualquier consulta de internet, que le puedes preguntar que ha
+    // hecho algun trabajador hoy». Decir «se le pueden pedir cosas» no hace que
+    // nadie se lo pida: la gente prueba lo que ve escrito entre comillas.
+    //
+    // Solo se exige donde importa —las dos IAs—, porque en las demas pantallas un
+    // ejemplo es un adorno y aqui es la funcion.
+    for (const id of ['harvey', 'chat']) {
+      // La ventana termina en la SIGUIENTE tarjeta, no a los 1.800 caracteres.
+      // Con el corte fijo se colaba la tarjeta de al lado y contaba SUS frases:
+      // quite las cuatro de Harvey y la regla siguio verde porque veia las de
+      // Brutal.IA. Es el mismo fallo de ventana ancha que ya me habia mordido
+      // hoy en otra regla, y solo salio por reintroducir el bug.
+      const desde = lista.indexOf(`id: '${id}'`)
+      expect(desde, `el recorrido ya no tiene la pantalla «${id}»`).toBeGreaterThan(-1)
+      const siguiente = lista.indexOf("\n  {\n    id: '", desde)
+      const tarjeta = lista.slice(desde, siguiente === -1 ? lista.length : siguiente)
+      const frases = [...tarjeta.matchAll(/'«[^']{8,}»'/g)].length
+      expect(frases, `la pantalla «${id}» del recorrido se quedo sin frases de ejemplo: explicar que se le puede preguntar no hace que nadie pregunte`)
+        .toBeGreaterThanOrEqual(3)
+    }
+    // Y que TODAS tengan al menos uno, sea frase o no.
+    const conEjemplos = [...lista.matchAll(/ejemplos:\s*\[\s*'/g)].length
+    expect(conEjemplos, 'hay pantallas del recorrido sin ningun ejemplo').toBe(dibujadas.length)
   })
 
 })

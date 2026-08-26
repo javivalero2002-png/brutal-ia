@@ -610,3 +610,63 @@ export function MiniOperativa() {
     </Lienzo>
   )
 }
+
+/** Harvey: la pantalla de voz, con el botón de micrófono y sus contadores. */
+export function MiniHarvey() {
+  return (
+    <Lienzo>
+      <Halo />
+      <div className="relative h-full flex flex-col">
+        {/* La barra de arriba, que es lo que identifica esta pantalla */}
+        <div className="flex items-center gap-1.5 px-2 py-1.5" style={{ borderBottom: `1px solid ${BORDER}` }}>
+          <div className="rounded flex-shrink-0" style={{ width: '9px', height: '9px', background: `${BLU}2E`, border: `1px solid ${BLU}5C` }} />
+          <div>
+            <div className="font-figtree text-[7px] font-black text-white leading-none">Harvey</div>
+            <div className="font-syne text-[4px] font-black tracking-[0.2em] leading-none mt-[1px]" style={{ color: 'rgba(255,255,255,0.28)' }}>EXECUTIVE AI · BRUTAL STUDIOS</div>
+          </div>
+          <div className="flex items-center gap-1 px-1.5 py-[2px] rounded-full ml-1"
+            style={{ background: `${GRN}14`, border: `1px solid ${GRN}30` }}>
+            <div className="rounded-full" style={{ width: '2.5px', height: '2.5px', background: GRN }} />
+            <span className="font-syne text-[4px] font-black tracking-wide" style={{ color: GRN }}>VEGA · VOZ IA</span>
+          </div>
+          <div className="flex-1" />
+          {[{ t: 'URG 3', c: RED }, { t: 'PROJ 5', c: BLU }, { t: 'INBOX 4', c: AMBAR }].map(x => (
+            <div key={x.t} className="px-1 py-[2px] rounded-full font-syne text-[4px] font-black"
+              style={{ background: `${x.c}18`, border: `1px solid ${x.c}38`, color: x.c }}>{x.t}</div>
+          ))}
+        </div>
+
+        {/* Lo que se le acaba de decir y lo que ha hecho con ello */}
+        <div className="flex-1 flex flex-col justify-center gap-1 px-2.5">
+          <div className="self-end px-1.5 py-1 rounded-lg max-w-[74%]"
+            style={{ background: `${BLU}1F`, border: `1px solid ${BLU}38` }}>
+            <span className="font-figtree text-[5.5px]" style={{ color: '#CFDDFF' }}>«Crea una tarea urgente para Jorge: repasar el montaje»</span>
+          </div>
+          {/* La tarjeta de confirmar, que es la pieza clave de Harvey */}
+          <div className="self-start rounded-lg px-1.5 py-1 max-w-[80%]"
+            style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${AMBAR}3D` }}>
+            <div className="font-syne text-[4px] font-black tracking-[0.2em]" style={{ color: AMBAR }}>HARVEY PROPONE</div>
+            <div className="font-figtree text-[5.5px] text-white mt-[1px]">Tarea · Repasar el montaje</div>
+            <div className="flex items-center gap-1 mt-1">
+              <div className="px-1 py-[1px] rounded font-syne text-[4px] font-black" style={{ background: `${RED}1F`, color: RED }}>URGENTE</div>
+              <div className="px-1 py-[1px] rounded font-syne text-[4px] font-black" style={{ background: `${BLU}1F`, color: `${BLU}E6` }}>JORGE</div>
+              <div className="flex-1" />
+              <div className="px-1.5 py-[1px] rounded font-syne text-[4px] font-black" style={{ background: `${GRN}24`, border: `1px solid ${GRN}47`, color: GRN }}>CONFIRMAR</div>
+            </div>
+          </div>
+        </div>
+
+        {/* El botón de hablar */}
+        <div className="flex items-center justify-center pb-2">
+          <div className="relative flex items-center justify-center rounded-full" style={{ width: '22px', height: '22px' }}>
+            <div className="absolute rounded-full" style={{ inset: '-5px', background: `${BLU}24`, filter: 'blur(5px)' }} />
+            <div className="relative rounded-full flex items-center justify-center"
+              style={{ width: '22px', height: '22px', background: `${BLU}2E`, border: `1px solid ${BLU}70` }}>
+              <div className="rounded-full" style={{ width: '4px', height: '7px', background: `${BLU}E6` }} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </Lienzo>
+  )
+}

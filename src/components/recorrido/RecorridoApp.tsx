@@ -3,7 +3,7 @@ import { BLU, BORDER, SURF2 } from '@/components/shared/design-tokens'
 import LucideIcon from '@/components/shared/LucideIcon'
 import {
   MiniHoy, MiniFichar, MiniTareas, MiniInbox, MiniCalendario,
-  MiniClientes, MiniProyectos, MiniContenido, MiniChat, MiniOperativa,
+  MiniClientes, MiniProyectos, MiniContenido, MiniHarvey, MiniChat, MiniOperativa,
 } from './piezas'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -30,53 +30,82 @@ import {
 export const RECORRIDO = [
   {
     id: 'hoy', icono: 'sun', nombre: 'Hoy', Mini: MiniHoy,
-    que: 'La portada. Te saluda por tu nombre y te resume en cinco líneas lo que reclama tu atención hoy.',
-    truco: 'El orbe del centro es Harvey. Le hablas, y si le pides crear una tarea, un cliente o un evento, te enseña lo que ha entendido antes de crearlo.',
+    que: 'La portada. Al abrir la app te dice en cinco líneas qué reclama tu atención hoy: lo urgente del correo, lo que vence y lo que dejaste a medias ayer.',
+    truco: 'No hay que ir a buscar nada. Si algo importa, sale aquí — y si aquí no sale nada, es que no hay nada ardiendo.',
+    ejemplos: ['La bola azul del centro es Harvey', 'Se abre sola al entrar'],
   },
   {
     id: 'diario', icono: 'pen-line', nombre: 'Fichar', Mini: MiniFichar,
-    que: 'Al empezar el día escribes qué te propones y marcas entrada. Al terminar tachas lo que has hecho y cuentas qué se quedó a medias.',
-    truco: 'Los objetivos que escribes no se quedan aquí: se convierten en tareas de verdad, salen en Tareas, y se tachan solas cuando las completas.',
+    que: 'Al entrar marcas entrada y escribes qué te propones hacer. Al salir tachas lo que has hecho y cuentas en dos líneas qué se quedó a medias.',
+    truco: 'Lo que escribes como objetivo no se queda aquí: pasa a Tareas como tarea de verdad. Si la tachas en un sitio, se tacha en el otro — son la misma cosa vista desde dos pantallas, no dos listas que hay que mantener a mano.',
+    ejemplos: ['Mientras la jornada está abierta corre un reloj con tus horas'],
   },
   {
     id: 'tareas', icono: 'check-square', nombre: 'Tareas', Mini: MiniTareas,
-    que: 'Todo lo que hay que hacer, en lista o en tablero, con quién lo lleva y para cuándo.',
-    truco: 'El botón «Mi día» deja solo lo tuyo urgente o ya vencido. Y una fecha límite es un DÍA, no una hora: nada vence a las dos de la mañana.',
+    que: 'Todo lo que hay que hacer, tuyo y del equipo, con quién lo lleva, para cuándo y con qué prioridad. En lista o en tablero, como prefieras mirarlo.',
+    truco: 'El botón «Mi día» deja en pantalla solo lo tuyo urgente o ya vencido. Es el atajo para cuando abres la app y no sabes por dónde empezar.',
+    ejemplos: ['Mi día', 'Agrupar por proyecto', 'Agrupar por prioridad'],
   },
   {
     id: 'inbox', icono: 'inbox', nombre: 'Inbox', Mini: MiniInbox,
-    que: 'El correo de tus cuentas de Gmail y del buzón compartido de colaboraciones, en una sola lista.',
-    truco: 'Cada correo llega ya leído por la IA: la línea azul de debajo del asunto es su resumen, y la barra de color de la izquierda marca lo urgente sin que abras nada.',
+    que: 'Tu correo de Gmail y el buzón compartido de colaboraciones, en una sola lista. También los mensajes internos que os mandáis entre vosotros.',
+    truco: 'Cada correo llega ya leído por la IA: la línea azul de debajo del asunto es su resumen, y la barra de color de la izquierda marca lo urgente. Puedes saber si algo corre sin abrir un solo email.',
+    ejemplos: ['Al responder, Harvey te escribe el borrador', 'Y ya sabe de qué ibais hablando'],
   },
   {
     id: 'calendario', icono: 'calendar', nombre: 'Calendario', Mini: MiniCalendario,
     que: 'El mes entero con todo lo que tiene fecha, y el detalle del día al pinchar en él.',
-    truco: 'No es solo Google Calendar: en el mismo día se pintan los eventos, las piezas que se publican, las tareas que vencen y los deadlines de proyecto.',
+    truco: 'No es solo tu Google Calendar: en el mismo día se pintan los eventos, las piezas que se publican, las tareas que vencen y los cierres de proyecto. Cada cosa con su color.',
+    ejemplos: ['Lo que crees aquí aparece en tu Google de verdad'],
   },
   {
     id: 'clientes', icono: 'users', nombre: 'Clientes', Mini: MiniClientes,
     que: 'La ficha de cada cliente: a qué se dedica, cuánto factura al mes y todo lo que tenéis abierto con él.',
-    truco: 'Se cruza sola con el correo: la ficha te dice cuándo fue el último contacto y cuántos emails suyos siguen sin leer.',
+    truco: 'Se cruza sola con el correo. La ficha te dice cuándo fue el último contacto y cuántos emails suyos siguen sin leer — que es la forma rápida de ver a quién tenéis olvidado.',
+    ejemplos: ['HOY · HACE 3D · HACE 3 SEMANAS'],
   },
   {
     id: 'proyectos', icono: 'folder-open', nombre: 'Proyectos', Mini: MiniProyectos,
     que: 'Cada trabajo grande con su cliente, su porcentaje de avance, su fecha límite y las tareas que cuelgan de él.',
-    truco: 'Puedes soltar un PDF dentro de un proyecto: la IA lo lee, lo resume, lo guarda en la memoria del estudio y después le puedes hacer preguntas al documento.',
+    truco: 'Suelta un PDF encima de un proyecto y la IA lo lee entero: saca la portada, lo resume, lo guarda en la memoria del estudio y después le puedes hacer preguntas al documento sin volver a abrirlo.',
+    ejemplos: ['«¿Qué plazos pone el contrato?»', '«¿Cuánto presupuestamos aquí?»'],
   },
   {
     id: 'contenido', icono: 'film', nombre: 'Contenido', Mini: MiniContenido,
     que: 'El tablero de las piezas que se publican en redes: van pasando de idea a en producción, a listo, a publicado.',
-    truco: 'Cada pieza tiene un enlace de revisión que se copia con un botón, para que un cliente lo abra fuera de la app y deje su opinión sin necesitar cuenta.',
+    truco: 'Cada pieza tiene un enlace de revisión que se copia con un botón. Se lo mandas a un cliente, lo abre fuera de la app y deja su opinión ahí mismo — sin cuenta, sin contraseña y sin ver nada más del estudio.',
+    ejemplos: ['Copiar enlace de revisión'],
+  },
+  {
+    id: 'harvey', icono: 'cpu', nombre: 'Harvey', Mini: MiniHarvey,
+    que: 'El asistente al que se le habla. Pulsas el micrófono, dices lo que quieras y te contesta en voz alta.',
+    // Lo que Javi pidio explicar de verdad: que Harvey no es un buscador de la
+    // app, es la app con manos. Y que no se queda dentro — busca en internet.
+    truco: 'No solo contesta: HACE. Crea tareas, proyectos, clientes, piezas y reuniones, marca cosas como hechas y te cierra la jornada. Y antes de tocar nada te enseña una tarjeta con lo que ha entendido: hasta que no la confirmas, no existe.',
+    ejemplos: [
+      '«Crea una tarea urgente para Jorge»',
+      '«Ya está el montaje del teaser»',
+      '«Reunión con Zara el martes a las 10»',
+      '«Cierra mi día: he montado el teaser»',
+    ],
   },
   {
     id: 'chat', icono: 'message-square', nombre: 'Brutal.IA', Mini: MiniChat,
-    que: 'Un chat escrito con la IA que ya sabe lo que hay dentro de la app.',
-    truco: 'No hay que contarle nada: conoce tus tareas, tus proyectos, tus clientes y tu correo. Y la conversación se guarda — mañana sigue ahí.',
+    que: 'La misma cabeza que Harvey, pero escrita. Para cuando no puedes hablar en voz alta o quieres leer la respuesta con calma.',
+    // Las tres cosas que la gente NO prueba porque no se le ocurre que pueda.
+    truco: 'Sabe tres cosas a la vez: lo que hay dentro de la app, lo que ha hecho cada persona del equipo, y lo que hay en internet ahora mismo — busca de verdad, en tiempo real. Así que le puedes preguntar por una campaña vuestra de hace un año y, en el mensaje siguiente, por el precio de un alquiler hoy.',
+    ejemplos: [
+      '«¿Qué ha hecho Jorge esta semana?»',
+      '«¿Qué campaña hicimos con Nutella?»',
+      '«¿Cuánto cuesta alquilar un dron en Valencia?»',
+      '«Resúmeme los correos sin leer»',
+    ],
   },
   {
     id: 'ajustes', icono: 'settings', nombre: 'Operativa', Mini: MiniOperativa,
     que: 'La trastienda: tu ficha y tu color, los avisos, conectar el correo y el calendario, la memoria del estudio y las copias de seguridad.',
-    truco: 'Aquí se vuelve a abrir esta puesta en marcha entera cuando quieras. Es la única forma de repetir un paso que te hayas saltado.',
+    truco: 'La Memoria es lo que hace que las IAs sepan cómo trabajáis: notas, decisiones, procesos y PDFs que se leen enteros. Lo que apuntes ahí lo saben las dos, y lo saben al momento.',
+    ejemplos: ['Aquí se vuelve a abrir esta puesta en marcha cuando quieras'],
   },
 ]
 
@@ -108,6 +137,26 @@ export function TarjetaRecorrido({ i }: { i: number }) {
         <div className="font-syne text-[7px] font-black tracking-[0.2em] mb-1" style={{ color: `${BLU}B3` }}>LO QUE NO SE VE</div>
         <p className="font-figtree text-[11.5px] leading-snug" style={{ color: 'rgba(255,255,255,0.5)' }}>{p.truco}</p>
       </div>
+
+      {/* Las frases literales. Explicar que «se le puede pedir cosas» no hace que
+          nadie se lo pida: la gente prueba lo que ve escrito. Por eso van entre
+          comillas y tal cual se dicen — son para copiar, no para entender. */}
+      {p.ejemplos.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2.5">
+          {p.ejemplos.map(e => {
+            // Lo entrecomillado es algo que se DICE; lo demás es algo que hay.
+            const seDice = e.startsWith('«')
+            return (
+              <div key={e} className="px-2.5 py-1 rounded-full font-figtree text-[10.5px] leading-tight"
+                style={seDice
+                  ? { background: `${BLU}14`, border: `1px solid ${BLU}30`, color: '#BFD2FF' }
+                  : { background: 'rgba(255,255,255,0.035)', border: `1px solid ${BORDER}`, color: 'rgba(255,255,255,0.38)' }}>
+                {e}
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Los puntos. Van abajo y pequeños: informan de dónde estás, no se pulsan
           —a diez pantallas, unos puntos pulsables de 4px son una trampa táctil. */}
