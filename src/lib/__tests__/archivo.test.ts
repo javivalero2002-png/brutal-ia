@@ -61,14 +61,31 @@ describe('/api/archivo · no puede ser un redirector abierto', () => {
 })
 
 describe('Memoria · el enlace guardado no puede ser una firma que caduca', () => {
-  const MEMORIA = 'src/components/sections/MemoriaSection.tsx'
+  // La linea `📎 Documento:` ya no se escribe en MemoriaSection: se componia en
+  // DOS sitios con nombres de campo distintos y se llevo a `notaDocumento.ts`.
+  // La regla se REAPUNTA, no se quita: lo que vigila —que lo guardado sea el
+  // enlace estable y no una firma que caduca— sigue valiendo igual, y ahora
+  // ademas cubre el camino de Proyectos, que antes no miraba nadie.
+  const COMPOSITOR = 'src/lib/notaDocumento.ts'
+  const LLAMANTES = [
+    'src/components/sections/MemoriaSection.tsx',
+    'src/components/sections/ProyectosSection.tsx',
+  ]
 
   it('la nota apunta a /api/archivo, no al Storage', () => {
-    const m = readFileSync(MEMORIA, 'utf8')
-    const linea = m.split('\n').find(l => l.includes('📎 Documento:')) || ''
+    const c = readFileSync(COMPOSITOR, 'utf8')
+    const linea = c.split('\n').find(l => l.includes('📎 Documento:')) || ''
     expect(linea, 'no se encontró la línea que compone la nota del documento').not.toBe('')
-    expect(/\/api\/archivo/.test(linea),
-      'guarda la URL del Storage directamente: caduca en 1 h si es firmada, y muere al cerrar el bucket si es pública').toBe(true)
+
+    // Quien le pasa el enlace tiene que pasarle el envoltorio, que es donde
+    // estaba el riesgo: el compositor solo escribe lo que le den.
+    for (const f of LLAMANTES) {
+      const src = readFileSync(f, 'utf8')
+      const enlace = src.split('\n').find(l => /enlace:/.test(l)) || ''
+      expect(enlace, `${f} ya no le pasa un enlace al compositor de la nota`).not.toBe('')
+      expect(/\/api\/archivo/.test(enlace),
+        `${f} guarda la URL del Storage directamente: caduca en 1 h si es firmada, y muere al cerrar el bucket si es pública`).toBe(true)
+    }
   })
 })
 

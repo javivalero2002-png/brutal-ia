@@ -101,6 +101,10 @@ export async function POST(request: NextRequest) {
   // Resumen con Haiku
   let summary = ''
   let datos: { tipo: string; cliente: string; sector: string; fechas: string; importe: string } | null = null
+  // El documento en texto plano. Es lo que separa «sé de qué va este PDF» de «sé
+  // qué campaña hicimos con Nutella»: el resumen de 80-150 palabras no nombra ni
+  // la mitad de las cosas que hay dentro.
+  let contenido = ''
   try {
     if (buffer.length < 20 * 1024 * 1024) {
       // La MISMA llamada de siempre —un documento se lee UNA vez y nunca más—,
@@ -111,7 +115,8 @@ export async function POST(request: NextRequest) {
       // el documento en conocimiento en vez de en un archivo guardado.
       const msg = await anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 700,
+        // Sube de 700 porque ahora se pide el CONTENIDO, no solo el resumen.
+        max_tokens: 3000,
         messages: [{ role: 'user', content: [
           { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } } as any,
           { type: 'text', text: `Analiza este documento para la base de conocimiento de Brutal Studios, una agencia creativa.
@@ -119,12 +124,21 @@ export async function POST(request: NextRequest) {
 Responde SOLO con un objeto JSON, sin texto alrededor y sin vallas de código:
 {
   "resumen": "80-150 palabras en español: de qué trata, datos clave y puntos importantes. Sin preámbulos.",
+  "contenido": "el documento ENTERO en texto plano, hasta 4000 caracteres. Condensa solo si se pasa de ahí, y condensa quitando relleno, NUNCA quitando nombres ni cifras.",
   "tipo": "presupuesto | contrato | brief | factura | propuesta | informe | otro",
   "cliente": "nombre de la empresa CLIENTE, tal cual aparece. Cadena vacía si no hay uno claro.",
   "sector": "sector del cliente en una o dos palabras, o cadena vacía",
   "fechas": "las fechas relevantes, en una línea, o cadena vacía",
   "importe": "el importe principal con su moneda, o cadena vacía"
 }
+
+Para "contenido": esto NO es un resumen, es el documento. Lo lee una IA para
+contestar preguntas concretas, así que lo que importa es que estén los NOMBRES
+PROPIOS tal cual (marcas, personas, formatos, agencias), los estados de cada cosa
+(aprobado, rechazado, en proceso), las cifras y las fechas. Si el documento es una
+lista de proyectos, tienen que aparecer TODOS con su nombre y su estado — un
+resumen que dice «cinco propuestas» y no dice cuáles no sirve para nada. Mantén el
+orden y los apartados del original.
 
 Para "cliente": el cliente ES QUIEN CONTRATA. Brutal Studios NO es el cliente: si
 el documento lo emite Brutal Studios, el cliente es el destinatario. Si no estás
@@ -138,6 +152,7 @@ nombre equivocado.` }
         const limpio = bruto.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()
         const j = JSON.parse(limpio)
         summary = String(j.resumen || '').trim()
+        contenido = String(j.contenido || '').trim().slice(0, 4000)
         datos = {
           tipo: String(j.tipo || '').trim(),
           cliente: String(j.cliente || '').trim(),
@@ -194,5 +209,5 @@ nombre equivocado.` }
     }
   }
 
-  return NextResponse.json({ url: publicUrl, name: filename, summary, datos, clientId, clientePropuesto })
+  return NextResponse.json({ url: publicUrl, name: filename, summary, contenido, datos, clientId, clientePropuesto })
 }

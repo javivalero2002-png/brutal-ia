@@ -90,7 +90,12 @@ export function memoriaRelevante(notas: NotaMemoria[] | null | undefined, pregun
  *
  * Es lo más pequeño y lo más preguntable de la nota. Va siempre, esté donde esté.
  */
-const DATOS = /(?:Tipo|Cliente|Fechas|Importe|Estado):\s*[^·\n]+/g
+// Los nombres de campo son los de `CAMPOS_FICHA` en `notaDocumento.ts`. Aqui
+// ponia cinco y faltaban `Presupuesto` y `Alcance`, que son justo los que escribe
+// el camino de Proyectos: un documento subido desde un proyecto perdia su
+// presupuesto y su alcance, y esta lista no los rescataba porque no sabia que
+// existian. Los dos caminos escribian la misma idea con nombres distintos.
+const DATOS = /(?:Tipo|Cliente|Sector|Fechas|Importe|Presupuesto|Alcance|Estado):\s*[^·\n]+/g
 
 /**
  * Las mismas notas, ya en las líneas que se le pasan al modelo.
@@ -101,8 +106,19 @@ const DATOS = /(?:Tipo|Cliente|Fechas|Importe|Estado):\s*[^·\n]+/g
  * detalle. `memoriaRelevante` ya deja como mucho 6 documentos, así que el techo
  * está acotado: no es «mandarlo todo», es no partir por la mitad lo poco que se
  * ha elegido mandar.
+ *
+ * 5.500 y no 1.400 desde que la nota de un documento lleva dentro el DOCUMENTO y
+ * no solo su resumen. El motivo, medido: Javi preguntó «¿qué tipo de campaña
+ * hicimos con Nutella?» y las dos IAs dijeron que no había ninguna — el PDF tiene
+ * 4.529 caracteres y NUTELLA & PAN sale en el primer tercio, pero en Memoria solo
+ * había un resumen de 684 que no la nombraba.
+ *
+ * El techo real: 6 documentos × 5.500 = 33.000 caracteres, unos 8.000 tokens por
+ * mensaje. A la escala de esto —siete personas, unas decenas de documentos— eso
+ * son céntimos, y es la diferencia entre una IA que sabe de qué va un PDF y una
+ * que sabe lo que pone dentro.
  */
-export const lineasDeMemoria = (notas: NotaMemoria[], corte = 400, corteDoc = 1400) =>
+export const lineasDeMemoria = (notas: NotaMemoria[], corte = 400, corteDoc = 5500) =>
   notas
     .map(m => {
       const plano = (m.content || '').replace(/\s+/g, ' ')

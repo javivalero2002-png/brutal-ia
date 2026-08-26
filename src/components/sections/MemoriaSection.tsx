@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { rutaApp } from '@/lib/appUrl'
+import { componerNotaDocumento } from '@/lib/notaDocumento'
 import { useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, todayKey, localDayKey, AMBAR, buscaEnTexto } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
 import LucideIcon from '@/components/shared/LucideIcon'
@@ -63,12 +64,6 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
       // Harvey entiende: sin esto, «¿cuánto presupuestamos a Zara?» no tiene dónde
       // mirar aunque el importe esté dentro del archivo.
       const d = j.datos || {}
-      const ficha = [
-        d.tipo ? `Tipo: ${d.tipo}` : '',
-        d.cliente ? `Cliente: ${d.cliente}` : '',
-        d.fechas ? `Fechas: ${d.fechas}` : '',
-        d.importe ? `Importe: ${d.importe}` : '',
-      ].filter(Boolean).join(' · ')
 
       await data.createMemoria({
         title: (j.name||file.name).replace(/\.pdf$/i,''),
@@ -76,7 +71,12 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
         // Enlazada a su cliente cuando lo reconocemos: así el documento aparece al
         // mirar ESE cliente, en vez de quedarse suelto en una lista general.
         ...(j.clientId ? { client_id: j.clientId } : {}),
-        content: `${j.summary||''}${ficha ? `\n\n${ficha}` : ''}\n\n📎 Documento: ${rutaApp('/api/archivo?u=' + encodeURIComponent(j.url||urlJ.publicUrl))}`,
+        content: componerNotaDocumento({
+          resumen: j.summary,
+          datos: { Tipo: d.tipo, Cliente: d.cliente, Fechas: d.fechas, Importe: d.importe },
+          contenido: j.contenido,
+          enlace: rutaApp('/api/archivo?u=' + encodeURIComponent(j.url || urlJ.publicUrl)),
+        }),
       })
 
       if (j.clientePropuesto) {

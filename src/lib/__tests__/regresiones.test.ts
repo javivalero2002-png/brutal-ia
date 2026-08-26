@@ -5188,6 +5188,8 @@ describe('las superficies de IA se DERIVAN, no se enumeran', () => {
       'ingesta de un PDF: extrae texto para METERLO en memoria. Darle la ficha seria contarle lo que ya sabemos para que resuma lo que aun no sabemos.',
     'src/app/api/projects/analyze-pdf/route.ts':
       'analiza el PDF de UN proyecto concreto, y el propio documento es todo el contexto que necesita. Ademas es el unico sitio con prompt caching y meterle un bloque que cambia cada hora lo invalidaria.',
+    'src/app/api/admin/memoria-releer/route.ts':
+      'transcribe un PDF que YA esta en memoria para que las IAs puedan leerlo entero. Es el mismo caso que documents/route.ts: darle la ficha seria contarle lo que ya sabemos para que copie lo que aun no sabemos, y encima invita a rellenar huecos con contexto en vez de con el documento — justo lo que no se quiere de una transcripcion.',
     'src/app/api/clients/[id]/ai-advice/route.ts':
       'consejo sobre UN cliente, con la ficha de ese cliente delante. Pendiente de revisar si le vendria bien, pero hoy no es un fallo mudo.',
   }

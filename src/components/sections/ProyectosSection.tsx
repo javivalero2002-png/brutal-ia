@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, Fragment} from 'react'
 import { rutaApp } from '@/lib/appUrl'
+import { componerNotaDocumento } from '@/lib/notaDocumento'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { Abanico, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, dlLabel, todayKey, estadoDeadline, AMBAR, buscaEnTexto } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
@@ -294,22 +295,17 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
     }
     setLlevando(true)
     try {
-      const ficha = [
-        a.data?.client ? `Cliente: ${a.data.client}` : '',
-        a.data?.budget ? `Presupuesto: ${a.data.budget}` : '',
-        a.data?.dates ? `Fechas: ${a.data.dates}` : '',
-        a.data?.scope ? `Alcance: ${a.data.scope}` : '',
-      ].filter(Boolean).join(' · ')
       await data.createMemoria?.({
         title: titulo,
         category: 'Documento',
         ...(proy.client_id ? { client_id: proy.client_id } : {}),
-        content: [
-          a.summary || '',
-          ficha,
-          (a.keyPoints || []).slice(0, 5).map((p: string) => `· ${p}`).join('\n'),
-          url ? `📎 Documento: ${rutaApp('/api/archivo?u=' + encodeURIComponent(url))}` : '',
-        ].filter(Boolean).join('\n\n'),
+        content: componerNotaDocumento({
+          resumen: a.summary,
+          datos: { Cliente: a.data?.client, Presupuesto: a.data?.budget, Fechas: a.data?.dates, Alcance: a.data?.scope },
+          puntos: a.keyPoints,
+          contenido: a.contenido,
+          enlace: url ? rutaApp('/api/archivo?u=' + encodeURIComponent(url)) : '',
+        }),
       })
       if (!silencioso) showToast('Guardado en Memoria')
     } catch { if (!silencioso) showToast('No se pudo guardar en Memoria') }
