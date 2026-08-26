@@ -78,8 +78,40 @@ export function memoriaRelevante(notas: NotaMemoria[] | null | undefined, pregun
   return [...curadasElegidas, ...docsElegidos]
 }
 
-/** Las mismas notas, ya en las líneas que se le pasan al modelo. */
-export const lineasDeMemoria = (notas: NotaMemoria[], corte = 400) =>
+/**
+ * Los DATOS de una nota: cliente, fechas, importe, tipo, estado.
+ *
+ * Existe porque el extractor de PDF los escribe AL FINAL, después del resumen
+ * en prosa, y el corte caía justo encima. Medido sobre la memoria real: de las
+ * cinco notas que llevaban esta línea, las CINCO la perdían. O sea que a «¿de
+ * qué cliente es esta propuesta?» no había ni una que supiera contestar, y a
+ * «¿qué importe tiene EL TRAIDOR?» las dos IAs dijeron que no lo tenían —
+ * teniéndolo, 80 caracteres más allá de la tijera.
+ *
+ * Es lo más pequeño y lo más preguntable de la nota. Va siempre, esté donde esté.
+ */
+const DATOS = /(?:Tipo|Cliente|Fechas|Importe|Estado):\s*[^·\n]+/g
+
+/**
+ * Las mismas notas, ya en las líneas que se le pasan al modelo.
+ *
+ * Dos cortes y no uno: una nota escrita a mano son dos frases, y un documento es
+ * el resumen de un PDF entero. Con 400 para todo, de un resumen de 1.380
+ * caracteres llegaban 400 y se perdían mil — el resto del documento, no un
+ * detalle. `memoriaRelevante` ya deja como mucho 6 documentos, así que el techo
+ * está acotado: no es «mandarlo todo», es no partir por la mitad lo poco que se
+ * ha elegido mandar.
+ */
+export const lineasDeMemoria = (notas: NotaMemoria[], corte = 400, corteDoc = 1400) =>
   notas
-    .map(m => `  - ${m.title}${m.category ? ` [${m.category}]` : ''}: ${(m.content || '').replace(/\s+/g, ' ').slice(0, corte)}`)
+    .map(m => {
+      const plano = (m.content || '').replace(/\s+/g, ' ')
+      const esDoc = /documento/i.test(m.category || '')
+      const cuerpo = plano.slice(0, esDoc ? corteDoc : corte)
+      const datos = (plano.match(DATOS) || [])
+        .map(d => d.trim())
+        .filter(d => !cuerpo.includes(d))
+      const cola = datos.length ? ` · ${datos.join(' · ')}` : ''
+      return `  - ${m.title}${m.category ? ` [${m.category}]` : ''}: ${cuerpo}${cola}`
+    })
     .join('\n')
