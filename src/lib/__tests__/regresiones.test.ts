@@ -4087,6 +4087,113 @@ describe('todos los buscadores de la app buscan igual', () => {
   })
 })
 
+describe('la documentacion no se vuelve mentira sola', () => {
+  // El valor de esta app fuera de la cabeza de Javi esta en `README.md` y
+  // `docs/OPERACION.md`: son lo que permite que otra persona la levante y la
+  // mantenga. Pero una documentacion que se queda vieja es PEOR que ninguna,
+  // porque se sigue con confianza.
+  //
+  // Y se queda vieja igual que el codigo. Hoy mismo se encontro el panel de
+  // procesos diciendo «TODO LO AUTOMÁTICO, AL DÍA» mientras vigilaba 2 de los 4
+  // crons; el runbook listaba esos mismos 2, y al README le faltaba una variable
+  // OBLIGATORIA (`VAPID_SUBJECT`) — o sea que seguir el README al pie de la letra
+  // para levantar una instancia daba un build fallido.
+  //
+  // Estas dos reglas comparan la prosa contra la fuente de verdad.
+  it('el README documenta todas las variables que el arranque exige', () => {
+    const exigidas = [...new Set(
+      [...readFileSync('scripts/check-env.mjs', 'utf8').matchAll(/'([A-Z][A-Z0-9_]+)'/g)].map(m => m[1]))]
+    expect(exigidas.length, 'check-env ya no exige nada: revisa esta regla en vez de borrarla').toBeGreaterThan(8)
+    const readme = readFileSync('README.md', 'utf8')
+    const faltan = exigidas.filter(v => !readme.includes(v))
+    expect(faltan,
+      `hay variables que \`prebuild\` exige y el README no menciona. Quien siga el README para levantar una instancia se encuentra un build fallido y un mensaje sobre una variable de la que nadie le habia hablado:\n  ${faltan.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('el runbook lista todos los procesos automaticos que hay', () => {
+    const crons = [...new Set((JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons?: { path: string }[] })
+      .crons?.map(c => c.path) || [])]
+    expect(crons.length, 'no hay crons en vercel.json: revisa esta regla').toBeGreaterThan(1)
+    const doc = readFileSync('docs/OPERACION.md', 'utf8')
+    const faltan = crons.filter(c => !doc.includes(c))
+    expect(faltan,
+      `hay procesos automaticos que el runbook no menciona. Quien lo lea creera que corren dos cosas cuando corren cuatro, y no sabra que mirar cuando una deje de funcionar — que es justo lo que paso con el aviso de las 20:00:\n  ${faltan.join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
+describe('el SQL del repo se puede aplicar de principio a fin', () => {
+  // «Tener el DDL» y «poder levantar una instancia» no son lo mismo. La regla
+  // hermana comprueba que TODA tabla y columna viva tenga su SQL; esta comprueba
+  // que ese SQL se pueda EJECUTAR en orden — que es lo que decide si una instancia
+  // nueva arranca o se queda a medias.
+  //
+  // Sin base de datos delante no se puede ejecutar de verdad, pero si se pueden
+  // comprobar las tres formas en que esto se rompe al concatenar ficheros:
+  // una clave ajena que apunta a una tabla que aun no existe, un `alter table`
+  // sobre algo que nadie crea, y una funcion de extension usada antes de
+  // habilitarla (`uuid_generate_v4()` sin `create extension "uuid-ossp"`).
+  const ORDEN = ['supabase/schema.sql',
+    ...readdirSync('supabase').filter(f => f.endsWith('.sql') && f !== 'schema.sql').sort().map(f => join('supabase', f)),
+    ...readdirSync('migrations').filter(f => f.endsWith('.sql')).sort().map(f => join('migrations', f))]
+
+  // Las crea Supabase, no nosotros.
+  const DE_SUPABASE = new Set(['auth.users', 'storage.objects', 'storage.buckets'])
+
+  it('cada clave ajena apunta a una tabla ya creada', () => {
+    const creadas: string[] = []
+    const problemas: string[] = []
+    for (const f of ORDEN) {
+      const sql = readFileSync(f, 'utf8').replace(/--.*$/gm, '')
+      for (const m of sql.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?([a-z_][a-z0-9_]*)\s*\(([\s\S]*?)\n\s*\)\s*;/gi)) {
+        const tabla = m[1].toLowerCase()
+        for (const r of m[2].matchAll(/references\s+((?:[a-z_]+\.)?[a-z_][a-z0-9_]*)/gi)) {
+          const destino = r[1].toLowerCase()
+          if (DE_SUPABASE.has(destino)) continue
+          const limpio = destino.replace(/^public\./, '')
+          if (!creadas.includes(limpio)) {
+            problemas.push(`${f}: \`${tabla}\` referencia a \`${limpio}\`, que todavia no existe en este punto`)
+          }
+        }
+        creadas.push(tabla)
+      }
+    }
+    expect(creadas.length, 'no se reconoce ninguna tabla: revisa esta regla').toBeGreaterThan(15)
+    expect(problemas, `aplicando el SQL en orden, una clave ajena apunta a una tabla que aun no se ha creado. En una instancia nueva eso es un error y la migracion se para a medias:\n  ${problemas.join('\n  ')}`)
+      .toEqual([])
+  })
+
+  it('ningun ALTER TABLE toca una tabla que nadie crea', () => {
+    const todo = ORDEN.map(f => readFileSync(f, 'utf8').replace(/--.*$/gm, '')).join('\n')
+    const creadas = new Set([...todo.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?([a-z_][a-z0-9_]*)/gi)].map(m => m[1].toLowerCase()))
+    const huerfanos = [...new Set([...todo.matchAll(/alter\s+table\s+(?:if\s+exists\s+)?(?:public\.)?([a-z_][a-z0-9_]*)/gi)]
+      .map(m => m[1].toLowerCase())
+      .filter(t => !creadas.has(t) && !DE_SUPABASE.has(t) && t !== 'objects' && t !== 'buckets'))]
+    expect(huerfanos, `hay ALTER TABLE sobre tablas que este repo no crea:\n  ${huerfanos.join('\n  ')}`).toEqual([])
+  })
+
+  it('las funciones de extension se usan DESPUES de habilitarla', () => {
+    // `uuid_generate_v4()` viene de `uuid-ossp` y NO esta en Postgres por defecto.
+    // Si algun fichero la usa antes de que `schema.sql` habilite la extension, la
+    // creacion de esa tabla falla en una instancia nueva. (`gen_random_uuid()` si
+    // es nativa desde Postgres 13 y no necesita nada.)
+    let habilitada = false
+    const problemas: string[] = []
+    for (const f of ORDEN) {
+      const sql = readFileSync(f, 'utf8').replace(/--.*$/gm, '')
+      const iExt = sql.search(/create\s+extension\s+(?:if\s+not\s+exists\s+)?"?uuid-ossp/i)
+      const iUso = sql.search(/uuid_generate_v4\s*\(/i)
+      if (iUso !== -1 && !habilitada && (iExt === -1 || iExt > iUso)) {
+        problemas.push(`${f}: usa uuid_generate_v4() y la extension uuid-ossp no se ha habilitado todavia`)
+      }
+      if (iExt !== -1) habilitada = true
+    }
+    expect(problemas, `una funcion de extension se usa antes de habilitarla: en una instancia nueva esa tabla no se crea:\n  ${problemas.join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
 describe('dos contadores que subian solos', () => {
   it('«completadas esta semana» se cuenta por completed_at', () => {
     // Se contaba por `updated_at`: retocar el texto de una tarea vieja ya terminada

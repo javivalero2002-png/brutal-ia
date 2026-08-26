@@ -48,7 +48,7 @@ Sin cualquiera de estas, `npm run build` se niega a compilar
 | `ANTHROPIC_API_KEY` | chat, Harvey y análisis de correo |
 | `GOOGLE_CLIENT_ID` · `GOOGLE_CLIENT_SECRET` | Gmail y Calendar |
 | `NEXT_PUBLIC_APP_URL` | de aquí sale la dirección de vuelta de OAuth |
-| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` · `VAPID_PRIVATE_KEY` | avisos push |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` · `VAPID_PRIVATE_KEY` · `VAPID_SUBJECT` | avisos push |
 
 En producción hace falta además `CRON_SECRET`, o los procesos automáticos
 devuelven 500.
