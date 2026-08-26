@@ -470,6 +470,29 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
   }, [])
 
   // ── MEMORIA ────────────────────────────────────────────────
+  /**
+   * Vuelve a traer SOLO la memoria.
+   *
+   * La suscripcion de Realtime de aqui arriba es la via buena, pero depende de que
+   * la tabla este en la publicacion `supabase_realtime` — y eso es un ajuste de
+   * base de datos que no falla si no esta: se queda callado. He intentado
+   * verificarlo desde fuera y no he podido, asi que la frescura de la memoria NO
+   * puede depender de ello.
+   *
+   * Esto es el suelo: al abrir Harvey o Brutal.IA se pide la memoria otra vez. Es
+   * una consulta pequeña, en el momento exacto en que importa, y funciona haya o
+   * no Realtime. Si un dia se publica la tabla, esto sobra y no molesta.
+   */
+  const refrescarMemoria = useCallback(async () => {
+    try {
+      const nuevas = await apiFetch('/api/memoria')
+      // Mismo criterio que `apply` en load(): una respuesta que no es un array
+      // —un {error}, un 500— NO pisa lo que ya hay. Vaciar la memoria del
+      // contexto de la IA por un fallo pasajero es peor que tenerla vieja.
+      if (Array.isArray(nuevas)) setMemoria(nuevas as MemoriaEntry[])
+    } catch { /* la memoria vieja sigue siendo mejor que ninguna */ }
+  }, [])
+
   const createMemoria = useCallback(async (entry: Partial<MemoriaEntry>) => {
     const created = await apiFetch('/api/memoria', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) })
     setMemoria(prev => [created, ...prev])
@@ -553,7 +576,7 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
     projects, createProject, updateProject, deleteProject,
     tasks, createTask, updateTask, deleteTask, deleteTasks, toggleTask,
     inbox, markRead, markManyRead, markUnread, sendInternalMessage, reloadInbox,
-    memoria, createMemoria, updateMemoria, deleteMemoria,
+    memoria, createMemoria, updateMemoria, deleteMemoria, refrescarMemoria,
     agenda, createAgenda, updateAgenda, deleteAgenda, aplicarAgendaLocal,
     reglas, createRegla, updateRegla, deleteRegla, runAutomations,
     chatMessages, sendChatMessage, clearChat,

@@ -6484,4 +6484,27 @@ describe('el motor de automatizaciones recibe lo que mira', () => {
     expect(bloque).not.toMatch(/últimos 7 días/)
   })
 
+  // Verificada quitando la llamada de cada seccion por separado: roja las dos veces.
+  it('las dos IAs piden la memoria otra vez al abrirse', () => {
+    // Ni Harvey ni Brutal.IA leen `memoria` del servidor: la leen del estado de
+    // useNexusData, que se llena UNA vez al arrancar la app. Sin este refresco, la
+    // memoria que ve la IA es la del momento en que se abrio la pestaña — y el
+    // fallo no se ve, porque contesta con seguridad sobre una lista vieja.
+    //
+    // Hay una suscripcion de Realtime que deberia bastar, pero depende de que la
+    // tabla este en la publicacion `supabase_realtime`, y eso no falla si no esta:
+    // se queda callado. Por eso esto es el suelo y no el adorno.
+    for (const f of ['HarveySection', 'ChatSection']) {
+      const src = leerCodigo(`src/components/sections/${f}.tsx`)
+      expect(/refrescarMemoria\?\.\(\)/.test(src),
+        `${f} ya no refresca la memoria al abrirse: la IA contestara sobre la memoria que hubiera al arrancar la app`).toBe(true)
+    }
+    // Y que el hook siga dandola: si se cae de ahi, las dos llamadas de arriba
+    // son `undefined?.()` y no fallan — se quedan calladas, que es lo peor.
+    const hook = leerCodigo('src/hooks/useNexusData.ts')
+    const devuelve = hook.slice(hook.lastIndexOf('return {'))
+    expect(/refrescarMemoria/.test(devuelve),
+      'useNexusData ya no expone refrescarMemoria: las llamadas con ?. se vuelven silenciosas').toBe(true)
+  })
+
 })
