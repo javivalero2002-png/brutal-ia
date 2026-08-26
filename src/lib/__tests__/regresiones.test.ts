@@ -6510,3 +6510,58 @@ describe('el motor de automatizaciones recibe lo que mira', () => {
   })
 
 })
+
+
+describe('el calendario no puede mentir sobre las tareas', () => {
+  const CAL = 'src/components/sections/CalendarioSection.tsx'
+
+  // Las cuatro verificadas reintroduciendo su bug, una a una.
+  it('las tareas completadas siguen viendose en su dia', () => {
+    const src = leerCodigo(CAL)
+    // Acotado al sitio: `!t.done` aparece en mas de una seccion, y buscarlo en
+    // todo el fichero daria verde con el bug puesto en OTRA parte.
+    const i = src.indexOf('data.tasks?.forEach')
+    expect(i, 'el calendario ya no recorre las tareas: repunta esta regla en vez de borrarla').toBeGreaterThan(-1)
+    const mapeo = src.slice(i, i + 900)
+
+    // Buscar `!t.done` a secas daba FALSO POSITIVO: el propio arreglo lo usa para
+    // contar las pendientes SIN fecha, tres lineas mas arriba. Una regla que se
+    // caza a si misma no vigila nada — o la quitas, o la afinas.
+    expect(/t\.due_date && !t\.done/.test(mapeo),
+      'el calendario vuelve a esconder las tareas hechas: al completarla desaparece del dia —indistinguible de borrarla— y un mes pasado se ve en blanco').toBe(false)
+    expect(/hecha:/.test(mapeo),
+      'la tarea ya no lleva marca de hecha: sin ella no se puede pintar apagada ni sacarla del recuento de carga').toBe(true)
+
+    // Y que la marca LLEGUE al pintado: emitirla y no usarla es lo mismo que no
+    // emitirla, solo que mas dificil de ver.
+    expect(/raw\?\.hecha/.test(src),
+      'la marca de hecha ya no se usa al pintar: la tarea completada se veria igual que una pendiente').toBe(true)
+  })
+
+  it('el «hoy» del calendario es el de Madrid, no el del portatil', () => {
+    const src = leerCodigo(CAL)
+    expect(/claveDeHoyMadrid\(\)/.test(src),
+      'el calendario volvio a calcular hoy con `new Date()`: fuera de España el recuadro de HOY cae en una casilla y las tareas de hoy en la de al lado').toBe(true)
+    // Y que nadie vuelva a declarar una constante que TAPE al helper.
+    expect(/const todayKey = toKey\(/.test(src),
+      'vuelve a haber una constante local llamada `todayKey` que tapa al helper de Madrid: quien lo importe aqui se lleva el del portatil sin enterarse').toBe(false)
+  })
+
+  it('el color de una tarea sale de nivelTarea(), no de un ternario', () => {
+    const src = leerCodigo(CAL)
+    const i = src.indexOf('data.tasks?.forEach')
+    const mapeo = src.slice(i, i + 900)
+    expect(/nivelTarea\(t\.level\)/.test(mapeo),
+      'el chip vuelve a decidir el color a mano: `createTask` pinta antes de que conteste el servidor, asi que un nivel que el modelo escriba en español llega al render durante esa ventana').toBe(true)
+  })
+
+  it('lo que se esconde detras del «+N» es lo menos grave, no lo ultimo en llegar', () => {
+    const src = leerCodigo(CAL)
+    const orden = src.indexOf('eventsByDay[k].sort(')
+    const corte = src.indexOf('.slice(0,3)')
+    expect(orden, 'el calendario ya no ordena los eventos del dia: el recorte vuelve a ir por orden de llegada, y un dia con tres reuniones esconde la entrega urgente').toBeGreaterThan(-1)
+    expect(corte, 'ya no hay recorte: repunta esta regla').toBeGreaterThan(-1)
+    expect(orden < corte,
+      'se ordena DESPUES de cortar, que es no ordenar').toBe(true)
+  })
+})

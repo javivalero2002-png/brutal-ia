@@ -89,6 +89,11 @@ const TASKS: Task[] = [
   mkTask({ text:'Feedback creatividades Mango',        level:'high',   due_date:day(-3), assigned_to:'u2', project_id:'p4' }),
   mkTask({ text:'Actualizar portfolio web',            level:'normal', due_date:day(9),  assigned_to:'u3' }),
   mkTask({ text:'Programar newsletter agosto',         level:'normal', assigned_to:'u1', project_id:'p3' }),
+  // COMPLETADA Y CON FECHA. Es el caso que el calendario tenia roto —las hechas
+  // se filtraban con `!t.done` y desaparecian del dia— y no habia ni una asi en
+  // los datos de muestra, asi que el harness no lo podia enseñar. Un juego de
+  // datos que no incluye el caso que se rompio no sirve para vigilarlo.
+  mkTask({ text:'Montaje teaser Mango',                 level:'high',   done:true, due_date:day(-2), assigned_to:'u2', project_id:'p4', updated_at:iso(0) }),
   mkTask({ text:'Call de seguimiento Mango',           level:'high',   done:true, assigned_to:'u2', project_id:'p4', updated_at:iso(0) }),
   mkTask({ text:'Factura agosto Adidas',               level:'normal', done:true, assigned_to:'u1', updated_at:iso(0) }),
   mkTask({ text:'Brief campaña Nike aprobado',         level:'normal', done:true, assigned_to:'u3', project_id:'p1', updated_at:iso(-1) }),
