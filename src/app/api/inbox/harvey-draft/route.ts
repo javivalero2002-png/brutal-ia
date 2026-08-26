@@ -84,9 +84,15 @@ export async function POST(request: NextRequest) {
   // leer la memoria o los clientes se cuela como «no hay nada relevante» y el
   // borrador sale escrito sobre menos contexto del que hay — sin que nadie lo sepa.
   // El borrador se hace igual (es util aunque le falte algo), pero queda anotado.
-  const [ficha, { data: notas, error: eNotas }, { data: clientes, error: eCli }, { data: anteriores, error: eAnt }] = await Promise.all([
+  const [ficha, { data: curadas, error: eNotas }, { data: documentos, error: eDocs }, { data: clientes, error: eCli }, { data: anteriores, error: eAnt }] = await Promise.all([
     leerFicha(admin),
-    admin.from('memoria').select('title, category, content').order('created_at', { ascending: false }).limit(200),
+    // DOS consultas, no una con limit(200). Era el gemelo vivo del bug que
+    // /api/chat ya tenía arreglado y explicado: con un solo cubo ordenado por
+    // fecha, cada PDF que se sube empuja fuera una nota escrita a mano, y lo
+    // primero que se cae es la doctrina del estudio —cómo se factura, cómo se
+    // habla a un cliente— que es justo lo que un borrador de respuesta necesita.
+    admin.from('memoria').select('title, category, content').not('category', 'ilike', 'documento').order('created_at', { ascending: false }).limit(200),
+    admin.from('memoria').select('title, category, content').ilike('category', 'documento').order('created_at', { ascending: false }).limit(150),
     admin.from('clients').select('name, industry, status, notes').limit(100),
     // Los correos anteriores de ESA dirección. Es lo que convierte un borrador
     // genérico en una respuesta que sabe de qué se venía hablando.
@@ -102,15 +108,15 @@ export async function POST(request: NextRequest) {
           error: null as { message: string } | null,
         }),
   ])
-  if (eNotas || eCli || eAnt) {
+  if (eNotas || eDocs || eCli || eAnt) {
     console.error('[harvey-draft] contexto incompleto —',
-      eNotas?.message || '', eCli?.message || '', eAnt?.message || '')
+      eNotas?.message || '', eDocs?.message || '', eCli?.message || '', eAnt?.message || '')
   }
 
   // La memoria se elige con el ASUNTO Y EL CUERPO como pregunta: es lo que hay
   // para emparejar. Con la pregunta vacía devolvería siempre las mismas notas.
   const consulta = [correo.subject, correo.ai_summary, correo.body_preview].filter(Boolean).join(' ')
-  const memoria = lineasDeMemoria(memoriaRelevante((notas || []) as never, consulta))
+  const memoria = lineasDeMemoria(memoriaRelevante([...(curadas || []), ...(documentos || [])] as never, consulta))
 
   const cliente = (clientes || []).find(c =>
     String(c.name || '').toLowerCase().trim() === String(correo.ai_client || '').toLowerCase().trim())
