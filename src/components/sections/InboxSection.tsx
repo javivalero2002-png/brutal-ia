@@ -397,10 +397,28 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
   const uc = (u: string) => u==='urgent'?RED:u==='high'?AMBAR:BLU
   const ul = (u: string) => rotuloNivel(u, true)
 
+  // LOS FILTROS DEL MOVIL. Esta lista existia, comentada y con un test encima,
+  // pero NO SE RENDERIZABA EN NINGUN SITIO: `tabs` se declaraba aqui y no se usaba.
+  // La unica llamada a `setFilter` de todo el fichero vive en la columna de la
+  // izquierda, que va dentro de `{!isMobile && (...)}`, asi que en un telefono
+  // `filter` valia 'Todos' desde que abrias la app hasta que la cerrabas: ni
+  // urgentes, ni sin leer, ni elegir buzon, ni recuperar lo archivado.
+  //
+  // Los acentos van en HEX de 6 digitos por lo mismo que los de `carpetas` doce
+  // lineas mas abajo, y ahora importa de verdad: los chips concatenan opacidad
+  // (`${t.accent}1F`). Con un rgba salia `rgba(234,67,53,0.8)1F` y el navegador
+  // tira la declaracion ENTERA sin decir nada — el chip activo se quedaria sin
+  // fondo ni borde. Mientras esto fue codigo muerto, nadie lo pago.
+  //
+  // Y cada `n` cuenta LO QUE SU FILTRO DEVUELVE, no los no leidos. Estaban
+  // mezclados: el chip decia «Urgente 3» y la lista abria con siete, porque el
+  // numero contaba urgentes-sin-leer y el filtro devuelve todos los urgentes.
+  // Un numero pegado encima de la lista que no es el largo de la lista se lee
+  // como un fallo de la lista.
   const tabs = [
-    {id:'Todos', label:'Todos', n: allMsgs.length, accent:'rgba(255,255,255,0.35)'},
+    {id:'Todos', label:'Todos', n: activeMsgs.length, accent:'#FFFFFF'},
     {id:'Sin leer', label:'Sin leer', n: unread, accent: BLU},
-    {id:'Urgente', label:'Urgente', n: urgent, accent: RED},
+    {id:'Urgente', label:'Urgente', n: activeMsgs.filter((m:any)=>m.ai_urgency==='urgent').length, accent: RED},
     // UN CHIP POR BUZON REAL. Esta es la unica forma de elegir cuenta en MOVIL:
     // la columna de la izquierda con las cuentas es solo de escritorio, y la
     // pantalla que hacia de selector se ha quitado —Javi: «no queda bien y no es
@@ -411,7 +429,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
     // para no dejar la fila coja durante la carga.
     ...(cuentas === null
       ? [
-          {id:'Personal', label:'Personal', n: personalGmailCount, accent:'rgba(234,67,53,0.8)'},
+          {id:'Personal', label:'Personal', n: personalGmailCount, accent:'#EA4335'},
           {id:'Colabs', label:'Colabs', n: colabsGmailCount, accent: GRN},
         ]
       : cuentas.map(cta => ({
@@ -420,15 +438,18 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
           // de la arroba. La direccion entera no cabe en un chip.
           label: cta.compartida ? 'Colabs' : cta.email.split('@')[0],
           n: activeMsgs.filter((m:any)=>m.cuenta===cta.email).length,
-          accent: cta.compartida ? GRN : 'rgba(234,67,53,0.8)',
+          accent: cta.compartida ? GRN : '#EA4335',
         }))),
-    {id:'Clientes', label:'Clientes', n: fromClients, accent:'rgba(255,176,32,0.8)'},
-    {id:'Interno', label:'Equipo', n: internal, accent: 'rgba(167,139,250,0.8)'},
-    ...(allMsgs.some((m:any)=>m.source==='whatsapp') ? [{id:'WhatsApp', label:'WhatsApp', n: allMsgs.filter((m:any)=>m.source==='whatsapp').length, accent:'rgba(37,211,102,0.8)'}] : []),
+    {id:'Clientes', label:'Clientes', n: activeMsgs.filter((m:any)=>esDeCliente(m)).length, accent: AMBAR},
+    {id:'Interno', label:'Equipo', n: activeMsgs.filter((m:any)=>m.source==='internal').length, accent: '#A78BFA'},
+    ...(activeMsgs.some((m:any)=>m.source==='whatsapp') ? [{id:'WhatsApp', label:'WhatsApp', n: activeMsgs.filter((m:any)=>m.source==='whatsapp').length, accent:'#25D366'}] : []),
+    // Calendario tambien: esta en la columna de escritorio y no aqui, asi que era
+    // otra pantalla a la que desde el telefono no habia forma de llegar.
+    {id:'Calendar', label:'Calendario', n: 0, accent:'#A78BFA'},
     // Archivados también en móvil. La carpeta solo existía en la columna de
     // escritorio, así que desde el teléfono se podía archivar un correo y no había
     // ninguna forma de volver a verlo: un archivado sin deshacer es un borrado.
-    {id:'Archivados', label:'Archivados', n: archivedCount, accent:'rgba(255,255,255,0.35)'},
+    {id:'Archivados', label:'Archivados', n: archivedCount, accent:'#FFFFFF'},
   ]
 
   return (
@@ -550,6 +571,28 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
               </div>
             </div>
         </div>
+
+        {/* La fila de filtros del movil, que es lo que hace util todo lo de arriba.
+            Va DENTRO del panel de la lista a proposito: ese panel ya se oculta solo
+            al abrir un correo (`display:selected?'none':'flex'`), asi que la fila
+            desaparece con el sin una condicion mas que mantener.
+            Desplazable en horizontal y sin barra: son once chips y no caben. */}
+        {isMobile && !selected && (
+          <div className="flex items-center gap-1.5 px-4 py-2.5 flex-shrink-0 overflow-x-auto"
+            style={{borderBottom:`1px solid ${BORDER}`,scrollbarWidth:'none',touchAction:'pan-x',overscrollBehavior:'contain',overflowY:'hidden',WebkitOverflowScrolling:'touch' as never}}>
+            {tabs.map(t=>{
+              const act = filter===t.id
+              return (
+                <button key={t.id} onClick={()=>{ setFilter(t.id); setActiveSender(null); setSelected(null) }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full flex-shrink-0 whitespace-nowrap transition-all active:scale-95"
+                  style={{background:act?`${t.accent}1F`:'transparent',border:`1px solid ${act?`${t.accent}4D`:BORDER}`}}>
+                  <span className="font-syne text-[9px] font-black tracking-wide" style={{color:act?t.accent:'rgba(255,255,255,0.38)'}}>{t.label}</span>
+                  {t.n>0 && <span className="font-figtree text-[9.5px] font-bold" style={{color:act?t.accent:'rgba(255,255,255,0.25)'}}>{t.n}</span>}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {/* Tarjetas de estado (estilo referencia) */}
         {!isMobile && !selected && filter!=='Calendar' && (
@@ -704,8 +747,11 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
 
           return (
             <div className="flex-1 overflow-y-auto">
-              {/* Todos header strip — source breakdown */}
-              {filter==='Todos' && !activeSender && allMsgs.length>0 && (
+              {/* Todos header strip — source breakdown.
+                  En MOVIL no: la fila de chips de arriba dice los mismos numeros
+                  y ademas se pulsa. Dos filas con «3 SIN LEER · 1 URGENTE», una
+                  viva y otra de adorno, se lee como que una de las dos falla. */}
+              {!isMobile && filter==='Todos' && !activeSender && allMsgs.length>0 && (
                 <div className="flex items-center gap-2 px-4 py-3 flex-wrap" style={{borderBottom:`1px solid ${BORDER}`,background:'rgba(255,255,255,0.012)'}}>
                   {unread>0 && <span className="flex items-center gap-1.5 font-syne text-[7px] font-black px-2 py-1 rounded-full" style={{background:`${BLU}18`,color:BLU,border:`1px solid ${BLU}28`}}><div className="w-1 h-1 rounded-full" style={{background:BLU}}/>{unread} SIN LEER</span>}
                   {urgent>0 && <span className="flex items-center gap-1.5 font-syne text-[7px] font-black px-2 py-1 rounded-full" style={{background:`${RED}12`,color:RED,border:`1px solid ${RED}22`}}><div className="w-1 h-1 rounded-full" style={{background:RED}}/>{urgent} URGENTE{urgent>1?'S':''}</span>}
