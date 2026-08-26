@@ -1717,9 +1717,27 @@ describe('mejoras del 19 de agosto', () => {
   // existia en la columna de escritorio. Un archivado sin vuelta es un borrado.
   it('lo que se archiva se puede recuperar desde el mismo sitio', () => {
     const I = leerCodigo('src/components/sections/InboxSection.tsx')
-    const tabs = I.slice(I.indexOf('const tabs = ['), I.indexOf('const tabs = [') + 1400)
+    const tabs = I.slice(I.indexOf('const tabs = ['), I.indexOf('const tabs = [') + 1900)
     expect(/Archivados/.test(tabs),
       'la carpeta Archivados solo esta en escritorio: desde el movil se archiva y no hay forma de volver a verlo').toBe(true)
+
+    // ESTA REGLA PASO EN VERDE MIENTRAS EL BUG ESTABA VIVO, y por eso esta aqui
+    // lo de abajo. `tabs` se declaraba, se comentaba —«esta es la unica forma de
+    // elegir cuenta en MOVIL»— y NO SE RENDERIZABA: la lista existia y la pantalla
+    // no la enseñaba. Comprobar que una constante contiene 'Archivados' no
+    // comprueba que se pueda pulsar; comprueba que alguien la escribio.
+    //
+    // Es la version de estructura del aviso de CLAUDE.md sobre la prosa: alli el
+    // comentario satisfacia la regla, aqui la satisface el codigo muerto.
+    expect(/\{tabs\.map\(/.test(I),
+      'la fila de chips volvio a ser codigo muerto: `tabs` se declara y no se pinta, asi que en movil no hay forma de cambiar de filtro').toBe(true)
+
+    // Y que se pinte donde el movil puede verla. El unico `setFilter` que habia
+    // vivia dentro de la columna `{!isMobile && (...)}`, o sea en ninguna parte
+    // para un telefono.
+    const fila = I.slice(I.indexOf('{tabs.map('), I.indexOf('{tabs.map(') + 700)
+    expect(/setFilter\(t\.id\)/.test(fila),
+      'los chips del movil ya no cambian el filtro: pintarlos sin `setFilter` es un adorno').toBe(true)
   })
 })
 
