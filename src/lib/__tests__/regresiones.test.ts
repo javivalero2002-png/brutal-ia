@@ -6682,3 +6682,31 @@ describe('la vigilancia', () => {
       'el vigilante volvio a avisar en cada pasada: un cron caido un fin de semana serian 48 avisos, y 48 avisos de lo mismo son cero').toBe(true)
   })
 })
+
+
+describe('el revisor de instancias no se puede quedar atras', () => {
+  // Verificada añadiendo una variable a check-env y viendola roja.
+  it('lee las variables de check-env.mjs, no una copia suya', () => {
+    // Si el revisor llevara su propia lista, añadir una variable obligatoria en
+    // check-env dejaria al revisor diciendo «todo bien» con una variable menos —
+    // y el sitio donde eso se nota es la instancia de un cliente, en produccion.
+    const r = readFileSync(join(process.cwd(), 'scripts/revisar-instancia.mjs'), 'utf8')
+    expect(/scripts\/check-env\.mjs/.test(r),
+      'el revisor ya no lee check-env.mjs: si lleva su propia lista, se quedara atras sin avisar').toBe(true)
+    // Y las TRES listas por separado. Leerlas juntas da falsas alarmas —me paso:
+    // dio por obligatorias CRON_SECRET, que solo lo es en produccion, y
+    // WHATSAPP_APP_SECRET, que es opcional. Un revisor que avisa de lo que no pasa
+    // se aprende a ignorar.
+    for (const l of ['REQUIRED', 'REQUIRED_PROD', 'OPTIONAL']) {
+      expect(r.includes(`'${l}'`),
+        `el revisor ya no distingue la lista ${l}: volveria a dar falsas alarmas`).toBe(true)
+    }
+  })
+
+  it('la guia de montaje menciona el revisor y la sonda', () => {
+    // Una guia que no lleva a comprobar el resultado es una lista de deseos.
+    const g = readFileSync(join(process.cwd(), 'docs/NUEVA-INSTANCIA.md'), 'utf8')
+    expect(/revisar-instancia\.mjs/.test(g), 'la guia no dice como comprobar que la instancia esta bien').toBe(true)
+    expect(/\/api\/salud/.test(g), 'la guia no dice que hay que poner una sonda externa').toBe(true)
+  })
+})

@@ -11,7 +11,8 @@
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "TZ=UTC vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "revisar": "node scripts/revisar-instancia.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
