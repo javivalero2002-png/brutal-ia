@@ -53,6 +53,7 @@ const nombre = (f: string) => f.replace(`${RAIZ}/`, '').replace('/route.ts', '')
 const SIN_SESION: Record<string, string> = {
   'cron/sync-colabs': 'la ejecuta Vercel, no una persona: se autentica con CRON_SECRET',
   'cron/backup': 'la ejecuta Vercel, no una persona: se autentica con CRON_SECRET',
+  'cron/vigilante': 'la ejecuta Vercel, no una persona: se autentica con CRON_SECRET. Mira los latidos y avisa al propietario cuando algo lleva demasiado sin correr.',
   'cron/recordatorio-fichar': 'la ejecuta Vercel, no una persona: se autentica con CRON_SECRET',
   'cron/recordatorio-cerrar': 'la ejecuta Vercel, no una persona: se autentica con CRON_SECRET',
   'whatsapp': 'webhook entrante: valida la firma del proveedor, no una sesión',

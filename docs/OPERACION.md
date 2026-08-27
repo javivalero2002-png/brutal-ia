@@ -147,6 +147,7 @@ protege.
 | Miércoles (04:00 UTC) | `/api/cron/backup` — copia de la base y poda del histórico de avisos | Se deja de tener red debajo, en silencio |
 | L-V (08:00 y 09:00 UTC) | `/api/cron/recordatorio-fichar` — avisa a quien no ha empezado el día. Se dispara dos veces y la ruta comprueba dentro que en Madrid sean las 10:00 | Nadie recibe el aviso de fichar, y no hay error |
 | L-V (18:00 y 19:00 UTC) | `/api/cron/recordatorio-cerrar` — avisa a quien fichó y no ha cerrado. Mismo truco con la hora de Madrid (20:00) | Nadie recibe el aviso de cerrar el día. **Ya pasó**: el `select` no traía `entrada_at`, el filtro daba false para todo el mundo y el cron respondía `{ok:true, avisados:0}` — indistinguible de «hoy todos habían cerrado» |
+| Cada hora | `/api/cron/vigilante` — mira los latidos y avisa al propietario cuando un proceso lleva más del doble de su cadencia sin correr. No repite el mismo aviso en 12 h | Nadie se entera de que algo automático se ha parado. **Ya pasó**: el 18 de agosto el cron horario estuvo muerto un día entero y se descubrió mirando |
 
 Todos se autentican con `CRON_SECRET`, que Vercel manda en la cabecera. Los dos
 primeros usan cerrojo (`job_locks`) para no pisarse consigo mismos; los
