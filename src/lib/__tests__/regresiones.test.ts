@@ -4025,7 +4025,32 @@ describe('decir que lo has hecho sin haberlo hecho tiene aviso', () => {
       const i = c.indexOf('afirmaHaberloHecho(')
       expect(/else if/.test(c.slice(Math.max(0, i - 120), i)),
         `${ruta}: el aviso no cuelga del caso «no hubo accion», asi que saltaria tambien cuando si la hubo`).toBe(true)
+      // El TEXTO del aviso, de un solo sitio. Estaba escrito a mano en las dos
+      // secciones, palabra por palabra, y es lo que el usuario lee en el momento
+      // mas delicado: cuando la app le dice que NO se ha guardado nada.
+      expect(/AVISO_SIN_FICHA/.test(c),
+        `${ruta} vuelve a escribir el aviso a mano en vez de usar la constante: dos copias que pueden divergir`).toBe(true)
     }
+  })
+
+  // Verificada con la regla vieja puesta: roja.
+  it('el aviso de «no se ha guardado» no salta con un participio suelto', () => {
+    const src = leerCodigo('src/lib/harveyAccion.ts')
+    // Buscaba `hecho[.,;]` en CUALQUIER sitio, asi que «de lo que ha hecho.» y
+    // «de hecho,» —de las expresiones mas comunes en español— disparaban la
+    // alarma. Javi lo vio en un RESUMEN, donde no habia nada que guardar.
+    //
+    // Un aviso que sale cuando no toca se aprende a ignorar, y este existe para
+    // el dia en que Harvey diga que ha creado algo y no lo haya creado.
+    expect(/hecho\[\.,;\]/.test(src),
+      'el detector vuelve a casar «hecho» en cualquier sitio: «de hecho,» dispara el aviso en cada respuesta que lo use').toBe(false)
+    // La confirmacion suelta solo vale abriendo la respuesta o una linea.
+    expect(/\(\^\|\\n\)/.test(src),
+      'la confirmacion suelta ya no esta anclada al principio de linea').toBe(true)
+    // Y sin lookbehind: un `(?<!…)` es un SyntaxError al cargar el modulo en un
+    // Safari viejo, y eso no rompe el aviso — rompe el bundle en ese movil.
+    expect(/\(\?<[!=]/.test(src),
+      'lookbehind en una expresion que se carga en el cliente: en un Safari viejo es un SyntaxError y se lleva el bundle por delante').toBe(false)
   })
 })
 

@@ -4,7 +4,7 @@ import { construirContexto } from '@/lib/contextoHarvey'
 import { memoriaRelevante, lineasDeMemoria } from '@/lib/memoriaRelevante'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
-import { parsearAccionHarvey, type AccionHarvey , etiquetaAccion, afirmaHaberloHecho } from '@/lib/harveyAccion'
+import { parsearAccionHarvey, type AccionHarvey , etiquetaAccion, afirmaHaberloHecho, AVISO_SIN_FICHA} from '@/lib/harveyAccion'
 import { nivelTarea } from '@/components/shared/helpers'
 import { BLU, RED, GRN, VIO, BORDER } from '@/components/shared/design-tokens'
 import { useIsMobile } from '@/components/shared/hooks'
@@ -321,7 +321,7 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
       // propuso nada. El usuario se queda con la frase, la da por buena, y lo
       // descubre días después buscando algo que no existe.
       else if (afirmaHaberloHecho(limpio)) {
-        reply = `${limpio}\n\n(Ojo: lo he dicho pero no me ha salido la ficha para confirmarlo, así que NO se ha guardado. Pídemelo otra vez.)`
+        reply = `${limpio}\n\n${AVISO_SIN_FICHA}`
       }
 
       // Si viene del fallback local, se DICE. Callarlo era hacer pasar por Harvey

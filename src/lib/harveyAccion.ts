@@ -158,8 +158,52 @@ export function etiquetaAccion(tipo: TipoAccion): {
  * son ofertas, no afirmaciones, y avisar ahí sería ruido en la mitad de las
  * respuestas.
  */
-const AFIRMA_HECHO = /\b(he (creado|añadido|anotado|apuntado|guardado|marcado|cerrado|programado|puesto)|queda (creada?|anotada?|apuntada?|guardada?)|ya (la|lo) tienes|hecho[.,;]|listo[.,;]|apuntado[.,;]|anotado[.,;])/i
+/**
+ * PASADO EN PRIMERA PERSONA. «He creado», «te la he apuntado», «lo he hecho».
+ *
+ * El grupo 1 captura un «no» delante para poder DESCARTARLO: «no he podido
+ * crearla» es lo contrario de una afirmación, y «no he creado la tarea» también.
+ * Se captura en vez de usar un lookbehind a propósito: un `(?<!…)` es un
+ * SyntaxError al cargar el módulo en un Safari viejo, y eso no rompe este aviso,
+ * rompe el bundle entero en el móvil de quien lo tenga.
+ */
+const PRIMERA_PERSONA = /\b(no\s+)?he\s+(creado|añadido|anadido|anotado|apuntado|guardado|marcado|cerrado|programado|puesto|hecho)\b/gi
+const QUEDA = /\bqueda\s+(creada?|anotada?|apuntada?|guardada?)\b/i
+const YA_TIENES = /\bya\s+(la|lo|las|los)\s+tienes\b/i
+
+/**
+ * La confirmación SUELTA: «Hecho.», «Listo,», «Apuntado.».
+ *
+ * Solo al principio de la respuesta o de una línea. Antes bastaba con que la
+ * palabra apareciera en CUALQUIER sitio seguida de puntuación (`hecho[.,;]`), y
+ * eso convierte «de hecho,» —de las expresiones más comunes en español— en una
+ * alarma permanente.
+ *
+ * Lo destapó Javi con un resumen: «…aún no hay nada registrado de lo que ha
+ * hecho.» y debajo el aviso de que no se había guardado nada. No había nada que
+ * guardar: era un resumen. Medido sobre cinco frases inocentes, saltaba en
+ * cuatro.
+ *
+ * Y un aviso que sale cuando no toca se aprende a ignorar, que es justo lo que no
+ * puede pasar con este: existe para el día en que Harvey diga que ha creado algo
+ * y no lo haya creado.
+ */
+const SUELTA = /(^|\n)\s*(hecho|listo|apuntado|anotado|guardado)\s*[.,;:!]/i
+
+/**
+ * Lo que se le añade a la respuesta cuando Harvey dice que ha hecho algo y no ha
+ * emitido la acción. Estaba escrito a mano en HoySection y otra vez, palabra por
+ * palabra, en HarveySection: dos copias de una frase que el usuario lee en un
+ * momento delicado —cuando la app le está diciendo que NO se ha guardado nada—.
+ */
+export const AVISO_SIN_FICHA =
+  '(Ojo: lo he dicho pero no me ha salido la ficha para confirmarlo, así que NO se ha guardado. Pídemelo otra vez.)'
 
 export function afirmaHaberloHecho(texto: string): boolean {
-  return AFIRMA_HECHO.test(String(texto || ''))
+  const t = String(texto || '')
+  // `matchAll` y no `exec`: con `exec` solo se mira la PRIMERA coincidencia, así
+  // que «no he podido crearla, pero he apuntado la fecha» se leería como una
+  // negación y se perdería la afirmación de después.
+  for (const m of t.matchAll(PRIMERA_PERSONA)) if (!m[1]) return true
+  return QUEDA.test(t) || YA_TIENES.test(t) || SUELTA.test(t)
 }

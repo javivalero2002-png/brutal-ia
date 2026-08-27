@@ -404,4 +404,33 @@ describe('si dice que lo ha hecho y no hay accion, se avisa', () => {
       'Mañana tienes la reunión de equipo.',
     ]) expect(afirmaHaberloHecho(t), `falso positivo: ${t}`).toBe(false)
   })
+
+  // EL CASO REAL. Javi pidio un resumen y debajo le salio «Ojo: lo he dicho pero
+  // no me ha salido la ficha para confirmarlo, asi que NO se ha guardado». No
+  // habia nada que guardar: era un resumen.
+  //
+  // La regla buscaba `hecho[.,;]` en CUALQUIER sitio, asi que casaba con «…de lo
+  // que ha hecho.» — y, peor, con «de hecho,», que es de las expresiones mas
+  // comunes en español. Medido sobre cinco frases inocentes: saltaba en cuatro.
+  it('no confunde el participio suelto con una confirmacion', () => {
+    for (const t of [
+      'Javi ficho a las 14:25. Aun no hay nada registrado de lo que ha hecho.',
+      'De hecho, la reunion es el martes.',
+      'Ya esta listo, pero falta revisarlo.',
+      'El montaje esta hecho; falta el color.',
+      'Lo que has hecho hoy: tres tareas.',
+      'No he creado la tarea porque no me has dicho para quien.',
+    ]) expect(afirmaHaberloHecho(t), `falso positivo: ${t}`).toBe(false)
+  })
+
+  it('sigue cazando la confirmacion cuando abre la respuesta', () => {
+    // La palabra suelta SI vale al principio: ahi «Hecho.» significa hecho.
+    for (const t of [
+      'Hecho.',
+      'Listo, la tienes en el calendario.',
+      'Anotado. Te aviso el viernes.',
+      'Lo he hecho ya.',
+      'No he podido con la primera, pero he apuntado la segunda.',
+    ]) expect(afirmaHaberloHecho(t), `no detecta: ${t}`).toBe(true)
+  })
 })
