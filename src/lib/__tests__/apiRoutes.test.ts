@@ -214,6 +214,16 @@ describe('rutas API · co_assigned_to cuenta como tuya', () => {
         // que es distinto de «en las que participo». No es un olvido: es la unica
         // lectura que no rompe el dia de otra persona.
         if (f.includes('diario/arrastrar')) continue
+        // `diario/pendientes` es el mismo caso y por el mismo motivo. Busca las
+        // tareas que nacieron de MI linea de diario, no las que llevo entre
+        // manos: son las que se tachan al cerrar mi dia, y DiarioSection las crea
+        // siempre con `assigned_to` = yo.
+        //
+        // Con el co-responsable dentro, una tarea nacida del objetivo de OTRA
+        // persona —en la que yo soy segundo— saldria escrita en mi tarjeta de dia
+        // sin cerrar. Vería el objetivo de otro como si me lo hubiera propuesto yo,
+        // y al tacharlo estaria cerrando el dia de alguien con el trabajo de otro.
+        if (f.includes('diario/pendientes')) continue
         olvidos.push(`${nombre(f)}: .eq('assigned_to', user.id) sin co_assigned_to`)
       }
     }

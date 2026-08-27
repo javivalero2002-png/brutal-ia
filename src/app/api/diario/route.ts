@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { instanteEnMadrid } from '@/lib/horaMadrid'
 import { todayKey, localDayKey, ventanaDelDia, esTareaDe, diarioTieneAlgo } from '@/components/shared/helpers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -143,7 +144,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'No puedes cerrar un día que no has abierto' }, { status: 400 })
     }
-    if (!previo?.cierre_at) fila.cierre_at = ahora
+    if (!previo?.cierre_at) {
+      // UN DÍA PASADO NO SE CIERRA «AHORA».
+      //
+      // Aquí se estampaba `ahora` siempre. Cerrar ayer hoy a las 16:40 habiendo
+      // fichado ayer a las 09:12 daba una jornada de 31 HORAS — y esa cifra va al
+      // resumen del equipo y al panel del jefe. La duración se calcula restando
+      // `cierre_at - entrada_at` (resumenEquipo.ts, RelojJornada), así que un
+      // cierre con la fecha de hoy no es un detalle: es una mentira con número.
+      //
+      // Para un día pasado la hora es OBLIGATORIA. Podría inventarse una —el
+      // final del día, ocho horas después— pero inventarle horas trabajadas a
+      // alguien es peor que pedirle que las escriba: la pantalla las trae ya
+      // rellenas con la última señal real de ese día, así que cuesta un toque.
+      if (dia < hoy) {
+        const hora = typeof body?.cierre_hora === 'string' ? body.cierre_hora.trim() : ''
+        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) {
+          return NextResponse.json(
+            { error: 'Para cerrar un día pasado hace falta la hora en que terminaste' }, { status: 400 })
+        }
+        const instante = instanteEnMadrid(dia, hora)
+        if (!instante) {
+          return NextResponse.json({ error: 'Esa hora no existe en ese día' }, { status: 400 })
+        }
+        // Y que sea posible: después de fichar y dentro de SU día. Sin esto, el
+        // cliente decide cuántas horas trabajó y el número deja de valer nada.
+        if (new Date(instante) <= new Date(previo.entrada_at as string)) {
+          return NextResponse.json(
+            { error: 'Terminaste antes de fichar: revisa la hora' }, { status: 400 })
+        }
+        fila.cierre_at = instante
+      } else {
+        fila.cierre_at = ahora
+      }
+    }
   }
 
   const { data, error } = await admin

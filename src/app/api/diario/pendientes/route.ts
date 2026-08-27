@@ -1,29 +1,28 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { todayKey, localDayKey, normalizarObjetivo } from '@/components/shared/helpers'
+import { todayKey, localDayKey } from '@/components/shared/helpers'
 import { NextResponse } from 'next/server'
 
+export const maxDuration = 30
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Lo MÍO que me propuse en días anteriores y sigue sin hacer.
+// MIS DÍAS SIN CERRAR.
 //
-// «Vienen de antes» lo calculaba el cliente mirando TAREAS, y eso lo hacía
-// depender de que la tarea existiera: un objetivo escrito en el diario cuya tarea
-// no se llegó a crear —porque se escribió antes de que eso funcionara, o porque
-// la creación falló— desaparecía al día siguiente sin dejar rastro. Justo lo que
-// Javi vio con «Prueba top».
+// Javi: «¿qué pasa si no cierras el día? Al día siguiente, cuando abras la app,
+// que te salga un aviso».
 //
-// Aquí se mira el DIARIO, que es donde el objetivo está de verdad escrito, y se
-// cruza con las tareas solo para saber cuál está hecho. Así el arrastre sobrevive
-// aunque la tarea nunca llegara a existir.
+// Lo que había: un push a las 20:00 y una regla que se lo cuenta al jefe. O sea
+// que el aviso existía para todo el mundo MENOS para quien tiene que cerrarlo,
+// dentro de la app, que es donde se cierra.
 //
-// Solo lo propio: `user.id` sale de la sesión y no hay parámetro que lo cambie.
+// Solo MÍOS y solo del pasado: el de hoy está abierto por definición.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Una línea de objetivo, sin viñetas ni espacios de más. */
-const lineas = (t?: string | null) =>
-  (t || '').split('\n').map(l => l.replace(/^[-•*\s]+/, '').trim()).filter(Boolean)
+/** Cuántos días atrás se mira. Más allá, cerrar «a ver qué pasó» es inventarlo. */
+const DIAS_ATRAS = 7
 
-// Vive en `shared/helpers.ts`: estaba escrito aquí y en el otro sitio, byte por byte.
-const normalizar = normalizarObjetivo
+const HORA_MADRID = new Intl.DateTimeFormat('es-ES', {
+  timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', hour12: false,
+})
 
 export async function GET() {
   const supabase = await createClient()
@@ -33,50 +32,53 @@ export async function GET() {
   const admin = await createAdminClient()
   const hoy = todayKey()
   const desde = new Date(`${hoy}T12:00:00Z`)
-  desde.setUTCDate(desde.getUTCDate() - 14)
-  const desdeClave = localDayKey(desde.toISOString())
+  desde.setUTCDate(desde.getUTCDate() - DIAS_ATRAS)
+  const desdeClave = localDayKey(desde)
 
-  const [{ data: entradas, error: errD }, { data: tareas, error: errT }] = await Promise.all([
-    admin.from('diario').select('dia,entrada').eq('user_id', user.id).gte('dia', desdeClave).lt('dia', hoy),
-    // Mías incluye las compartidas: si la cierra el co-responsable, el objetivo
-    // ESTÁ hecho, y sin esto volvería mañana a decirme que lo tengo pendiente.
-    admin.from('tasks').select('id,text,done,diario_dia,diario_objetivo')
-      .or(`assigned_to.eq.${user.id},co_assigned_to.eq.${user.id}`),
+  const [{ data: filas, error: eDiario }, { data: tareas, error: eTareas }] = await Promise.all([
+    admin.from('diario').select('dia, entrada, entrada_at, cierre_at, updated_at')
+      .eq('user_id', user.id).gte('dia', desdeClave).lt('dia', hoy).order('dia', { ascending: true }),
+    admin.from('tasks').select('id, text, done, completed_at, diario_dia, diario_objetivo')
+      .eq('assigned_to', user.id).gte('diario_dia', desdeClave).lt('diario_dia', hoy),
   ])
-
-  // supabase-js no lanza: sin mirar el error, un fallo se leería como «no tienes
-  // nada pendiente», que es indistinguible de la verdad y peor que un error.
-  if (errD || errT) {
-    return NextResponse.json({ error: (errD || errT)!.message }, { status: 500 })
+  // Un fallo al leer NO puede pintarse como «no hay ninguno»: sería decirle a
+  // alguien que tiene sus días cerrados sin haberlos mirado.
+  if (eDiario || eTareas) {
+    console.error('[diario/pendientes] no se pudo revisar:', eDiario?.message || '', eTareas?.message || '')
+    return NextResponse.json({ error: 'No se pudieron revisar los días' }, { status: 500 })
   }
 
-  const hechas = new Set(
-    (tareas || []).filter(t => t.done).flatMap(t => [
-      t.diario_objetivo ? normalizar(t.diario_objetivo) : '',
-      normalizar(t.text || ''),
-    ].filter(Boolean)),
-  )
-  // Los objetivos que YA tienen tarea viva se dejan fuera: de esos se encarga la
-  // lista de tareas del cliente, y meterlos aquí los duplicaría en pantalla.
-  const conTarea = new Set(
-    (tareas || []).filter(t => !t.done).flatMap(t => [
-      t.diario_objetivo ? normalizar(t.diario_objetivo) : '',
-      normalizar(t.text || ''),
-    ].filter(Boolean)),
-  )
+  const dias = (filas || [])
+    .filter(f => f.entrada_at && !f.cierre_at)
+    .map(f => {
+      const delDia = (tareas || []).filter(t => t.diario_dia === f.dia)
+      // Los objetivos se guardan uno por línea en `entrada`, que es el formato que
+      // permite tacharlos luego. La tarea se empareja por `diario_objetivo`, no
+      // por el texto: editar el texto de la tarea en Tareas rompería el vínculo.
+      const objetivos = String(f.entrada || '').split('\n').map(s => s.trim()).filter(Boolean)
+        .map(texto => {
+          const t = delDia.find(x => String(x.diario_objetivo || '').trim() === texto)
+          return { texto, hecha: !!t?.done, taskId: (t?.id as string) || null }
+        })
 
-  const vistos = new Set<string>()
-  const pendientes: { dia: string; texto: string }[] = []
-  // De más reciente a más antiguo: si el mismo objetivo se repitió varios días, se
-  // enseña una vez y con la fecha en que se escribió por última vez.
-  for (const e of (entradas || []).sort((a, b) => b.dia.localeCompare(a.dia))) {
-    for (const o of lineas(e.entrada)) {
-      const k = normalizar(o)
-      if (!k || vistos.has(k) || hechas.has(k) || conTarea.has(k)) continue
-      vistos.add(k)
-      pendientes.push({ dia: e.dia, texto: o })
-    }
-  }
+      // LA HORA QUE SE SUGIERE SALE DE UNA SEÑAL REAL, no de un número redondo.
+      // La última tarea que completaste ese día, o la última vez que se tocó la
+      // fila. Si no hay ninguna, no se sugiere nada y la pantalla la pide: nadie
+      // debería inventarle horas trabajadas a nadie, y menos si las mira un jefe.
+      const marcas = [
+        ...delDia.map(t => t.completed_at).filter(Boolean) as string[],
+        ...(f.updated_at && localDayKey(f.updated_at) === f.dia ? [f.updated_at as string] : []),
+      ].filter(m => localDayKey(m) === f.dia && new Date(m) > new Date(f.entrada_at as string))
+      const ultima = marcas.sort().at(-1) || null
 
-  return NextResponse.json({ pendientes: pendientes.slice(0, 30) })
+      return {
+        dia: f.dia,
+        entrada_at: f.entrada_at,
+        entro: HORA_MADRID.format(new Date(f.entrada_at as string)),
+        objetivos,
+        horaSugerida: ultima ? HORA_MADRID.format(new Date(ultima)) : null,
+      }
+    })
+
+  return NextResponse.json({ dias })
 }
