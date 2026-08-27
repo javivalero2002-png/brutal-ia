@@ -25,18 +25,26 @@ propietario (su correo).
 2. **Plan Pro.** No es opcional para un cliente: el plan gratuito **no tiene
    copias de seguridad automáticas**, y perder los datos de un cliente es el final
    del negocio, no un susto.
-3. SQL Editor → pega **`supabase/schema.sql`** entero y ejecútalo.
-4. Después, las migraciones de **`migrations/`** por orden de fecha.
+3. SQL Editor → primero la extensión: `create extension if not exists "uuid-ossp";`
+   Sin ella, `schema.sql` falla en la primera tabla con «function
+   uuid_generate_v4() does not exist» y no se crea nada.
+4. Pega **`supabase/schema.sql`** entero y ejecútalo.
+5. **Los cinco `supabase/migration_*.sql`.** Sí, están en `supabase/` y no en
+   `migrations/`, y ni el README ni esta guía los mencionaban hasta hoy — es el
+   agujero más fácil de pisar de todo el montaje:
+   `migration_content_cover`, `migration_content_video`, `migration_gmail_colabs`,
+   `migration_notification_log`, `migration_pdf_analysis`.
+6. Después, las migraciones de **`migrations/`** por orden de fecha.
    **Nunca ejecutes nada de `docs/sql-rechazado/`** — está ahí para no perderlo,
    no para correrlo.
-5. Storage → bucket **`content-videos`**, **privado**.
+7. Storage → bucket **`content-videos`**, **privado**.
    El nombre va escrito dentro de cada dirección guardada: renombrarlo después
    rompe todos los ficheros que ya haya.
-6. Authentication → Site URL y Redirect URLs con el dominio del cliente.
+8. Authentication → Site URL y Redirect URLs con el dominio del cliente.
    Esto es lo que Supabase mete en el correo de «¿olvidaste tu contraseña?». Si
    apunta a un sitio muerto, la recuperación manda a la gente a una página en
    blanco — y nadie lo nota, porque recuperar la contraseña es raro.
-7. Copia el **Project URL**, la **clave publicable** y la **clave secreta**.
+9. Copia el **Project URL**, la **clave publicable** y la **clave secreta**.
 
 ## 2 · Google Cloud  *(panel web)*
 
@@ -70,6 +78,21 @@ propietario (su correo).
 2. Ponle `role = 'owner'` en la tabla `profiles`. Sin owner, las pantallas de
    propietario —Reportes, Copias, Equipo— no las ve nadie.
 3. Carga sus clientes.
+
+## 4-bis · Quitar a Brutal Studios de en medio
+
+Esto es lo que convierte «una copia de nuestra app» en **la app del cliente**, y
+todo son valores por defecto que **no fallan**: si te los dejas, la instancia
+funciona y lleva nuestro nombre dentro.
+
+| Variable | Si no la pones | Se ve en |
+|---|---|---|
+| `NEXT_PUBLIC_APP_URL` | cae a `brutalstudios-ia.vercel.app` | enlaces de invitación, revisión de piezas, el OAuth de Google |
+| `COMPANY_EMAIL` | cae a `colaboraciones@brutalstudios.es` | de ahí sale qué correos son «del equipo» |
+| `VAPID_SUBJECT` | cae a `mailto:pablo@brutalstudios.es` | va firmado en cada notificación |
+| `DOMINIO_EQUIPO` | cae a `brutalstudios.es` | **la lista de Equipo saldría vacía**: filtra los perfiles por dominio de correo |
+
+El revisor del paso siguiente las comprueba una a una.
 
 ## 5 · Comprobar que está bien  *(el revisor)*
 

@@ -54,9 +54,24 @@ En producción hace falta además `CRON_SECRET`, o los procesos automáticos
 devuelven 500.
 
 **Opcionales**: sin ellas la app funciona y pierde una función concreta —
-`FISH_AUDIO_API_KEY` (la voz de Harvey), `GROQ_API_KEY` u `OPENAI_API_KEY` (que
-Harvey te entienda al hablar), `TAVILY_API_KEY` (búsqueda web),
-`WHATSAPP_APP_SECRET` (el canal de WhatsApp, aún sin estrenar).
+`FISH_AUDIO_API_KEY` y `FISH_AUDIO_VOICE_ID` (la voz de Harvey: sin cualquiera de
+las dos, el mismo 503), `GROQ_API_KEY` u `OPENAI_API_KEY` (que Harvey te entienda
+al hablar), `TAVILY_API_KEY` (búsqueda web), y `WHATSAPP_APP_SECRET`,
+`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` (el canal
+de WhatsApp, aún sin estrenar).
+
+**Y las de montar la app para OTRO negocio.** Todas tienen valor por defecto y
+ninguna falla si falta: la instancia funciona y lleva el nombre de Brutal Studios
+dentro, que es la peor forma de equivocarse porque no da señal.
+
+| Variable | Si no la pones |
+|---|---|
+| `COMPANY_EMAIL` | de aquí sale qué correos son «del equipo»; por defecto, el de Brutal Studios |
+| `DOMINIO_EQUIPO` | la lista de Equipo filtra por este dominio: con el de otro negocio saldría **vacía** |
+| `VAPID_SUBJECT` | va firmado en cada notificación; por defecto, un correo de Brutal Studios |
+| `NEXT_PUBLIC_APP_URL` | es obligatoria, pero ojo: el código cae a `brutalstudios-ia.vercel.app` si se queda vacía |
+
+Las comprueba `npm run revisar`. Ver **`docs/NUEVA-INSTANCIA.md`**.
 
 ### La base de datos
 

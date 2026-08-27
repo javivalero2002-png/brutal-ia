@@ -6710,3 +6710,42 @@ describe('el revisor de instancias no se puede quedar atras', () => {
     expect(/\/api\/salud/.test(g), 'la guia no dice que hay que poner una sonda externa').toBe(true)
   })
 })
+
+
+describe('la identidad de Brutal Studios no puede crecer dentro del codigo', () => {
+  it('el dominio no se usa para FILTRAR, solo como valor por defecto', () => {
+    // El caso real: `GET /api/admin/team` filtraba con
+    // `.ilike('email', '%@brutalstudios.es')` escrito a mano. En la instancia de
+    // otro negocio eso deja la lista de Equipo VACIA — sin error, sin nada raro:
+    // la consulta va bien y no casa ni un perfil. Ahora sale de `DOMINIO_EQUIPO`
+    // con ese valor por defecto, asi que aqui no cambia nada y alli funciona.
+    const malos: string[] = []
+    for (const f of RUTAS) {
+      const c = leerCodigo(f)
+      // Un literal del dominio DENTRO de un filtro de consulta. Como valor por
+      // defecto de un `process.env.X || '...'` esta bien: es lo que hace que la
+      // instancia de Brutal Studios siga funcionando igual.
+      for (const m of c.matchAll(/\.(eq|ilike|like|match)\([^)]*brutalstudios[^)]*\)/g)) {
+        if (!/process\.env/.test(m[0])) malos.push(`${f}: ${m[0].slice(0, 70)}`)
+      }
+    }
+    expect(malos, 'hay una consulta que filtra por el dominio de Brutal Studios escrito a mano: en la instancia de un cliente esa lista sale vacia y sin error').toEqual([])
+  })
+
+  it('las menciones en pantalla no crecen', () => {
+    // TOPE, no cero. Quedan menciones en textos de interfaz —marcadores de
+    // posicion, ayudas, la cuenta compartida— y quitarlas es marca blanca: un
+    // trabajo aparte y una decision de producto, no un arreglo.
+    //
+    // Esto es un trinquete: que no aumenten mientras se decide. Si baja, se baja
+    // el numero; si sube, alguien acaba de escribir el nombre del estudio en la
+    // app de otro negocio.
+    const TOPE = 24
+    let n = 0
+    for (const f of [...RUTAS, ...CLIENTE]) {
+      n += (leerCodigo(f).match(/brutalstudios|brutalia\.tech/gi) || []).length
+    }
+    expect(n, `las menciones a Brutal Studios en el codigo han subido a ${n} (el tope es ${TOPE}). En la instancia de un cliente, cada una es nuestro nombre dentro de su app`)
+      .toBeLessThanOrEqual(TOPE)
+  })
+})

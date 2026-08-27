@@ -36,7 +36,11 @@ export async function GET() {
   // Igual que en /api/me, y aqui es peor: con el asterisco esta ruta devolvia los
   // refresh tokens de Gmail de LAS SIETE PERSONAS en una sola respuesta.
   const { data: profiles, error } = await admin.from('profiles').select('id, email, name, role, avatar_color, initials, gmail_connected, gmail_account, gmail_colabs_connected, gmail_colabs_account')
-    .ilike('email', '%@brutalstudios.es')
+    // EL DOMINIO, DE UNA VARIABLE. Estaba escrito a mano, y en la instancia de
+    // otro negocio eso significa que la lista de Equipo sale VACÍA — sin error y
+    // sin nada raro: la consulta va bien y no casa ni un perfil. El defecto es el
+    // de siempre, así que aquí no cambia nada.
+    .ilike('email', `%@${process.env.DOMINIO_EQUIPO || 'brutalstudios.es'}`)
     .order('role', { ascending: false })
   // supabase-js NO lanza: descartando `error` esto devolvia [] con un 200, que es
   // exactamente lo mismo que responde una tabla vacia. En Ajustes → Equipo el
