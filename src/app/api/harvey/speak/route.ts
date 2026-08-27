@@ -1,6 +1,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { checkAiRateLimit } from '@/lib/rate-limit'
 import { NextRequest, NextResponse } from 'next/server'
+import { textoParaVoz } from '@/lib/textoHarvey'
 
 export const maxDuration = 60
 
@@ -15,6 +16,14 @@ export async function POST(request: NextRequest) {
 
   const { text } = await request.json()
   if (!text?.trim()) return NextResponse.json({ error: 'Sin texto' }, { status: 400 })
+
+  // LO QUE SE DICE NO ES LO QUE SE ESCRIBE. Javi: «cuando reprodujo en audio dos
+  // horas y diez minutos, dijo 2H10M». Se mandaba el texto tal cual, y la app
+  // escribe las duraciones en corto porque en pantalla es lo que se lee de un
+  // vistazo. Aqui y no en cada boton que hable: asi vale para cualquiera que
+  // llame a esta ruta, hoy y mañana.
+  const paraDecir = textoParaVoz(text)
+  if (!paraDecir) return NextResponse.json({ error: 'Sin texto' }, { status: 400 })
 
   // Fish Audio se factura por carácter. Sin tope, un cliente manipulado (o un
   // bucle accidental) podía quemar el saldo con una sola petición: esta ruta era
@@ -42,7 +51,7 @@ export async function POST(request: NextRequest) {
         model: 's2.1-pro',
       },
       body: JSON.stringify({
-        text,
+        text: paraDecir,
         reference_id: fishVoice,
         format: 'mp3',
         mp3_bitrate: 128,

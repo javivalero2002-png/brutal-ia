@@ -5,6 +5,7 @@ import { memoriaRelevante, lineasDeMemoria } from '@/lib/memoriaRelevante'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
 import { parsearAccionHarvey, type AccionHarvey , etiquetaAccion, afirmaHaberloHecho, AVISO_SIN_FICHA} from '@/lib/harveyAccion'
+import { limpiarTextoHarvey } from '@/lib/textoHarvey'
 import { nivelTarea } from '@/components/shared/helpers'
 import { BLU, RED, GRN, VIO, BORDER } from '@/components/shared/design-tokens'
 import { useIsMobile } from '@/components/shared/hooks'
@@ -312,7 +313,11 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
       // cuando pregunta algo y le respondes con dos palabras.
       hiloRef.current = [...hiloRef.current, { role: 'harvey' as const, text: reply }].slice(-20)
 
-      const { texto: limpio, accion } = parsearAccionHarvey(reply)
+      // El markdown se quita AQUI y no se confia al prompt. Harvey tiene escrito
+      // «cero markdown, nada de asteriscos» y aun asi emitio `**Estado del dia:**`
+      // en un briefing: una instruccion en el prompt no es determinista.
+      const { texto: crudo, accion } = parsearAccionHarvey(reply)
+      const limpio = limpiarTextoHarvey(crudo)
       reply = limpio
       if (accion) setPendingAction(accion)
       // RED DE SEGURIDAD. La emisión de la acción no es determinista: probando
