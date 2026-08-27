@@ -9,6 +9,7 @@ import { limpiarTextoHarvey } from '@/lib/textoHarvey'
 import { nivelTarea } from '@/components/shared/helpers'
 import { BLU, RED, GRN, VIO, BORDER } from '@/components/shared/design-tokens'
 import { useIsMobile } from '@/components/shared/hooks'
+import DiaSinCerrar from '@/components/shared/DiaSinCerrar'
 import { todayKey, localDayKey, madridHour, madridDateLabel, estadoDeadline } from '@/components/shared/helpers'
 import { getSharedAudio, playAck, isIOSDevice, matchTeamMember, splitForTTS, stopAllVoices, isSRBroken, markSRBroken } from '@/components/shared/audio'
 import LucideIcon from '@/components/shared/LucideIcon'
@@ -540,6 +541,14 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
 
   return (
     <div className={isMobile ? 'h-full flex flex-col overflow-y-auto overflow-x-hidden' : 'h-full flex overflow-hidden'} style={{background:'#030308'}}>
+
+      {/* EL DÍA QUE TE DEJASTE ABIERTO.
+          Arriba del orbe y no debajo: si hay que bajar a buscarlo, no es un aviso.
+          Y solo se pinta cuando hay uno de verdad, así que en el 99% de los días
+          esto no ocupa un píxel. */}
+      <div className={isMobile ? 'px-4 pt-3 flex-shrink-0' : 'absolute top-4 left-1/2 -translate-x-1/2 z-20 w-full max-w-[26rem] px-4'}>
+        <DiaSinCerrar showToast={showToast} onCerrado={() => data.reload?.()} />
+      </div>
 
       {/* ══ HARVEY ══ */}
       {/* dvh y no vh: en el movil este bloque va dentro de la raiz de 100dvh, y

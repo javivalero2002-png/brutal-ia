@@ -455,12 +455,25 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
           </div>
         </div>
 
-        {/* Month nav */}
-        <div className={`flex items-center gap-4 ${isMobile?'px-4':'px-8'} py-4 flex-shrink-0`} style={{borderBottom:`1px solid ${BORDER}`}}>
+        {/* Month nav.
+            En MÓVIL van dos filas, no una. Era una sola con `gap-4` y sin envolver
+            ni desplazar, así que en un teléfono «HOY · 8 eventos · SOLO MÍAS · 3
+            sin fecha» se salía por la derecha y el último chip aparecía cortado a
+            la mitad. Y lo que se cortaba primero era justo lo que más informa: los
+            contadores de lo que NO se pinta en ninguna casilla.
+            La navegación arriba —que es lo que se pulsa— y los chips debajo, en
+            una fila que se desplaza sola, con el mismo idioma que la del Inbox. */}
+        <div className={`flex ${isMobile?'flex-col items-stretch gap-2.5 px-4':'items-center gap-4 px-8'} py-4 flex-shrink-0`} style={{borderBottom:`1px solid ${BORDER}`}}>
+          <div className={isMobile ? 'flex items-center gap-3' : 'contents'}>
           <button onClick={prevMonth} className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors hover:bg-white/5" style={{background:SURF2}} aria-label="Anterior"><LucideIcon name="chevron-left" size={14} color="rgba(255,255,255,0.4)"/></button>
           <span className="font-figtree text-[18px] font-black" style={{letterSpacing:'-0.02em'}}>{MONTHS_ES[viewMonth]} <span style={{color:'rgba(255,255,255,0.35)'}}>{viewYear}</span></span>
           <button onClick={nextMonth} className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors hover:bg-white/5" style={{background:SURF2}} aria-label="Siguiente"><LucideIcon name="chevron-right" size={14} color="rgba(255,255,255,0.4)"/></button>
           <button onClick={()=>{setViewMonth(today.getMonth());setViewYear(today.getFullYear());setSelectedDay(today)}} className="ml-2 px-3 py-1.5 rounded-lg font-syne text-[8px] font-black tracking-wide transition-colors" style={{background:'rgba(27,95,250,0.1)',color:BLU}}>HOY</button>
+          </div>
+          {/* La fila de chips. `touchAction: pan-x` y sin barra, igual que la del
+              Inbox: son cinco y no caben, pero se llega a todos arrastrando. */}
+          <div className={isMobile ? 'flex items-center gap-2 overflow-x-auto' : 'contents'}
+            style={isMobile ? {scrollbarWidth:'none',touchAction:'pan-x',overscrollBehavior:'contain',overflowY:'hidden',WebkitOverflowScrolling:'touch' as never} : undefined}>
           {/* «Vacío» y «no lo he traído» NO son lo mismo.
               Las flechas dejan navegar a cualquier mes y de Google solo se trae un
               tramo; fuera de él el mes salía en blanco, o sea que el calendario
@@ -538,6 +551,7 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
               {syncingCal ? 'SINCRONIZANDO…' : 'SINCRONIZAR'}
             </button>
           )}
+          </div>
         </div>
 
         {/* Aviso: token sin permiso de Calendar (reconectar Gmail) */}
