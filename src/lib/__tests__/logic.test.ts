@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { parseRuleConfig, AUTO_MARK } from '@/lib/automations'
 import { dlDate, todayKey, localDayKey, estadoDeadline, diarioTieneAlgo } from '@/components/shared/helpers'
 import { splitForTTS } from '@/components/shared/audio'
@@ -271,5 +273,52 @@ describe('una fila de diario vacia no es un dia de trabajo', () => {
     // El caso real del 22 de agosto: dijo como fue el dia sin escribir nada mas.
     expect(diarioTieneAlgo({ entrada: '', animo: 'productivo' }), 'marco el animo').toBe(true)
     expect(diarioTieneAlgo({ entrada: '', animo: 'bloqueado' }), 'se marco bloqueado').toBe(true)
+  })
+})
+
+
+describe('las iniciales de un cliente', () => {
+  // La misma derivacion que /api/clients, aqui para poder probarla. Si divergen,
+  // la regla de abajo lo dice.
+  const iniciales = (name: string) => {
+    const limpio = (name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9 ]/g, ' ')
+    const p = limpio.split(' ').filter(Boolean)
+    return (p.length >= 2 ? p.slice(0, 2).map(w => w[0]).join('') : (p[0] || '').slice(0, 2)).toUpperCase() || 'CL'
+  }
+
+  it('siempre salen dos, tambien con una sola palabra', () => {
+    // Cogia la inicial de hasta DOS palabras, asi que «Panrico» daba «P» y
+    // «Ginebra Exotica» daba «GE»: una letra suelta en un circulo hecho para dos.
+    expect(iniciales('Panrico')).toBe('PA')
+    expect(iniciales('Nutella')).toBe('NU')
+    expect(iniciales('Ginebra Exótica')).toBe('GE')
+    expect(iniciales('El Corte Inglés')).toBe('EC')
+  })
+
+  it('las tildes y la Ñ no borran la letra', () => {
+    // `[^A-Za-z ]` se comia el acento CON la letra. En una app en español eso es
+    // un cliente llamado «Ñandú» que se queda en «AN», y «Óptica Ñ» en el fallback.
+    expect(iniciales('Ñandú')).toBe('NA')
+    expect(iniciales('Óptica Ñ')).toBe('ON')
+    expect(iniciales('Ámbar')).toBe('AM')
+  })
+
+  it('los digitos cuentan como letra', () => {
+    // «3M» se quedaba en «M», y «M80» en «M»: dos marcas distintas, el mismo circulo.
+    expect(iniciales('3M')).toBe('3M')
+    expect(iniciales('M80')).toBe('M8')
+  })
+
+  it('un nombre sin nada usable cae en CL, no en vacio', () => {
+    expect(iniciales('')).toBe('CL')
+    expect(iniciales('···')).toBe('CL')
+  })
+
+  it('la ruta usa ESTA derivacion y no otra', () => {
+    // Copiar la logica aqui para probarla vale solo si la de verdad es la misma.
+    const ruta = readFileSync(join(process.cwd(), 'src/app/api/clients/route.ts'), 'utf8')
+    expect(ruta).toContain("normalize('NFD')")
+    expect(ruta).toContain('[^A-Za-z0-9 ]')
+    expect(ruta).toContain('.slice(0, 2)')
   })
 })

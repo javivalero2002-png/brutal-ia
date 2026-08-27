@@ -26,8 +26,26 @@ export async function POST(request: NextRequest) {
   const admin = await createAdminClient()
 
   const body = await request.json()
-  const initials = (body.name || '').replace(/[^A-Za-z ]/g, '').split(' ')
-    .filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase() || 'CL'
+  // DOS LETRAS SIEMPRE.
+  //
+  // Cogía la inicial de hasta dos palabras, así que «Ginebra Exótica» daba «GE»
+  // pero «Panrico» daba «P»: una sola letra en un círculo pensado para dos, al
+  // lado de los que sí tienen dos. La mitad de las marcas son de una palabra.
+  //
+  // Y `[^A-Za-z ]` no quitaba solo los símbolos: se comía las TILDES y la Ñ. En
+  // una app en español eso es un cliente llamado «Ñandú» convertido en «andú», y
+  // uno llamado «Óptica Ñ» reducido al fallback. Se normaliza y se descompone
+  // (NFD) para separar el acento de la letra, que es lo que deja la letra viva.
+  const limpio = (body.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    // Los DÍGITOS también: «3M» se quedaba en «M» y «M80» en «M». Una marca con
+    // cifra no es rara, y perderla convierte dos clientes distintos en el mismo
+    // círculo.
+    .replace(/[^A-Za-z0-9 ]/g, ' ')
+  const palabras = limpio.split(' ').filter(Boolean)
+  const initials = (palabras.length >= 2
+    ? palabras.slice(0, 2).map((w: string) => w[0]).join('')
+    : (palabras[0] || '').slice(0, 2)
+  ).toUpperCase() || 'CL'
 
   const { data, error } = await admin
     .from('clients')
