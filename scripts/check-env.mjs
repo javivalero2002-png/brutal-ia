@@ -47,8 +47,17 @@ const OPTIONAL = [
   ['OPENAI_API_KEY', 'transcripción de Harvey'],
   ['GROQ_API_KEY', 'transcripción rápida'],
   ['FISH_AUDIO_API_KEY', 'voz de Harvey'],
-  ['VAPID_SUBJECT', 'se usa un mailto por defecto'],
   ['WHATSAPP_APP_SECRET', 'el webhook responde 503 sin ella (integración futura)'],
+  // Las de la REVENTA. Todas tienen valor por defecto y ninguna falla si falta:
+  // la instancia funciona y lleva el nombre de Brutal Studios dentro. Por eso van
+  // aquí — para que se vean al montar una instancia nueva.
+  ['COMPANY_EMAIL', 'de aquí sale qué correos son «del equipo»; por defecto, el de Brutal Studios'],
+  ['DOMINIO_EQUIPO', 'la lista de Equipo filtra por este dominio; con el de otro negocio, saldría VACÍA'],
+  ['VAPID_SUBJECT', 'va firmado en cada notificación; por defecto, un correo de Brutal Studios'],
+  ['FISH_AUDIO_VOICE_ID', 'sin ella Harvey no habla, y el fallo es el mismo 503 que si faltara la clave'],
+  ['WHATSAPP_TOKEN', 'sin ella no sale ni un mensaje de WhatsApp, y no da error'],
+  ['WHATSAPP_PHONE_NUMBER_ID', 'lo mismo que el token: las dos se comprueban juntas'],
+  ['WHATSAPP_VERIFY_TOKEN', 'el apretón de manos del webhook con Meta; te la inventas tú'],
 ]
 
 const required = isVercelProd ? [...REQUIRED, ...REQUIRED_PROD] : REQUIRED

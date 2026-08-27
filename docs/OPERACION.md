@@ -73,7 +73,12 @@ nadie; quien restaure vuelve a conectar su cuenta con un clic).
 
 ### Restaurar
 
-1. Reconstruye el esquema: `supabase/schema.sql`, luego `migrations/*.sql` por fecha.
+1. Reconstruye el esquema, **en tres pasos y en este orden**:
+   `supabase/schema.sql` → los **cinco `supabase/migration_*.sql`** → `migrations/*.sql`
+   por fecha. Los cinco del medio son los que se olvidan: están en `supabase/` y no
+   en `migrations/`, y hasta hoy este documento no los mencionaba. Sin ellos faltan
+   columnas sueltas y el síntoma es un 42703 en una pantalla cualquiera, semanas
+   después. La lista completa, en `docs/NUEVA-INSTANCIA.md`.
 2. Descarga el JSON del día que quieras (Operativa → Copias).
 3. Inserta tabla por tabla **en el orden en que vienen en el fichero** — está
    puesto a propósito para que las claves ajenas no reboten: `profiles` primero,

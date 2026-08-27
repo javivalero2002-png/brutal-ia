@@ -201,11 +201,63 @@ else {
     else mal('la app dice que NO está sana', `HTTP ${r.status} · falla: ${(j.fallo || []).join(', ')}`)
   } catch (e) { mal('la app no responde', `${APP} — ${e.message}`) }
 
+  // LO QUE HAY DESPLEGADO, no lo que pone mi fichero. `/api/gmail/callback` sin
+  // parámetros redirige usando la `NEXT_PUBLIC_APP_URL` que tiene el DESPLIEGUE,
+  // así que cantarla es la única forma de pillar el caso peor: que la variable de
+  // Vercel diga una cosa y la de aquí otra. Ahí Gmail falla con
+  // `redirect_uri_mismatch` y en la app no hay ni rastro — Google corta antes de
+  // llamarnos, así que no hay log, ni aviso, ni error.
+  try {
+    const r = await pedir(`${APP}/api/gmail/callback`, { redirect: 'manual' })
+    const loc = r.headers.get('location') || ''
+    const host = (() => { try { return new URL(loc).origin } catch { return '' } })()
+    if (!host) ojo('no se pudo leer la URL desplegada', 'el callback no redirigió')
+    else if (host !== new URL(APP).origin) {
+      mal('la app desplegada usa OTRA dirección', `despliegue: ${host} · aquí: ${APP} — conectar Gmail fallará con redirect_uri_mismatch y sin rastro`)
+    } else ok('la dirección del despliegue coincide', host)
+  } catch (e) { ojo('no se pudo comprobar la dirección desplegada', e.message) }
+
+  // Y el CRON_SECRET del DESPLIEGUE: si coincide con el nuestro, `/api/salud`
+  // devuelve el detalle. Es la única forma de comprobarlo sin ejecutar un cron.
+  if (env.CRON_SECRET) {
+    try {
+      const r = await pedir(`${APP}/api/salud?detalle=${encodeURIComponent(env.CRON_SECRET)}`)
+      const j = await r.json().catch(() => ({}))
+      if (j.piezas) ok('CRON_SECRET coincide con el del despliegue')
+      else mal('CRON_SECRET NO coincide con el del despliegue', 'los crons devolverán 401 y no correrá nada de lo automático, en silencio')
+    } catch (e) { ojo('no se pudo comprobar CRON_SECRET', e.message) }
+  }
+
   // No se puede comprobar desde fuera si Google tiene esta URI dada de alta: se
   // IMPRIME para poder pegarla, que es donde se falla al montar una instancia.
   console.log(`\n  \x1b[2mPega esta URI en Google Cloud → Credenciales → tu cliente OAuth:\x1b[0m`)
   console.log(`  \x1b[1m${APP}/api/gmail/callback\x1b[0m`)
   console.log(`  \x1b[2mSi no coincide EXACTAMENTE, conectar Gmail falla con redirect_uri_mismatch.\x1b[0m`)
+}
+
+// ── 5. ¿QUEDA ALGO DE BRUTAL STUDIOS AQUÍ DENTRO? ──────────────────────────
+// La comprobación que decide si esto es «la app del cliente» o «una copia de la
+// nuestra». Todas estas variables tienen valor por defecto y NINGUNA falla si
+// falta: la instancia arranca, funciona, y lleva nuestro nombre dentro. Es la
+// peor forma de equivocarse, porque no da ninguna señal.
+titulo('5 · ¿Queda algo de Brutal Studios?')
+const NUESTRO = /brutalstudios|brutalia|brutal-studios/i
+const HEREDADAS = [
+  ['NEXT_PUBLIC_APP_URL', 'enlaces de invitación, revisión de piezas y el OAuth de Google'],
+  ['COMPANY_EMAIL', 'de aquí sale qué correos son «del equipo»'],
+  ['DOMINIO_EQUIPO', 'la lista de Equipo filtra por este dominio: con el nuestro, saldría VACÍA'],
+  ['VAPID_SUBJECT', 'va firmado en cada notificación'],
+]
+// Solo tiene sentido preguntarlo si la instancia NO es la de Brutal Studios.
+const esNuestra = NUESTRO.test(env.NEXT_PUBLIC_APP_URL || '')
+if (esNuestra) {
+  ok('esta es la instancia de Brutal Studios', 'la comprobación de reventa no aplica')
+} else {
+  for (const [k, para] of HEREDADAS) {
+    if (!env[k]) mal(`${k} sin poner`, `cae al valor de Brutal Studios — ${para}`)
+    else if (NUESTRO.test(env[k])) mal(`${k} lleva nuestro nombre`, `${env[k]} — ${para}`)
+    else ok(k, env[k].length > 42 ? `${env[k].slice(0, 42)}…` : env[k])
+  }
 }
 
 console.log(`\n${fallos ? `\x1b[31m${fallos} fallo(s)\x1b[0m` : '\x1b[32mSin fallos\x1b[0m'}${avisos ? ` · \x1b[33m${avisos} aviso(s)\x1b[0m` : ''}\n`)
