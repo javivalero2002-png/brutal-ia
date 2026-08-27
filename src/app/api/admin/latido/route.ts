@@ -1,5 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { leerLatidos } from '@/lib/reglaRows'
+import { CADENCIA } from '@/lib/cadencia'
 import { NextResponse } from 'next/server'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -24,20 +25,7 @@ import { NextResponse } from 'next/server'
  * miércoles siguiente — y un aviso que salta sin motivo enseña a ignorar los
  * avisos, que es justo lo contrario de para lo que existe este panel.
  */
-const CADENCIA: Record<string, number> = {
-  'sync-colabs': 60,
-  copia: 7 * 24 * 60,
-  // LOS CUATRO, no dos. El panel dice «TODO LO AUTOMÁTICO, AL DÍA» y solo miraba
-  // la mitad: los dos recordatorios podian llevar dias sin correr y aqui salia
-  // todo en verde. Un panel que afirma mas de lo que mira es peor que no tenerlo,
-  // porque se deja de comprobar a mano.
-  //
-  // Cadencia diaria para los dos: corren de lunes a viernes (`0 8,9 * * 1-5` y
-  // `0 18,19 * * 1-5`), asi que un fin de semana son ~72h sin latir. Con el margen
-  // del doble que aplica el codigo de abajo, 24h*4 no da falsa alarma el lunes.
-  'recordatorio-fichar': 4 * 24 * 60,
-  'recordatorio-cerrar': 4 * 24 * 60,
-}
+// La cadencia vive en `src/lib/cadencia.ts`: la miran el panel y el vigilante.
 
 export async function GET() {
   const supabase = await createClient()

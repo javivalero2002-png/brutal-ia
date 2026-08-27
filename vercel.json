@@ -33,6 +33,10 @@
     {
       "path": "/api/cron/recordatorio-cerrar",
       "schedule": "0 19 * * 1-5"
+    },
+    {
+      "path": "/api/cron/vigilante",
+      "schedule": "0 * * * *"
     }
   ],
   "git": {

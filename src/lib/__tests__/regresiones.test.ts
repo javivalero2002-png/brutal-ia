@@ -2070,7 +2070,7 @@ describe('lo que se anadio no ralentiza lo de siempre', () => {
 describe('cron y latido dicen la misma hora', () => {
   it('lo que el panel espera cuadra con lo que vercel.json programa', () => {
     const vercel = JSON.parse(readFileSync('vercel.json', 'utf8'))
-    const L = leerCodigo('src/app/api/admin/latido/route.ts')
+    const L = leerCodigo('src/lib/cadencia.ts')
 
     // Cada ruta de cron declara su nombre de latido al llamar a `marcarLatido`.
     // Eso es lo que ata el fichero de configuración con el panel.
@@ -4615,7 +4615,7 @@ describe('tres afirmaciones mas que no se sostenian', () => {
       (JSON.parse(readFileSync('vercel.json', 'utf8')) as { crons?: { path: string }[] }).crons
         ?.map(c => c.path.split('/').pop()!) || [])
     expect(crons.size, 'no hay crons en vercel.json: revisa esta regla').toBeGreaterThan(1)
-    const L = leerCodigo('src/app/api/admin/latido/route.ts')
+    const L = leerCodigo('src/lib/cadencia.ts')
     const m = L.match(/const CADENCIA: Record<string, number> = \{([\s\S]*?)\n\}/)
     expect(m, 'ya no existe CADENCIA: revisa esta regla en vez de borrarla').toBeTruthy()
     // `backup` late como `copia`: el cron y el nombre del latido no coinciden.
@@ -6637,5 +6637,48 @@ describe('lo que Harvey dice se limpia antes de pintarlo y antes de decirlo', ()
     const cuerpo = i === -1 ? src : src.slice(i, i + 700)
     expect(/text:\s*paraDecir/.test(cuerpo),
       'se prepara el texto para la voz y luego se manda el crudo igual').toBe(true)
+  })
+})
+
+
+describe('la vigilancia', () => {
+  // Verificadas reintroduciendo el bug, una a una.
+  it('nadie hace upsert sobre reglas.name, que NO es unico', () => {
+    // Casi lo meto: el vigilante escribia su fila con
+    // `.upsert({...}, { onConflict: 'name' })`. Compila, pasa tsc, y revienta EN
+    // EJECUCION con «no unique or exclusion constraint matching the ON CONFLICT
+    // specification» — porque `reglas` guarda VARIAS filas con el mismo `name`
+    // (una por tarea de latido, con la tarea en `description`). Por eso
+    // `marcarLatido` busca y actualiza en vez de hacer upsert, y lo dice.
+    const malos: string[] = []
+    for (const f of RUTAS) {
+      const c = leerCodigo(f)
+      for (const m of c.matchAll(/from\('reglas'\)[\s\S]{0,200}?onConflict:\s*'name'/g)) {
+        malos.push(`${f}: ${m[0].slice(0, 60).replace(/\s+/g, ' ')}…`)
+      }
+    }
+    expect(malos, 'hay un upsert sobre `reglas` por `name`, que no tiene restriccion de unicidad: compila y revienta al ejecutarse').toEqual([])
+  })
+
+  it('la sonda de salud no pide sesion y sabe decir que NO', () => {
+    const s = leerCodigo('src/app/api/salud/route.ts')
+    // Un monitor externo no tiene sesion. Si esto pidiera `getUser()`, devolveria
+    // 401 siempre y el monitor diria «caido» las 24 horas — o, peor, se apagaria.
+    expect(/getUser\(\)/.test(s),
+      'la sonda de salud pide sesion: un monitor externo no la tiene y avisaria de una caida permanente').toBe(false)
+    // Y tiene que poder devolver 503. Una sonda que siempre contesta 200 no es una
+    // sonda, es una pagina.
+    expect(/status:\s*503/.test(s),
+      'la sonda de salud ya no devuelve 503: entonces nunca avisa de nada').toBe(true)
+    // El detalle, solo con la llave: un endpoint publico que cuenta el error de tu
+    // base le esta contando a cualquiera que usas y que version.
+    expect(/CRON_SECRET/.test(s),
+      'la sonda de salud da el detalle sin llave: eso es contarle a cualquiera como falla tu base').toBe(true)
+  })
+
+  it('el vigilante no repite el mismo aviso cada hora', () => {
+    const s = leerCodigo('src/app/api/cron/vigilante/route.ts')
+    expect(/REPETIR_CADA_H/.test(s),
+      'el vigilante volvio a avisar en cada pasada: un cron caido un fin de semana serian 48 avisos, y 48 avisos de lo mismo son cero').toBe(true)
   })
 })
