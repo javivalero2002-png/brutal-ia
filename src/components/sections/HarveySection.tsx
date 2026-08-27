@@ -5,6 +5,7 @@ import { memoriaRelevante as elegirMemoria } from '@/lib/memoriaRelevante'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
 import { parsearAccionHarvey, type AccionHarvey , etiquetaAccion, afirmaHaberloHecho, AVISO_SIN_FICHA} from '@/lib/harveyAccion'
+import { limpiarTextoHarvey } from '@/lib/textoHarvey'
 import { nivelTarea } from '@/components/shared/helpers'
 import type { NexusData } from '@/types'
 import { estadoDeadline, Esperando, BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, AMBAR, mensajeErrorTranscripcion } from '@/components/shared'
@@ -409,7 +410,11 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
       // Parse action command
       // Un solo sitio para las dos secciones: esto estaba escrito linea por linea
       // aqui y en la otra, y cada bug de la pareja habia que arreglarlo dos veces.
-      const { texto: limpio, accion } = parsearAccionHarvey(reply)
+      // El markdown se quita AQUI y no se confia al prompt. Harvey tiene escrito
+      // «cero markdown, nada de asteriscos» y aun asi emitio `**Estado del dia:**`
+      // en un briefing: una instruccion en el prompt no es determinista.
+      const { texto: crudo, accion } = parsearAccionHarvey(reply)
+      const limpio = limpiarTextoHarvey(crudo)
       reply = limpio
       if (accion) setPendingAction(accion)
       // RED DE SEGURIDAD. La emisión de la acción no es determinista: probando

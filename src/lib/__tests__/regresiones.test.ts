@@ -6611,3 +6611,31 @@ describe('un solo aviso, no dos', () => {
     }
   })
 })
+
+
+describe('lo que Harvey dice se limpia antes de pintarlo y antes de decirlo', () => {
+  // Las dos verificadas quitando el cableado, una a una.
+  it('las dos secciones quitan el markdown de la respuesta', () => {
+    // El prompt ya le pide «texto limpio, cero markdown, nada de asteriscos»
+    // (harvey/chat/route.ts) y aun asi emitio `**Estado del dia:**` en un
+    // briefing. Una instruccion en el prompt no es determinista: si tiene que
+    // cumplirse siempre, se cumple en el codigo.
+    for (const f of ['src/components/sections/HoySection.tsx', 'src/components/sections/HarveySection.tsx']) {
+      const src = leerCodigo(f)
+      expect(/limpiarTextoHarvey\(/.test(src),
+        `${f} vuelve a pintar la respuesta de Harvey cruda: los asteriscos de una negrita salen tal cual en la tarjeta`).toBe(true)
+    }
+  })
+
+  it('a la voz se le manda el texto preparado, no el crudo', () => {
+    const src = leerCodigo('src/app/api/harvey/speak/route.ts')
+    expect(/textoParaVoz\(/.test(src),
+      'la ruta de voz vuelve a mandar el texto tal cual: «2h 10m» se dice «2H10M»').toBe(true)
+    // Y que el resultado LLEGUE al cuerpo. Llamarla y no usar lo que devuelve es
+    // el modo de fallo silencioso de siempre: compila, corre y no hace nada.
+    const i = src.indexOf('api.fish.audio')
+    const cuerpo = i === -1 ? src : src.slice(i, i + 700)
+    expect(/text:\s*paraDecir/.test(cuerpo),
+      'se prepara el texto para la voz y luego se manda el crudo igual').toBe(true)
+  })
+})
