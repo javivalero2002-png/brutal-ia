@@ -4,7 +4,7 @@ import { construirContexto } from '@/lib/contextoHarvey'
 import { memoriaRelevante as elegirMemoria } from '@/lib/memoriaRelevante'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
-import { parsearAccionHarvey, type AccionHarvey , etiquetaAccion, afirmaHaberloHecho } from '@/lib/harveyAccion'
+import { parsearAccionHarvey, type AccionHarvey , etiquetaAccion, afirmaHaberloHecho, AVISO_SIN_FICHA} from '@/lib/harveyAccion'
 import { nivelTarea } from '@/components/shared/helpers'
 import type { NexusData } from '@/types'
 import { estadoDeadline, Esperando, BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, AMBAR, mensajeErrorTranscripcion } from '@/components/shared'
@@ -418,7 +418,7 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
       // propuso nada. El usuario se queda con la frase, la da por buena, y lo
       // descubre días después buscando algo que no existe.
       else if (afirmaHaberloHecho(limpio)) {
-        reply = `${limpio}\n\n(Ojo: lo he dicho pero no me ha salido la ficha para confirmarlo, así que NO se ha guardado. Pídemelo otra vez.)`
+        reply = `${limpio}\n\n${AVISO_SIN_FICHA}`
       }
 
       setIsSearching(false)
