@@ -57,6 +57,14 @@ const AVISADAS_MAX = 40
  * esperado — recordar la clave los silenciaría para siempre a la primera.
  */
 const SOSTENIDOS = new Set(['unread_pileup', 'many_overdue'])
+// Eventos con VENTANA DE FRESCURA de 24h: proyecto_nuevo y pieza_nueva salen de
+// `matches` cuando el item pasa de 24h (automations.ts, ramas de esos triggers).
+// Para ellos el throttle de 6h no vale: con un lote creado de golpe, el motor
+// avisa 1 por ejecución y a las 24h los últimos se caen de la ventana SIN
+// avisar. Su dedup real es `avisadas` (por clave, una vez cada uno), así que se
+// les salta el throttle. task_overdue, bloqueado, etc. NO están: su match
+// persiste y el throttle solo los retrasa, no los pierde.
+const EVENTOS_VENTANA_CORTA = new Set(['proyecto_nuevo', 'pieza_nueva'])
 
 /** Hace N días, en day key de Madrid. Para acotar la ventana del diario. */
 const hace = (n: number) => {
@@ -654,9 +662,16 @@ async function ejecutarReglas(
           }
         }
       } else if (a.type === 'notify_team' || a.type === 'notify_owner') {
-        // Throttle: no repetir el aviso de esta regla dentro de la ventana
+        // Throttle, salvo para los eventos de ventana corta (proyecto_nuevo,
+        // pieza_nueva). Su dedup real es `avisadas` (por clave, abajo): «cada uno
+        // avisa UNA vez». El throttle de 6h solo estorbaba —con 5 piezas de golpe
+        // salía 1 aviso y las otras 4 esperaban un hueco, y a las 24h la 5ª se
+        // caía de la ventana de frescura sin avisar NUNCA, incumpliendo la
+        // promesa—. Sin él, cada pasada horaria recoge la siguiente pieza nueva:
+        // mismo volumen de push (1/ejecución/regla, por el break de abajo) pero
+        // sin perder ninguna. Ver EVENTOS_VENTANA_CORTA.
         const last = r.last_triggered_at ? new Date(r.last_triggered_at).getTime() : 0
-        if (now - last < NOTIFY_THROTTLE_MS) break
+        if (!EVENTOS_VENTANA_CORTA.has(cfg.trigger.type) && now - last < NOTIFY_THROTTLE_MS) break
         // La CLAVE, no solo el reloj: de un evento puntual se avisa UNA vez.
         // `continue` y no `break` — el siguiente match puede ser un evento nuevo.
         if (!SOSTENIDOS.has(cfg.trigger.type) && avisadasSet.has(match.key)) continue

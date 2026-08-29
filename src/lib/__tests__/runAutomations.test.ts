@@ -356,6 +356,22 @@ describe('runAutomations · notificaciones', () => {
     await runAutomations(fakeSupabase(e))
     expect(pushCalls.map(p => p.fn)).toEqual(['all'])
   })
+
+  it('un evento de ventana corta (proyecto_nuevo) NO lo bloquea el throttle', async () => {
+    // El bug: con el throttle de 6h, un lote de proyectos/piezas nuevos avisaba de
+    // a uno cada 6h y los últimos se caían de la ventana de 24h SIN avisar. Su
+    // dedup es `avisadas` (por clave), no el reloj, así que un proyecto fresco
+    // debe avisar aunque la regla haya disparado hace 2h. Con task_overdue
+    // (sostenido) el throttle SÍ bloquea — es el test de arriba.
+    const e = estadoBase()
+    e.reglas = [regla(
+      { v:1, trigger:{type:'proyecto_nuevo'}, action:{type:'notify_team', message:'{nombre}'} },
+      { last_triggered_at: new Date('2026-08-09T08:00:00Z').toISOString() }, // hace 2h
+    )]
+    e.projects = [{ id: 'p-fresco', name: 'Nuevo', created_at: '2026-08-09T09:00:00Z' }]
+    await runAutomations(fakeSupabase(e))
+    expect(pushCalls.map(p => p.fn)).toEqual(['all'])
+  })
 })
 
 describe('runAutomations · resiliencia', () => {
