@@ -240,7 +240,7 @@ Responde SOLO con JSON válido (sin markdown):
   "summary": "resumen en 1-2 frases en español",
   "action": "acción requerida en 1 frase o 'Ninguna acción requerida'",
   "client": "EXACTAMENTE uno de los clientes conocidos de arriba, o 'Desconocido'. Quien ENVÍA el correo no es un cliente por enviarlo: Temu, Google o un banco son remitentes. Si no estás seguro, 'Desconocido'.",
-  "urgency": "urgent|high|normal",
+  "urgency": "urgent|high|normal — urgencia PARA EL ESTUDIO, no la que grite el correo: urgent/high solo si alguien del estudio tiene que actuar pronto (un cliente esperando algo, un pago NUESTRO que vence, un servicio que usamos caído). El lenguaje de urgencia de marketing —ofertas que expiran, reembolsos de tiendas, 'última oportunidad', avisos genéricos de exchanges o bancos donde no se pide nada concreto— es normal.",
   "suggestedTask": "texto de tarea a crear o null"
 }`
       }]

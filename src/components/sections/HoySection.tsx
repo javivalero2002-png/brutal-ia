@@ -6,7 +6,7 @@ import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
 import { parsearAccionHarvey, type AccionHarvey , etiquetaAccion, afirmaHaberloHecho, AVISO_SIN_FICHA} from '@/lib/harveyAccion'
 import { limpiarTextoHarvey } from '@/lib/textoHarvey'
-import { nivelTarea } from '@/components/shared/helpers'
+import { nivelTarea, esNoReply } from '@/components/shared/helpers'
 import { BLU, RED, GRN, VIO, BORDER } from '@/components/shared/design-tokens'
 import { useIsMobile } from '@/components/shared/hooks'
 import DiaSinCerrar from '@/components/shared/DiaSinCerrar'
@@ -642,7 +642,14 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
               const unread = inboxArr.filter((m:any)=>!m.is_read)
               const importante = unread.filter((m:any)=>m.ai_urgency==='urgent'||m.ai_urgency==='high').length
               const todayEvts = ((data.calendarEvents||[]) as any[]).filter((e:any)=>e.start?.slice(0,10)===todayStr)
-              const focusEmail = unread.find((m:any)=>m.ai_urgency==='urgent') || unread.find((m:any)=>m.ai_urgency==='high')
+              // El hueco de «lo primero que lees cada mañana» lo gana un HUMANO
+              // si lo hay: un aviso de login de Facebook puede ser urgente, pero
+              // no por delante del correo urgente de una persona. Y si lo que hay
+              // es solo la máquina, se enseña igual — solo que sin pedir que le
+              // «respondas» a un noreply.
+              const porNivel = (nivel: string) =>
+                unread.find((m:any)=>m.ai_urgency===nivel && !esNoReply(m.from_email)) || unread.find((m:any)=>m.ai_urgency===nivel)
+              const focusEmail = porNivel('urgent') || porNivel('high')
               // `nav: Section` y no `string`: sin el tipo, un 'proyecto' en singular
               // compilaba y dejaba la app en una seccion inexistente.
               type BItem = {icon:string;color:string;text:string;nav:Section}
@@ -656,7 +663,7 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
                 const cli = focusEmail.ai_client
                 const yaLoDice = !!cli && quien.toLowerCase().includes(cli.toLowerCase())
                 const sufijo = cli && cli !== 'Desconocido' && !yaLoDice ? ` (${cli})` : ''
-                items.push({icon:'mail',color:'rgba(255,176,32,0.95)',text:`Responde a ${quien}${sufijo}: ${focusEmail.subject||'propuesta'}`,nav:'inbox'})
+                items.push({icon:'mail',color:'rgba(255,176,32,0.95)',text:`${esNoReply(focusEmail.from_email) ? 'Mira el aviso de' : 'Responde a'} ${quien}${sufijo}: ${focusEmail.subject||'propuesta'}`,nav:'inbox'})
               }
               if (urgentTasks.length>0) items.push({icon:'alert-triangle',color:RED,text:`${urgentTasks.length} tarea${urgentTasks.length>1?'s':''} urgente${urgentTasks.length>1?'s':''} por cerrar: ${urgentTasks[0].text}`,nav:'tareas'})
               if (dueTodayTasks.length>0) items.push({icon:'clock',color:'rgba(255,176,32,0.95)',text:`${dueTodayTasks.length} tarea${dueTodayTasks.length>1?'s':''} vence${dueTodayTasks.length>1?'n':''} hoy: ${dueTodayTasks[0].text}`,nav:'tareas'})

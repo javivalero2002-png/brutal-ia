@@ -100,6 +100,13 @@ export function triar(
   }
   if (ASUNTO_QUE_OBLIGA.test(correo.subject || '')) return { analizar: true, motivo: 'asunto' }
 
+  // AQUÍ NO HAY CRIBA POR no-reply, Y ES LA SEGUNDA VEZ QUE SE DECIDE. La
+  // primera versión de este fichero los saltaba por regex y se revirtió: es
+  // exactamente el remitente de DocuSign, WeTransfer, Drive, Ariba y el banco
+  // (el test «un no-reply cualquiera se analiza» lo fija). La segunda vez fue
+  // el 2026-08-29: `esNoReply()` ya existía para la UI (no ofrecer RESPONDER a
+  // una máquina) y parecía natural traerla aquí — son dos preguntas distintas.
+  // Que un remitente no LEA respuestas no dice nada de si su correo IMPORTA.
   // ── La decisión ─────────────────────────────────────────────────────────────
   // Sin etiquetas de categoría —cuentas con las pestañas desactivadas, o si Gmail
   // cambia de idea— no casa nada y se analiza. Ese sí es fallar hacia el lado
