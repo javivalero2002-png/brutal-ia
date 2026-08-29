@@ -516,3 +516,40 @@ export const fechaOTBD = (crudo?: string | null): string => {
   const d = new Date(`${v}T12:00:00`)
   return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v ? 'TBD' : v
 }
+
+/**
+ * La marca de dedup del motor de reglas, que viaja DENTRO de `tasks.notes`.
+ *
+ * El motor crea sus tareas con `notes: '⚙ auto:clave'` y esa clave es lo único
+ * que impide que la misma regla cree la misma tarea cada hora (automations.ts
+ * la relee de las notas — dedup sin migración). El problema: notes es un campo
+ * que el usuario ve y EDITA. Sin estos helpers, el editor enseñaba la marca en
+ * crudo —«⚙ auto:overdue:9f2c…» como si fuera una nota tuya— y bastaba borrarla
+ * y guardar para que la tarea «duplicada» reapareciera en la siguiente pasada.
+ *
+ * El contrato es de ida y vuelta: la UI pinta y edita SOLO `texto`, y al
+ * guardar vuelve a unir la marca que hubiera. Un campo que el usuario no ha
+ * tocado no debe cambiar por el viaje.
+ */
+export const AUTO_MARK = '⚙ auto:'
+
+/** Separa la marca del motor (si la hay) del texto legible de unas notas. */
+export const separarMarcaAuto = (notes: string | null | undefined): { marca: string | null; texto: string } => {
+  const n = notes || ''
+  const idx = n.indexOf(AUTO_MARK)
+  if (idx < 0) return { marca: null, texto: n }
+  // La clave llega hasta el primer blanco — mismo corte que hace el motor al releerla.
+  const resto = n.slice(idx + AUTO_MARK.length)
+  const clave = resto.split(/\s/)[0]
+  return {
+    marca: AUTO_MARK + clave,
+    texto: (n.slice(0, idx) + resto.slice(clave.length)).trim(),
+  }
+}
+
+/** Reúne texto editado y marca para guardar. Devuelve null si no queda nada. */
+export const unirMarcaAuto = (texto: string | null | undefined, marca: string | null): string | null => {
+  const t = (texto || '').trim()
+  if (!marca) return t || null
+  return t ? `${t}\n${marca}` : marca
+}

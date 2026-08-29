@@ -322,3 +322,39 @@ describe('las iniciales de un cliente', () => {
     expect(ruta).toContain('.slice(0, 2)')
   })
 })
+
+import { separarMarcaAuto, unirMarcaAuto } from '@/components/shared/helpers'
+
+describe('la marca del motor no se pinta ni se pierde', () => {
+  it('separa la marca del texto en todas sus formas', () => {
+    // Tarea del motor recién creada: las notas SON la marca.
+    expect(separarMarcaAuto(`${AUTO_MARK}overdue:9f2c`)).toEqual({ marca: `${AUTO_MARK}overdue:9f2c`, texto: '' })
+    // El usuario añadió texto encima de una tarea del motor.
+    expect(separarMarcaAuto(`ver el guion\n${AUTO_MARK}k1`)).toEqual({ marca: `${AUTO_MARK}k1`, texto: 'ver el guion' })
+    // Notas normales, sin marca.
+    expect(separarMarcaAuto('llamar al cliente')).toEqual({ marca: null, texto: 'llamar al cliente' })
+    expect(separarMarcaAuto(null)).toEqual({ marca: null, texto: '' })
+  })
+
+  it('el viaje editar→guardar conserva la marca aunque se borre todo el texto', () => {
+    // Es EL caso que motivó los helpers: borrar el texto de una tarea del motor
+    // no puede destruir su dedup, o la regla la recrea en la siguiente pasada.
+    const original = `${AUTO_MARK}overdue:9f2c`
+    const { marca } = separarMarcaAuto(original)
+    expect(unirMarcaAuto('', marca)).toBe(original)
+    // Y con texto editado, la marca viaja detrás.
+    expect(unirMarcaAuto('nuevo texto', marca)).toBe(`nuevo texto\n${AUTO_MARK}overdue:9f2c`)
+    // Sin marca, guardar vacío es null (no una cadena vacía en la base).
+    expect(unirMarcaAuto('', null)).toBeNull()
+  })
+
+  it('lo que guarda unirMarcaAuto lo entiende el rastreo del motor', () => {
+    // El motor relee la clave con indexOf + corte en el primer blanco
+    // (automations.ts, existingMarks): si este formato y aquel se separan,
+    // el dedup muere en silencio. Se reproduce aquí el mismo corte.
+    const guardado = unirMarcaAuto('texto del usuario', `${AUTO_MARK}k2`)!
+    const idx = guardado.indexOf(AUTO_MARK)
+    expect(idx).toBeGreaterThanOrEqual(0)
+    expect(guardado.slice(idx + AUTO_MARK.length).split(/\s/)[0]).toBe('k2')
+  })
+})
