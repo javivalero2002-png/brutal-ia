@@ -324,6 +324,7 @@ describe('las iniciales de un cliente', () => {
 })
 
 import { separarMarcaAuto, unirMarcaAuto, esNoReply, sinControl } from '@/components/shared/helpers'
+import { horaMinutoMadrid } from '@/components/shared/helpers'
 
 describe('la marca del motor no se pinta ni se pierde', () => {
   it('separa la marca del texto en todas sus formas', () => {
@@ -399,5 +400,16 @@ describe('sinControl quita lo que Postgres no traga', () => {
     // No-strings pasan tal cual (null/undefined no se tocan).
     expect(sinControl(null)).toBeNull()
     expect(sinControl(undefined)).toBeUndefined()
+  })
+})
+
+describe('horaMinutoMadrid da la hora de Madrid, no la del que mira', () => {
+  it('convierte un instante UTC a hora de Madrid (verano e invierno)', () => {
+    // Verano: CEST = UTC+2. 08:00Z → 10:00 Madrid. getHours() en UTC daría 8.
+    expect(horaMinutoMadrid('2026-08-15T08:00:00Z')).toEqual({ h: 10, m: 0 })
+    // Invierno: CET = UTC+1. 08:30Z → 09:30 Madrid.
+    expect(horaMinutoMadrid('2026-01-15T08:30:00Z')).toEqual({ h: 9, m: 30 })
+    // Medianoche de Madrid no debe salir como 24.
+    expect(horaMinutoMadrid('2026-08-14T22:00:00Z').h).toBe(0)
   })
 })

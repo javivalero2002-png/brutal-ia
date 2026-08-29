@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import LucideIcon from '@/components/shared/LucideIcon'
 import { BLU, GRN, RED, AMBAR, VIO } from '@/components/shared/design-tokens'
-import { localDayKey, todayKey } from '@/components/shared/helpers'
+import { localDayKey, todayKey, horaMinutoMadrid } from '@/components/shared/helpers'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EL PANEL DE TRABAJO DEL EQUIPO
@@ -36,12 +36,14 @@ type Brief = { dias: string[]; equipo: Fila[]; sinActividad: string[] }
 const H_INI = 8
 const H_FIN = 20
 
+// En Madrid, no en la zona del navegador: si no, la barra y las horas de la
+// jornada se corren para quien mira desde otra zona (rodaje fuera, reloj mal).
 const pct = (iso: string) => {
-  const d = new Date(iso)
-  const h = d.getHours() + d.getMinutes() / 60
+  const { h: hh, m } = horaMinutoMadrid(iso)
+  const h = hh + m / 60
   return Math.max(0, Math.min(100, ((h - H_INI) / (H_FIN - H_INI)) * 100))
 }
-const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('es-ES', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit' })
 
 const ESTADOS = {
   cerrado:   { l: 'DÍA CERRADO', c: GRN },
@@ -55,7 +57,7 @@ function estadoDe(e: Entrada | undefined) {
   if (!e || !e.entrada_at) return 'sinFichar' as const
   if (e.cierre_at) return 'cerrado' as const
   if (e.animo === 'bloqueado') return 'bloqueado' as const
-  return new Date(e.entrada_at).getHours() >= 11 ? ('tarde' as const) : ('curso' as const)
+  return horaMinutoMadrid(e.entrada_at).h >= 11 ? ('tarde' as const) : ('curso' as const)
 }
 
 export default function PanelEquipo({ profile }: { profile: { id?: string } | null }) {

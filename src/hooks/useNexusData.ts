@@ -495,7 +495,14 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
 
   const createMemoria = useCallback(async (entry: Partial<MemoriaEntry>) => {
     const created = await apiFetch('/api/memoria', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) })
-    setMemoria(prev => [created, ...prev])
+    // Dedup por id, SIMÉTRICO al manejador de Realtime de arriba: `memoria` es la
+    // única tabla con suscripción Realtime Y create optimista, así que si el
+    // INSERT de Realtime llega antes que esta respuesta, la fila entraría dos
+    // veces (key duplicada de React, y la nota doble en el contexto de la IA). El
+    // manejador de Realtime ya deduplica; este create no lo hacía.
+    setMemoria(prev => prev.some(m => m.id === created?.id)
+      ? prev.map(m => m.id === created.id ? created : m)
+      : [created, ...prev])
     // Se DEVUELVE, como createClientRecord y updateMemoria: sin el id de la nota
     // recién creada, quien la crea no puede enlazarla después — el caso real era
     // «DAR DE ALTA» el cliente propuesto de un PDF, que creaba el cliente y

@@ -22,9 +22,18 @@ export const LOGO_ROW = '__account_logo__'
 export const LATIDO_ROW = '__latido_cron__'
 /** Qué avisos ha silenciado cada uno. Una fila por persona (`created_by`). */
 export const PREFS_ROW = '__avisos_prefs__'
+/**
+ * El vigilante deja aquí qué crons ya avisó de estar caídos, para no repetir el
+ * aviso cada hora. Es bookkeeping, no una automatización — y vivía como constante
+ * local en vigilante/route.ts SIN estar en esta lista, así que tras el primer
+ * incidente de cron caído aparecía como una tarjeta fantasma «__vigilante_avisado__»
+ * en Automatizaciones e inflaba el contador «DE N ACTIVAS». El mismo fallo que el
+ * logo, que es justo por lo que existe este módulo.
+ */
+export const AVISADO_ROW = '__vigilante_avisado__'
 
 /** Nombres de filas de la tabla `reglas` que no son automatizaciones. */
-export const NON_RULE_ROWS = [PUSH_ROW, LOGO_ROW, LATIDO_ROW, PREFS_ROW] as const
+export const NON_RULE_ROWS = [PUSH_ROW, LOGO_ROW, LATIDO_ROW, PREFS_ROW, AVISADO_ROW] as const
 
 /** Filtro PostgREST para excluirlas: `.not('name', 'in', NON_RULE_ROWS_FILTER)`. */
 export const NON_RULE_ROWS_FILTER = `(${NON_RULE_ROWS.map(n => `"${n}"`).join(',')})`

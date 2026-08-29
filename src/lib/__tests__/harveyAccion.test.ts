@@ -43,6 +43,17 @@ describe('parsearAccionHarvey', () => {
     expect(texto).not.toContain('[ACCION')
   })
 
+  // Si la respuesta agota max_tokens y el corte cae DENTRO de la etiqueta (que va
+  // al final), queda un fragmento ABIERTO sin `]`. TODAS/ETIQUETA exigen cierre,
+  // así que no lo casaban y se quedaba en el texto → el TTS lo leía en voz alta.
+  it('quita un fragmento de etiqueta truncada al final (max_tokens)', () => {
+    const { texto, accion } = parsearAccionHarvey('Te la creo. [ACCION:tarea|Llamar a Nocilla')
+    expect(texto).toBe('Te la creo.')
+    expect(texto).not.toContain('[ACCION')
+    expect(texto).not.toContain('ACCION')
+    expect(accion).toBeNull()
+  })
+
   // El prompt pide los niveles en inglés dentro de una conversación en español,
   // así que el modelo escribe «urgente» tarde o temprano. `tasks.level` tiene
   // CHECK: un valor de fuera hace que el INSERT rebote. Y la tarjeta «HARVEY
