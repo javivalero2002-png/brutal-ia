@@ -1,4 +1,22 @@
-const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA='
+// EL WAV SILENCIOSO VA EN BLOB, NO EN data:. La CSP de produccion es
+// `media-src 'self' blob:` y los subdominios de supabase — sin `data:` — asi que el
+// `play()` del data: fallaba SIEMPRE en produccion. Y como `__unlocked` solo se
+// pone cuando ese play sale bien, el desbloqueo reintentaba en cada toque
+// durante toda la sesion: 16 errores de CSP en consola en un solo recorrido, y
+// en iPhone el truco de desbloquear el audio no funciono nunca alli donde mas
+// falta hace. Descubierto usando la app en produccion — en dev la cabecera
+// tambien esta, pero esa consola no la mira nadie.
+//
+// `blob:` esta permitido en la CSP, y el resultado es el mismo fichero.
+const SILENT_B64 = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA='
+let silentUrl: string | null = null
+const getSilentUrl = () => {
+  if (!silentUrl && typeof window !== 'undefined') {
+    const bytes = Uint8Array.from(atob(SILENT_B64), c => c.charCodeAt(0))
+    silentUrl = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }))
+  }
+  return silentUrl
+}
 let sharedAudioEl: HTMLAudioElement | null = null
 
 export const getSharedAudio = () => {
@@ -66,7 +84,7 @@ export const stopAllVoices = () => {
  * Desbloquear el audio en iOS, SIN pisar lo que esté sonando.
  *
  * EL FALLO QUE ARREGLA: esto va enganchado a cada `touchend` y cada `click` de la
- * app, y ponía `src = SILENT_WAV` en el ÚNICO elemento de audio que hay. La guarda
+ * app, y ponía el wav silencioso en el ÚNICO elemento de audio que hay. La guarda
  * era `__unlocked`, que solo se pone a `true` si ese primer `play()` sale bien — y
  * en iOS falla a menudo. Con la guarda en falso, CADA toque metía un wav silencioso
  * encima de la voz de Harvey. Javi: «mientras está hablando y deslizo, se para».
@@ -82,10 +100,12 @@ export const unlockAudio = () => {
   if (!a || (a as any).__unlocked) return
   // Sonando, o a punto: no se pisa. `paused` es falso mientras reproduce, y
   // `readyState`/`currentSrc` cubren el hueco entre asignar el src y empezar.
-  if (!a.paused || (a.currentSrc && a.currentSrc !== SILENT_WAV && a.readyState > 0 && !a.ended)) return
+  if (!a.paused || (a.currentSrc && a.currentSrc !== getSilentUrl() && a.readyState > 0 && !a.ended)) return
   a.setAttribute('playsinline', '')
   a.volume = 1
-  a.src = SILENT_WAV
+  const url = getSilentUrl()
+  if (!url) return
+  a.src = url
   a.play().then(() => { (a as any).__unlocked = true }).catch(() => {})
   try {
     const synth = window.speechSynthesis

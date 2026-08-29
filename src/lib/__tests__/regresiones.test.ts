@@ -6749,3 +6749,32 @@ describe('la identidad de Brutal Studios no puede crecer dentro del codigo', () 
       .toBeLessThanOrEqual(TOPE)
   })
 })
+
+
+describe('el audio no puede usar lo que la CSP bloquea', () => {
+  // Verificada devolviendo el data: a audio.ts: roja.
+  it('ningun audio se carga desde data:', () => {
+    // La CSP de produccion es `media-src 'self' blob: https://*.supabase.co`,
+    // sin `data:`. Un `a.src = 'data:audio/...'` no falla en el codigo — falla
+    // en el navegador, en silencio para la app, y el sintoma real fue este: el
+    // desbloqueo de audio de iOS reintentaba en CADA toque toda la sesion
+    // porque su play() nunca llegaba a sonar, con 16 errores de CSP en consola
+    // en un solo recorrido. En iPhone, la voz de Harvey sin desbloquear.
+    const malos: string[] = []
+    for (const f of [...RUTAS, ...CLIENTE, ...TS]) {
+      if ((leerCodigo(f).match(/['"`]data:audio/g) || []).length) malos.push(f)
+    }
+    expect([...new Set(malos)],
+      'hay un audio cargado desde data:, que la CSP de produccion bloquea en silencio — usa un blob:, que si esta permitido').toEqual([])
+  })
+
+  // Y la otra mitad: que la CSP siga permitiendo blob: en media-src, que es de
+  // lo que depende el arreglo. Quitarlo alli revive el mismo fallo sin tocar
+  // audio.ts.
+  it('la CSP permite blob: en media-src', () => {
+    const cfg = readFileSync(join(process.cwd(), 'next.config.ts'), 'utf8')
+    const media = cfg.match(/media-src[^"]*/)?.[0] || ''
+    expect(media.includes('blob:'),
+      'media-src ya no permite blob:: el wav de desbloqueo de iOS vuelve a fallar en cada toque').toBe(true)
+  })
+})
