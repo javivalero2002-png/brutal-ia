@@ -1,7 +1,9 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { codigoHttpDeError } from '@/lib/respuestaDb'
 import { sendPushToUser } from '@/lib/push'
 import { borrarFicherosDeAdjuntos } from '@/lib/taskAttachments'
 import { getAuthCtx, canAccessTask } from '@/lib/authz'
+import { nivelTarea, sinControl } from '@/components/shared/helpers'
 import { NextRequest, NextResponse } from 'next/server'
 
 // El push de reasignación se ESPERA (ver abajo), así que la ruta declara su tope:
@@ -24,6 +26,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const admin = ctx.admin
 
   const fields = pick(body, ['text','level','done','due_date','project_id','client_id','assigned_to','co_assigned_to','notes'])
+  // Gemelo del POST: normalizar el nivel y sanear el texto en la frontera, o un
+  // «urgente» o un byte nulo de un PDF pegado dan un 500 crudo al editar.
+  if ('level' in fields) (fields as any).level = nivelTarea((fields as any).level)
+  if ('text' in fields) (fields as any).text = sinControl((fields as any).text)
+  if ('notes' in fields) (fields as any).notes = sinControl((fields as any).notes)
+  // Gemelo del POST: normalizar el nivel y sanear el texto en la frontera, o un
+  // «urgente» o un byte nulo de un PDF pegado dan un 500 crudo al editar.
   // Sella el momento de completado (y lo limpia al reabrir) para que los
   // reportes de tendencia sean reales y no dependan de updated_at.
   if (typeof (fields as any).done === 'boolean') {
@@ -54,7 +63,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       .from('tasks').update({ ...rest, ...stamp }).eq('id', id).select(SELECT).single())
   }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // 400 si el error lo causa la entrada del cliente, 500 si es nuestro.
+  if (error) return NextResponse.json({ error: error.message }, { status: codigoHttpDeError(error) })
 
   // Aviso a quien ACABA de entrar en la tarea.
   //

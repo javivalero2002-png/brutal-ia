@@ -6965,6 +6965,15 @@ describe('lo que se propone se termina de hacer', () => {
     expect(finTarjetas, 'no encuentro el final de las tarjetas de estado del Inbox').toBeGreaterThan(iniTarjetas)
     expect(/allMsgs/.test(inbox.slice(iniTarjetas, finTarjetas)),
       'una tarjeta de estado del Inbox vuelve a contar sobre allMsgs: los archivados inflan un número que pide atención').toBe(false)
+    // Las DOS rutas de escritura de tareas (POST y PATCH) sanean el texto y
+    // normalizan el nivel EN LA FRONTERA, o un byte nulo pegado de un PDF o un
+    // «urgente» en español dan un 500 crudo de Postgres. Son gemelas: arreglar
+    // una y olvidar la otra es el patrón que este fichero existe para cazar.
+    for (const ruta of ['src/app/api/tasks/route.ts', 'src/app/api/tasks/[id]/route.ts']) {
+      const cod = leerCodigo(ruta)
+      expect(/sinControl\(/.test(cod), `${ruta} no sanea el texto: un byte nulo dará un 500`).toBe(true)
+      expect(/nivelTarea\(/.test(cod), `${ruta} no normaliza el nivel: un «urgente» dará un 500 del CHECK`).toBe(true)
+    }
     const au = leerCodigo('src/components/sections/AutomatizacionesSection.tsx')
     expect(/al sincronizar emails/.test(au),
       'el texto vuelve a prometer que el motor corre al sincronizar: el sync manual NO lo ejecuta').toBe(false)

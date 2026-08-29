@@ -323,7 +323,7 @@ describe('las iniciales de un cliente', () => {
   })
 })
 
-import { separarMarcaAuto, unirMarcaAuto, esNoReply } from '@/components/shared/helpers'
+import { separarMarcaAuto, unirMarcaAuto, esNoReply, sinControl } from '@/components/shared/helpers'
 
 describe('la marca del motor no se pinta ni se pierde', () => {
   it('separa la marca del texto en todas sus formas', () => {
@@ -385,5 +385,19 @@ describe('esNoReply reconoce a las máquinas sin quitarle la voz a nadie', () =>
       // Ambiguos que se dejan CON boton a proposito: puede leerlos una persona.
       'contacto@disfrutabox.com', 'support@messages.gofundme.com', 'security@empresa.es',
     ]) expect(esNoReply(e), String(e)).toBe(false)
+  })
+})
+
+describe('sinControl quita lo que Postgres no traga', () => {
+  it('elimina el byte nulo pero conserva el texto legible', () => {
+    // El byte nulo es el que da el 500 «unsupported Unicode escape sequence».
+    expect(sinControl('antes' + String.fromCharCode(0) + 'despues')).toBe('antesdespues')
+    // Tab, salto y retorno se conservan: son texto legítimo (Postgres los guarda).
+    expect(sinControl('l1\tcol\nl2\r')).toBe('l1\tcol\nl2\r')
+    // Emoji y acentos intactos.
+    expect(sinControl('café ñandú 🎬 日本')).toBe('café ñandú 🎬 日本')
+    // No-strings pasan tal cual (null/undefined no se tocan).
+    expect(sinControl(null)).toBeNull()
+    expect(sinControl(undefined)).toBeUndefined()
   })
 })
