@@ -371,6 +371,8 @@ describe('esNoReply reconoce a las máquinas sin quitarle la voz a nadie', () =>
       'mailer-daemon@googlemail.com',
       // El noreply español y el recordatorio de Facebook: reales, del buzón.
       'noresponder@idealista.com', 'reminders@facebookmail.com',
+      // facebookmail.com entero: es el dominio de notificaciones de Facebook.
+      'security@facebookmail.com', 'registration@facebookmail.com',
     ]) expect(esNoReply(e), e).toBe(true)
   })
   it('nunca marca a una persona', () => {
@@ -381,7 +383,7 @@ describe('esNoReply reconoce a las máquinas sin quitarle la voz a nadie', () =>
       'claudia.nv@gmail.com', 'nora.replicante@cliente.com',
       'notaria@despacho.es', null, '',
       // Ambiguos que se dejan CON boton a proposito: puede leerlos una persona.
-      'contacto@disfrutabox.com', 'support@messages.gofundme.com', 'security@facebookmail.com',
+      'contacto@disfrutabox.com', 'support@messages.gofundme.com', 'security@empresa.es',
     ]) expect(esNoReply(e), String(e)).toBe(false)
   })
 })

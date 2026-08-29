@@ -6952,6 +6952,19 @@ describe('lo que se propone se termina de hacer', () => {
     const ta = leerCodigo('src/components/sections/TareasSection.tsx')
     expect(/notes:\s*t\.notes|notes:\s*activeTask\.notes/.test(ta),
       'las notas entran crudas al panel o al duplicado: la marca ⚙ auto: se pinta como texto y borrarla destruye el dedup del motor').toBe(false)
+    // Las tarjetas de estado del Inbox miden lo NO LEÍDO ACTIVO. «Prioridad»
+    // contaba sobre allMsgs y un urgente ARCHIVADO seguía sumando en un número
+    // que pide atención — 14 en la tarjeta y 7 en la carpeta de al lado, con el
+    // mismo icono y el mismo ámbar. La regla se acota al bloque de las
+    // tarjetas: allMsgs es legítimo en el resto del fichero.
+    // Anclas de CÓDIGO, no de comentario — leerCodigo quita los comentarios.
+    const inbox = leerCodigo('src/components/sections/InboxSection.tsx')
+    const iniTarjetas = inbox.indexOf("{n:unread, l:'Sin leer'")
+    const finTarjetas = inbox.indexOf("alert-circle", iniTarjetas)
+    expect(iniTarjetas, 'no encuentro las tarjetas de estado del Inbox — si cambió su forma, reapunta la regla').toBeGreaterThan(-1)
+    expect(finTarjetas, 'no encuentro el final de las tarjetas de estado del Inbox').toBeGreaterThan(iniTarjetas)
+    expect(/allMsgs/.test(inbox.slice(iniTarjetas, finTarjetas)),
+      'una tarjeta de estado del Inbox vuelve a contar sobre allMsgs: los archivados inflan un número que pide atención').toBe(false)
     const au = leerCodigo('src/components/sections/AutomatizacionesSection.tsx')
     expect(/al sincronizar emails/.test(au),
       'el texto vuelve a prometer que el motor corre al sincronizar: el sync manual NO lo ejecuta').toBe(false)

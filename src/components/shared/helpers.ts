@@ -568,8 +568,13 @@ export const unirMarcaAuto = (texto: string | null | undefined, marca: string | 
  * falso positivo le quita a alguien la posibilidad de responder a un humano.
  */
 export const esNoReply = (email: string | null | undefined): boolean => {
-  const local = (email || '').split('@')[0].toLowerCase()
+  const [local, dominio] = (email || '').toLowerCase().split('@')
   if (!local) return false
+  // Dominios que SOLO envían notificaciones, se llame como se llame el local:
+  // en la vista Personas, seis avisos de security@facebookmail.com encabezaban
+  // la lista de «humanos». facebookmail.com es el dominio de notificaciones de
+  // Facebook — ahí no escribe nadie.
+  if (dominio === 'facebookmail.com') return true
   // «noresponder» es el noreply en español (idealista lo usa y era el segundo
   // remitente más frecuente del buzón). «reminders» salió al probar con el
   // buzón real: reminders@facebookmail.com. Marketing (temu@, campaigns@,
