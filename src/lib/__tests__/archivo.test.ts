@@ -174,3 +174,75 @@ describe('isOwnStorageUrl ata el BUCKET, no solo el prefijo', () => {
     expect(isOwnStorageUrl(`https://${H}/storage/v1/object/sign/content-videos/a/b.mp4?token=x`)).toBe(true)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// esStorageDeOtroBucket — la validación de escritura que rechaza guardar un
+// identificador a un bucket ajeno (defensa en profundidad del pin de firmarUrl).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('esStorageDeOtroBucket · qué se rechaza al GUARDAR', () => {
+  const H = 'ejemplo.supabase.co'
+  beforeAll(() => { process.env.NEXT_PUBLIC_SUPABASE_URL = `https://${H}` })
+
+  it('caza una URL de storage nuestra a otro bucket (copias, y cualquier otro)', async () => {
+    const { esStorageDeOtroBucket } = await import('@/lib/safeFetch')
+    expect(esStorageDeOtroBucket(`https://${H}/storage/v1/object/public/copias/2026-08-19.json.gz`)).toBe(true)
+    for (const b of ['content-covers', 'boombastic', 'privado'])
+      expect(esStorageDeOtroBucket(`https://${H}/storage/v1/object/sign/${b}/x?token=t`), b).toBe(true)
+  })
+
+  it('NO caza el bucket de contenido ni los enlaces externos (YouTube/Instagram)', async () => {
+    const { esStorageDeOtroBucket } = await import('@/lib/safeFetch')
+    expect(esStorageDeOtroBucket(`https://${H}/storage/v1/object/public/content-videos/a.mp4`)).toBe(false)
+    expect(esStorageDeOtroBucket('https://www.youtube.com/watch?v=x')).toBe(false)
+    expect(esStorageDeOtroBucket('https://www.instagram.com/reel/x')).toBe(false)
+    for (const v of [null, undefined, '', 42, {}]) expect(esStorageDeOtroBucket(v as unknown), String(v)).toBe(false)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// firmarUrl — EL CHOKEPOINT. Firma solo el bucket de contenido; cualquier otro
+// (copias = la copia entera de la base) devuelve null y NO se firma. Se prueba
+// con un cliente de storage FALSO que registra qué bucket se pidió firmar: así
+// no se acuña ninguna URL firmada real al backup.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('firmarUrl · solo firma el bucket de contenido', () => {
+  const H = 'ejemplo.supabase.co'
+  beforeAll(() => { process.env.NEXT_PUBLIC_SUPABASE_URL = `https://${H}` })
+
+  const adminFalso = (registro: string[]) => ({
+    storage: {
+      from(bucket: string) {
+        return {
+          async createSignedUrl(path: string) {
+            registro.push(bucket)
+            return { data: { signedUrl: `https://${H}/firmada/${bucket}/${path}?token=x` }, error: null }
+          },
+        }
+      },
+    },
+  })
+
+  it('el bucket de copias NO se firma: devuelve null y ni siquiera lo intenta', async () => {
+    const { firmarUrl } = await import('@/lib/storageFirmado')
+    const reg: string[] = []
+    const out = await firmarUrl(adminFalso(reg) as never, `https://${H}/storage/v1/object/public/copias/2026-08-19.json.gz`)
+    expect(out, 'una URL a copias no debe firmarse').toBeNull()
+    expect(reg, 'no debe llamarse a createSignedUrl para copias').toEqual([])
+  })
+
+  it('el bucket de contenido SÍ se firma', async () => {
+    const { firmarUrl } = await import('@/lib/storageFirmado')
+    const reg: string[] = []
+    const out = await firmarUrl(adminFalso(reg) as never, `https://${H}/storage/v1/object/public/content-videos/a/b.mp4`)
+    expect(out).toContain('/firmada/content-videos/')
+    expect(reg).toEqual(['content-videos'])
+  })
+
+  it('un enlace externo (YouTube) se devuelve tal cual, sin firmar', async () => {
+    const { firmarUrl } = await import('@/lib/storageFirmado')
+    const reg: string[] = []
+    const yt = 'https://www.youtube.com/watch?v=abc'
+    expect(await firmarUrl(adminFalso(reg) as never, yt)).toBe(yt)
+    expect(reg).toEqual([])
+  })
+})

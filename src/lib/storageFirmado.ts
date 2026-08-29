@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { rutaDeStorage } from '@/lib/taskAttachments'
+import { BUCKET_CONTENIDO } from '@/lib/safeFetch'
 
 // Convierte las URLs del Storage que salen de la base en permisos TEMPORALES.
 //
@@ -46,6 +47,20 @@ export async function firmarUrl(admin: SupabaseClient, url: unknown): Promise<st
   // No es del Storage: `content_agenda.video_url` admite enlaces de YouTube o
   // Vimeo, que se incrustan tal cual y no hay que tocar.
   if (!r) return url
+  // CHOKEPOINT DE SEGURIDAD. Sin esto, firmarUrl firmaba CUALQUIER bucket con el
+  // service role —que se salta que el bucket sea privado—, incluido `copias`, la
+  // copia completa de la base (correo personal de los 7, chats con Harvey,
+  // sueldos). Un miembro guardaba `…/object/public/copias/AAAA-MM-DD.json.gz` en
+  // una columna que luego se firma (un adjunto de tarea, una portada de pieza) y
+  // recibía una URL firmada de 12h al backup —o peor, salía por /api/review, que
+  // es PÚBLICO—. Es el gemelo exacto del pin que isOwnStorageUrl ya tenía y este
+  // no: por eso el bucket vive compartido en safeFetch.ts. Solo se firma
+  // contenido de usuario; el backup lo firma /api/admin/backup por su cuenta,
+  // con su propio candado owner-only.
+  if (r.bucket !== BUCKET_CONTENIDO) {
+    console.error('[storage] NO se firma un bucket no permitido:', r.bucket, '—', r.path)
+    return null
+  }
   const { data, error } = await admin.storage.from(r.bucket).createSignedUrl(r.path, VIGENCIA_SEGUNDOS)
   if (error || !data?.signedUrl) {
     // Se registra y se devuelve null en vez de la URL vieja: con el bucket cerrado

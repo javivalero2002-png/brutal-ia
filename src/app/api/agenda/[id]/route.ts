@@ -1,5 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { firmarCampos } from '@/lib/storageFirmado'
+import { esStorageDeOtroBucket } from '@/lib/safeFetch'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Solo columnas conocidas: campos desconocidos no deben tumbar la petición
@@ -41,6 +42,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   // equipo" pintaba el estado optimista, decía "Opinión publicada" y se perdía al
   // recargar: el PATCH nunca las llevaba.
   const payload: any = pick(body, ['title','platform','content_type','status','publish_date','publish_time','notes','client_id','account_name','video_url','carpeta','feedback','cover_url'])
+  // cover_url/video_url salen firmados por el GET y por /api/review (PÚBLICO): un
+  // identificador a otro bucket (copias) se convertiría en una URL firmada al
+  // backup expuesta a cualquiera con el enlace de revisión. Defensa en
+  // profundidad del pin de firmarUrl; los enlaces externos (YouTube) pasan.
+  if (esStorageDeOtroBucket(payload.cover_url) || esStorageDeOtroBucket(payload.video_url))
+    return NextResponse.json({ error: 'URL de almacenamiento no permitida' }, { status: 400 })
   let { data, error } = await admin.from('content_agenda').update(payload).eq('id', id).select('*, client:clients(id,name,initials,color)').single()
   // El fallback debe cubrir también las columnas nuevas: si cover_url no existe
   // en la BD (upload-cover ya contempla ese caso), sin esto el guardado entero

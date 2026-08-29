@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { firmarCampos } from '@/lib/storageFirmado'
 import { borrarFicherosDeAdjuntos } from '@/lib/taskAttachments'
 import { getAuthCtx, canAccessTask } from '@/lib/authz'
+import { esStorageDeOtroBucket } from '@/lib/safeFetch'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -30,6 +31,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const body = await req.json()
   const { name, url, size, mime_type } = body
   if (!name || !url) return NextResponse.json({ error: 'name and url required' }, { status: 400 })
+  // Defensa en profundidad del pin de firmarUrl: no se guarda un identificador
+  // que apunte a otro bucket (p. ej. `copias`), o al leerlo firmado se filtraría
+  // el backup. El chokepoint de firmarUrl ya devuelve null, pero rechazar aquí
+  // evita almacenar basura y da un 400 honesto.
+  if (esStorageDeOtroBucket(url)) return NextResponse.json({ error: 'URL de almacenamiento no permitida' }, { status: 400 })
 
   const { data, error } = await ctx.admin
     .from('task_attachments')
