@@ -496,6 +496,11 @@ export function useNexusData(profile: Profile | null, onNewInboxMessage?: (msg: 
   const createMemoria = useCallback(async (entry: Partial<MemoriaEntry>) => {
     const created = await apiFetch('/api/memoria', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) })
     setMemoria(prev => [created, ...prev])
+    // Se DEVUELVE, como createClientRecord y updateMemoria: sin el id de la nota
+    // recién creada, quien la crea no puede enlazarla después — el caso real era
+    // «DAR DE ALTA» el cliente propuesto de un PDF, que creaba el cliente y
+    // dejaba el documento con client_id NULL para siempre.
+    return created as MemoriaEntry
   }, [])
 
   const updateMemoria = useCallback(async (id: string, updates: Partial<MemoriaEntry>) => {

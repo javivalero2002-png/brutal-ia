@@ -185,12 +185,11 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
                 style={{ display: 'block', background: 'rgba(255,255,255,0.03)' }} />
             ) : null}
 
-            {/* La portada acompaña al vídeo cuando hay las dos: da contexto sin
-                competir con él. */}
-            {(embed || item.video_url) && item.cover_url && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={item.cover_url} alt="" className="w-full rounded-2xl" style={{ display: 'block' }} />
-            )}
+            {/* Aquí hubo un segundo <img> de la portada «acompañando al vídeo».
+                Era de un diseño anterior (iframe arriba): desde que la rama
+                principal pinta portada+play, su condición equivalía EXACTAMENTE a
+                la de arriba — o pintaba la misma imagen dos veces seguidas, o no
+                se pintaba. Y esta es la única página que ve gente de fuera. */}
 
             {/* Aquí había un bloque «NOTAS DEL EQUIPO» que NO podía pintarse
                 nunca: el endpoint excluye `notes` a propósito por ser de uso
