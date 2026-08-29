@@ -69,9 +69,20 @@ const PLANTILLAS = [
 
 function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: PropsAutomatizaciones) {
   const isMobile = useIsMobile()
-  // Las plantillas que ya se han usado, por nombre. Es la clave con la que se
-  // crean, asi que es la unica comparacion honesta que se puede hacer.
-  const enUso = new Set(data.reglas.map((r: Regla) => r.name))
+  // Las plantillas usadas se reconocen por su CONFIGURACIÓN, no por el nombre:
+  // renombrar la regla (doble clic, en la misma tarjeta) la sacaba del set y la
+  // plantilla volvía a ofrecer «+ USAR» — dos reglas idénticas activas, cada una
+  // con su throttle y su tag de push, o sea el mismo aviso dos veces. La firma
+  // disparador|acción sobrevive al rename y a que la plantilla retoque textos.
+  // Es deliberadamente gruesa: una regla A MANO con la misma combinación también
+  // marca la plantilla como cubierta, que es lo que significa «ya la tienes».
+  const firmaDe = (ct?: string | null) => {
+    try {
+      const j = JSON.parse(ct || '')
+      return j?.trigger?.type && j?.action?.type ? `${j.trigger.type}|${j.action.type}` : null
+    } catch { return null }
+  }
+  const enUso = new Set(data.reglas.map((r: Regla) => firmaDe(r.condition_text)).filter(Boolean))
 
   const activeCount = data.reglas.filter((r: Regla)=>r.active).length
   const totalFired = data.reglas.reduce((s: number, r: Regla)=>s+(r.trigger_count||0),0)
@@ -344,7 +355,7 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: PropsAuto
                     {/* La que ya tienes se queda A LA VISTA, pero sin poder añadirse
                         otra vez: dos reglas iguales avisan dos veces, y a la tercera
                         nadie lee los avisos. Se recupera sola si borras la regla. */}
-                    {isOwner && (enUso.has(tpl.name)
+                    {isOwner && (enUso.has(`${tpl.config.trigger.type}|${tpl.config.action.type}`)
                       ? <span className="flex-shrink-0 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide"
                           style={{background:'rgba(46,212,122,0.1)',color:GRN,border:'1px solid rgba(46,212,122,0.22)'}}>YA LA TIENES</span>
                       : <button onClick={async()=>{try{await data.createRegla({name:tpl.name,condition_text:JSON.stringify(tpl.config),action_text:`${tpl.cond} › ${tpl.act}`,active:true});showToast('Regla creada · el motor la ejecutará')}catch{showToast('Error')}}} className="flex-shrink-0 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all hover:opacity-80" style={{background:'rgba(27,95,250,0.12)',color:BLU,border:'1px solid rgba(27,95,250,0.2)'}}>+ USAR</button>)}

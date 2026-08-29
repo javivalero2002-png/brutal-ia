@@ -35,6 +35,17 @@ describe('parseImporte · la facturación es texto libre', () => {
     expect(parseImporte('10k/mes').anual).toBe(false)
   })
 
+  it('el sufijo no roba la primera letra de la palabra siguiente', () => {
+    // «12 mil» era 12.000.000 y «1500 mensuales» eran 1.500 MILLONES en el MRR:
+    // la clase del número se tragaba el espacio y la «m» de la palabra siguiente
+    // pasaba por sufijo. Escrito tal cual invitan los placeholders de la app.
+    expect(parseImporte('12 mil').mensual).toBe(12_000)
+    expect(parseImporte('1500 mensuales').mensual).toBe(1_500)
+    expect(parseImporte('3000 mes').mensual).toBe(3_000)
+    expect(parseImporte('2 millones').mensual).toBe(2_000_000)
+    expect(parseImporte('10 mil al año').mensual).toBeCloseTo(833.33, 1)
+  })
+
   it('no confunde «ano» dentro de otra palabra', () => {
     // «engaño», «año» suelto… la guarda es de palabra completa.
     expect(parseImporte('12k plan engañoso').anual).toBe(false)

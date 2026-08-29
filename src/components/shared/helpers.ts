@@ -189,7 +189,14 @@ export function parseImporte(bruto?: string | null): { mensual: number; anual: b
   const anual = /\b(anual|ano|year|yr)\b|\/\s*(ano|year)/.test(sinTildes)
 
   // El número, con su sufijo. Se busca el PRIMERO: «12k/mes» y «€12k» dan igual.
-  const m = /(\d[\d.,\s]*)\s*([km])?/i.exec(t.replace(/[€$£]/g, ''))
+  //
+  // Dos trampas pagadas aquí. La clase antigua incluía \s, así que en «12 mil»
+  // consumía «2 » y el sufijo opcional caía sobre la «m» de la PALABRA
+  // SIGUIENTE: 12 → 12.000.000. Con «1500 mensuales» —escrito tal cual invita
+  // el placeholder— el MRR subía 1.500 millones. Ahora el número no puede
+  // acabar en espacio, y el sufijo solo vale como token completo: una «m»
+  // pegada a más letras es otra palabra, no un multiplicador.
+  const m = /(\d[\d.,]*(?:\s\d[\d.,]*)*)\s*([km])?(?![a-zñá-ú])/i.exec(t.replace(/[€$£]/g, ''))
   if (!m) return { mensual: 0, anual }
 
   let cuerpo = m[1].replace(/\s/g, '')
@@ -203,7 +210,9 @@ export function parseImporte(bruto?: string | null): { mensual: number; anual: b
   const n = parseFloat(cuerpo)
   if (!Number.isFinite(n)) return { mensual: 0, anual }
 
-  const factor = sufijo === 'k' ? 1_000 : sufijo === 'm' ? 1_000_000 : 1
+  // «mil» y «millones» escritos con todas sus letras son sufijo legítimo.
+  const porPalabra = /\bmillon(es)?\b/.test(sinTildes) ? 1_000_000 : /\bmil(es)?\b/.test(sinTildes) ? 1_000 : 1
+  const factor = sufijo === 'k' ? 1_000 : sufijo === 'm' ? 1_000_000 : porPalabra
   const total = n * factor
   return { mensual: anual ? total / 12 : total, anual }
 }
