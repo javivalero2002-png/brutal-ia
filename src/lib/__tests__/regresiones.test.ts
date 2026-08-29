@@ -6937,6 +6937,13 @@ describe('lo que se propone se termina de hacer', () => {
     const rv = leerCodigo('src/app/review/[token]/page.tsx')
     expect(/\(embed \|\| item\.video_url\) && item\.cover_url/.test(rv),
       'volvio el bloque suelto de portada: en una pieza con video y portada se pinta la misma imagen dos veces, en la unica pagina que ve gente de fuera').toBe(false)
+    // El mismo patron en la ficha de cliente: al bloque NOTAS del diseño
+    // original se le sumo NOTAS INTERNAS sin quitar el viejo, y las notas
+    // salian dos veces en la misma pantalla. Una sola interpolacion de lectura
+    // (la del textarea de editar usa editNotes, no cuenta aqui).
+    const cl = leerCodigo('src/components/sections/ClientesSection.tsx')
+    expect((cl.match(/\{selected\.notes\}/g) || []).length,
+      'las notas del cliente se pintan dos veces en la ficha: sobra la copia del diseño anterior').toBeLessThanOrEqual(1)
     const au = leerCodigo('src/components/sections/AutomatizacionesSection.tsx')
     expect(/al sincronizar emails/.test(au),
       'el texto vuelve a prometer que el motor corre al sincronizar: el sync manual NO lo ejecuta').toBe(false)
