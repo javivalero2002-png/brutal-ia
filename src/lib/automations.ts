@@ -29,6 +29,30 @@ const LOCK_TTL_MS = 90_000
 
 export const AUTO_MARK = '⚙ auto:'
 
+/**
+ * Prefijo con el que una regla de AVISO recuerda, en su `description`, las
+ * claves que ya notificó. Mismo espíritu que AUTO_MARK: dedup sin migración.
+ *
+ * Sin esto el único freno era el throttle de 6 h por regla, que no distingue
+ * eventos: «Claudia se marcó bloqueado el día 14» avisaba hasta 4 veces al día
+ * mientras la fila siguiera en la ventana del diario — ~56 pushes por UN día
+ * bloqueado. El throttle responde «¿cuándo avisé por última vez?»; esto
+ * responde «¿ya avisé de ESTO?», que es la pregunta correcta para un evento.
+ *
+ * `description` está libre: el esquema la tiene y ni la UI ni las rutas la
+ * leen para las reglas normales (las filas especiales __latido__/__prefs__ la
+ * usan, pero no son reglas estructuradas y no pasan por aquí).
+ */
+export const AVISADAS_MARK = '⚙avisadas:'
+const AVISADAS_MAX = 40
+
+/**
+ * Disparadores de estado SOSTENIDO: su clave describe una situación que sigue
+ * viva («10+ sin leer»), no un hecho puntual. Ahí repetir cada 6 h es lo
+ * esperado — recordar la clave los silenciaría para siempre a la primera.
+ */
+const SOSTENIDOS = new Set(['unread_pileup', 'many_overdue'])
+
 /** Hace N días, en day key de Madrid. Para acotar la ventana del diario. */
 const hace = (n: number) => {
   const d = new Date(`${todayKey()}T12:00:00`)
@@ -458,7 +482,7 @@ async function ejecutarReglas(
   // Reglas activas (excluye las filas que no son reglas: push y logos de cuenta)
   const { data: rules, error: rulesError } = await admin
     .from('reglas')
-    .select('id,name,condition_text,action_text,active,trigger_count,last_triggered_at,created_by')
+    .select('id,name,description,condition_text,action_text,active,trigger_count,last_triggered_at,created_by')
     .eq('active', true)
     .not('name', 'in', NON_RULE_ROWS_FILTER)
 
@@ -562,6 +586,14 @@ async function ejecutarReglas(
     // a create_task, que es donde estaba el problema.
     let hechasEnEstaRegla = 0
 
+    // Las claves ya avisadas por esta regla, si las hay.
+    const avisadasSet = new Set<string>((() => {
+      const d = (r as { description?: string | null }).description || ''
+      if (!d.startsWith(AVISADAS_MARK)) return [] as string[]
+      try { const j = JSON.parse(d.slice(AVISADAS_MARK.length)); return Array.isArray(j) ? j : [] } catch { return [] }
+    })())
+    let avisadaNueva = false
+
     for (const match of matches) {
       if (hechasEnEstaRegla >= MAX_MATCHES_PER_RULE) break
       const a = cfg.action
@@ -615,6 +647,9 @@ async function ejecutarReglas(
         // Throttle: no repetir el aviso de esta regla dentro de la ventana
         const last = r.last_triggered_at ? new Date(r.last_triggered_at).getTime() : 0
         if (now - last < NOTIFY_THROTTLE_MS) break
+        // La CLAVE, no solo el reloj: de un evento puntual se avisa UNA vez.
+        // `continue` y no `break` — el siguiente match puede ser un evento nuevo.
+        if (!SOSTENIDOS.has(cfg.trigger.type) && avisadasSet.has(match.key)) continue
         const body = fillTemplate(a.message || '{asunto}', match.vars).slice(0, 160) || r.name
         const payload: PushPayload = { title: `⚡ ${r.name}`, body, url: '/dashboard', tag: `auto-${r.id}`, urgent: cfg.action.level === 'urgent', categoria: 'automatizacion' }
         // canSendPush como en colabsSync y gmail/sync. Sin él, el único freno era
@@ -661,6 +696,7 @@ async function ejecutarReglas(
         }
         if (!enviado) break   // sin throttle: que la siguiente vuelta lo reintente
         fired = true
+        if (!SOSTENIDOS.has(cfg.trigger.type)) { avisadasSet.add(match.key); avisadaNueva = true }
         results.push({ ruleId: r.id, ruleName: r.name, action: a.type, detail: body })
         break // un aviso por ejecución basta
       }
@@ -674,6 +710,9 @@ async function ejecutarReglas(
       const { error: updErr } = await admin.from('reglas').update({
         trigger_count: (r.trigger_count || 0) + results.filter(x => x.ruleId === r.id).length,
         last_triggered_at: new Date().toISOString(),
+        // Las últimas N claves avisadas, para no reavisar del mismo evento. Se
+        // recorta por el final: las viejas ya salieron de la ventana del trigger.
+        ...(avisadaNueva ? { description: AVISADAS_MARK + JSON.stringify([...avisadasSet].slice(-AVISADAS_MAX)) } : {}),
       }).eq('id', r.id)
       if (updErr) console.error(`[automations] no se pudo actualizar la regla ${r.name}:`, updErr.message)
     }

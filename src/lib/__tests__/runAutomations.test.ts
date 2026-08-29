@@ -261,6 +261,48 @@ describe('runAutomations · create_task', () => {
   })
 })
 
+describe('runAutomations · un evento avisa UNA vez, no cada 6 horas', () => {
+  // El throttle responde «¿cuando avise por ultima vez?»; la memoria de claves
+  // responde «¿ya avise de ESTO?», que es la pregunta correcta para un evento.
+  // Sin ella, «alguien se marco bloqueado el dia 14» llegaba hasta 4 veces al
+  // dia mientras la fila siguiera en la ventana del diario: ~56 pushes por UN
+  // evento que quiza se resolvio al dia siguiente.
+  it('la clave avisada se recuerda y no reavisa aunque el throttle expire', async () => {
+    const e = estadoBase()
+    e.reglas = [regla({ v:1, trigger:{type:'task_overdue'}, action:{type:'notify_team', message:'x'} })]
+    e.tasks = [tarea({ due_date: '2026-08-01' })]
+    await runAutomations(fakeSupabase(e))
+    expect(pushCalls.map(p=>p.fn)).toEqual(['all'])
+
+    const upd = e.updates.find(u => u.tabla === 'reglas' && u.datos.description)
+    expect(upd, 'el motor ya no apunta la clave avisada: el mismo evento reavisara cada 6 horas').toBeTruthy()
+
+    // Segunda vuelta, con el throttle YA expirado y el mismo evento vivo.
+    pushCalls.length = 0
+    const e2 = estadoBase()
+    e2.reglas = [regla({ v:1, trigger:{type:'task_overdue'}, action:{type:'notify_team', message:'x'} },
+      { last_triggered_at: new Date(Date.now() - 7*3600_000).toISOString(), description: upd!.datos.description })]
+    e2.tasks = [tarea({ due_date: '2026-08-01' })]
+    await runAutomations(fakeSupabase(e2))
+    expect(pushCalls, 'el mismo evento volvio a avisar pese a estar apuntado como avisado').toHaveLength(0)
+  })
+
+  it('los estados sostenidos SI repiten: ahi el freno correcto es el throttle', async () => {
+    // «5+ tareas vencidas» sigue siendo verdad mañana. Recordar su clave lo
+    // silenciaria para siempre a la primera, que es el fallo simetrico.
+    const e = estadoBase()
+    e.reglas = [regla({ v:1, trigger:{type:'many_overdue', threshold:1}, action:{type:'notify_team', message:'x'} },
+      { last_triggered_at: new Date(Date.now() - 7*3600_000).toISOString() })]
+    e.tasks = [tarea({ due_date: '2026-08-01' })]
+    await runAutomations(fakeSupabase(e))
+    expect(pushCalls.map(p=>p.fn), 'un estado sostenido dejo de repetirse: su clave no debe recordarse').toEqual(['all'])
+    // Y NO deja memoria: si la dejara, la proxima vuelta lo silenciaria para
+    // siempre — el fallo simetrico del que arregla la memoria de claves.
+    expect(e.updates.find(u => u.tabla === 'reglas' && u.datos.description),
+      'un estado sostenido apunto su clave: quedara mudo tras el primer aviso').toBeUndefined()
+  })
+})
+
 describe('runAutomations · notificaciones', () => {
   const reglaEquipo = regla({ v:1, trigger:{type:'task_overdue'}, action:{type:'notify_team', message:'Hay retrasos'} })
   const reglaDueno  = regla({ v:1, trigger:{type:'task_overdue'}, action:{type:'notify_owner', message:'Hay retrasos'} })

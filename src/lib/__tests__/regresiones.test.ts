@@ -5780,12 +5780,21 @@ describe('las plantillas de automatizacion no se esconden al usar una', () => {
 
   it('la que ya se usa se ve, pero no se puede duplicar', () => {
     // Dos reglas iguales avisan dos veces, y a la tercera nadie lee los avisos.
-    expect(/enUso\.has\(tpl\.name\)/.test(UI),
-      'ya no se distingue la plantilla que esta en uso: se puede anadir dos veces y avisara doble')
+    //
+    // REAPUNTADA, no borrada: antes exigia la comparacion POR NOMBRE
+    // (`enUso.has(tpl.name)`), y ese mecanismo era el bug — renombrar la regla
+    // (funcion ofrecida en su propia tarjeta) la sacaba del set y la plantilla
+    // volvia a ofrecer «+ USAR»: dos reglas identicas activas, el mismo aviso
+    // dos veces. Ahora la firma es disparador|accion, que sobrevive al rename.
+    expect(/enUso\.has\(`\$\{tpl\.config\.trigger\.type\}\|\$\{tpl\.config\.action\.type\}`\)/.test(UI),
+      'ya no se distingue la plantilla en uso por su CONFIGURACION: renombrar la regla la volvera a ofrecer y avisara doble')
       .toBe(true)
     expect(/const enUso = new Set\(data\.reglas\.map/.test(UI),
       'el conjunto de plantillas en uso ya no sale de las reglas reales')
       .toBe(true)
+    // Y nunca de vuelta al nombre, que es el mecanismo que fallo.
+    expect(/enUso\.has\(tpl\.name\)/.test(UI),
+      'la plantilla vuelve a reconocerse por nombre: renombrar la regla la reactiva').toBe(false)
   })
 })
 
