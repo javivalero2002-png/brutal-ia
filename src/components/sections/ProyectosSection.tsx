@@ -1074,7 +1074,9 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
           <div className="mb-5">
             <div className="flex items-center justify-between mb-2">
               <div className="font-syne text-[8px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.25)'}}>ESTADO</div>
-              <span className="font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.08)'}}>S CICLAR</span>
+              {/* nx-kbd-hints: pista del atajo S (ciclar estado) — sin la clase
+                  salía «S CICLAR» recortado en el móvil, donde no hay teclado. */}
+              <span className="nx-kbd-hints font-syne text-[7px] font-bold tracking-widest" style={{color:'rgba(255,255,255,0.08)'}}>S CICLAR</span>
             </div>
             <div className="flex gap-1.5 flex-wrap">
               {([{s:'plan.',l:'Planif.',c:'#FFFFFF'},{s:'activo',l:'Activo',c:GRN},{s:'urgente',l:'Urgente',c:RED},{s:'revisión',l:'Revisión',c:'#A78BFA'},{s:'completado',l:'Completado',c:GRN}] as {s:Project['status'];l:string;c:string}[]).map(opt=>(
