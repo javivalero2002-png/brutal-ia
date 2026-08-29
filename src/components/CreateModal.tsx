@@ -14,13 +14,16 @@ const meta: Record<string, { eyebrow: string; title: string; saveLabel: string }
   contenido: { eyebrow:'CONTENIDO',             title:'Nueva Pieza',     saveLabel:'AÑADIR PIEZA' },
 }
 
-function fields(type: string, team: Profile[]) {
+function fields(type: string, team: Profile[], isOwner = true) {
   const f = (label: string, key: string, placeholder: string, extra?: object) => ({ label, key, placeholder, ...extra })
   const maps: Record<string, object[]> = {
     cliente: [
       f('Nombre del cliente', 'name', 'Ej: Nike España'),
       f('Industria', 'industria', 'Ej: Fashion · Lifestyle'),
-      f('Facturación', 'facturacion', 'Ej: 12k/mes · 120k/año · €1.500'),
+      // Solo el owner: el POST descarta `revenue` de cualquier otro rol —igual
+      // que el PATCH desde siempre— y enseñar un campo que el servidor va a
+      // ignorar en silencio es peor que no enseñarlo.
+      ...(isOwner ? [f('Facturación', 'facturacion', 'Ej: 12k/mes · 120k/año · €1.500')] : []),
     ],
     proyecto: [
       f('Nombre del proyecto', 'nombre', 'Ej: Campaña Higgsfield — verano'),
@@ -69,6 +72,8 @@ function fields(type: string, team: Profile[]) {
 }
 
 interface CreateModalProps {
+  /** El campo Facturación solo se enseña al owner; el servidor lo descarta del resto. */
+  isOwner?: boolean
   modal: string
   /** Cancelar y la X: descartan a proposito. */
   onClose: () => void
@@ -123,7 +128,7 @@ const VARS_POR_DISPARADOR: Record<string, string[]> = {
 const varsDe = (trigger?: string): string =>
   (VARS_POR_DISPARADOR[trigger || ''] || []).map(v => `{${v}}`).join(' ')
 
-export default function CreateModal({ modal, onClose, onDismiss, mf, setMf, saving, onSave, team, clients = [] }: CreateModalProps) {
+export default function CreateModal({ modal, onClose, onDismiss, mf, setMf, saving, onSave, team, clients = [], isOwner = true }: CreateModalProps) {
   const isMobile = useIsMobile()
   const m = meta[modal]
   if (!m) return null
@@ -186,7 +191,7 @@ export default function CreateModal({ modal, onClose, onDismiss, mf, setMf, savi
         <div className={isMobile ? 'px-5 py-4 space-y-3.5 flex-1 overflow-y-auto' : 'px-7 py-6 space-y-5'} style={isMobile ? {overscrollBehavior:'contain'} : undefined}>
           {modal === 'regla' ? (
             <RuleBuilder mf={mf} setMf={setMf} team={team} clients={clients} />
-          ) : fields(modal, team).map(f => (
+          ) : fields(modal, team, isOwner).map(f => (
             <div key={f.key}>
               {/* Los campos secundarios se ven secundarios: rótulo más pequeño,
                   más apagado y con «opcional» dicho al lado. Lo que se pide con el

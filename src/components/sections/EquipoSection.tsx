@@ -197,17 +197,22 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
       })
       const json = await res.json()
       if (!res.ok) { showToast(json.error || 'Error al crear cuenta'); return }
-      setInviteResult({ email: newMemberEmail.trim().toLowerCase(), inviteLink: json.inviteLink || null, clave: json.clave || null, yaExistia: json.action === 'existing' })
+      // El servidor distingue 'existing' Y 'updated' (regenerar el acceso de una
+      // cuenta que ya estaba): las dos son «ya existía». Con solo la primera, el
+      // panel y los toasts titulaban «Cuenta creada» sobre una cuenta de meses —
+      // y quien lee eso deprisa cree que ha duplicado a alguien.
+      const yaExistia = json.action === 'existing' || json.action === 'updated'
+      setInviteResult({ email: newMemberEmail.trim().toLowerCase(), inviteLink: json.inviteLink || null, clave: json.clave || null, yaExistia })
       // Si el enlace no salió, se dice POR QUÉ. Antes se tragaba el fallo y
       // quedaba una cuenta creada sin nada que mandarle: parecía que no había
       // funcionado.
-      if (!json.inviteLink) showToast(json.avisoEnlace ? `Cuenta creada, pero el enlace falló: ${json.avisoEnlace}` : 'Cuenta creada, pero no se pudo generar el enlace')
+      if (!json.inviteLink) showToast(`${yaExistia ? 'La cuenta ya existía' : 'Cuenta creada'}, pero ${json.avisoEnlace ? `el enlace falló: ${json.avisoEnlace}` : 'no se pudo generar el enlace'}`)
       setNewMemberName(''); setNewMemberEmail(''); setNewMemberRole('member')
       // La lista se refresca. Sin esto, la persona recien dada de alta no aparecia
       // hasta recargar la pagina: parecia que el alta no habia funcionado, y lo
       // logico entonces es repetirla.
       await data.reloadTeam?.()
-      showToast(`Cuenta creada para ${newMemberEmail.trim().split('@')[0]}`)
+      showToast(yaExistia ? `Acceso regenerado para ${newMemberEmail.trim().split('@')[0]}` : `Cuenta creada para ${newMemberEmail.trim().split('@')[0]}`)
     } catch { showToast('Error de red') }
     finally { setAddingLoading(false) }
   }

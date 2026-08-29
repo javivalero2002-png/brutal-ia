@@ -849,7 +849,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
 
                   {c.revenue && c.revenue !== '—' && (
                     <div className="mb-4 px-4 py-3 rounded-xl" style={{background:c.color+'08',border:`1px solid ${c.color}15`}}>
-                      <div className="font-syne text-[8px] font-black tracking-widest mb-1" style={{color:'rgba(255,255,255,0.25)'}}>FACTURACIÓN MENSUAL</div>
+                      <div className="font-syne text-[8px] font-black tracking-widest mb-1" style={{color:'rgba(255,255,255,0.25)'}}>{/* El mismo criterio que la ficha: «120k/año» etiquetado MENSUAL hacía apuntar una cifra doce veces mayor a quien lee la rejilla deprisa. */}{parseImporte(c.revenue).anual ? 'FACTURACIÓN ANUAL' : 'FACTURACIÓN MENSUAL'}</div>
                       <div className="font-figtree text-[22px] font-black leading-none" style={{color:c.color||'rgba(240,240,248,0.85)'}}>{c.revenue}</div>
                     </div>
                   )}

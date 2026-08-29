@@ -119,7 +119,10 @@ export default function PanelEquipo({ profile }: { profile: { id?: string } | nu
   const enElEquipo = brief.equipo.length + (brief.sinActividad?.length || 0)
   const bloqueados = delDia.filter(f => f.hoy?.animo === 'bloqueado').length
   const objetivos = delDia.reduce((n, f) => n + (f.hoy?.entrada || '').split('\n').filter(l => l.trim()).length, 0)
-  const completadas = delDia.reduce((n, f) => n + f.tareas.filter(t => t.completed_at && localDayKey(t.completed_at) === dia).length, 0)
+  // Una tarea con responsable Y co-responsable aparece en las listas de LOS DOS:
+  // sumarla por fila la contaba dos veces y el titular decía «2 COMPLETADAS» con
+  // una sola tarea hecha. Dedup por id, que el briefing ya manda.
+  const completadas = new Set(delDia.flatMap(f => f.tareas.filter(t => t.completed_at && localDayKey(t.completed_at) === dia).map(t => t.id))).size
   const esHoy = dia === todayKey()
 
   return (
