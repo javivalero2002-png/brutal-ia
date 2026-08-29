@@ -323,7 +323,7 @@ describe('las iniciales de un cliente', () => {
   })
 })
 
-import { separarMarcaAuto, unirMarcaAuto } from '@/components/shared/helpers'
+import { separarMarcaAuto, unirMarcaAuto, esNoReply } from '@/components/shared/helpers'
 
 describe('la marca del motor no se pinta ni se pierde', () => {
   it('separa la marca del texto en todas sus formas', () => {
@@ -356,5 +356,32 @@ describe('la marca del motor no se pinta ni se pierde', () => {
     const idx = guardado.indexOf(AUTO_MARK)
     expect(idx).toBeGreaterThanOrEqual(0)
     expect(guardado.slice(idx + AUTO_MARK.length).split(/\s/)[0]).toBe('k2')
+  })
+})
+
+describe('esNoReply reconoce a las máquinas sin quitarle la voz a nadie', () => {
+  it('caza los remitentes automáticos reales del buzón', () => {
+    // Todos observados de verdad en inbox_messages (el 49% del buzón).
+    for (const e of [
+      'notifications@vercel.com', 'notifications@github.com',
+      'jobalerts-noreply@linkedin.com', 'messages-noreply@linkedin.com',
+      'noreply-accounts@google.com', 'noreply@polymarket.com',
+      'no-reply@accounts.google.com', 'notifications-noreply@linkedin.com',
+      'drive-shares-dm-noreply@google.com', 'donotreply@example.com',
+      'mailer-daemon@googlemail.com',
+      // El noreply español y el recordatorio de Facebook: reales, del buzón.
+      'noresponder@idealista.com', 'reminders@facebookmail.com',
+    ]) expect(esNoReply(e), e).toBe(true)
+  })
+  it('nunca marca a una persona', () => {
+    // Un falso positivo aquí le quita a alguien el botón de responder a un
+    // humano — es el error caro, por eso el detector es conservador.
+    for (const e of [
+      'pablo@brutalstudios.es', 'colaboraciones@brutalstudios.es',
+      'claudia.nv@gmail.com', 'nora.replicante@cliente.com',
+      'notaria@despacho.es', null, '',
+      // Ambiguos que se dejan CON boton a proposito: puede leerlos una persona.
+      'contacto@disfrutabox.com', 'support@messages.gofundme.com', 'security@facebookmail.com',
+    ]) expect(esNoReply(e), String(e)).toBe(false)
   })
 })
