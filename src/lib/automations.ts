@@ -27,7 +27,12 @@ const LOCK_TTL_MS = 90_000
 //   · notify_*    → throttle por regla vía `last_triggered_at` (una vez / VENTANA).
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const AUTO_MARK = '⚙ auto:'
+// La constante vive en shared/helpers.ts porque también la necesita la UI
+// (separar la marca del texto al pintar y editar notas); este módulo importa
+// web-push y no puede entrar en un componente de cliente. Se re-exporta para
+// que los consumidores del motor sigan encontrándola aquí.
+export { AUTO_MARK } from '@/components/shared/helpers'
+import { AUTO_MARK } from '@/components/shared/helpers'
 
 /**
  * Prefijo con el que una regla de AVISO recuerda, en su `description`, las

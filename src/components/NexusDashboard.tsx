@@ -502,6 +502,20 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
 
   const popNavRef = useRef(false)
   useEffect(() => {
+    // RECARGAR NO TE MANDA A HOY. El navegador conserva history.state en las
+    // recargas, así que tras recargar en Fichar el historial dice
+    // {nxSection:'diario'}… pero el estado de React nace en 'hoy' (el servidor
+    // no ve el #hash: los fragmentos no viajan, e initialSection solo cubre los
+    // atajos ?s= de la PWA). Sin esto, el efecto de sección veía el desajuste y
+    // EMPUJABA #hoy encima: recargar te sacaba de donde estabas y además dejaba
+    // una entrada de más. Se adopta la sección guardada, con el flag armado para
+    // que ni el push automático ni la pila del botón «atrás» reaccionen — esto
+    // no es una navegación, es despertar donde ya estabas.
+    const guardada = window.history.state?.nxSection
+    if (esSeccion(guardada ?? null) && guardada !== sectionRef.current) {
+      popNavRef.current = true
+      setSection(guardada as Section)
+    }
     if (!window.history.state?.nxSection) {
       window.history.replaceState({ nxSection: 'hoy' }, '', '#hoy')
     }

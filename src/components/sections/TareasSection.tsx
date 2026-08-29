@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { Task, Project, Profile, NexusData} from '@/types'
 import { useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, todayKey, daysBetweenKeys, estadoDeadline, buscaEnTexto, NIVEL_TAREA, rotuloNivel } from '@/components/shared'
-import { plural, nivelTarea } from '@/components/shared/helpers'
+import { plural, nivelTarea, separarMarcaAuto, unirMarcaAuto } from '@/components/shared/helpers'
 import type { IrASeccion } from '@/components/shared/secciones'
 import TableroLunes from '@/components/shared/TableroLunes'
 
@@ -231,7 +231,9 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
         const idx = activeTask ? tasks.findIndex(t=>t.id===activeTask.id) : -1
         const next = e.key==='j' ? Math.min(idx+1,tasks.length-1) : Math.max(idx-1,0)
         const t = tasks[next]
-        if (t) { setActiveTask(t); setEditing({text:t.text,level:t.level,assigned_to:t.assigned_to,co_assigned_to:t.co_assigned_to,done:t.done,due_date:t.due_date,project_id:t.project_id,notes:t.notes}); setConfirmDelete(false) }
+        // camposEditables y no un objeto inline: era la copia gemela de la lista
+        // de campos que el comentario de camposEditables ya prohíbe duplicar.
+        if (t) { setActiveTask(t); setEditing(camposEditables(t)); setConfirmDelete(false) }
       }
       if (activeTask&&!['INPUT','TEXTAREA'].includes((e.target as HTMLElement).tagName)&&!(e.metaKey||e.ctrlKey||e.altKey)) {
         if (e.key==='c') { e.preventDefault(); setEditing(x=>({...x,done:!x.done})) }
@@ -249,7 +251,12 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
   // comparacion es un campo cuyos cambios se pierden sin avisar.
   const camposEditables = (t: Task) => ({
     text:t.text, level:t.level, assigned_to:t.assigned_to, co_assigned_to:t.co_assigned_to,
-    done:t.done, due_date:t.due_date, project_id:t.project_id, notes:t.notes,
+    done:t.done, due_date:t.due_date, project_id:t.project_id,
+    // Al panel solo entra el TEXTO de las notas: la marca «⚙ auto:clave» del
+    // motor de reglas no es una nota del usuario, es el dedup que impide que la
+    // misma regla recree la tarea cada hora. Enseñarla en el textarea invitaba a
+    // borrarla — y al guardar, la marca la reúne el propio guardado.
+    notes: separarMarcaAuto(t.notes).texto || null,
   })
 
   // ¿Hay algo escrito en el panel que no este guardado?
@@ -300,6 +307,12 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
       }
       if (Object.keys(cambios).length === 0) {
         showToast('No hay cambios que guardar'); setActiveTask(null); return
+      }
+      // El panel edita las notas SIN la marca del motor (ver camposEditables):
+      // antes de guardar se reúne con la que la tarea tuviera, o borrar el texto
+      // de una tarea del motor destruía su dedup y la regla la recreaba.
+      if ('notes' in cambios) {
+        cambios.notes = unirMarcaAuto(cambios.notes as string | null, separarMarcaAuto(activeTask.notes).marca)
       }
       await data.updateTask(activeTask.id, cambios)
       showToast('Tarea actualizada')
@@ -544,7 +557,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
     const header = ['Tarea','Prioridad','Estado','Vencimiento','Responsable','Proyecto','Notas']
     const lines = rows.map((t:Task)=>{
       const proj = t.project_id ? data.projects.find((p:Project)=>p.id===t.project_id) : null
-      return [t.text, prLabel(t.level), t.done?'Completada':'Pendiente', t.due_date?t.due_date.slice(0,10):'', t.assignee?.name||'', proj?.name||'', t.notes||''].map(esc).join(',')
+      return [t.text, prLabel(t.level), t.done?'Completada':'Pendiente', t.due_date?t.due_date.slice(0,10):'', t.assignee?.name||'', proj?.name||'', separarMarcaAuto(t.notes).texto].map(esc).join(',')
     })
     const csv = '﻿' + [header.join(','), ...lines].join('\n')
     const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' })
@@ -663,8 +676,9 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
             {due && <span className="font-syne text-[7.5px] font-black" style={{color:due.color}}>
               <span style={{color:'rgba(255,255,255,0.2)'}}>· </span>{due.label}
             </span>}
-            {/* Notas */}
-            {t.notes && (
+            {/* Notas — el icono solo si hay TEXTO: una tarea del motor cuyas
+                notas son solo la marca de dedup no tiene nada que leer. */}
+            {separarMarcaAuto(t.notes).texto && (
               <span className="flex items-center gap-0.5">
                 <LucideIcon name="file-text" size={9} color="rgba(255,255,255,0.25)"/>
               </span>
@@ -1262,7 +1276,7 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                 :<button onClick={()=>setConfirmDelete(true)} className="px-3 py-2 rounded-xl font-syne text-[9px] font-black tracking-wide" style={{color:'rgba(229,29,42,0.5)',border:`1px solid rgba(229,29,42,0.15)`}}>ELIMINAR</button>
               )}
               <button onClick={async()=>{
-                try{const copy=await data.createTask({text:`${activeTask.text} (copia)`,level:activeTask.level,assigned_to:activeTask.assigned_to,co_assigned_to:activeTask.co_assigned_to,notes:activeTask.notes,due_date:activeTask.due_date,project_id:activeTask.project_id,client_id:activeTask.client_id,source:'manual'})
+                try{const copy=await data.createTask({text:`${activeTask.text} (copia)`,level:activeTask.level,assigned_to:activeTask.assigned_to,co_assigned_to:activeTask.co_assigned_to,notes:separarMarcaAuto(activeTask.notes).texto||null,due_date:activeTask.due_date,project_id:activeTask.project_id,client_id:activeTask.client_id,source:'manual'})
                 // El borrado armado se desarma tambien aqui, como ya hacen openTask y
                 // el salto con j/k. Sin esto, si te lo pensabas y en vez de cancelar
                 // pulsabas Duplicar, el cajon pasaba a la copia recien creada con el

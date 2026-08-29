@@ -6944,6 +6944,14 @@ describe('lo que se propone se termina de hacer', () => {
     const cl = leerCodigo('src/components/sections/ClientesSection.tsx')
     expect((cl.match(/\{selected\.notes\}/g) || []).length,
       'las notas del cliente se pintan dos veces en la ficha: sobra la copia del diseño anterior').toBeLessThanOrEqual(1)
+    // La marca «⚙ auto:» del motor viaja DENTRO de tasks.notes, y el panel de
+    // Tareas la separa al cargar (camposEditables) y la reúne al guardar. Meter
+    // las notas EN CRUDO en el editor o en el duplicado deshace el contrato:
+    // la marca se enseña como si fuera texto del usuario y borrarla mata el
+    // dedup — la regla recrea la tarea en la siguiente pasada del motor.
+    const ta = leerCodigo('src/components/sections/TareasSection.tsx')
+    expect(/notes:\s*t\.notes|notes:\s*activeTask\.notes/.test(ta),
+      'las notas entran crudas al panel o al duplicado: la marca ⚙ auto: se pinta como texto y borrarla destruye el dedup del motor').toBe(false)
     const au = leerCodigo('src/components/sections/AutomatizacionesSection.tsx')
     expect(/al sincronizar emails/.test(au),
       'el texto vuelve a prometer que el motor corre al sincronizar: el sync manual NO lo ejecuta').toBe(false)
