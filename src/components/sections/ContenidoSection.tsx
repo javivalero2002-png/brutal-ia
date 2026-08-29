@@ -1075,7 +1075,15 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                 bocetoPlatform={bocetoPlatform}
                 setBocetoPlatform={setBocetoPlatform}
                 editContentType={editContentType}
-                setEditContentType={setEditContentType}
+                // El selector se comporta como un ajuste APLICADO —el preview
+                // cambia al momento— pero el valor solo viajaba en el GUARDAR
+                // general: quien tocaba el formato desde el boceto y cerraba lo
+                // perdía, y al reabrir volvía PUBLICACIÓN. Se persiste al tocar,
+                // como ya hace la portada al subirse.
+                setEditContentType={(t)=>{
+                  setEditContentType(t)
+                  if (activeItem?.id) data.updateAgenda(activeItem.id, { content_type: t }).catch(()=>showToast('No se pudo guardar el formato'))
+                }}
                 onSaveCopy={async (caption) => {
                   // Misma cautela que en uploadCover: la pieza se fija al empezar.
                   // Con el panel abierto se salta de pieza con J/K, y el copy de una

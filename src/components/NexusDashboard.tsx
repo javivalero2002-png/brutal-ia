@@ -1270,6 +1270,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
       {/* MODAL */}
       {modal && (
         <CreateModal
+          isOwner={isOwner}
           modal={modal}
           onClose={() => setModal(null)}
           // El clic en el FONDO pasa por la misma comprobacion que Escape. Cancelar y

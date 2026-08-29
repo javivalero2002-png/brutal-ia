@@ -6876,3 +6876,24 @@ describe('el tablero de Proyectos', () => {
       'ProyectosSection compone una nota de documento a mano: la copia que se desvie perdera campos que las otras si llevan').toBeGreaterThanOrEqual(2)
   })
 })
+
+
+describe('el dinero de un cliente tiene una sola puerta', () => {
+  // Verificada quitando el condicional del POST: roja.
+  it('el POST de clientes condiciona revenue por rol, como el PATCH', () => {
+    // El PATCH lo hacia desde el principio y el POST aceptaba `revenue` de
+    // cualquiera: un miembro creaba un cliente con un importe y el MRR del panel
+    // lo sumaba. El mismo dato con dos puertas y una sin cerrojo.
+    const c = leerCodigo('src/app/api/clients/route.ts')
+    expect(/esOwner \? \['name','industry','status','revenue'/.test(c),
+      'el POST de clientes vuelve a aceptar revenue de cualquier rol: el MRR queda al alcance de quien no puede editarlo').toBe(true)
+  })
+
+  it('el KPI de completadas del panel de equipo deduplica por id', () => {
+    // Una tarea con responsable y co-responsable aparece en las listas de los
+    // dos: sumar por fila la contaba dos veces y el titular del dia mentia.
+    const pe = leerCodigo('src/components/sections/PanelEquipo.tsx')
+    expect(/const completadas = new Set\(delDia\.flatMap/.test(pe),
+      'el KPI de completadas volvio a sumar por fila: cada tarea co-asignada cuenta doble').toBe(true)
+  })
+})

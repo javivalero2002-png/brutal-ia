@@ -25,6 +25,15 @@ export async function POST(request: NextRequest) {
   // Cualquier miembro del equipo autenticado puede crear clientes (el borrado sigue siendo solo-owner)
   const admin = await createAdminClient()
 
+  // La facturación la fija solo el owner, IGUAL QUE AL EDITARLA: el PATCH de
+  // clients/[id] condiciona su allowlist por rol desde el principio, y este POST
+  // la aceptaba de cualquiera — el mismo dato con dos puertas y una sin cerrojo.
+  // Un miembro creaba un cliente con un importe y el MRR del panel lo sumaba.
+  // El campo se descarta en silencio: el modal ya no se lo enseña a quien no es
+  // owner, así que si llega es un cliente manipulado, no una persona confundida.
+  const { data: perfilCreador } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle()
+  const esOwner = perfilCreador?.role === 'owner'
+
   const body = await request.json()
   // DOS LETRAS SIEMPRE.
   //
@@ -49,7 +58,7 @@ export async function POST(request: NextRequest) {
 
   const { data, error } = await admin
     .from('clients')
-    .insert({ ...pick(body, ['name','industry','status','revenue','notes','color']), initials, created_by: user.id })
+    .insert({ ...pick(body, esOwner ? ['name','industry','status','revenue','notes','color'] : ['name','industry','status','notes','color']), initials, created_by: user.id })
     .select()
     .single()
 
