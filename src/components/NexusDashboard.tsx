@@ -438,6 +438,40 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
     },
   )
 
+  // Los otros tres paneles que tapan la pantalla tampoco vivían en el historial:
+  // el buscador, la hoja de MÁS y el menú del «+». El atrás los cerraba... y
+  // ADEMÁS se comía una entrada de verdad — te cambiaba de sección o te sacaba
+  // de la app con el panel aún delante.
+  //
+  // La parte fina no es abrirlos, es el clic que cierra Y navega (un resultado
+  // del buscador, una sección de la hoja): si hace `setX(false)` y
+  // `setSection(...)` en el mismo lote, el back() DIFERIDO del hook y el
+  // pushState síncrono del efecto de sección se entrelazan, y el historial
+  // acaba con una entrada huérfana o deshaciendo la navegación recién hecha.
+  // Por eso ese clic no cierra el estado: guarda lo que toca hacer después y
+  // llama a history.back() — el hook cierra y ejecuta lo pendiente cuando el
+  // pop ya devolvió el historial a su sitio. Los cierres a secas (✕, fondo,
+  // Escape) sí pueden seguir tocando el estado: el hook consume su entrada solo.
+  //
+  // Y lo pendiente va en un setTimeout(0), no en línea: el manejador de
+  // secciones escucha el MISMO popstate y su limpieza hace setModal(null) — en
+  // el mismo lote, «abre el modal de tarea» perdía contra esa limpieza y el
+  // menú del + se cerraba sin abrir nada (pasó al verificarlo). Un tick después,
+  // el pop ya asentó con todos sus listeners y lo pendiente corre sobre limpio.
+  const trasCerrarRef = useRef<(() => void) | null>(null)
+  const ejecutaPendiente = () => {
+    const f = trasCerrarRef.current
+    trasCerrarRef.current = null
+    if (f) setTimeout(f, 0)
+  }
+  const cierraOverlay = (cerrar: () => void, despues?: () => void) => {
+    if (window.history.state?.nxOverlay) { trasCerrarRef.current = despues || null; window.history.back() }
+    else { cerrar(); despues?.() }
+  }
+  useBackClosable(searchOpen, () => { setSearchOpen(false); ejecutaPendiente() })
+  useBackClosable(isMobile && masOpen, () => { setMasOpen(false); ejecutaPendiente() })
+  useBackClosable(quickCreateOpen, () => { setQuickCreateOpen(false); ejecutaPendiente() })
+
 
   // Abrir un modal SIEMPRE limpia los campos. Antes solo lo hacía el menú rápido:
   // las secciones reciben `setModal` tal cual como `onOpenModal`, así que abrir
@@ -588,7 +622,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   const handleSearchKey = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setSearchIdx(i => Math.min(i+1, sr.current.length-1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setSearchIdx(i => Math.max(i-1, -1)) }
-    else if (e.key === 'Enter' && searchIdx >= 0 && sr.current[searchIdx]) sr.current[searchIdx].act()
+    else if (e.key === 'Enter' && searchIdx >= 0 && sr.current[searchIdx]) cierraOverlay(()=>setSearchOpen(false), sr.current[searchIdx].act)
     else if (e.key === 'Escape') setSearchOpen(false)
   }
 
@@ -1087,7 +1121,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
                     <div className="fixed inset-0 z-40" onClick={()=>setQuickCreateOpen(false)}/>
                     <div className="absolute right-0 top-full mt-2 z-50 rounded-2xl py-2 min-w-[180px] animate-fadeUp" style={{background:'#12122A',border:`1px solid ${BORDER}`,boxShadow:'0 12px 40px rgba(0,0,0,0.6)'}}>
                       {([{icon:'check-square',label:'Tarea',modal:'tarea'},{icon:'users',label:'Cliente',modal:'cliente'},{icon:'folder-open',label:'Proyecto',modal:'proyecto'},{icon:'film',label:'Pieza',modal:'contenido'},{icon:'zap',label:'Regla',modal:'regla'}] as const).filter(item=>item.modal!=='regla'||isOwner).map(item=>(
-                        <button key={item.modal} onClick={()=>{setQuickCreateOpen(false);setModal(item.modal);setMf({})}} className="flex items-center gap-3 w-full px-4 py-2.5 text-left transition-colors hover:bg-white/5">
+                        <button key={item.modal} onClick={()=>cierraOverlay(()=>setQuickCreateOpen(false), ()=>{setModal(item.modal);setMf({})})} className="flex items-center gap-3 w-full px-4 py-2.5 text-left transition-colors hover:bg-white/5">
                           <LucideIcon name={item.icon} size={14} color="rgba(240,240,248,0.4)"/>
                           <span className="font-syne text-[10px] font-black tracking-wide" style={{color:'rgba(240,240,248,0.7)'}}>{item.label}</span>
                         </button>
@@ -1211,7 +1245,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
                   // se abre a menudo, no para inventariar la app.
                   {id:'diario' as Section, icon:'pen-line', label:'Fichar'},
                 ] as {id:Section,icon:string,label:string}[]).map(item=>(
-                  <button key={item.id} onClick={()=>{setSection(item.id);setMasOpen(false)}}
+                  <button key={item.id} onClick={()=>cierraOverlay(()=>setMasOpen(false), ()=>setSection(item.id))}
                     className="flex flex-col items-center gap-2 py-4 rounded-2xl transition-all active:scale-95"
                     style={{background:section===item.id?'rgba(27,95,250,0.12)':'rgba(255,255,255,0.03)',border:`1px solid ${section===item.id?'rgba(27,95,250,0.25)':'rgba(255,255,255,0.06)'}`}}>
                     <LucideIcon name={item.icon as any} size={20} color={section===item.id?BLU:'rgba(255,255,255,0.5)'}/>
@@ -1237,7 +1271,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
             <div className={`${isMobile?'max-h-[45vh]':'max-h-[340px]'} overflow-y-auto p-1.5`}>
               {searchQuery.length >= 2 && searchResults.length === 0 && <div className="py-8 text-center text-white/25 text-sm">Sin resultados</div>}
               {searchResults.map((r,i) => (
-                <button key={i} onClick={r.act} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-left transition-colors" style={{ background:i===searchIdx?'rgba(27,95,250,0.14)':'transparent' }}>
+                <button key={i} onClick={()=>cierraOverlay(()=>setSearchOpen(false), r.act)} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-left transition-colors" style={{ background:i===searchIdx?'rgba(27,95,250,0.14)':'transparent' }}>
                   <span className="font-syne text-[8px] font-black tracking-widest px-2 py-0.5 rounded" style={{ background:'rgba(255,255,255,0.05)', color:typeColor[r.type]||'rgba(240,240,248,0.4)' }}>{r.type}</span>
                   <span className="flex-1 text-[13px] text-white/85 truncate">{r.title}</span>
                   <span className="text-[11px] text-white/30 flex-shrink-0">{r.sub}</span>

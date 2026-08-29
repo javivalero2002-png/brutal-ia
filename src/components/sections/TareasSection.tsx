@@ -1080,6 +1080,17 @@ function TareasSection({data,onOpenModal,showToast,isOwner,profile,onNavigate,on
                   <LucideIcon name="target" size={13} color={focusMode?'#7aa5ff':'rgba(255,255,255,0.4)'}/>
                   MI DÍA{focusCount>0?` · ${focusCount}`:''}
                 </button>
+                {/* El mismo conmutador de orden que en escritorio: sin él, el móvil
+                    vivía clavado en el modo que se hubiera elegido la última vez
+                    desde un ordenador. */}
+                <div className="flex p-0.5 rounded-xl gap-0.5 flex-shrink-0" style={{background:SURF2,border:`1px solid ${BORDER}`}}>
+                  {([{id:'prioridad' as const,icon:'arrow-up-narrow-wide',title:'Ordenar por prioridad: urgentes arriba, en una sola lista'},{id:'fecha' as const,icon:'calendar-clock',title:'Agrupar por fecha: atrasadas, hoy, próximas y sin fecha'}] as const).map(s=>(
+                    <button key={s.id} onClick={()=>setTaskSort(s.id)} title={s.title} aria-label={s.title} className="w-8 h-8 flex items-center justify-center rounded-lg transition-all"
+                      style={{background:taskSort===s.id?BLU+'26':'transparent',border:`1px solid ${taskSort===s.id?BLU+'55':'transparent'}`}}>
+                      <LucideIcon name={s.icon as any} size={13} color={taskSort===s.id?'#5b8dff':'rgba(255,255,255,0.28)'}/>
+                    </button>
+                  ))}
+                </div>
                 <button onClick={exportCSV} className="flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0" style={{background:SURF2,border:`1px solid ${BORDER}`}} aria-label="Descargar"><LucideIcon name="download" size={14} color="rgba(255,255,255,0.4)"/></button>
               </div>
               {(() => {
