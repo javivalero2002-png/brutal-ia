@@ -212,7 +212,7 @@ export interface NexusData {
   markRead: (id: string) => Promise<void>
   markManyRead: (ids: string[]) => Promise<void>
   markUnread: (id: string) => Promise<void>
-  createMemoria: (data: Partial<MemoriaEntry>) => Promise<void>
+  createMemoria: (entry: Partial<MemoriaEntry>) => Promise<MemoriaEntry | void>
   updateMemoria: (id: string, data: Partial<MemoriaEntry>) => Promise<void>
   deleteMemoria: (id: string) => Promise<void>
   /** Vuelve a traer solo la memoria. La llaman Harvey y Brutal.IA al abrirse. */

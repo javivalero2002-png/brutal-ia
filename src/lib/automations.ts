@@ -427,7 +427,12 @@ export function evaluateTrigger(cfg: RuleConfig, ctx: {
           // indefinidamente, porque escribirle TU al cliente no deja rastro en el
           // buzon y la condicion solo se apaga si contesta el. Treinta dias de
           // silencio eran treinta tareas iguales.
-          key: `followup:${cli.id}`,
+          // ...y CON el día del último email del cliente: es estable durante un
+          // mismo silencio (no gotea) y cambia cuando el cliente escribe y vuelve
+          // a callarse. Sin él, la marca de la tarea ya hecha —que sobrevive en
+          // sus notes— bloqueaba el seguimiento PARA SIEMPRE: el primer silencio
+          // creaba la tarea y ningún silencio posterior volvía a crear ninguna.
+          key: `followup:${cli.id}:${localDayKey(new Date(mostRecent))}`,
           clientId: cli.id,
           vars: { cliente: cli.name, dias: String(daysSince) },
         })

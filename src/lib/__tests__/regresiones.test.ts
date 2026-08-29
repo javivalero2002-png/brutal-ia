@@ -6897,3 +6897,48 @@ describe('el dinero de un cliente tiene una sola puerta', () => {
       'el KPI de completadas volvio a sumar por fila: cada tarea co-asignada cuenta doble').toBe(true)
   })
 })
+
+
+describe('lo que se propone se termina de hacer', () => {
+  // Verificada quitando el updateMemoria del handler: roja.
+  it('DAR DE ALTA enlaza el documento al cliente que acaba de crear', () => {
+    // El banner creaba el cliente y la nota se quedaba con client_id NULL para
+    // siempre: no salia al filtrar Memoria por ese cliente y no habia reparacion
+    // posible desde la UI. Pasaba con el PRIMER documento de cada cliente nuevo,
+    // que es exactamente el caso que dispara el banner.
+    const m = leerCodigo('src/components/sections/MemoriaSection.tsx')
+    expect(/updateMemoria\(clientePropuesto\.notaId/.test(m),
+      'DAR DE ALTA vuelve a crear el cliente sin enlazar el documento: la nota queda suelta para siempre').toBe(true)
+    // Y el hook tiene que DEVOLVER la nota, o no hay id que enlazar.
+    const h = leerCodigo('src/hooks/useNexusData.ts')
+    const i = h.indexOf('const createMemoria')
+    expect(/return created/.test(h.slice(i, i + 700)),
+      'createMemoria ya no devuelve la nota creada: quien la crea no puede enlazarla despues').toBe(true)
+  })
+
+  // Verificada devolviendo la clave sin dia: roja.
+  it('el seguimiento de cliente revive con cada nuevo silencio', () => {
+    // La clave `followup:id` a secas funcionaba UNA vez en la vida por cliente:
+    // la marca de la tarea ya hecha sobrevive en sus notes y bloqueaba todos los
+    // silencios posteriores. Con el dia del ultimo email dentro, la clave es
+    // estable durante un silencio (no gotea) y cambia cuando el cliente escribe
+    // y vuelve a callarse.
+    const a = leerCodigo('src/lib/automations.ts')
+    expect(/key: `followup:\$\{cli\.id\}:\$\{localDayKey\(new Date\(mostRecent\)\)\}`/.test(a),
+      'la clave del seguimiento perdio el periodo: el segundo silencio de un cliente ya no crea tarea nunca').toBe(true)
+  })
+
+  it('la pagina publica de revision no promete lo que el motor no hace ni pinta doble', () => {
+    // Los DOS renders legitimos de la portada viven en ramas excluyentes de un
+    // ternario (cover+video con play / solo cover): contarlos daba falso
+    // positivo — me paso al escribir esta regla. Lo que no puede volver es el
+    // bloque suelto de un diseño anterior cuya condicion equivalia a la de la
+    // rama principal: pintaba la MISMA imagen dos veces seguidas.
+    const rv = leerCodigo('src/app/review/[token]/page.tsx')
+    expect(/\(embed \|\| item\.video_url\) && item\.cover_url/.test(rv),
+      'volvio el bloque suelto de portada: en una pieza con video y portada se pinta la misma imagen dos veces, en la unica pagina que ve gente de fuera').toBe(false)
+    const au = leerCodigo('src/components/sections/AutomatizacionesSection.tsx')
+    expect(/al sincronizar emails/.test(au),
+      'el texto vuelve a prometer que el motor corre al sincronizar: el sync manual NO lo ejecuta').toBe(false)
+  })
+})

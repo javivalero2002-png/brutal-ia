@@ -31,7 +31,7 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
   const [memClientFilter, setMemClientFilter] = useState<string>('Todos')
   const [uploadingDoc, setUploadingDoc] = useState(false)
   /** Cliente que la IA ha visto en un documento y que todavía no tenemos dado de alta. */
-  const [clientePropuesto, setClientePropuesto] = useState<{ nombre: string; sector: string } | null>(null)
+  const [clientePropuesto, setClientePropuesto] = useState<{ nombre: string; sector: string; notaId?: string } | null>(null)
   const [creandoCliente, setCreandoCliente] = useState(false)
   const docInputRef = useRef<HTMLInputElement>(null)
   const uploadDoc = async (file: File) => {
@@ -65,7 +65,7 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
       // mirar aunque el importe esté dentro del archivo.
       const d = j.datos || {}
 
-      await data.createMemoria({
+      const notaCreada = await data.createMemoria({
         title: (j.name||file.name).replace(/\.pdf$/i,''),
         category: 'Documento',
         // Enlazada a su cliente cuando lo reconocemos: así el documento aparece al
@@ -83,7 +83,9 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
         // Se PROPONE, no se crea. Un cliente inventado por una lectura dudosa
         // ensucia Clientes, Proyectos y Reportes a la vez, y limpiarlo cuesta más
         // que el clic que ahorras.
-        setClientePropuesto(j.clientePropuesto)
+        // Con el id de la nota recién creada: es lo que permite que DAR DE ALTA
+        // enlace el documento al cliente en vez de dejarlo suelto para siempre.
+        setClientePropuesto({ ...j.clientePropuesto, notaId: notaCreada?.id })
         showToast('Documento guardado · he detectado un cliente')
       } else {
         showToast(j.clientId ? 'Documento guardado y enlazado a su cliente' : 'Documento guardado en la memoria')
@@ -240,7 +242,15 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
             onClick={async()=>{
               setCreandoCliente(true)
               try {
-                await data.createClient({ name: clientePropuesto.nombre, industry: clientePropuesto.sector || undefined })
+                const nuevo = await data.createClient({ name: clientePropuesto.nombre, industry: clientePropuesto.sector || undefined })
+                // Y el documento QUEDA ENLAZADO. Antes se creaba el cliente y la
+                // nota seguía con client_id NULL para siempre: no salía al filtrar
+                // Memoria por ese cliente, y sin edición posible desde la UI. El
+                // enlace es la intención declarada del banner — «así el documento
+                // aparece al mirar ESE cliente».
+                if (clientePropuesto.notaId && (nuevo as { id?: string } | undefined)?.id) {
+                  await data.updateMemoria(clientePropuesto.notaId, { client_id: (nuevo as { id: string }).id }).catch(() => {})
+                }
                 showToast(`${clientePropuesto.nombre} dado de alta en Clientes`)
                 setClientePropuesto(null)
               } catch { showToast('No se pudo crear el cliente') }

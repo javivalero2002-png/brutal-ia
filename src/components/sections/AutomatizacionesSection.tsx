@@ -226,7 +226,7 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: PropsAuto
           <div className="font-syne text-[8.5px] font-black tracking-widest mb-0.5" style={{color:GRN}}>MOTOR ACTIVO</div>
           <div className="font-figtree text-[12px] leading-relaxed" style={{color:'rgba(255,255,255,0.4)'}}>
             {autoCount > 0
-              ? <>Evalúa <b style={{color:'rgba(255,255,255,0.7)'}}>{autoCount}</b> {autoCount===1?'regla automática':'reglas automáticas'} cada hora y al sincronizar emails. Puedes forzarlo con <b style={{color:GRN}}>Ejecutar ahora</b>.</>
+              ? <>Evalúa <b style={{color:'rgba(255,255,255,0.7)'}}>{autoCount}</b> {autoCount===1?'regla automática':'reglas automáticas'} cada hora. Puedes forzarlo con <b style={{color:GRN}}>Ejecutar ahora</b>.</>
               : <>El motor está en marcha. Crea una regla con <b style={{color:'rgba(255,255,255,0.7)'}}>+ REGLA</b> y se ejecutará automáticamente.</>}
           </div>
         </div>
