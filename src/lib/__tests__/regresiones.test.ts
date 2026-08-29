@@ -5130,6 +5130,17 @@ describe('el contexto de Harvey se escribe UNA vez', () => {
         `${nombre} habla con Harvey sin mandarle el hilo: olvidara lo que acaba de preguntar`)
         .toBe(true)
     }
+
+    // Y LA TERCERA COPIA, que vivio meses: el chat del PDF de Proyectos pintaba
+    // la conversacion entera y mandaba cada pregunta SOLA — la ruta acepta
+    // `history` desde su primer commit y nadie lo envio nunca. «¿y en que
+    // moneda?» no sabia a que se referia el «y».
+    const PROY = leerCodigo('src/components/sections/ProyectosSection.tsx')
+    const j = PROY.indexOf('question:q')
+    expect(j, 'el chat del PDF ya no pregunta: revisa esta regla').toBeGreaterThan(-1)
+    expect(/history:/.test(PROY.slice(j, j + 600)),
+      'el chat del PDF vuelve a mandar cada pregunta sola: la conversacion pintada es mentira')
+      .toBe(true)
   })
 })
 
@@ -6828,5 +6839,40 @@ describe('los modales de crear no pierden ni callan', () => {
     expect(i, 'ya no se configura project_deadline: repunta esta regla').toBeGreaterThan(-1)
     expect(/Number\.isFinite/.test(D.slice(i, i + 260)),
       'la antelacion del deadline vuelve a pasar por un || que se traga el 0').toBe(true)
+  })
+})
+
+
+describe('el tablero de Proyectos', () => {
+  const P = leerCodigo('src/components/sections/ProyectosSection.tsx')
+
+  // Verificada quitando el onDragEnd: roja.
+  it('un arrastre cancelado no deja el ref cargado', () => {
+    // Soltabas fuera (o ESC), y minutos despues CUALQUIER drop —un texto, un
+    // fichero del escritorio— movia aquel proyecto de columna, o lo completaba
+    // y archivaba si caia en una carpeta. dragend dispara tambien al cancelar.
+    const i = P.indexOf('draggable onDragStart={()=>dragRef.current=p.id}')
+    expect(i, 'la tarjeta ya no se arrastra asi: repunta esta regla').toBeGreaterThan(-1)
+    expect(/onDragEnd=\{\(\)=>\{dragRef\.current=null\}\}/.test(P.slice(i, i + 900)),
+      'la tarjeta arrastrable perdio su onDragEnd: un arrastre cancelado deja el ref cargado y el siguiente drop mueve ese proyecto').toBe(true)
+  })
+
+  // Verificada devolviendo la comparacion de timestamps: roja.
+  it('el borde de urgencia usa el mismo calculo que la chapa', () => {
+    // El borde comparaba timestamps (dlDate < now+7d) y la chapa day keys de
+    // Madrid: a 7 dias justos, chapa ambar con borde normal. Dos indicadores del
+    // mismo dato contradiciendose en la misma fila.
+    expect(/dlDate\(p\.deadline\)\s*<\s*new Date\(Date\.now\(\)/.test(P),
+      'el borde de la lista vuelve a comparar timestamps: se contradira con la chapa de al lado en el limite').toBe(false)
+  })
+
+  // Verificada quitando el compositor de analyzePdf: roja.
+  it('la nota del analisis usa el compositor comun, no una copia', () => {
+    // Era la tercera copia de la composicion y la unica que tiraba `a.contenido`
+    // — el texto del documento, ya pedido y pagado. La nota nacia pobre y la
+    // idempotencia («Ya estaba en Memoria») la hacia permanente.
+    const usos = (P.match(/componerNotaDocumento\(/g) || []).length
+    expect(usos,
+      'ProyectosSection compone una nota de documento a mano: la copia que se desvie perdera campos que las otras si llevan').toBeGreaterThanOrEqual(2)
   })
 })
