@@ -633,12 +633,10 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
                 ))}
               </div>
             )}
-            {selected.notes && (
-              <div className="rounded-2xl p-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-                <div className="font-syne text-[9px] font-black tracking-widest mb-3" style={{color:'rgba(255,255,255,0.25)'}}>NOTAS</div>
-                <p className="text-[12px] leading-relaxed" style={{color:'rgba(255,255,255,0.45)'}}>{selected.notes}</p>
-              </div>
-            )}
+            {/* Aquí había un bloque NOTAS del diseño original que pintaba
+                selected.notes por segunda vez — el bloque NOTAS INTERNAS de más
+                arriba es el que quedó como bueno. Hay una regla en
+                regresiones.test.ts que impide que vuelva. */}
           </div>
         </div>
 

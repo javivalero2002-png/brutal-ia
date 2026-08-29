@@ -1184,7 +1184,10 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
             {selected.body_preview && (
               <EmailBodyBlock preview={selected.body_preview} gmailId={selected.gmail_id}/>
             )}
-            <div className="flex items-center justify-center gap-3 py-1">
+            {/* nx-kbd-hints: en táctil lo oculta globals.css, como en las otras
+                ocho secciones — esta fila era la única sin la clase y salía
+                «J siguiente · K anterior» en un teléfono sin teclado. */}
+            <div className="nx-kbd-hints flex items-center justify-center gap-3 py-1">
               <span className="font-syne text-[7.5px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.1)'}}>
                 <kbd className="px-1 py-0.5 rounded" style={{background:'rgba(255,255,255,0.06)',fontFamily:'inherit'}}>J</kbd> siguiente
                 {' · '}
