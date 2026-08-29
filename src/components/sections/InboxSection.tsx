@@ -8,7 +8,7 @@ import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR, rotuloNivel } from '@/com
 import { useIsMobile, useBackClosable } from '@/components/shared'
 import { strColor, relTime, todayKey } from '@/components/shared'
 // `plural` no se reexporta desde el índice de shared: se importa del módulo.
-import { plural } from '@/components/shared/helpers'
+import { plural, esNoReply } from '@/components/shared/helpers'
 import { LucideIcon } from '@/components/shared'
 import type { IrASeccion } from '@/components/shared/secciones'
 
@@ -906,7 +906,11 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                   {!isMobile && 'ARCHIVAR'}
                 </button>
               )}
-              {selected.from_email && selected.source==='gmail' && (
+              {/* Sin RESPONDER para remitentes automáticos: la mitad del buzón
+                  son notificaciones (noreply@, notifications@…) y el borrador
+                  de Harvey ahí es una llamada al modelo para una respuesta que
+                  no puede llegar a nadie. La tarjeta de abajo lo explica. */}
+              {selected.from_email && selected.source==='gmail' && !esNoReply(selected.from_email) && (
                 <button onClick={()=>replyOpen?setReplyOpen(false):openHarveyReply(selected)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all hover:opacity-80" style={{color:replyOpen?BLU:'rgba(255,255,255,0.45)',border:`1px solid ${replyOpen?BLU+'50':BORDER}`,background:replyOpen?`${BLU}12`:'transparent'}}>
                   <LucideIcon name="corner-up-left" size={10} color={replyOpen?BLU:'rgba(255,255,255,0.45)'}/>RESPONDER
                 </button>
@@ -1004,8 +1008,21 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                         </div>
                         <LucideIcon name={creatingTask?'loader':'plus'} size={14} color={`${BLU}80`}/>
                       </button>
-                      {/* Secondary: Harvey reply draft */}
-                      {selected.from_email && selected.source==='gmail' && (
+                      {/* Secondary: Harvey reply draft — o la verdad, si el
+                          remitente es una máquina. Ofrecer el borrador a
+                          noreply@ es pagar una llamada al modelo por una
+                          respuesta que rebota; decirlo vale más que esconderlo. */}
+                      {selected.from_email && selected.source==='gmail' && (esNoReply(selected.from_email) ? (
+                        <div className="w-full flex items-center gap-3 rounded-xl px-4 py-3" style={{background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,255,255,0.05)'}}>
+                          <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:'rgba(255,255,255,0.04)'}}>
+                            <LucideIcon name="mail-x" size={13} color="rgba(255,255,255,0.3)"/>
+                          </div>
+                          <div className="flex-1 text-left">
+                            <div className="font-syne text-[7.5px] font-black tracking-wide mb-0.5" style={{color:'rgba(255,255,255,0.25)'}}>SIN RESPUESTA</div>
+                            <div className="text-[11.5px]" style={{color:'rgba(255,255,255,0.35)'}}>Remitente automático — no lee respuestas</div>
+                          </div>
+                        </div>
+                      ) : (
                         <button onClick={()=>replyOpen?setReplyOpen(false):openHarveyReply(selected)} className="w-full flex items-center gap-3 rounded-xl px-4 py-3 transition-all hover:opacity-80" style={{background:replyOpen?`${BLU}10`:'rgba(255,255,255,0.04)',border:`1px solid ${replyOpen?BLU+'30':'rgba(255,255,255,0.07)'}`}}>
                           <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:replyOpen?`${BLU}20`:'rgba(255,255,255,0.06)'}}>
                             <LucideIcon name="sparkles" size={13} color={replyOpen?BLU:'rgba(255,255,255,0.45)'}/>
@@ -1016,7 +1033,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                           </div>
                           <LucideIcon name={replyLoading?'loader':'corner-up-left'} size={13} color={replyOpen?BLU:'rgba(255,255,255,0.25)'}/>
                         </button>
-                      )}
+                      ))}
                       {/* Tertiary: ask Harvey */}
                       {onAskHarvey && (
                         <button onClick={()=>onAskHarvey(`Tengo un email de "${selected.from_name||'?'}" con asunto "${selected.subject||'sin asunto'}". ${selected.ai_summary?`Resumen: ${selected.ai_summary}. `:''}${selected.ai_action&&selected.ai_action!=='Ninguna acción requerida'?`Acción sugerida: ${selected.ai_action}. `:''}¿Cómo debería manejar esta comunicación?`)} className="w-full flex items-center gap-3 rounded-xl px-4 py-3 transition-all hover:opacity-80" style={{background:`${BLU}08`,border:`1px solid ${BLU}18`}}>

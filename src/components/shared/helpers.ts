@@ -553,3 +553,27 @@ export const unirMarcaAuto = (texto: string | null | undefined, marca: string | 
   if (!marca) return t || null
   return t ? `${t}\n${marca}` : marca
 }
+
+/**
+ * ¿Es un remitente automático que no lee respuestas?
+ *
+ * Medido contra el buzón real: el 49% de los mensajes vienen de direcciones
+ * así (notifications@github, jobalerts-noreply@linkedin, drive-shares-dm-
+ * noreply@google…). Ofrecer «Harvey redacta la respuesta» ahí gasta una
+ * llamada al modelo en un borrador que no puede llegar a nadie — y peor,
+ * hace creer que responder sirve de algo.
+ *
+ * Conservador a propósito: solo el local-part, y solo las formas que no
+ * puede tener una persona. Un falso negativo enseña un botón de más; un
+ * falso positivo le quita a alguien la posibilidad de responder a un humano.
+ */
+export const esNoReply = (email: string | null | undefined): boolean => {
+  const local = (email || '').split('@')[0].toLowerCase()
+  if (!local) return false
+  // «noresponder» es el noreply en español (idealista lo usa y era el segundo
+  // remitente más frecuente del buzón). «reminders» salió al probar con el
+  // buzón real: reminders@facebookmail.com. Marketing (temu@, campaigns@,
+  // info@…) queda FUERA a propósito: ahí puede haber una persona leyendo.
+  return /no[-_.]?reply|no[-_.]?responder|do[-_.]?not[-_.]?reply|mailer[-_.]?daemon/.test(local)
+    || /^(notifications?|bounces?|reminders?)$/.test(local)
+}
