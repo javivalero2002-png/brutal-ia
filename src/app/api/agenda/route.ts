@@ -1,6 +1,8 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { firmarCampos } from '@/lib/storageFirmado'
 import { esStorageDeOtroBucket } from '@/lib/safeFetch'
+import { sinControl } from '@/components/shared/helpers'
+import { codigoHttpDeError } from '@/lib/respuestaDb'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Solo columnas conocidas: campos desconocidos no deben tumbar la petición
@@ -30,12 +32,14 @@ export async function POST(request: NextRequest) {
   // video_url sale firmado por el GET y por /api/review (público): no se guarda un
   // identificador a otro bucket. Los enlaces externos (YouTube) pasan.
   if (esStorageDeOtroBucket(payload.video_url)) return NextResponse.json({ error: 'URL de almacenamiento no permitida' }, { status: 400 })
+  if ('title' in payload) payload.title = sinControl(payload.title)
+  if ('notes' in payload) payload.notes = sinControl(payload.notes)
   let { data, error } = await admin.from('content_agenda').insert(payload).select('*, client:clients(id,name,initials,color)').single()
   // Si la BD aún no tiene las columnas nuevas (migración pendiente), reintentar sin ellas
   if (error && /account_name|video_url/.test(error.message)) {
     delete payload.account_name; delete payload.video_url
     ;({ data, error } = await admin.from('content_agenda').insert(payload).select('*, client:clients(id,name,initials,color)').single())
   }
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: error.message }, { status: codigoHttpDeError(error) })
   return NextResponse.json(data)
 }

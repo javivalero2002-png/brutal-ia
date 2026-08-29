@@ -1,4 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { sinControl } from '@/components/shared/helpers'
+import { codigoHttpDeError } from '@/lib/respuestaDb'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -10,10 +12,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const ALLOWED = ['title', 'content', 'category', 'client_id', 'tags', 'pinned']
   const updates: Record<string, unknown> = {}
   for (const k of ALLOWED) if (k in body) updates[k] = body[k]
+  // Gemelo del POST y de tasks/[id]: sanear el texto para que un byte nulo pegado
+  // no tumbe la edición con un 500.
+  if ('title' in updates) updates.title = sinControl(updates.title as string)
+  if ('content' in updates) updates.content = sinControl(updates.content as string)
   if (Object.keys(updates).length === 0) return NextResponse.json({ error: 'No valid fields' }, { status: 400 })
   const admin = await createAdminClient()
   const { data, error } = await admin.from('memoria').update(updates).eq('id', id).select('*, client:clients(id,name,initials,color)').single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: error.message }, { status: codigoHttpDeError(error) })
   return NextResponse.json(data)
 }
 

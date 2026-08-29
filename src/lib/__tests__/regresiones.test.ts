@@ -2282,6 +2282,19 @@ describe('nada del Storage sale sin firmar', () => {
       'BUCKET_CONTENIDO debe declararse una vez en safeFetch y compartirse').toBe(true)
   })
 
+  it('el sync no persiste un análisis degradado como si fuera real', () => {
+    // analyzeEmail devuelve un objeto `degraded` (summary=asunto) en fallo, no
+    // null. Escribir `ai_summary: analysis?.summary` lo persistía como análisis
+    // real: doble render («no pudo analizarlo» + panel de análisis) y una acción
+    // falsa. Los campos ai_* deben derivarse de camposDeAnalisis, que anula el
+    // degradado. Los DOS inserts gemelos (buzón compartido y personal).
+    const C = leerCodigo('src/lib/colabsSync.ts')
+    expect(/ai_summary:\s*analysis\?\.summary/.test(C),
+      'un insert del sync vuelve a persistir el análisis degradado como resumen real').toBe(false)
+    expect((C.match(/\.\.\.camposDeAnalisis\(analysis\)/g) || []).length,
+      'los dos inserts del sync (compartido y personal) deben usar camposDeAnalisis').toBe(2)
+  })
+
   it('lo que se firma es lo que la consulta trae', () => {
     // El gemelo del anterior, y ya mordio en la pantalla de revision: `firmarCampos`
     // pedia `cover_url` y el `select` no la traia, asi que se firmaba una columna
@@ -2392,8 +2405,15 @@ describe('la criba del correo', () => {
     // «BRUTAL.IA — ANALISIS» sobre algo que la IA no habia visto nunca.
     for (const f of CON_ANALISIS) {
       const C = leerCodigo(f)
-      expect(/ai_summary: analysis\?\.summary \?\? null/.test(C),
-        `${f}: guarda un resumen inventado cuando no hubo analisis`).toBe(true)
+      // Antes se exigia `ai_summary: analysis?.summary ?? null`. Ese guard solo
+      // anulaba el caso OMITIDO (analysis===null); con el DEGRADADO (analyzeEmail
+      // devuelve un objeto, no null) el `?? null` no disparaba y se guardaba el
+      // asunto como resumen real. camposDeAnalisis anula LOS DOS casos, que es la
+      // intencion original de esta regla, ahora cumplida de verdad.
+      expect(/\.\.\.camposDeAnalisis\(analysis\)/.test(C),
+        `${f}: guarda un resumen inventado cuando no hubo analisis (o cuando fue degradado)`).toBe(true)
+      expect(/ai_summary: analysis\?\.summary/.test(C),
+        `${f}: vuelve el patron viejo que persiste el analisis degradado como real`).toBe(false)
       expect(/ai_estado:/.test(C),
         `${f}: no deja constancia de si el correo se analizo. Sin eso la criba no se puede auditar ni deshacer`).toBe(true)
     }
@@ -6985,15 +7005,28 @@ describe('lo que se propone se termina de hacer', () => {
     expect(finTarjetas, 'no encuentro el final de las tarjetas de estado del Inbox').toBeGreaterThan(iniTarjetas)
     expect(/allMsgs/.test(inbox.slice(iniTarjetas, finTarjetas)),
       'una tarjeta de estado del Inbox vuelve a contar sobre allMsgs: los archivados inflan un número que pide atención').toBe(false)
-    // Las DOS rutas de escritura de tareas (POST y PATCH) sanean el texto y
-    // normalizan el nivel EN LA FRONTERA, o un byte nulo pegado de un PDF o un
-    // «urgente» en español dan un 500 crudo de Postgres. Son gemelas: arreglar
-    // una y olvidar la otra es el patrón que este fichero existe para cazar.
-    for (const ruta of ['src/app/api/tasks/route.ts', 'src/app/api/tasks/[id]/route.ts']) {
+    // TODA ruta que escribe TEXTO LIBRE del usuario (lo que se pega de un PDF)
+    // debe sanear el byte nulo, o el insert rebota con un 500 crudo. La lista
+    // salió de la caza multi-agente: eran ocho gemelos del arreglo de tasks, y
+    // esta red los cubre a todos para que el próximo no se escape. Si se añade
+    // una ruta con una columna de texto libre, va a esta lista.
+    const RUTAS_TEXTO_LIBRE = [
+      'src/app/api/tasks/route.ts', 'src/app/api/tasks/[id]/route.ts',
+      'src/app/api/memoria/route.ts', 'src/app/api/memoria/[id]/route.ts',
+      'src/app/api/agenda/route.ts', 'src/app/api/agenda/[id]/route.ts',
+      'src/app/api/projects/[id]/notes/route.ts',
+      'src/app/api/clients/[id]/comments/route.ts',
+      'src/app/api/inbox/route.ts',
+      'src/app/api/diario/route.ts',
+    ]
+    for (const ruta of RUTAS_TEXTO_LIBRE) {
       const cod = leerCodigo(ruta)
       expect(/sinControl\(/.test(cod), `${ruta} no sanea el texto: un byte nulo dará un 500`).toBe(true)
-      expect(/nivelTarea\(/.test(cod), `${ruta} no normaliza el nivel: un «urgente» dará un 500 del CHECK`).toBe(true)
+      expect(/codigoHttpDeError\(/.test(cod), `${ruta} devuelve 500 crudo en un error del cliente en vez de codigoHttpDeError`).toBe(true)
     }
+    // El nivel con CHECK es exclusivo de las rutas de tareas.
+    for (const ruta of ['src/app/api/tasks/route.ts', 'src/app/api/tasks/[id]/route.ts'])
+      expect(/nivelTarea\(/.test(leerCodigo(ruta)), `${ruta} no normaliza el nivel: un «urgente» dará un 500 del CHECK`).toBe(true)
     const au = leerCodigo('src/components/sections/AutomatizacionesSection.tsx')
     expect(/al sincronizar emails/.test(au),
       'el texto vuelve a prometer que el motor corre al sincronizar: el sync manual NO lo ejecuta').toBe(false)
