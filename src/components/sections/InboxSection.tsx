@@ -515,7 +515,11 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
             const carpetas = [
               {id:'Todos', label:'Bandeja unificada', n:activeMsgs.length, c:'#FFFFFF', ic:'inbox'},
               {id:'Sin leer', label:'Sin leer', n:unread, c:BLU, ic:'mail'},
-              {id:'Urgente', label:'Prioridad', n:urgent, c:AMBAR, ic:'zap'},
+              // «Urgente», como su chip del móvil — se llamaba «Prioridad», el
+              // MISMO rótulo, icono y color que la tarjeta de estado de arriba,
+              // que mide otra cosa (alta+urgente): dos números distintos con la
+              // misma cara en la misma pantalla se leen como un fallo.
+              {id:'Urgente', label:'Urgente', n:urgent, c:AMBAR, ic:'zap'},
               {id:'Personas', label:'Personas', n:dePersonas, c:'#5EEAD4', ic:'user-check'},
               {id:'Clientes', label:'Clientes', n:fromClients, c:AMBAR, ic:'user'},
               {id:'Interno', label:'Equipo', n:internal, c:'#A78BFA', ic:'users'},
@@ -610,10 +614,16 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
         {/* Tarjetas de estado (estilo referencia) */}
         {!isMobile && !selected && filter!=='Calendar' && (
           <div className="flex gap-3 px-6 py-3.5 flex-shrink-0" style={{borderBottom:`1px solid ${BORDER}`}}>
+            {/* Las cuatro miden lo mismo: LO NO LEÍDO que está activo. Prioridad
+                contaba sobre allMsgs —un urgente ARCHIVADO seguía sumando en un
+                número que pide atención— y Colaboraciones contaba el total del
+                buzón entre tres vecinas que contaban no leídos: 21, 14, 58, 7
+                con tres bases distintas no es una fila de estado, es una
+                adivinanza. */}
             {[
               {n:unread, l:'Sin leer', c:unread>0?'#e2b877':'#FFFFFF', ic:'mail'},
-              {n:allMsgs.filter((m:any)=>m.ai_urgency==='high'||m.ai_urgency==='urgent').filter((m:any)=>!m.is_read).length, l:'Prioridad', c:AMBAR, ic:'zap'},
-              {n:colabsGmailCount, l:'Colaboraciones', c:GRN, ic:'users-2'},
+              {n:activeMsgs.filter((m:any)=>(m.ai_urgency==='high'||m.ai_urgency==='urgent')&&!m.is_read).length, l:'Prioridad', c:AMBAR, ic:'zap'},
+              {n:colabsGmailUnread, l:'Colaboraciones', c:GRN, ic:'users-2'},
               {n:urgent, l:'Urgentes', c:urgent>0?RED:'#FFFFFF', ic:'alert-circle'},
             ].map((s,i)=>(
               <div key={i} className="flex-1 flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl" style={{background:'rgba(255,255,255,0.025)',border:`1px solid rgba(255,255,255,0.05)`}}>
