@@ -1,5 +1,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendPushToUser } from '@/lib/push'
+import { sinControl } from '@/components/shared/helpers'
+import { codigoHttpDeError } from '@/lib/respuestaDb'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Lecturas grandes de bandeja + envio de push: el default de Vercel se queda corto.
@@ -95,15 +97,15 @@ export async function POST(request: NextRequest) {
     // podias leer sus DM con un tercero.
     from_user_id: user.id,
     from_name: fromName,
-    subject: subject || '(sin asunto)',
-    body_preview: body.slice(0, 500),
+    subject: sinControl(subject) || '(sin asunto)',
+    body_preview: sinControl(body.slice(0, 500)),
     ai_urgency: 'normal',
     is_read: false,
     is_unread: true,
     received_at: new Date().toISOString(),
   }).select().single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: error.message }, { status: codigoHttpDeError(error) })
 
   // Notificación push al destinatario del mensaje interno.
   //

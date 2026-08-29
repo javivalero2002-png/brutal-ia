@@ -9,6 +9,31 @@ import { acquireLock, releaseLock } from '@/lib/jobLock'
 import { esTokenMuerto, esConexionRota, avisarConexionCaida } from '@/lib/gmailAuth'
 import { getEmailsWithRefreshToken, getGmailAccountEmail } from '@/lib/gmail'
 import { analyzeEmail, EmailAnalysis, plazoRestante, MINIMO_UTIL_MS } from '@/lib/ai'
+
+/**
+ * Los campos ai_* de un análisis, o todo null si el análisis es DEGRADADO.
+ *
+ * analyzeEmail NUNCA devuelve null: en fallo (401/429/timeout) devuelve un objeto
+ * `degraded` cuyo `summary` es el ASUNTO. Los dos inserts del sync escribían
+ * `ai_summary: analysis?.summary ?? null`, y como el objeto no es null el
+ * `?? null` no disparaba: se guardaba el asunto como resumen y «Revisar email»
+ * como acción. En pantalla, para CADA correo de una caída del modelo, salían A LA
+ * VEZ el aviso «La IA no pudo analizarlo» Y el panel «BRUTAL.IA — ANÁLISIS» con
+ * una acción sugerida falsa. El `?? null` era correcto cuando analyzeEmail
+ * devolvía null y quedó obsoleto al pasar a devolver `degraded`. Sus gemelos
+ * —reanalizar y rescatarAplazados— sí bloquean el degradado; estos dos no.
+ * (Se conserva ai_estado='fallo', que pinta «no pudo analizarlo» con su botón de
+ * reanalizar: honesto y sin auto-reintentar contra un modelo aún caído.)
+ */
+function camposDeAnalisis(a: EmailAnalysis | null) {
+  const bueno = a && !a.degraded ? a : null
+  return {
+    ai_summary: bueno?.summary ?? null,
+    ai_action: bueno?.action ?? null,
+    ai_client: bueno?.client ?? null,
+    ai_urgency: bueno?.urgency ?? null,
+  }
+}
 import { sendPushToAll, sendPushToUser, canSendPush } from '@/lib/push'
 import { localDayKey } from '@/components/shared/helpers'
 
@@ -272,13 +297,11 @@ async function syncColabsInboxSinCerrojo(
       from_email: email.from_email,
       subject: email.subject,
       body_preview: email.body_preview,
-      // NULL, no un resumen inventado: el fallback sacaba el correo del filtro
-      // de Clientes y del contador de Prioridad, y encima hacía que la pantalla
-      // pintara un panel «BRUTAL.IA — ANÁLISIS» sobre algo que la IA no vio.
-      ai_summary: analysis?.summary ?? null,
-      ai_action: analysis?.action ?? null,
-      ai_client: analysis?.client ?? null,
-      ai_urgency: analysis?.urgency ?? null,
+      // NULL, no un resumen inventado, cuando la IA no vio el correo (degradado):
+      // el fallback sacaba el correo del filtro de Clientes y del contador de
+      // Prioridad, y hacía que la pantalla pintara un panel «BRUTAL.IA — ANÁLISIS»
+      // sobre algo que la IA no vio. Ver camposDeAnalisis.
+      ...camposDeAnalisis(analysis),
       ai_estado: estado,
       ai_motivo: analizar ? null : motivo,
       is_read: !email.is_unread,
@@ -616,13 +639,11 @@ async function syncPersonalInboxSinCerrojo(
       from_email: email.from_email,
       subject: email.subject,
       body_preview: email.body_preview,
-      // NULL, no un resumen inventado: el fallback sacaba el correo del filtro
-      // de Clientes y del contador de Prioridad, y encima hacía que la pantalla
-      // pintara un panel «BRUTAL.IA — ANÁLISIS» sobre algo que la IA no vio.
-      ai_summary: analysis?.summary ?? null,
-      ai_action: analysis?.action ?? null,
-      ai_client: analysis?.client ?? null,
-      ai_urgency: analysis?.urgency ?? null,
+      // NULL, no un resumen inventado, cuando la IA no vio el correo (degradado):
+      // el fallback sacaba el correo del filtro de Clientes y del contador de
+      // Prioridad, y hacía que la pantalla pintara un panel «BRUTAL.IA — ANÁLISIS»
+      // sobre algo que la IA no vio. Ver camposDeAnalisis.
+      ...camposDeAnalisis(analysis),
       ai_estado: estado,
       ai_motivo: analizar ? null : motivo,
       is_read: !email.is_unread,

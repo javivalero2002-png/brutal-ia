@@ -1,4 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { sinControl } from '@/components/shared/helpers'
+import { codigoHttpDeError } from '@/lib/respuestaDb'
 import { NextResponse } from 'next/server'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -47,10 +49,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const admin = await createAdminClient()
   const { data, error } = await admin
     .from('client_comments')
-    .insert({ client_id: id, profile_id: user.id, body: body.trim() })
+    .insert({ client_id: id, profile_id: user.id, body: sinControl(body.trim()) })
     .select('*, profile:profiles(name, initials, avatar_color)')
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: error.message }, { status: codigoHttpDeError(error) })
   return NextResponse.json(data)
 }

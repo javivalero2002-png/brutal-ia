@@ -1,4 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { sinControl } from '@/components/shared/helpers'
+import { codigoHttpDeError } from '@/lib/respuestaDb'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Solo columnas conocidas: campos desconocidos no deben tumbar la petición
@@ -22,7 +24,12 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await request.json()
   const admin = await createAdminClient()
-  const { data, error } = await admin.from('memoria').insert({ ...pick(body, ['title','category','content','client_id','source']), created_by: user.id }).select('*, client:clients(id,name,initials,color)').single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // Memoria es JUSTO la sección de pegar texto de PDFs/Word: un byte nulo en
+  // title/content tumbaba el insert con un 500 crudo. Mismo saneo que tasks.
+  const campos: any = { ...pick(body, ['title','category','content','client_id','source']), created_by: user.id }
+  if ('title' in campos) campos.title = sinControl(campos.title)
+  if ('content' in campos) campos.content = sinControl(campos.content)
+  const { data, error } = await admin.from('memoria').insert(campos).select('*, client:clients(id,name,initials,color)').single()
+  if (error) return NextResponse.json({ error: error.message }, { status: codigoHttpDeError(error) })
   return NextResponse.json(data)
 }

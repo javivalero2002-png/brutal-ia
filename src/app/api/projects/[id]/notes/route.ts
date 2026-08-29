@@ -1,4 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { sinControl } from '@/components/shared/helpers'
+import { codigoHttpDeError } from '@/lib/respuestaDb'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -45,11 +47,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const { data, error } = await admin
     .from('project_notes')
-    .insert({ project_id: id, user_id: user.id, user_name: profile?.name || 'Usuario', content: content.trim() })
+    // sinControl: content?.trim() no quita el byte nulo (no es whitespace) y
+    // tumbaba el insert con un 500 al pegar de un PDF.
+    .insert({ project_id: id, user_id: user.id, user_name: profile?.name || 'Usuario', content: sinControl(content.trim()) })
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: error.message }, { status: codigoHttpDeError(error) })
   return NextResponse.json(data)
 }
 

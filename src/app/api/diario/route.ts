@@ -1,6 +1,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { instanteEnMadrid } from '@/lib/horaMadrid'
-import { todayKey, localDayKey, ventanaDelDia, esTareaDe, diarioTieneAlgo } from '@/components/shared/helpers'
+import { todayKey, localDayKey, ventanaDelDia, esTareaDe, diarioTieneAlgo, sinControl } from '@/components/shared/helpers'
+import { codigoHttpDeError } from '@/lib/respuestaDb'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Solo columnas conocidas. Misma razón que en el resto de rutas: impide que un
@@ -82,6 +83,10 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}))
   const campos = pick(body, ['entrada', 'cierre', 'animo']) as { entrada?: string; cierre?: string; animo?: string }
+  // entrada/cierre son texto libre del balance del día: un byte nulo pegado
+  // tumbaba el upsert con un 500 y se perdía el cierre. `animo` ya se valida abajo.
+  if ('entrada' in campos) campos.entrada = sinControl(campos.entrada) ?? undefined
+  if ('cierre' in campos) campos.cierre = sinControl(campos.cierre) ?? undefined
   // `animo` va por `pick`, o sea que puede llegar cualquier cosa. La columna tiene
   // un CHECK, así que un valor fuera de la lista NO deja un dato raro: hace rebotar
   // el upsert entero y se pierde el cierre del día. Es el mismo fallo que ya vivió
@@ -183,9 +188,10 @@ export async function POST(request: NextRequest) {
   const { data, error } = await admin
     .from('diario')
     .upsert(fila, { onConflict: 'user_id,dia' })
+    // (error mapeado a 400/500 abajo con codigoHttpDeError)
     .select('*, autor:profiles!user_id(id,name,initials,avatar_color)')
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: error.message }, { status: codigoHttpDeError(error) })
   return NextResponse.json(data)
 }
