@@ -11,11 +11,41 @@
 // un getPublicUrl() del propio Supabase, así que restringir a ese host no rompe
 // ningún flujo real.
 
+// El ÚNICO bucket donde vive contenido de usuario. Todo lo demás —`copias` (la
+// copia completa de la base), `content-covers`, `boombastic`— no debe alcanzarse
+// nunca por una URL que venga del cliente ni firmarse por el service role. Vive
+// aquí, compartido, para que los DOS chokepoints (isOwnStorageUrl y firmarUrl)
+// usen el mismo valor y no puedan volver a divergir — que es justo cómo se coló
+// la fuga: isOwnStorageUrl se fijó a este bucket y firmarUrl se quedó sin fijar.
+export const BUCKET_CONTENIDO = 'content-videos'
+
 function supabaseHost(): string | null {
   try {
     const raw = process.env.NEXT_PUBLIC_SUPABASE_URL
     return raw ? new URL(raw).host : null
   } catch { return null }
+}
+
+/**
+ * ¿Es `raw` una URL de Storage de NUESTRO Supabase que apunta a un bucket que no
+ * es el de contenido? Es lo que un cliente no debería poder guardar en una
+ * columna que luego se firma (cover_url, video_url, pdf_url, adjuntos): guardar
+ * `…/copias/AAAA-MM-DD.json.gz` ahí y leerlo firmado era la vía de exfiltración.
+ *
+ * Un enlace EXTERNO (YouTube/Instagram en video_url) NO es de nuestro storage y
+ * da `false` — se admite tal cual, como siempre. Solo caza lo que es
+ * inequívocamente una URL de storage nuestra hacia otro bucket.
+ */
+export function esStorageDeOtroBucket(raw: unknown): boolean {
+  if (typeof raw !== 'string' || !raw) return false
+  const host = supabaseHost()
+  if (!host) return false
+  try {
+    const u = new URL(raw)
+    if (u.host !== host) return false
+    const m = u.pathname.match(/^\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\//)
+    return !!m && m[1] !== BUCKET_CONTENIDO
+  } catch { return false }
 }
 
 /** true si la URL es https y apunta al host de Supabase del proyecto. */
@@ -52,5 +82,5 @@ export function isOwnStorageUrl(raw: unknown): raw is string {
   // `content-videos` es el unico bucket donde vive contenido de usuario. Los tres
   // sitios que usan esta funcion —el visor de archivos, el analisis de PDF y el de
   // documentos— solo tienen que alcanzar ese.
-  return /^\/storage\/v1\/object\/(public|sign)\/content-videos\//.test(u.pathname)
+  return new RegExp(`^/storage/v1/object/(public|sign)/${BUCKET_CONTENIDO}/`).test(u.pathname)
 }

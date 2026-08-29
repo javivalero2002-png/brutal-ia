@@ -2262,6 +2262,26 @@ describe('nada del Storage sale sin firmar', () => {
       .toEqual([])
   })
 
+  it('firmarUrl fija el bucket ANTES de firmar: no firma copias ni ningun otro', () => {
+    // EL CHOKEPOINT. firmarUrl firma con el service role, que se salta que el
+    // bucket sea privado. Sin fijar el bucket, un identificador guardado a
+    // `copias` (la copia entera de la base) se convertia en una URL firmada de
+    // 12h — la misma fuga que isOwnStorageUrl ya cerraba, viva en el otro
+    // chokepoint. La guarda tiene que estar Y tiene que ir ANTES del
+    // createSignedUrl, o no protege nada.
+    const C = leerCodigo('src/lib/storageFirmado.ts')
+    // El patron de la COMPARACION, no el token suelto (el import tambien lo lleva).
+    const guarda = C.search(/r\.bucket\s*!==\s*BUCKET_CONTENIDO/)
+    const firma = C.indexOf('createSignedUrl')
+    expect(guarda, 'firmarUrl ya no comprueba el bucket contra BUCKET_CONTENIDO: vuelve la fuga del backup').toBeGreaterThan(-1)
+    expect(firma, 'no encuentro createSignedUrl en firmarUrl').toBeGreaterThan(-1)
+    expect(guarda, 'la comprobacion del bucket debe ir ANTES de firmar').toBeLessThan(firma)
+    // Y el bucket permitido vive COMPARTIDO en safeFetch (no un literal duplicado),
+    // que es lo que impide que los dos chokepoints vuelvan a divergir.
+    expect(/export const BUCKET_CONTENIDO/.test(leerCodigo('src/lib/safeFetch.ts')),
+      'BUCKET_CONTENIDO debe declararse una vez en safeFetch y compartirse').toBe(true)
+  })
+
   it('lo que se firma es lo que la consulta trae', () => {
     // El gemelo del anterior, y ya mordio en la pantalla de revision: `firmarCampos`
     // pedia `cover_url` y el `select` no la traia, asi que se firmaba una columna

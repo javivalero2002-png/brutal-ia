@@ -1,5 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { firmarCampos } from '@/lib/storageFirmado'
+import { esStorageDeOtroBucket } from '@/lib/safeFetch'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Solo columnas conocidas: campos desconocidos no deben tumbar la petición
@@ -26,6 +27,9 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const admin = await createAdminClient()
   const payload: any = { ...pick(body, ['title','platform','content_type','status','publish_date','publish_time','notes','client_id','account_name','video_url','carpeta']), created_by: user.id }
+  // video_url sale firmado por el GET y por /api/review (público): no se guarda un
+  // identificador a otro bucket. Los enlaces externos (YouTube) pasan.
+  if (esStorageDeOtroBucket(payload.video_url)) return NextResponse.json({ error: 'URL de almacenamiento no permitida' }, { status: 400 })
   let { data, error } = await admin.from('content_agenda').insert(payload).select('*, client:clients(id,name,initials,color)').single()
   // Si la BD aún no tiene las columnas nuevas (migración pendiente), reintentar sin ellas
   if (error && /account_name|video_url/.test(error.message)) {

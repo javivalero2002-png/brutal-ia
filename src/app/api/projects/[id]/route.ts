@@ -1,6 +1,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { firmarCampos } from '@/lib/storageFirmado'
 import { getAuthCtx, projectExists } from '@/lib/authz'
+import { esStorageDeOtroBucket } from '@/lib/safeFetch'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Solo columnas conocidas: campos desconocidos no deben tumbar la petición
@@ -18,6 +19,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const body = await request.json()
   const admin = ctx.admin
+  // cover_url/pdf_url salen firmados por el GET: no se guarda un identificador a
+  // otro bucket (copias). Defensa en profundidad del pin de firmarUrl.
+  if (esStorageDeOtroBucket(body?.cover_url) || esStorageDeOtroBucket(body?.pdf_url))
+    return NextResponse.json({ error: 'URL de almacenamiento no permitida' }, { status: 400 })
   const { data, error } = await admin
     .from('projects').update({ ...pick(body, ['name','client_id','status','progress','deadline','color','cover_url','pdf_url','pdf_analysis','carpeta']), updated_at: new Date().toISOString() })
     .eq('id', id).select('*, client:clients(id,name,initials,color)').single()
