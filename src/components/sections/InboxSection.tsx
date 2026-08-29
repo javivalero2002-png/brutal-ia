@@ -239,6 +239,16 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
   const unread = activeMsgs.filter(m=>!m.is_read).length
   const urgent = activeMsgs.filter(m=>m.ai_urgency==='urgent'&&!m.is_read).length
   const internal = activeMsgs.filter(m=>m.source==='internal'&&!m.is_read).length
+  // Lo escrito por humanos: el equipo (DMs), WhatsApp y el gmail que no venga
+  // de una máquina. Medido contra el buzón real: el 49% es noreply y
+  // notificaciones — este es el filtro que lo aparta de golpe.
+  const esDePersona = (m: any) => m.source !== 'gmail' || !esNoReply(m.from_email)
+  const dePersonas = activeMsgs.filter(esDePersona).length
+  // Las vistas que mezclan orígenes enseñan la chapa de procedencia (COLABS,
+  // Gmail, WhatsApp, DM) en cada fila. La condición estaba escrita CUATRO veces
+  // idénticas — el gemelo de manual: añadir una vista nueva obligaba a acordarse
+  // de las cuatro copias.
+  const vistaMezclada = filter==='Todos'||filter==='Sin leer'||filter==='Urgente'||filter==='Personas'
   // UN CLIENTE ES UNO DE LA TABLA `clients`, no lo que el modelo haya escrito.
   //
   // Javi: «los clientes los revisa mal, saca clientes de donde no son». Tenia 57
@@ -272,6 +282,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
         if (filter==='Todos') return true
         if (filter==='Sin leer') return !m.is_read
         if (filter==='Urgente') return m.ai_urgency==='urgent'
+        if (filter==='Personas') return esDePersona(m)
         if (filter==='Clientes') return esDeCliente(m)
         if (filter==='Interno') return m.source==='internal'
         if (filter==='Personal') return m.source==='gmail'&&!m.shared
@@ -419,6 +430,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
     {id:'Todos', label:'Todos', n: activeMsgs.length, accent:'#FFFFFF'},
     {id:'Sin leer', label:'Sin leer', n: unread, accent: BLU},
     {id:'Urgente', label:'Urgente', n: activeMsgs.filter((m:any)=>m.ai_urgency==='urgent').length, accent: RED},
+    {id:'Personas', label:'Personas', n: dePersonas, accent:'#5EEAD4'},
     // UN CHIP POR BUZON REAL. Esta es la unica forma de elegir cuenta en MOVIL:
     // la columna de la izquierda con las cuentas es solo de escritorio, y la
     // pantalla que hacia de selector se ha quitado —Javi: «no queda bien y no es
@@ -504,6 +516,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
               {id:'Todos', label:'Bandeja unificada', n:activeMsgs.length, c:'#FFFFFF', ic:'inbox'},
               {id:'Sin leer', label:'Sin leer', n:unread, c:BLU, ic:'mail'},
               {id:'Urgente', label:'Prioridad', n:urgent, c:AMBAR, ic:'zap'},
+              {id:'Personas', label:'Personas', n:dePersonas, c:'#5EEAD4', ic:'user-check'},
               {id:'Clientes', label:'Clientes', n:fromClients, c:AMBAR, ic:'user'},
               {id:'Interno', label:'Equipo', n:internal, c:'#A78BFA', ic:'users'},
               {id:'Archivados', label:'Archivados', n:archivedCount, c:'#FFFFFF', ic:'archive'},
@@ -548,10 +561,10 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                 {filter==='WhatsApp' && <svg viewBox="0 0 24 24" width={18} height={18} fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>}
                 {filter==='Calendar' && <svg viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="#A78BFA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>}
                 {filter==='Interno' && <LucideIcon name="users-2" size={18} color="rgba(167,139,250,0.8)"/>}
-                {(filter==='Todos'||filter==='Sin leer'||filter==='Urgente'||filter==='Clientes') && <LucideIcon name="inbox" size={18} color="rgba(255,255,255,0.5)"/>}
+                {(filter==='Todos'||filter==='Sin leer'||filter==='Urgente'||filter==='Personas'||filter==='Clientes') && <LucideIcon name="inbox" size={18} color="rgba(255,255,255,0.5)"/>}
                 <div className="flex-1 min-w-0">
                   <h1 className="font-figtree text-[20px] font-black text-white leading-none truncate" style={{letterSpacing:'-0.03em'}}>
-                    {filter.startsWith('cuenta:')?filter.slice(7):filter==='Personal'?'Gmail Personal':filter==='Colabs'?'Colaboraciones':filter==='Gmail'?'Gmail':filter==='WhatsApp'?'WhatsApp':filter==='Calendar'?'Calendario':filter==='Interno'?'Equipo':filter==='Urgente'?'Urgentes':filter==='Sin leer'?'Sin leer':filter==='Clientes'?'Clientes':'Todos'}
+                    {filter.startsWith('cuenta:')?filter.slice(7):filter==='Personal'?'Gmail Personal':filter==='Colabs'?'Colaboraciones':filter==='Gmail'?'Gmail':filter==='WhatsApp'?'WhatsApp':filter==='Calendar'?'Calendario':filter==='Interno'?'Equipo':filter==='Urgente'?'Urgentes':filter==='Personas'?'Personas':filter==='Sin leer'?'Sin leer':filter==='Clientes'?'Clientes':'Todos'}
                   </h1>
                   {filter==='Personal' && profile?.gmail_account && (
                     <div className="font-syne text-[7.5px] truncate mt-0.5" style={{color:'rgba(255,255,255,0.22)'}}>{profile.gmail_account}</div>
@@ -848,10 +861,10 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 mb-0.5">
                               <span className="font-syne text-[9px] font-black truncate flex-1" style={{color:isUnread?'rgba(255,255,255,0.88)':'rgba(255,255,255,0.32)'}}>{m.from_name||'Desconocido'}</span>
-                              {(filter==='Todos'||filter==='Sin leer'||filter==='Urgente') && isColabs && <span className="font-syne text-[6px] font-black px-1 py-0.5 rounded-full flex-shrink-0" style={{background:`${GRN}14`,color:GRN}}>COLABS</span>}
-                              {(filter==='Todos'||filter==='Sin leer'||filter==='Urgente') && isGmail && !isColabs && <svg viewBox="0 0 24 24" width={9} height={9} className="flex-shrink-0"><path fill="#EA4335" d="M22.5 12.5c0-.83-.07-1.64-.2-2.42H12v4.59h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.25z"/><path fill="#4285F4" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>}
-                              {(filter==='Todos'||filter==='Sin leer'||filter==='Urgente') && isWA && <svg viewBox="0 0 24 24" width={9} height={9} fill="#25D366" className="flex-shrink-0"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>}
-                              {(filter==='Todos'||filter==='Sin leer'||filter==='Urgente') && isInternal && <span className="font-syne text-[6px] font-black px-1 py-0.5 rounded flex-shrink-0" style={{background:'rgba(167,139,250,0.1)',color:'rgba(167,139,250,0.75)'}}>DM</span>}
+                              {vistaMezclada &&isColabs && <span className="font-syne text-[6px] font-black px-1 py-0.5 rounded-full flex-shrink-0" style={{background:`${GRN}14`,color:GRN}}>COLABS</span>}
+                              {vistaMezclada &&isGmail && !isColabs && <svg viewBox="0 0 24 24" width={9} height={9} className="flex-shrink-0"><path fill="#EA4335" d="M22.5 12.5c0-.83-.07-1.64-.2-2.42H12v4.59h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.25z"/><path fill="#4285F4" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>}
+                              {vistaMezclada &&isWA && <svg viewBox="0 0 24 24" width={9} height={9} fill="#25D366" className="flex-shrink-0"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>}
+                              {vistaMezclada &&isInternal && <span className="font-syne text-[6px] font-black px-1 py-0.5 rounded flex-shrink-0" style={{background:'rgba(167,139,250,0.1)',color:'rgba(167,139,250,0.75)'}}>DM</span>}
                               {isUnread && m.ai_urgency==='urgent' && <span className="font-syne text-[6px] font-black px-1 py-0.5 rounded-full flex-shrink-0" style={{background:`${RED}14`,color:RED}}>URG</span>}
                               {m.attachments?.length>0 && <LucideIcon name="paperclip" size={9} color="rgba(255,255,255,0.2)"/>}
                               <span className="font-syne text-[7.5px] flex-shrink-0" style={{color:'rgba(255,255,255,0.2)'}}>{relTime(m.received_at)}</span>

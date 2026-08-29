@@ -6,7 +6,7 @@ import { textOf } from '@/lib/aiText'
 import { leerFicha } from '@/lib/fichaEstudio'
 import { memoriaRelevante, lineasDeMemoria } from '@/lib/memoriaRelevante'
 import { anotarError } from '@/lib/errores'
-import { localDayKey } from '@/components/shared/helpers'
+import { localDayKey, esNoReply } from '@/components/shared/helpers'
 
 // Sin topes, el SDK se queda con 10 MINUTOS de timeout y 2 reintentos: quien
 // acaba cortando es la plataforma, y entonces no hay ni mensaje de error ni log —
@@ -76,6 +76,14 @@ export async function POST(request: NextRequest) {
   const veColabs = perfil?.ver_colabs !== false
   const suyo = correo.user_id === user.id || (correo.shared === true && veColabs)
   if (!suyo) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  // La UI ya no ofrece redactar a un remitente automático (el 49% del buzón es
+  // noreply/notifications), pero la API es la barrera, no el botón: sin esto,
+  // llamar a la ruta a mano seguiría pagando una llamada al modelo por un
+  // borrador que no puede leer nadie.
+  if (esNoReply(correo.from_email)) {
+    return NextResponse.json({ error: 'Ese remitente es automático: no lee respuestas' }, { status: 422 })
+  }
 
   // ── EL CONTEXTO ─────────────────────────────────────────────────────────
   // Lo mismo que ven las otras dos IAs, más una cosa que solo tiene sentido
