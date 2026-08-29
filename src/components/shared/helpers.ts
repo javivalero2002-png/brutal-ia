@@ -582,3 +582,20 @@ export const esNoReply = (email: string | null | undefined): boolean => {
   return /no[-_.]?reply|no[-_.]?responder|do[-_.]?not[-_.]?reply|mailer[-_.]?daemon/.test(local)
     || /^(notifications?|bounces?|reminders?)$/.test(local)
 }
+
+/**
+ * Quita los caracteres de control que Postgres no puede almacenar en `text`.
+ *
+ * El byte NULO (U+0000) es el que muerde: un insert con un nulo dentro rebota
+ * con «unsupported Unicode escape sequence» —un 500 crudo— y llega más de lo que
+ * parece, al pegar texto copiado de un PDF o de ciertas apps de Windows. `ai.ts`
+ * ya tenía este saneo para no romper la API de Anthropic; las rutas de escritura
+ * no lo aplicaban y un byte nulo en una nota tumbaba el guardado. Se conservan
+ * tab, salto de línea y retorno (\x09/\x0A/\x0D): son texto legítimo y Postgres
+ * los guarda sin queja (medido en la prueba de estrés).
+ */
+export const sinControl = (s: string | null | undefined): string | null | undefined => {
+  if (typeof s !== 'string') return s
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+}

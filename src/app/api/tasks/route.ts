@@ -1,5 +1,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { codigoHttpDeError } from '@/lib/respuestaDb'
 import { borrarFicherosDeAdjuntos } from '@/lib/taskAttachments'
+import { nivelTarea, sinControl } from '@/components/shared/helpers'
 import { NextRequest, NextResponse } from 'next/server'
 import { sendPushToUser } from '@/lib/push'
 
@@ -40,6 +42,14 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
 
   const fields: any = { ...pick(body, ['text','level','done','due_date','project_id','client_id','assigned_to','co_assigned_to','source','notes','diario_dia','diario_objetivo']), created_by: user.id }
+  // `level` a la frontera: la columna tiene CHECK y el insert rebotaba con un 500
+  // crudo ante un «urgente» en español —la misma trampa que tasks.level ya avisa
+  // en otros sitios—. nivelTarea lo normaliza; si no venía, no se toca.
+  if ('level' in fields) fields.level = nivelTarea(fields.level)
+  // Un byte nulo en text/notes (pegar de un PDF) tumbaba el insert con 500. Ver
+  // sinControl: mismo saneo que ai.ts, ahora también en la escritura.
+  if ('text' in fields) fields.text = sinControl(fields.text)
+  if ('notes' in fields) fields.notes = sinControl(fields.notes)
   // `diario_dia` lo escribe el CLIENTE, así que se valida la forma antes de que
   // llegue a una columna por la que luego se filtra. Cualquier cosa que no sea
   // una clave de día se descarta entera, con su objetivo: las dos van juntas o
@@ -62,7 +72,10 @@ export async function POST(request: NextRequest) {
     ;({ data, error } = await admin.from('tasks').insert(rest).select(SELECT).single())
   }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // 400 si la culpa es del cliente (FK inexistente, CHECK, byte nulo), 500 si es
+  // nuestra. Ver codigoHttpDeError: un 500 debe seguir significando «se rompió
+  // algo nuestro».
+  if (error) return NextResponse.json({ error: error.message }, { status: codigoHttpDeError(error) })
 
   // Notificación push al asignado (si no es quien la crea).
   //

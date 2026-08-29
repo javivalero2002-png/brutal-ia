@@ -1,4 +1,5 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { codigoHttpDeError } from '@/lib/respuestaDb'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Solo columnas conocidas: campos desconocidos no deben tumbar la petición
@@ -62,6 +63,7 @@ export async function POST(request: NextRequest) {
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // 400 si la culpa es del cliente (un status fuera del CHECK, p. ej.), 500 si es nuestra.
+  if (error) return NextResponse.json({ error: error.message }, { status: codigoHttpDeError(error) })
   return NextResponse.json(data)
 }
