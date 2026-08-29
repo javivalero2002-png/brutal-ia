@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
-import { leerLatidos, marcarLatido } from '@/lib/reglaRows'
+import { leerLatidos, marcarLatido, AVISADO_ROW } from '@/lib/reglaRows'
 import { CADENCIA, seHaPasado } from '@/lib/cadencia'
 import { sendPushToUser } from '@/lib/push'
 import { NextRequest, NextResponse } from 'next/server'
@@ -24,8 +24,9 @@ export const maxDuration = 60
 // que vive dentro de la casa no avisa de que la casa se ha caído.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Dónde se apunta a quién ya se ha avisado, para no repetirlo cada hora. */
-const AVISADO_ROW = '__vigilante_avisado__'
+// AVISADO_ROW vive en reglaRows.ts (con las otras filas-que-no-son-reglas) para
+// estar en NON_RULE_ROWS: como constante local aquí se colaba en la lista de
+// Automatizaciones como una tarjeta fantasma tras el primer cron caído.
 
 /**
  * Cada cuánto se puede repetir el aviso de la MISMA avería, en horas.

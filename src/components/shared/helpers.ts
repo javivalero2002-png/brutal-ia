@@ -49,6 +49,18 @@ export const daysBetweenKeys = (desde: string, hasta: string): number =>
 export const madridHour = (): number =>
   Number(new Date().toLocaleString('en-US', { timeZone: 'Europe/Madrid', hour: 'numeric', hour12: false }))
 
+// Hora y minuto de UN instante cualquiera en Madrid, para pintar y clasificar
+// jornadas. Sin esto, un `new Date(iso).getHours()` da la hora de QUIEN MIRA: un
+// fichaje de las 10:00 de Madrid, visto desde un rodaje en UTC+3, salía marcado
+// «ENTRÓ TARDE» y con la barra corrida — la misma trampa que ya se arregló en el
+// Calendario. En-GB con hour12:false da 00–23 (y 24 en medianoche, que se dobla a 0).
+export const horaMinutoMadrid = (iso: string): { h: number; m: number } => {
+  const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date(iso))
+  const h = Number(p.find(x => x.type === 'hour')?.value ?? 0)
+  const m = Number(p.find(x => x.type === 'minute')?.value ?? 0)
+  return { h: h === 24 ? 0 : h, m }
+}
+
 // Fecha larga en español, fijada a Madrid para que servidor y cliente coincidan.
 export const madridDateLabel = (opts: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' }): string =>
   new Date().toLocaleDateString('es-ES', { timeZone: 'Europe/Madrid', ...opts })

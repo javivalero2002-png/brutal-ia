@@ -49,7 +49,13 @@ export function parsearAccionHarvey(respuesta: string): { texto: string; accion:
   // detecta exige al menos un carácter tras los dos puntos (`+`), así que un
   // `[ACCION:]` vacío no casaba y —en el código original, que salía aquí— se
   // quedaba dentro del texto. Eso el TTS lo lee: «corchete ACCION dos puntos».
-  const texto = respuesta.replace(TODAS, '').trim()
+  // Y un fragmento de etiqueta ABIERTA al final: si la respuesta agota max_tokens
+  // y el corte cae DENTRO del [ACCION:...] (que va en la última línea), queda
+  // «[ACCION:tarea|Llamar a Nocilla» sin `]`. TODAS exige cierre y no lo casa, así
+  // que sin esta segunda pasada se quedaba en el texto y el TTS lo leía en voz alta
+  // —justo lo que este módulo promete que no pasa—. El aviso de truncado que añade
+  // el servidor ya cubre que la acción no se creó; esto solo quita el ruido.
+  const texto = respuesta.replace(TODAS, '').replace(/\[ACCION:[^\]]*$/, '').trim()
 
   const m = respuesta.match(ETIQUETA)
   if (!m) return { texto, accion: null }

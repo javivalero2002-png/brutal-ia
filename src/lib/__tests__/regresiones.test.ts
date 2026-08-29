@@ -2282,6 +2282,22 @@ describe('nada del Storage sale sin firmar', () => {
       'BUCKET_CONTENIDO debe declararse una vez en safeFetch y compartirse').toBe(true)
   })
 
+  it('toda fila especial de reglaRows está en NON_RULE_ROWS', async () => {
+    // La tabla `reglas` guarda filas que NO son automatizaciones (push, logo,
+    // latido, prefs, el aviso del vigilante). Cada una que se olvide en
+    // NON_RULE_ROWS se cuela como tarjeta fantasma en Automatizaciones e infla el
+    // contador «DE N ACTIVAS» — pasó con el logo y volvió a pasar con
+    // __vigilante_avisado__. Esta regla exige que cada `*_ROW` declarado esté en
+    // la lista, se declare donde se declare.
+    const src = leerCodigo('src/lib/reglaRows.ts')
+    const declarados = [...src.matchAll(/export const \w*_ROW\s*=\s*'([^']+)'/g)].map(m => m[1])
+    expect(declarados.length, 'no encuentro las filas especiales *_ROW en reglaRows').toBeGreaterThanOrEqual(5)
+    const { NON_RULE_ROWS } = await import('@/lib/reglaRows')
+    for (const nombre of declarados)
+      expect((NON_RULE_ROWS as readonly string[]).includes(nombre),
+        `«${nombre}» es una fila especial pero NO está en NON_RULE_ROWS: saldrá como regla fantasma`).toBe(true)
+  })
+
   it('el sync no persiste un análisis degradado como si fuera real', () => {
     // analyzeEmail devuelve un objeto `degraded` (summary=asunto) en fallo, no
     // null. Escribir `ai_summary: analysis?.summary` lo persistía como análisis
