@@ -196,7 +196,10 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
               </button>
             ))}
           </div>
-          {!isMobile && <button onClick={()=>{
+          {/* En móvil también, solo que sin rótulo — como el de + DOCUMENTO de al
+              lado. Estaba gateado con !isMobile y exportar la memoria era la única
+              función de la sección que exigía sentarse ante un ordenador. */}
+          <button onClick={()=>{
             const md = data.memoria.map((m: any)=>`# ${m.title}\n**Categoría:** ${m.category}\n**Fecha:** ${m.created_at?localDayKey(m.created_at):''}\n\n${m.content}`).join('\n\n---\n\n')
             const blob = new Blob([md], {type:'text/markdown'})
             const a = document.createElement('a')
@@ -208,10 +211,10 @@ export default function MemoriaSection({data,memFilter,setMemFilter,onOpenModal,
             // plural entero: con una sola entrada el aviso decia "1 entradas
             // exportadas".
             showToast(plural(data.memoria.length,'entrada exportada','entradas exportadas'))
-          }} className="flex items-center gap-2 px-4 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.35)'}} title="Exportar como Markdown">
+          }} className="flex items-center gap-2 px-4 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest" style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.35)'}} title="Exportar como Markdown" aria-label="Exportar como Markdown">
             <LucideIcon name="download" size={13} color="rgba(255,255,255,0.35)"/>
-            <span>MD</span>
-          </button>}
+            {!isMobile && <span>MD</span>}
+          </button>
           <input ref={docInputRef} type="file" accept="application/pdf" className="hidden" onChange={e=>{const f=e.target.files?.[0]; if(f) uploadDoc(f); e.target.value=''}}/>
           <button onClick={()=>docInputRef.current?.click()} disabled={uploadingDoc} className="flex items-center gap-2 px-4 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest disabled:opacity-50" style={{background:'rgba(27,95,250,0.08)',border:`1px solid rgba(27,95,250,0.2)`,color:BLU}} title="Sube un PDF: la IA lo resume y lo guarda en la memoria">
             {uploadingDoc ? <><div className="w-3.5 h-3.5 border-2 rounded-full animate-spin" style={{borderColor:'rgba(27,95,250,0.3)',borderTopColor:BLU}}/>{!isMobile && <span>SUBIENDO…</span>}</> : <><LucideIcon name="upload" size={13} color={BLU}/>{!isMobile && <span>+ DOCUMENTO</span>}</>}
