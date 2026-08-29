@@ -336,26 +336,26 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
         // vuelve a leer el PDF.
         const a = j.analysis
         const proy = data.projects?.find((p: Project) => p.id === pid)
-        const ficha = [
-          a.data?.client ? `Cliente: ${a.data.client}` : '',
-          a.data?.budget ? `Presupuesto: ${a.data.budget}` : '',
-          a.data?.dates ? `Fechas: ${a.data.dates}` : '',
-          a.data?.scope ? `Alcance: ${a.data.scope}` : '',
-        ].filter(Boolean).join(' · ')
-        const puntos = (a.keyPoints || []).slice(0, 5).map((p: string) => `· ${p}`).join('\n')
-
         data.createMemoria?.({
           title: `${nombre || 'Proyecto'} — documento`,
           category: 'Documento',
           // Enlazada al cliente del proyecto: es el que ya sabemos con certeza,
           // mejor que el nombre que haya leído la IA dentro del PDF.
           ...(proy?.client_id ? { client_id: proy.client_id } : {}),
-          content: [
-            a.summary || '',
-            ficha,
-            puntos,
-            `📎 Documento: ${rutaApp('/api/archivo?u=' + encodeURIComponent(pdfUrl))}`,
-          ].filter(Boolean).join('\n\n'),
+          // El MISMO compositor que llevarAMemoria y que la subida de Memoria.
+          // Esta era la TERCERA copia y la única que tiraba `a.contenido` — el
+          // texto del documento que analyze-pdf ya pide y paga (su max_tokens
+          // subió a 4200 justo para devolverlo). La nota nacía con solo el
+          // resumen, las IAs no sabían contestar por un nombre o una cifra del
+          // contrato, y la guarda de idempotencia («Ya estaba en Memoria»)
+          // hacía la nota pobre permanente.
+          content: componerNotaDocumento({
+            resumen: a.summary,
+            datos: { Cliente: a.data?.client, Presupuesto: a.data?.budget, Fechas: a.data?.dates, Alcance: a.data?.scope },
+            puntos: a.keyPoints,
+            contenido: a.contenido,
+            enlace: rutaApp('/api/archivo?u=' + encodeURIComponent(pdfUrl)),
+          }),
         })?.catch?.(() => { /* la nota es un extra: si falla, el análisis del proyecto sigue guardado */ })
       }
     } catch { showToast('Error al analizar el PDF') }
@@ -452,7 +452,14 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
     const vigente = () => selectedProjectRef.current?.id === proyectoId
     setPdfQ(''); setPdfChat(c=>[...c,{role:'user',content:q}]); setPdfChatBusy(true)
     try {
-      const res = await fetch('/api/projects/analyze-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfUrl:pdfDoc.ident||pdfDoc.url,question:q}),signal:AbortSignal.timeout(60000)})
+      const res = await fetch('/api/projects/analyze-pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pdfUrl:pdfDoc.ident||pdfDoc.url,question:q,
+        // El HILO. La pantalla pinta la conversación entera y la ruta acepta
+        // `history` desde su primer commit, pero nadie lo mandaba nunca: cada
+        // pregunta viajaba sola y «¿y en qué moneda?» no sabía a qué se refería
+        // el «y». Tercera copia del mismo bug ya pagado en Hoy y Harvey. El rol
+        // se traduce —aquí se guarda 'ai', la API exige 'assistant'— y van los
+        // últimos 8 turnos: el PDF ya viaja entero, el hilo añade poco.
+        history:pdfChat.slice(-8).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.content}))}),signal:AbortSignal.timeout(60000)})
       const j = await res.json().catch(()=>({}))
       if (!vigente()) return
       setPdfChat(c=>[...c,{role:'ai',content: res.ok ? (j.answer||'—') : (j.error||'Error al responder')}])
@@ -760,7 +767,14 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                   // esto solo pasa donde la lista crece para siempre y se consulta
                   // en vez de tocarse.
                   const tarjeta = (p: Project) => (
-                  <div key={p.id} draggable onDragStart={()=>dragRef.current=p.id} onClick={()=>onSelect(selectedId===p.id?null:p.id)} className="rounded-xl cursor-pointer transition-all overflow-hidden" style={{background:selectedId===p.id?`rgba(27,95,250,0.06)`:SURF2,border:`1px solid ${selectedId===p.id?'rgba(27,95,250,0.35)':BORDER}`,boxShadow:selectedId===p.id?`0 0 16px ${p.color||BLU}1A`:'none'}}>
+                  <div key={p.id} draggable onDragStart={()=>dragRef.current=p.id}
+                    // Sin esto, un arrastre CANCELADO (soltar fuera, ESC) dejaba el
+                    // ref cargado para siempre: el siguiente drop de cualquier cosa
+                    // —un texto, un fichero del escritorio— movía este proyecto de
+                    // columna, o lo completaba y archivaba si caía en una carpeta.
+                    // dragend dispara siempre, también al cancelar, y DESPUÉS del
+                    // drop bueno, así que no pisa el caso que funciona.
+                    onDragEnd={()=>{dragRef.current=null}} onClick={()=>onSelect(selectedId===p.id?null:p.id)} className="rounded-xl cursor-pointer transition-all overflow-hidden" style={{background:selectedId===p.id?`rgba(27,95,250,0.06)`:SURF2,border:`1px solid ${selectedId===p.id?'rgba(27,95,250,0.35)':BORDER}`,boxShadow:selectedId===p.id?`0 0 16px ${p.color||BLU}1A`:'none'}}>
                     {p.cover_url && !brokenCovers.has(p.cover_url) ? (
                       <div className="relative w-full overflow-hidden" style={{height:'88px'}}>
                         <SafeImg src={p.cover_url} className="w-full h-full object-cover object-top" style={{filter:'brightness(0.75)'}} onErrorHide={()=>markCoverBroken(p.cover_url!)}/>
@@ -932,8 +946,14 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
               <div className={`flex items-center gap-4 py-3 transition-colors${isMobile?' px-4 flex-wrap gap-y-1.5':' px-6 py-4'}`} style={{borderLeft:`3px solid ${(()=>{
                 if (selectedId===p.id) return p.color||BLU
                 if (!p.deadline||p.deadline==='TBD'||p.status==='completado') return (p.color||BLU)+'35'
-                const dOver = !!estadoDeadline(p.deadline)?.vencido
-                const dSoon = !dOver && dlDate(p.deadline)<new Date(Date.now()+7*24*3600*1000)
+                // El MISMO cálculo que la chapa de al lado (estadoDeadline, en
+                // day keys de Madrid). Esto comparaba timestamps: a 7 días justos
+                // la chapa decía «+7d» en ámbar y el borde seguía del color
+                // normal — dos indicadores del mismo dato contradiciéndose en la
+                // misma fila, que es como se deja de confiar en los dos.
+                const dl = estadoDeadline(p.deadline)
+                const dOver = !!dl?.vencido
+                const dSoon = !dOver && !!dl?.pronto
                 return dOver ? `${RED}75` : dSoon ? 'rgba(255,176,32,0.55)' : (p.color||BLU)+'35'
               })()}`}}>
               <div className="relative flex-shrink-0">
