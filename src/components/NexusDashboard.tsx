@@ -474,6 +474,14 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
     const onPop = (e: PopStateEvent) => {
       const s = e.state?.nxSection
       if (s) {
+        // LA MISMA GUARDA QUE ESCAPE Y QUE EL CLIC EN EL FONDO. Era la tercera
+        // copia de la protección y la única sin ella: con el modal de crear
+        // abierto y campos escritos, el atrás mostraba el aviso de «usa Cancelar
+        // para descartarlos» —lo pone useBackClosable, que veta y repone la
+        // entrada del historial— y este listener, que recibe el MISMO evento
+        // justo después, cerraba el modal igual. Lo escrito, irrecuperable, con
+        // el aviso en pantalla contradiciendo lo que acababa de pasar.
+        if (modalRef.current && Object.values(mfRef.current).some(v => (v || '').trim())) return
         // El flag SOLO se arma si la sección cambia de verdad.
         //
         // Lo desarma el efecto de [section], y ese efecto no se ejecuta si el
@@ -620,6 +628,13 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
 
   const saveModal = async () => {
     setModalSaving(true)
+    // Un nombre tecleado que no casa con nada se DICE, no se descarta en
+    // silencio. «Nkie» en el campo cliente creaba el proyecto SIN cliente y el
+    // toast decía «Proyecto creado» tan tranquilo: luego no salía al filtrar por
+    // cliente y nadie sabía por qué. El aviso va en el mismo toast del éxito —lo
+    // creado se crea igual, que es lo que el usuario quería— pero se entera.
+    const sinCasar = (texto: string | undefined, encontrado: unknown, tipo: string) =>
+      texto?.trim() && !encontrado ? ` · ojo: no encontré ${tipo} «${texto.trim()}» — quedó sin ${tipo}` : ''
     try {
       if (modal === 'cliente') {
         if (!mf.name?.trim()) { showToast('Escribe el nombre del cliente'); return }
@@ -634,7 +649,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
         const color = client?.color || ACCENT_COLORS[data.projects.length % ACCENT_COLORS.length]
         const projStatus = (mf.estado || 'activo') as 'plan.'|'activo'|'urgente'|'revisión'|'completado'
         const createdProj = await data.createProject({ name:mf.nombre.trim(), client_id:client?.id, status:projStatus, progress:0, deadline:mf.deadline||'TBD', color })
-        showToast('Proyecto creado: '+mf.nombre)
+        showToast('Proyecto creado: ' + mf.nombre + sinCasar(mf.cliente, client, 'el cliente'))
         if (createdProj?.id) { setSelectedProject(createdProj.id); setJustCreatedProjId(createdProj.id); setProjView('list'); setSection('proyectos') }
       } else if (modal === 'tarea') {
         if (!mf.text?.trim()) { showToast('Escribe la tarea'); return }
@@ -647,7 +662,8 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
           ? data.projects.find((p: Project) => p.name.toLowerCase().includes(mf.proyecto.toLowerCase()) || mf.proyecto.toLowerCase().includes(p.name.toLowerCase().split(' ')[0]))
           : null
         await data.createTask({ text:mf.text.trim(), level, assigned_to:assignee?.id, source:'manual', due_date:mf.due_date?.trim()||undefined, client_id:taskClient?.id, project_id:taskProject?.id })
-        showToast('Tarea creada' + (taskProject ? ` · ${taskProject.name}` : taskClient ? ` · ${taskClient.name}` : ''))
+        showToast('Tarea creada' + (taskProject ? ` · ${taskProject.name}` : taskClient ? ` · ${taskClient.name}` : '')
+          + sinCasar(mf.cliente, taskClient, 'el cliente') + sinCasar(mf.proyecto, taskProject, 'el proyecto'))
       } else if (modal === 'memoria') {
         if (!mf.titulo?.trim()) { showToast('Escribe el título'); return }
         await data.createMemoria({ title:mf.titulo.trim(), category:mf.categoria||'General', content:mf.contenido||'' })
@@ -663,7 +679,11 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
         const trigClient = trigType === 'email_from_client' ? data.clients.find((c: Client) => c.id === mf.trg_client) : null
         const trigger: any = { type: trigType }
         if (trigType === 'email_from_client') { trigger.clientId = mf.trg_client; trigger.clientName = trigClient?.name }
-        if (trigType === 'project_deadline') trigger.days = Math.max(0, parseInt(mf.trg_days || '7', 10) || 7)
+        // `parseInt('0')` es 0, falsy, y el `|| 7` lo convertía en 7: pedías
+        // «avísame solo el día del deadline» y la regla se guardaba con una
+        // semana de antelación — sin edición posible después. El 7 por defecto
+        // queda reservado para «no hay número», no para el 0.
+        if (trigType === 'project_deadline') { const n = parseInt(mf.trg_days, 10); trigger.days = Number.isFinite(n) ? Math.max(0, n) : 7 }
         if (trigType === 'task_overdue') trigger.days = Math.max(0, parseInt(mf.trg_days || '0', 10) || 0)
         if (trigType === 'unread_pileup') trigger.threshold = Math.max(1, parseInt(mf.trg_threshold || '10', 10) || 10)
         if (trigType === 'many_overdue') trigger.threshold = Math.max(1, parseInt(mf.trg_threshold || '5', 10) || 5)
@@ -691,7 +711,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
           ? data.clients.find((c: Client) => c.name.toLowerCase().includes(mf.cliente.toLowerCase()) || mf.cliente.toLowerCase().includes(c.name.toLowerCase().split(' ')[0]))
           : null
         await data.createAgenda({ title:mf.titulo.trim(), platform:mf.plataforma||'Instagram', account_name:mf.cuenta?.trim()||undefined, content_type:'Post', status:(mf.estado||'borrador') as 'borrador'|'pendiente'|'listo'|'publicado', publish_date:mf.fecha, client_id:contentClient?.id })
-        showToast('Pieza añadida' + (contentClient ? ` · ${contentClient.name}` : ''))
+        showToast('Pieza añadida' + (contentClient ? ` · ${contentClient.name}` : '') + sinCasar(mf.cliente, contentClient, 'el cliente'))
       }
       setModal(null); setMf({})
     } catch (err: any) { showToast('Error: '+err.message) }

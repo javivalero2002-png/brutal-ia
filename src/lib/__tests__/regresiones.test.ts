@@ -6778,3 +6778,46 @@ describe('el audio no puede usar lo que la CSP bloquea', () => {
       'media-src ya no permite blob:: el wav de desbloqueo de iOS vuelve a fallar en cada toque').toBe(true)
   })
 })
+
+
+describe('los modales de crear no pierden ni callan', () => {
+  const D = leerCodigo('src/components/NexusDashboard.tsx')
+
+  // Verificada quitando la guarda: roja.
+  it('el atras lleva la misma guarda que Escape', () => {
+    // Era la tercera copia de la proteccion y la unica sin ella: con el modal de
+    // crear abierto y texto escrito, el atras mostraba el aviso de «usa Cancelar»
+    // —lo pone useBackClosable, que veta— y el listener de navegacion, que recibe
+    // el MISMO popstate justo despues, cerraba el modal igual. Perdida de datos
+    // con el aviso en pantalla diciendo lo contrario.
+    const i = D.indexOf('const onPop = (e: PopStateEvent)')
+    expect(i, 'ya no existe onPop: repunta esta regla').toBeGreaterThan(-1)
+    const cuerpo = D.slice(i, D.indexOf("window.addEventListener('popstate'", i))
+    const guarda = cuerpo.indexOf('mfRef.current')
+    const cierre = cuerpo.indexOf('setModal(null)')
+    expect(guarda, 'el onPop de navegacion perdio la guarda de texto escrito: el atras vuelve a tirar lo que habia en el modal').toBeGreaterThan(-1)
+    expect(cierre, 'onPop ya no cierra el modal: repunta esta regla').toBeGreaterThan(-1)
+    expect(guarda < cierre, 'la guarda esta DESPUES del cierre, o sea en ninguna parte').toBe(true)
+  })
+
+  // Verificada quitando una llamada: roja.
+  it('un cliente o proyecto tecleado que no casa se dice en el toast', () => {
+    // «Nkie» en el campo cliente creaba el proyecto sin cliente y el toast decia
+    // «Proyecto creado» tan tranquilo. Cuatro sitios hacen el mismo find difuso
+    // —proyecto, tarea (cliente y proyecto) y pieza— y los cuatro tienen que
+    // avisar: dejar uno fuera es fabricar el gemelo de siempre.
+    const llamadas = (D.match(/sinCasar\(mf\./g) || []).length
+    expect(llamadas, 'hay finds difusos de cliente/proyecto sin aviso cuando no casan: lo tecleado se descarta en silencio').toBeGreaterThanOrEqual(4)
+  })
+
+  // Verificada devolviendo el `|| 7`: roja.
+  it('el 0 de antelacion de una regla no se convierte en 7', () => {
+    // `parseInt('0')` es 0, falsy, y el `|| 7` lo convertia en 7: «avisame solo
+    // el dia del deadline» se guardaba como una semana antes, sin edicion
+    // posible despues. El defecto queda para «no hay numero», no para el 0.
+    const i = D.indexOf("trigType === 'project_deadline'")
+    expect(i, 'ya no se configura project_deadline: repunta esta regla').toBeGreaterThan(-1)
+    expect(/Number\.isFinite/.test(D.slice(i, i + 260)),
+      'la antelacion del deadline vuelve a pasar por un || que se traga el 0').toBe(true)
+  })
+})
