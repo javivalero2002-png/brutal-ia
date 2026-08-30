@@ -16,8 +16,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   const { data, error } = await admin
     .from('content_agenda')
     // `cover_url` SÍ, `notes` y `client_id` NO. La portada estaba en `firmarCampos`
-    // de abajo pero no aquí, así que se firmaba una columna que nunca llegaba: el
-    // cliente veía el título y una caja de texto, sin la pieza.
+    // de abajo pero no aquí, así que se firmaba una columna que nunca llegaba:
+    // quien lo abría veía el título y una caja de texto, sin la pieza.
     .select('id, title, platform, status, video_url, cover_url, publish_date')
     .eq('id', token)
     .single()
@@ -28,7 +28,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tok
   //
   // Sin esto el selector de la página no se pintaba nunca —`item.equipo` era
   // siempre undefined— y todo lo que llegaba por el enlace se firmaba como
-  // «Cliente». El POST ya validaba el autor contra `profiles`: estaba hecha la
+  // «Sin identificar». El POST ya validaba el autor contra `profiles`: estaba hecha la
   // mitad servidor y no la mitad lectura, y `item` va tipado como `any` en la
   // página, así que TypeScript no podía avisar.
   //
@@ -55,8 +55,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   try {
     const body = await req.json()
     feedback = body.feedback || ''
-    // Bandera y no texto: «el cliente ha aprobado» tiene que poder distinguirse de
-    // «el cliente ha escrito algo que parece un sí», y eso no se deduce leyendo.
+    // Bandera y no texto: «ha aprobado» tiene que poder distinguirse de
+    // «ha escrito algo que parece un sí», y eso no se deduce leyendo.
     aprobado = body.aprobado === true
     autor = typeof body.autor === 'string' ? body.autor.trim() : ''
   } catch {
@@ -80,17 +80,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   // `prev + '\n\n[12/08 10:30] texto'`. Pero esa columna tiene otro escritor:
   // ContenidoSection guarda ahi un array JSON de opiniones y TODAS sus lecturas
   // hacen JSON.parse dentro de un try/catch que devuelve [] al fallar. Los dos
-  // caminos llevan vivos desde que se añadio el boton COPIAR ENLACE PARA EL CLIENTE.
+  // caminos llevan vivos desde que se añadio el boton COPIAR ENLACE DE REVISION.
   //
   // Lo que pasaba, en orden:
   //   1. el equipo opina  -> feedback = '[{...}]'
-  //   2. el cliente envia -> feedback = '[{...}]\n\n[12/08 10:30] Cambiad el final'
+  //   2. quien revisa envia -> feedback = '[{...}]\n\n[12/08 10:30] Cambiad el final'
   //   3. al abrir la pieza, JSON.parse lanza y el catch devuelve []: TODAS las
   //      opiniones del equipo desaparecen de pantalla, sin ningun aviso
   //   4. la siguiente opinion parte de [] y sobrescribe la columna entera: el
-  //      comentario del cliente se borra para siempre
+  //      comentario de quien revisó se borra para siempre
   // Y sin nada previo era igual de malo: el texto plano tampoco es JSON, asi que
-  // el comentario del cliente NO SE PINTABA EN NINGUN SITIO. La funcion de
+  // el comentario de quien revisó NO SE PINTABA EN NINGUN SITIO. La funcion de
   // revision no entregaba nunca su resultado, que es lo unico que tenia que hacer.
   const entradas: Array<Record<string, unknown>> = (() => {
     const bruto = (existing.feedback || '').trim()
@@ -141,7 +141,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   })
 
   // El recorte se hace por el PRINCIPIO, no por el final. Cortando por el final,
-  // una vez lleno el campo el cliente enviaba su comentario, recibia "ok" y se
+  // una vez lleno el campo quien revisaba enviaba su comentario, recibia "ok" y se
   // perdia en silencio — justo el ultimo, que es el que importa. Ahora que son
   // entradas y no texto, se descartan las mas antiguas hasta que quepa.
   const LIMITE = 20000
@@ -159,7 +159,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   //
   // La página promete «el equipo recibirá tu respuesta» y la única señal era un
   // punto ámbar de píxel y medio en una tarjeta del tablero que nadie patrulla.
-  // Con siete personas no hay nadie mirando: el cliente pedía un cambio y se
+  // Con siete personas no hay nadie mirando: quien revisaba pedía un cambio y se
   // descubría días después. Esta función ya murió una vez por invisible.
   //
   // Al autor de la pieza si se sabe quién es; si no —las piezas viejas no tienen
@@ -181,14 +181,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     // El enlace se pasa al grupo de WhatsApp, así que basta con que tres personas
     // opinen seguidas —o con que alguien pulse enviar cinco veces— para que a los
     // siete les suene el móvil cinco veces. El freno es por pieza, no global: dos
-    // clientes opinando de dos piezas distintas sí deben avisar los dos.
+    // personas opinando de dos piezas distintas sí deben avisar los dos.
     if (!(await canSendPush(admin, `review-${token}`))) {
       // La opinión ya está guardada. Callar el aviso no pierde nada.
     } else if (creador) await sendPushToUser(admin, creador, aviso)
     else await sendPushToAll(admin, aviso)
   } catch (err) {
     // La opinión YA está guardada: un fallo del aviso no puede devolverle un
-    // error al cliente, que ha hecho su parte bien.
+    // error a quien opina, que ha hecho su parte bien.
     console.error('[review] no se pudo avisar del feedback:', err)
   }
 

@@ -55,15 +55,11 @@ function fields(type: string, team: Profile[], isOwner = true) {
     ],
     contenido: [
       f('Título de la pieza', 'titulo', 'Ej: Reel de lanzamiento — Higgsfield'),
-      // La CUENTA va antes que el cliente, y el cliente pasa al final.
-      //
-      // Casi todo lo que publica el estudio va en sus propios perfiles —Brutal
-      // Studios, Pablo, Julio—, no en el de un cliente. Tenerlo al revés hacía que
-      // el primer campo después del título pidiera algo que casi nunca aplica, y
-      // eso invita a rellenarlo mal solo por no dejarlo en blanco.
+      // Contenido es lo que el estudio SUBE a sus propios perfiles (Brutal
+      // Studios, Pablo, Julio…). No hay campo de cliente: estas piezas son
+      // nuestras. La cuenta/perfil es lo que las distingue.
       { label:'Plataforma', key:'plataforma', type:'platform' },
       { label:'Cuenta / Perfil', key:'cuenta', type:'account', placeholder:'' },
-      { label:'Cliente', key:'cliente', placeholder:'Déjalo vacío si es del estudio', secundario:true },
       { label:'Fecha de publicación', key:'fecha', type:'date-input', placeholder:'' },
       { label:'Estado', key:'estado', type:'status' },
     ],

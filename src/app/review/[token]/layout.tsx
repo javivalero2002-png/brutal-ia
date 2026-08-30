@@ -6,17 +6,16 @@ import { firmarUrl } from '@/lib/storageFirmado'
 // ─────────────────────────────────────────────────────────────────────────────
 // La tarjetita que sale al pegar el enlace en WhatsApp, Slack o un correo.
 //
-// Sin esto heredaba la del sitio: al cliente le llegaba «Nexus · BRUTAL.IA — app
-// interna de Brutal Studios». Ese enlace es, casi siempre, el primer contacto de
-// un cliente con nuestro trabajo, y presentaba la herramienta en vez de la pieza.
+// Sin esto heredaba la del sitio: a quien abría el enlace le llegaba «Nexus ·
+// BRUTAL.IA — app interna de Brutal Studios», y presentaba la herramienta en vez
+// de la pieza que se quería enseñar.
 //
-// Se resuelve en el SERVIDOR, en un layout, porque la página es de cliente y una
+// Se resuelve en el SERVIDOR, en un layout, porque la página es pública y una
 // vista previa la pide un robot que no ejecuta JavaScript: si el título se pusiera
 // desde React, la tarjeta seguiría saliendo genérica.
 //
 // Ojo con lo que se pone aquí: esta descripción viaja a los servidores de
-// WhatsApp y Slack, así que solo el título de la pieza — nunca las notas internas
-// ni el nombre del cliente.
+// WhatsApp y Slack, así que solo el título de la pieza — nunca las notas internas.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function generateMetadata(
@@ -81,8 +80,8 @@ export async function generateMetadata(
       twitter: { card: portadaFirmada ? 'summary_large_image' : 'summary', title: titulo, description: descripcion },
     }
   } catch {
-    // Que la vista previa falle no puede tumbar la página: el cliente tiene que
-    // poder abrir el enlace aunque la tarjetita salga genérica.
+    // Que la vista previa falle no puede tumbar la página: quien abra el enlace
+    // tiene que poder verla aunque la tarjetita salga genérica.
     return generica
   }
 }
