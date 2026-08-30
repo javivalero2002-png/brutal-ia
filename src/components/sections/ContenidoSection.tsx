@@ -935,7 +935,9 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                             <div className="px-3.5 pt-3 pb-3.5">
                               <div className="font-figtree text-[13px] font-semibold leading-snug line-clamp-2 mb-3" style={{color:'rgba(255,255,255,0.9)'}}>{item.title}</div>
                               <div className="flex items-center gap-2">
-                                {(() => { const ic = item.client || (item.client_id ? data.clients.find((c: any)=>c.id===item.client_id) : null); return ic ? <button onClick={e=>{e.stopPropagation();onSelectClient?.(ic.id);onNavigate?.('clientes')}} className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full truncate max-w-[100px] transition-all hover:opacity-75" style={{background:(ic.color||BLU)+'15',color:(ic.color||BLU)+'cc'}}>{ic.name}</button> : null })()}
+                                {/* Contenido es lo que SUBIMOS nosotros a RRSS — no hay
+                                    cliente detrás de una pieza. La etiqueta de cliente
+                                    salió de aquí a propósito. */}
                                 {item.publish_date && item.status!=='publicado' && (()=>{
                                   const todayStr2 = todayKey()
                                   const isToday2 = item.publish_date.slice(0,10)===todayStr2
@@ -1312,7 +1314,6 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="font-syne text-[9px] font-black tracking-widest" style={{color:pc}}>{activeItem.platform.toUpperCase()}</span>
                         {activeItem.account_name && <span className="font-syne text-[8px]" style={{color:'rgba(255,255,255,0.25)'}}>@{activeItem.account_name}</span>}
-                        {activeItem.client && <span className="font-syne text-[7.5px] font-black px-2 py-0.5 rounded-full" style={{background:(activeItem.client.color||BLU)+'12',color:(activeItem.client.color||BLU)+'bb'}}>{activeItem.client.name}</span>}
                       </div>
                       <div className="font-figtree text-[16px] font-bold text-white leading-snug" style={{letterSpacing:'-0.02em'}}>{activeItem.title}</div>
                     </div>

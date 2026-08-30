@@ -6879,11 +6879,12 @@ describe('los modales de crear no pierden ni callan', () => {
   // Verificada quitando una llamada: roja.
   it('un cliente o proyecto tecleado que no casa se dice en el toast', () => {
     // «Nkie» en el campo cliente creaba el proyecto sin cliente y el toast decia
-    // «Proyecto creado» tan tranquilo. Cuatro sitios hacen el mismo find difuso
-    // —proyecto, tarea (cliente y proyecto) y pieza— y los cuatro tienen que
-    // avisar: dejar uno fuera es fabricar el gemelo de siempre.
+    // «Proyecto creado» tan tranquilo. TRES sitios hacen el mismo find difuso
+    // —proyecto (cliente), tarea (cliente y proyecto)— y los tres tienen que
+    // avisar: dejar uno fuera es fabricar el gemelo de siempre. (Contenido ya no
+    // lleva cliente: las piezas son las RRSS del estudio, no de un cliente.)
     const llamadas = (D.match(/sinCasar\(mf\./g) || []).length
-    expect(llamadas, 'hay finds difusos de cliente/proyecto sin aviso cuando no casan: lo tecleado se descarta en silencio').toBeGreaterThanOrEqual(4)
+    expect(llamadas, 'hay finds difusos de cliente/proyecto sin aviso cuando no casan: lo tecleado se descarta en silencio').toBeGreaterThanOrEqual(3)
   })
 
   // Verificada devolviendo el `|| 7`: roja.

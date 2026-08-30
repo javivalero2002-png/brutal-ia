@@ -38,7 +38,7 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
    * Un solo camino para mandar la respuesta, se pida cambios o se apruebe.
    *
    * `aprobado` viaja como bandera y no como texto: el equipo tiene que poder
-   * distinguir «el cliente ha dado el visto bueno» de «el cliente ha escrito algo
+   * distinguir «ha dado el visto bueno» de «ha escrito algo
    * que parece un sí», y eso no se deduce leyendo prosa.
    */
   const enviar = async (texto: string, aprobado = false) => {
@@ -54,8 +54,8 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
       else setError('No se pudo enviar. Inténtalo de nuevo en un momento.')
     } catch {
       // Sin este catch, un fallo de RED dejaba la promesa rechazada: no se marcaba
-      // como enviado ni se enseñaba error, el boton volvia a estar disponible y el
-      // cliente se quedaba mirando su texto sin saber si habia llegado. Es la unica
+      // como enviado ni se enseñaba error, el boton volvia a estar disponible y
+      // quien opinaba se quedaba mirando su texto sin saber si habia llegado. Es la unica
       // pantalla que ve gente de fuera y su unico proposito es recoger esto.
       setError('No hemos podido enviarlo — comprueba tu conexión y vuelve a intentarlo. Tu texto sigue aquí.')
     } finally { setSending(false) }
@@ -73,7 +73,7 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
   // query, y solo hay un layout, así que esa regla alcanza también a esta ruta. La
   // app interna vive con ella porque cada sección scrollea por dentro; esta página
   // no tenía ninguno, así que el body recortaba el contenido y NO HABÍA FORMA DE
-  // BAJAR: el cliente no llegaba al textarea ni al botón de enviar, que son el
+  // BAJAR: quien opinaba no llegaba al textarea ni al botón de enviar, que son el
   // único propósito de la página. Y es la única pantalla que ve gente de fuera.
   return (
     <div
@@ -119,10 +119,10 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
 
             {/* El material. Tres casos y NINGUNO es un hueco mudo: se puede
                 incrustar, no se puede pero hay enlace, o solo hay portada. Antes
-                solo se pintaba el primero, así que a un cliente con el vídeo en
+                solo se pintaba el primero, así que a quien abre el enlace con el vídeo en
                 Drive —lo que la propia app le recomienda— se le pedía opinión
                 sobre algo que no veía. */}
-            {/* Y aquí más aún: el cliente puede tener un bloqueador y nosotros no
+            {/* Y aquí más aún: quien lo abre puede tener un bloqueador y nosotros no
                 nos vamos a enterar. Si el incrustado se le tapa, esto es lo único
                 que le queda para ver la pieza sobre la que le pedimos opinión. */}
             {item.video_url && (
@@ -139,7 +139,7 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
             {/* La PORTADA manda sobre el incrustado, por lo mismo que dentro de
                 la app: vive en nuestro Storage y ningún bloqueador la toca,
                 mientras que un incrustado de Instagram se tapa con un recuadro
-                gris que no podemos detectar. Y aquí el que lo abre es un cliente:
+                gris que no podemos detectar. Y aquí quien lo abre no ha iniciado sesión:
                 si no ve la pieza, no opina.
                 Con play encima, porque un clic lleva al vídeo de verdad. */}
             {item.cover_url && item.video_url ? (
@@ -194,7 +194,7 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
                 nunca: el endpoint excluye `notes` a propósito por ser de uso
                 interno, así que `item.notes` no llega jamás. Código muerto que
                 aparentaba una función que no existe. Si algún día se quiere
-                mandar contexto al cliente, hará falta un campo PÚBLICO aparte —
+                mandar contexto a quien revisa, hará falta un campo PÚBLICO aparte —
                 reexponer las notas internas no es la solución. */}
 
             {/* Feedback form */}
@@ -256,7 +256,7 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
                     Hasta ahora aprobar era literalmente el «…o aprobación» del
                     marcador de posición: texto libre que alguien del equipo lee,
                     interpreta y traduce a mover una tarjeta a mano. Para un
-                    estudio cuyo entregable es contenido revisado por clientes, la
+                    estudio cuyo entregable es contenido revisado por los jefes, la
                     respuesta MÁS frecuente era la peor servida.
                     Va como una entrada más del mismo array de opiniones, así que
                     no hace falta ninguna columna nueva. */}

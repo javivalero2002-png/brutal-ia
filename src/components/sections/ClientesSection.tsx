@@ -307,7 +307,6 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
     const urgentTasks = activeTasks.filter((t: Task)=>t.level==='urgent')
     const activeProjects = clientProjects.filter((p: Project)=>p.status==='activo'||p.status==='urgente')
     const avgProgress = clientProjects.length ? Math.round(clientProjects.reduce((s: number,p: Project)=>s+p.progress,0)/clientProjects.length) : 0
-    const clientContent = data.agenda.filter((a: any)=>a.client?.id===selected.id||a.client_id===selected.id)
 
     return (
       <div className={`${isMobile?'p-4':'p-8'} max-w-[1100px] mx-auto`}>
@@ -619,20 +618,8 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
               ))}
               {activeTasks.length>5 && <div className="px-5 py-2 text-center text-[10px]" style={{color:'rgba(255,255,255,0.2)'}}>+{activeTasks.length-5} más</div>}
             </div>
-            {clientContent.length>0 && (
-              <div className="rounded-2xl overflow-hidden" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-                <div className="px-5 py-4 font-syne text-[9px] font-black tracking-widest" style={{borderBottom:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.25)'}}>CONTENIDO</div>
-                {clientContent.slice(0,4).map((a: any,i: number)=>(
-                  <div key={a.id} className="flex items-center gap-3 px-5 py-3" style={{borderBottom:i<Math.min(clientContent.length,4)-1?`1px solid ${BORDER}`:'none'}}>
-                    <PlatformLogo platform={a.platform} size={13}/>
-                    <span className="text-[12px] flex-1 truncate" style={{color:'rgba(255,255,255,0.55)'}}>{a.title}</span>
-                    <span className="font-syne text-[8px] font-black px-2 py-0.5 rounded-lg" style={{background:a.status==='publicado'?'rgba(27,95,250,0.1)':a.status==='listo'?'rgba(34,197,94,0.1)':'rgba(255,255,255,0.04)',color:a.status==='publicado'?BLU:a.status==='listo'?GRN:'rgba(255,255,255,0.3)'}}>
-                      {(({'borrador':'EN BRUTO','pendiente':'EN PROD.','listo':'LISTO','publicado':'PUBLICADO'} as Record<string,string>)[a.status])||a.status?.toUpperCase()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+            {/* El bloque CONTENIDO de este cliente se quitó: las piezas de
+                Contenido son las RRSS del estudio, no de un cliente. */}
             {/* Aquí había un bloque NOTAS del diseño original que pintaba
                 selected.notes por segunda vez — el bloque NOTAS INTERNAS de más
                 arriba es el que quedó como bueno. Hay una regla en

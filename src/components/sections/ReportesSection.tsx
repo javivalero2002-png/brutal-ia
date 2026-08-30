@@ -161,16 +161,18 @@ function ReportesSection({data, onNavigate}: PropsReportes) {
           const desdeMes = new Date(); desdeMes.setDate(desdeMes.getDate() - 30)
           const publicadas = agendaItems.filter((a: any) =>
             a.status === 'publicado' && a.publish_date && a.publish_date >= localDayKey(desdeMes))
-          const porCliente = new Map<string, number>()
+          // Por PLATAFORMA, no por cliente: el contenido es del estudio para sus
+          // propios perfiles, así que lo que informa es dónde se publicó.
+          const porPlataforma = new Map<string, number>()
           for (const a of publicadas) {
-            const cli = a.client?.name || 'Sin cliente'
-            porCliente.set(cli, (porCliente.get(cli) || 0) + 1)
+            const plat = a.platform || 'Sin plataforma'
+            porPlataforma.set(plat, (porPlataforma.get(plat) || 0) + 1)
           }
           const contenidoHtml = publicadas.length
             ? `<div class="section"><h2>Contenido publicado · últimos 30 días</h2>` +
               `<div class="fila" style="padding:10px 0;border-bottom:1px solid #eee"><strong style="font-size:22px">${publicadas.length}</strong> <span style="color:#666">piezas publicadas</span></div>` +
-              [...porCliente.entries()].sort((a, b) => b[1] - a[1]).map(([cli, n]) =>
-                `<div class="fila" style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #f2f2f2"><div style="flex:1"><strong>${cli}</strong></div><span style="color:#666;font-size:13px">${n} ${n === 1 ? 'pieza' : 'piezas'}</span></div>`,
+              [...porPlataforma.entries()].sort((a, b) => b[1] - a[1]).map(([plat, n]) =>
+                `<div class="fila" style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #f2f2f2"><div style="flex:1"><strong>${plat}</strong></div><span style="color:#666;font-size:13px">${n} ${n === 1 ? 'pieza' : 'piezas'}</span></div>`,
               ).join('') + `</div>`
             // Sin piezas no se pinta un cero: una sección vacía en un informe
             // impreso hace pensar que falta un dato, no que no hubo actividad.

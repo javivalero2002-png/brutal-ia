@@ -755,11 +755,9 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
         showToast('Regla creada · el motor la ejecutará')
       } else if (modal === 'contenido') {
         if (!mf.titulo?.trim()) { showToast('Escribe el título'); return }
-        const contentClient = mf.cliente?.trim()
-          ? data.clients.find((c: Client) => c.name.toLowerCase().includes(mf.cliente.toLowerCase()) || mf.cliente.toLowerCase().includes(c.name.toLowerCase().split(' ')[0]))
-          : null
-        await data.createAgenda({ title:mf.titulo.trim(), platform:mf.plataforma||'Instagram', account_name:mf.cuenta?.trim()||undefined, content_type:'Post', status:(mf.estado||'borrador') as 'borrador'|'pendiente'|'listo'|'publicado', publish_date:mf.fecha, client_id:contentClient?.id })
-        showToast('Pieza añadida' + (contentClient ? ` · ${contentClient.name}` : '') + sinCasar(mf.cliente, contentClient, 'el cliente'))
+        // Sin cliente: las piezas son contenido propio del estudio para RRSS.
+        await data.createAgenda({ title:mf.titulo.trim(), platform:mf.plataforma||'Instagram', account_name:mf.cuenta?.trim()||undefined, content_type:'Post', status:(mf.estado||'borrador') as 'borrador'|'pendiente'|'listo'|'publicado', publish_date:mf.fecha })
+        showToast('Pieza añadida')
       }
       setModal(null); setMf({})
     } catch (err: any) { showToast('Error: '+err.message) }
