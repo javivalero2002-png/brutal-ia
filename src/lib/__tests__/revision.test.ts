@@ -236,12 +236,13 @@ describe('quién opina por el enlace', () => {
   })
 
   it('una firma declarada nunca pasa por comprobada', () => {
-    // `origen: 'cliente'` no significa «lo escribió el cliente»: significa «llegó
-    // por el enlace, sin que nadie iniciara sesión». Perder esa marca sería
-    // convertir una firma que cualquiera puede elegir en una verificada.
+    // `origen: 'enlace'` significa «llegó por el enlace público, sin que nadie
+    // iniciara sesión». Perder esa marca sería convertir una firma que cualquiera
+    // puede elegir en una verificada. (El enlace es para revisar NUESTRO
+    // contenido; no hay concepto de «cliente» — solo declarada vs comprobada.)
     const i = RUTA.indexOf('entradas.push({')
     expect(i, 'ya no se anexan opiniones asi: revisa esta regla').toBeGreaterThan(-1)
-    expect(/origen: 'cliente'/.test(RUTA.slice(i, i + 400)),
+    expect(/origen: 'enlace'/.test(RUTA.slice(i, i + 400)),
       'la opinion del enlace deja de marcarse como venida de fuera: se confundiria con una escrita desde dentro con sesion')
       .toBe(true)
     // Y la pantalla del equipo tiene que DECIRLO, no solo guardarlo.
