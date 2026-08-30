@@ -21,7 +21,7 @@ export type CategoriaAviso =
   | 'tarea'
   | 'mensaje'
   | 'correo'
-  | 'cliente'
+  | 'revision'
   | 'fichaje'
   | 'automatizacion'
   | 'averia'
@@ -55,15 +55,16 @@ export const AVISOS: Record<CategoriaAviso, Ficha> = {
     desc: 'Cuando entra un email en tu Gmail o en el buzón de colaboraciones.',
     silenciable: true,
   },
-  // La CLAVE se queda en `cliente` a propósito, aunque el concepto sea otro.
+  // La clave era `cliente` y ahora es `revision`, con el concepto entero.
   //
   // Javi: «el concepto está mal entendido: no será visto por clientes, sino por
-  // nuestros jefes, y las revisiones las darán ellos». Tiene razón y las palabras
-  // estaban mal — pero esta clave viaja guardada en las preferencias de avisos de
-  // cada persona. Renombrarla haría que a quien lo tuviera silenciado se le
-  // reactivara de golpe, sin avisar y sin entender por qué. Se cambia lo que se
-  // lee, que es lo que estaba mal; la clave es un detalle de implementación.
-  cliente: {
+  // nuestros jefes, y las revisiones las darán ellos». El enlace de contenido es
+  // para gestionar NUESTRO contenido, no para un cliente externo. Antes solo se
+  // cambió la etiqueta y se dejó la clave `cliente` por miedo a reactivar avisos
+  // silenciados al renombrarla — pero eso valía con la app EN USO; renombrada
+  // ANTES del lanzamiento (2026-09-01) no hay ninguna preferencia guardada que
+  // perder, así que es el único momento limpio para quitar la palabra del todo.
+  revision: {
     label: 'Revisiones de piezas',
     desc: 'Cuando alguien aprueba una pieza o pide cambios desde el enlace de revisión.',
     silenciable: true,
@@ -98,7 +99,7 @@ export const AVISOS: Record<CategoriaAviso, Ficha> = {
 
 /** El orden en que se pintan. Lo más frecuente arriba, la avería al final. */
 export const ORDEN_AVISOS: CategoriaAviso[] = [
-  'tarea', 'fichaje', 'correo', 'cliente', 'mensaje', 'automatizacion', 'averia',
+  'tarea', 'fichaje', 'correo', 'revision', 'mensaje', 'automatizacion', 'averia',
 ]
 
 /**

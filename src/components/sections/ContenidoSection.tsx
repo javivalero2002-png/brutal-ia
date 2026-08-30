@@ -1559,7 +1559,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                       <div key={i} className="flex items-start gap-3 p-3.5 rounded-2xl transition-all" style={{background:'rgba(255,255,255,0.03)',border:`1px solid rgba(255,255,255,0.06)`}}>
                         <div className="w-8 h-8 rounded-xl flex items-center justify-center font-syne text-[9px] font-black flex-shrink-0" style={{background:`${op.color||BLU}18`,color:op.color||BLU}}>{op.initials}</div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">{op.origen==='cliente'
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">{(op.origen==='enlace'||op.origen==='cliente')
                             /* Llegó por el ENLACE público, sin sesión. Ahora quien
                                opina puede decir quién es —el enlace se pega en un
                                grupo donde están el cliente y los jefes— y el

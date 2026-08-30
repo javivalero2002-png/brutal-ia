@@ -100,19 +100,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       if (Array.isArray(p)) return p
     } catch {}
     // Texto de la version anterior: se conserva como una entrada mas en vez de
-    // tirarlo, que es lo que hacia el JSON.parse del cliente.
-    // `name: 'Sin identificar'` y no «Cliente»: el enlace lo abren los jefes, no
-    // clientes. `origen: 'cliente'` se queda porque es lo que hay GUARDADO en las
-    // filas antiguas y significa «entró por el enlace público», que sigue siendo
-    // cierto — cambiarlo dejaría de casar con lo ya escrito.
-    return [{ origen: 'cliente', name: 'Sin identificar', initials: '··', color: '#FFB020', note: bruto, at: null }]
+    // tirarlo, que es lo que hacia el JSON.parse anterior.
+    // `origen: 'enlace'` = «entró por el enlace público, sin sesión». El enlace de
+    // contenido es para gestionar NUESTRO contenido —lo abren los jefes—, así que
+    // no hay concepto de «cliente» aquí; solo la distinción entre una firma
+    // declarada (por el enlace) y una comprobada (con sesión desde dentro).
+    return [{ origen: 'enlace', name: 'Sin identificar', initials: '··', color: '#FFB020', note: bruto, at: null }]
   })()
 
   // Quién firma. Se VALIDA contra el equipo real: sin esto, cualquiera con el
   // enlace podría poner el nombre que quisiera —el de un compañero, o uno
   // inventado con un cargo delante— y quedaría escrito en el hilo del equipo.
-  // Solo se aceptan nombres que existen; cualquier otra cosa firma como Cliente.
-  let firma = { name: 'Cliente', initials: 'CL', color: '#FFB020' }
+  // Solo se aceptan nombres que existen; quien no elige queda «Sin identificar».
+  let firma = { name: 'Sin identificar', initials: '··', color: '#FFB020' }
   if (autor) {
     const { data: miembros } = await admin.from('profiles').select('name, initials, avatar_color')
     const m = (miembros || []).find(p => (p as { name?: string }).name === autor)
@@ -126,11 +126,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   }
 
   entradas.push({
-    // `origen: 'cliente'` se queda SIEMPRE, diga quien diga que es. No significa
-    // «lo escribió el cliente»: significa «llegó por el enlace público, sin que
-    // nadie iniciara sesión». Esa distinción no se puede perder — es la diferencia
-    // entre una firma comprobada y una declarada.
-    origen: 'cliente',
+    // `origen: 'enlace'` se pone SIEMPRE: significa «llegó por el enlace público,
+    // sin que nadie iniciara sesión». Esa distinción no se puede perder — es la
+    // diferencia entre una firma comprobada (con sesión) y una declarada.
+    origen: 'enlace',
     name: firma.name,
     initials: firma.initials,
     // Verde cuando aprueba: en el hilo del equipo se distingue de un golpe de
@@ -173,7 +172,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     body: aprobado ? `«${titulo}» — aprobado sin cambios.` : `«${titulo}» — ${feedback.trim().slice(0, 90)}`,
     url: '/dashboard?s=contenido',
     tag: `review-${token}`,
-    categoria: 'cliente',
+    categoria: 'revision',
     urgent: !aprobado,
   }
   try {

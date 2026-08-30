@@ -18,13 +18,12 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
   /**
    * Quién dice ser quien está opinando.
    *
-   * El enlace se pega en un grupo de WhatsApp donde están el cliente Y los jefes,
-   * así que firmarlo todo como «CLIENTE» era falso la mitad de las veces. Ahora
-   * se elige, y el servidor comprueba que ese nombre exista de verdad en el equipo
-   * — si no, firma como Cliente.
+   * El enlace de contenido es para revisar NUESTRO contenido: lo abren los jefes y
+   * el equipo, no un cliente externo. Se elige quién eres, y el servidor comprueba
+   * que ese nombre exista de verdad en el equipo — si no, queda «Sin identificar».
    *
-   * Vacío = Cliente, y es el valor por DEFECTO a propósito: quien abre este enlace
-   * es, casi siempre, alguien de fuera. Elegir debe ser el gesto raro.
+   * Vacío = «Sin identificar», y es el valor por DEFECTO: quien opina puede
+   * decir quién es, pero no está obligado. Elegir es opcional, no un requisito.
    */
   const [autor, setAutor] = useState('')
 
@@ -214,8 +213,8 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
                 <div className="text-xs font-bold tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.3)' }}>TU FEEDBACK</div>
 
                 {/* Quién eres. Solo aparece si hay equipo que ofrecer — si la
-                    consulta falló, esto no sale y todo firma como Cliente, que es
-                    como funcionaba antes. Nunca bloquea el poder opinar. */}
+                    consulta falló, esto no sale y todo firma como «Sin
+                    identificar». Nunca bloquea el poder opinar. */}
                 {item.equipo?.length > 0 && (
                   <div className="mb-4">
                     <div className="text-[11px] mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>¿Quién eres?</div>
