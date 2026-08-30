@@ -426,32 +426,32 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
   // numero contaba urgentes-sin-leer y el filtro devuelve todos los urgentes.
   // Un numero pegado encima de la lista que no es el largo de la lista se lee
   // como un fallo de la lista.
+  // EL SELECTOR DE CUENTA del móvil, SEPARADO de las vistas. Elegir buzón
+  // —personal o colaboraciones— era buscar su chip entre once, desplazando la
+  // fila; ahora es un control segmentado fijo y prominente arriba (Javi lo pidió).
+  // «Todas» = todos los buzones. Los números son NO LEÍDOS por buzón, que es lo
+  // que de verdad importa al decidir dónde entrar. Mientras `/api/gmail/cuentas`
+  // no conteste se conservan Personal/Colabs, para no dejarlo cojo durante la carga.
+  // Se ofrece por PRESENCIA de correo, no por `cuentas` conectadas: el buzón
+  // compartido de colaboraciones lo ve todo el equipo aunque no lo haya conectado
+  // esta persona, así que «Colabs» debe salir mientras haya correo de colabs. Y
+  // «Personal» mientras haya correo personal. Es exactamente lo que se pidió
+  // —personal o colaboraciones— sin depender de si /api/gmail/cuentas contestó.
+  const cuentasMobile: {id:string; label:string; accent:string; n:number}[] = [
+    {id:'Todos', label:'Todas', accent:'#8B95A7', n: unread},
+    ...(personalGmailCount>0 ? [{id:'Personal', label:'Personal', accent:'#EA4335', n: personalGmailUnread}] : []),
+    ...(colabsGmailCount>0 ? [{id:'Colabs', label:'Colabs', accent: GRN, n: colabsGmailUnread}] : []),
+  ]
+  // Qué segmento se ve activo: el buzón elegido, o «Todas» cuando no hay uno
+  // (incluso mientras filtras por Sin leer/Urgente/Personas, que abarcan todos).
+  const esSegCuenta = (id:string) => id==='Personal'||id==='Colabs'||id.startsWith('cuenta:')
+  const cuentaActiva = esSegCuenta(filter) ? filter : 'Todos'
+
+  // Las VISTAS (sin «Todos» ni cuentas: eso vive en el selector de arriba).
   const tabs = [
-    {id:'Todos', label:'Todos', n: activeMsgs.length, accent:'#FFFFFF'},
     {id:'Sin leer', label:'Sin leer', n: unread, accent: BLU},
     {id:'Urgente', label:'Urgente', n: activeMsgs.filter((m:any)=>m.ai_urgency==='urgent').length, accent: RED},
     {id:'Personas', label:'Personas', n: dePersonas, accent:'#5EEAD4'},
-    // UN CHIP POR BUZON REAL. Esta es la unica forma de elegir cuenta en MOVIL:
-    // la columna de la izquierda con las cuentas es solo de escritorio, y la
-    // pantalla que hacia de selector se ha quitado —Javi: «no queda bien y no es
-    // util»—. Con `Personal` a secas, dos cuentas personales caian en el mismo
-    // chip y no habia manera de mirar solo una desde el telefono.
-    //
-    // Mientras `/api/gmail/cuentas` no conteste se conservan los dos de antes,
-    // para no dejar la fila coja durante la carga.
-    ...(cuentas === null
-      ? [
-          {id:'Personal', label:'Personal', n: personalGmailCount, accent:'#EA4335'},
-          {id:'Colabs', label:'Colabs', n: colabsGmailCount, accent: GRN},
-        ]
-      : cuentas.map(cta => ({
-          id: `cuenta:${cta.email}`,
-          // El buzon comun se llama por su nombre; los personales, por lo de antes
-          // de la arroba. La direccion entera no cabe en un chip.
-          label: cta.compartida ? 'Colabs' : cta.email.split('@')[0],
-          n: activeMsgs.filter((m:any)=>m.cuenta===cta.email).length,
-          accent: cta.compartida ? GRN : '#EA4335',
-        }))),
     {id:'Clientes', label:'Clientes', n: activeMsgs.filter((m:any)=>esDeCliente(m)).length, accent: AMBAR},
     {id:'Interno', label:'Equipo', n: activeMsgs.filter((m:any)=>m.source==='internal').length, accent: '#A78BFA'},
     ...(activeMsgs.some((m:any)=>m.source==='whatsapp') ? [{id:'WhatsApp', label:'WhatsApp', n: activeMsgs.filter((m:any)=>m.source==='whatsapp').length, accent:'#25D366'}] : []),
@@ -589,11 +589,28 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
             </div>
         </div>
 
-        {/* La fila de filtros del movil, que es lo que hace util todo lo de arriba.
-            Va DENTRO del panel de la lista a proposito: ese panel ya se oculta solo
-            al abrir un correo (`display:selected?'none':'flex'`), asi que la fila
-            desaparece con el sin una condicion mas que mantener.
-            Desplazable en horizontal y sin barra: son once chips y no caben. */}
+        {/* EL SELECTOR DE CUENTA — lo primero y lo más grande: es lo que más se
+            cambia y lo que Javi pidió hacer fácil. Segmentos anchos, siempre
+            visibles (no se desplazan), con el no-leído de cada buzón. */}
+        {isMobile && !selected && (
+          <div className="flex items-center gap-1.5 px-4 pt-3 pb-1 flex-shrink-0">
+            {cuentasMobile.map(c => {
+              const act = cuentaActiva === c.id
+              return (
+                <button key={c.id} onClick={()=>{ setFilter(c.id); setActiveSender(null); setSelected(null) }}
+                  className="flex-1 min-w-0 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl transition-all active:scale-[0.97]"
+                  style={{background:act?`${c.accent}1F`:'rgba(255,255,255,0.03)',border:`1px solid ${act?`${c.accent}59`:BORDER}`}}>
+                  {c.id!=='Todos' && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:c.accent}}/>}
+                  <span className="font-syne text-[10px] font-black tracking-wide truncate" style={{color:act?c.accent:'rgba(255,255,255,0.55)'}}>{c.label}</span>
+                  {c.n>0 && <span className="font-figtree text-[9px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:act?`${c.accent}26`:'rgba(255,255,255,0.06)',color:act?c.accent:'rgba(255,255,255,0.4)'}}>{c.n}</span>}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* La fila de VISTAS del móvil (Sin leer, Urgente, Personas…). El buzón se
+            elige arriba; aquí se afina qué se ve. Desplazable en horizontal. */}
         {isMobile && !selected && (
           <div className="flex items-center gap-1.5 px-4 py-2.5 flex-shrink-0 overflow-x-auto"
             style={{borderBottom:`1px solid ${BORDER}`,scrollbarWidth:'none',touchAction:'pan-x',overscrollBehavior:'contain',overflowY:'hidden',WebkitOverflowScrolling:'touch' as never}}>
