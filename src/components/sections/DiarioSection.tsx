@@ -1642,33 +1642,41 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
                 const hechas = p.tareas.length
                 const pct = objetivos ? Math.min(100, Math.round((hechas / objetivos) * 100)) : 0
                 const cerrado = !!p.entrada?.cierre_at
+                // Colores en HEX (no rgba): la píldora del estado concatena
+                // opacidad (`${c}1A`), y un rgba ahí rompería la declaración entera.
                 const estado = cerrado ? { l: 'Todo completado', c: GRN }
                   : p.entrada?.animo === 'bloqueado' ? { l: 'Bloqueado', c: RED }
                   : p.entrada?.entrada_at ? { l: 'En progreso', c: AMBAR }
-                  : { l: 'Sin fichar', c: 'rgba(255,255,255,0.25)' }
+                  : { l: 'Sin fichar', c: '#7C818C' }
                 const yo = p.persona.id === profile?.id
+                const ini = p.persona.initials || (p.persona.name || '?').slice(0, 2).toUpperCase()
                 return (
                   <div key={p.persona.id} className="flex items-center gap-3 px-3 py-2.5 rounded-2xl"
-                    style={{ background: yo ? 'rgba(255,255,255,0.025)' : 'transparent' }}>
-                    <span className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 font-syne text-[9px] font-black"
-                      style={{ background: (p.persona.avatar_color || VIO) + '22', color: p.persona.avatar_color || VIO }}>
-                      {p.persona.initials || (p.persona.name || '?').slice(0, 2).toUpperCase()}
-                    </span>
-                    <span className="font-figtree text-[12.5px] flex-shrink-0" style={{ color: 'rgba(255,255,255,0.72)', width: isMobile ? 74 : 96 }}>
-                      {yo ? `${p.persona.name || 'Tú'} (Tú)` : p.persona.name || '—'}
-                    </span>
-                    {!isMobile && (
-                      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: cerrado ? GRN : VIO }} />
+                    style={{ background: yo ? 'rgba(255,255,255,0.03)' : 'transparent' }}>
+                    {/* Avatar con ANILLO de progreso: el % del día se lee de un
+                        vistazo, y en móvil ya no hace falta la barra aparte. */}
+                    <div className="relative flex-shrink-0" style={{ width: 38, height: 38 }}>
+                      <ProgressRing pct={pct} size={38} stroke={2.5} color={cerrado ? GRN : estado.c} />
+                      <div className="absolute inset-[4px] rounded-full flex items-center justify-center font-syne text-[9px] font-black"
+                        style={{ background: (p.persona.avatar_color || VIO) + '22', color: p.persona.avatar_color || VIO }}>
+                        {ini}
                       </div>
-                    )}
-                    <span className="font-syne text-[10px] font-black flex-shrink-0" style={{ color: 'rgba(255,255,255,0.45)', width: 34, textAlign: 'right' }}>{pct}%</span>
-                    <span className="font-figtree text-[11px] flex-shrink-0" style={{ color: 'rgba(255,255,255,0.28)', width: 34, textAlign: 'right' }}>
-                      {hechas}/{objetivos}
-                    </span>
-                    <span className="flex items-center gap-1.5 flex-shrink-0" style={{ width: isMobile ? 96 : 128 }}>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-figtree text-[13px] font-semibold truncate" style={{ color: 'rgba(255,255,255,0.9)' }}>
+                        {yo ? `${p.persona.name || 'Tú'} · Tú` : p.persona.name || '—'}
+                      </div>
+                      <div className="font-figtree text-[11px] mt-0.5 truncate" style={{ color: 'rgba(255,255,255,0.34)' }}>
+                        {objetivos ? `${hechas} de ${objetivos} ${objetivos === 1 ? 'objetivo' : 'objetivos'}`
+                          : hechas ? `${hechas} ${hechas === 1 ? 'tarea hecha' : 'tareas hechas'}`
+                          : 'sin objetivos hoy'}
+                      </div>
+                    </div>
+                    {/* Estado en píldora, con su color de fondo */}
+                    <span className="flex items-center gap-1.5 flex-shrink-0 px-2.5 py-1 rounded-full"
+                      style={{ background: `${estado.c}1A`, border: `1px solid ${estado.c}33` }}>
                       <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: estado.c }} />
-                      <span className="font-figtree text-[11px] truncate" style={{ color: estado.c }}>{estado.l}</span>
+                      <span className="font-syne text-[8px] font-black tracking-wide whitespace-nowrap" style={{ color: estado.c }}>{estado.l.toUpperCase()}</span>
                     </span>
                   </div>
                 )
