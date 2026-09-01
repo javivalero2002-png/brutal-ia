@@ -21,3 +21,27 @@ export function codigoHttpDeError(error: { code?: string | null } | null | undef
   if (/^(22|23)/.test(code)) return 400
   return 500
 }
+
+/**
+ * EL MENSAJE QUE SE LE ENSEÑA A UNA PERSONA.
+ *
+ * `error.message` de Postgres es correcto y es ilegible: «new row for relation
+ * "clients" violates check constraint "clients_status_check"». Quien lo lee no es
+ * quien puede arreglarlo, y sobre todo no dice QUÉ hay que hacer.
+ *
+ * Este caso concreto tiene una causa única y una solución de una línea: la
+ * migración `20260901_clientes_potenciales.sql` no está aplicada en Supabase. Es
+ * exactamente el fallo que ya vivió meses en esta app —`content_agenda.feedback`
+ * faltaba y la revisión con cliente devolvía un 404, así que parecía que la página
+ * no existía— y lo que lo hizo durar tanto fue que el síntoma no nombraba la causa.
+ *
+ * Todo lo demás sale tal cual: inventarle un mensaje bonito a un error que no se
+ * conoce es cómo se pierde la única pista que había.
+ */
+export function mensajeDeError(error: { code?: string | null; message?: string | null } | null | undefined): string {
+  const msg = error?.message || 'Error'
+  if (error?.code === '23514' && /clients_status_check/.test(msg)) {
+    return 'Falta aplicar la migración 20260901_clientes_potenciales.sql en Supabase: la base todavía no admite el estado «Potencial».'
+  }
+  return msg
+}

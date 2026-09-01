@@ -60,6 +60,11 @@ const CLIENTS: Client[] = [
   // El filtro "Archivado" no tenia ningun cliente que mostrar, asi que ese estado
   // —y la fecha de archivado— no se podian revisar en el harness.
   { id:'c5', name:'Desigual', industry:'Moda',    status:'Archivado', revenue:'€9.000', color:'#EC4899', initials:'DG', created_at:iso(-400), archived_at:iso(-45) },
+  // Dos POTENCIALES, por lo mismo que el archivado: sin ninguno no se puede mirar
+  // el borde discontinuo, ni la barra del embudo, ni el botón de cerrar el trato.
+  // Y son dos y no uno para que el plural de la barra se vea de verdad.
+  { id:'c6', name:'Loewe',  industry:'Lujo',      status:'Potencial', revenue:'€25.000', color:'#8B5CF6', initials:'LO', created_at:iso(-12) },
+  { id:'c7', name:'Bimba y Lola', industry:'Moda', status:'Potencial', revenue:'€14.000', color:'#06B6D4', initials:'BL', created_at:iso(-4) },
 ]
 
 const PROJECTS: Project[] = [
@@ -256,6 +261,11 @@ export default function PreviewClient({
   const [projView, setProjView] = useState<'board'|'list'>('board')
   const [projStatusFilter, setProjStatusFilter] = useState('Todos')
   const [selectedProject, setSelectedProject] = useState<string|null>(null)
+  // La ficha de cliente NO se podía abrir en el harness: iba con `selectedId={null}`
+  // y un `onSelect` vacío, así que media sección —el estado, las notas, los
+  // ficheros, el botón de cerrar el trato— no se podía revisar aquí. Es justo lo
+  // que este preview existe para poder mirar sin tocar producción.
+  const [selectedClient, setSelectedClient] = useState<string|null>(null)
   const [memFilter, setMemFilter] = useState('Todos')
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
@@ -429,7 +439,7 @@ export default function PreviewClient({
         {section==='inbox' && <SectionErrorBoundary section="inbox"><InboxSection data={data} showToast={showToast} profile={profile} onNavigate={setSection} onSelectClient={()=>{}} onAskHarvey={()=>{}}/></SectionErrorBoundary>}
         {section==='diario' && <SectionErrorBoundary section="diario"><DiarioSection data={data} profile={profile} showToast={showToast} onNavigate={setSection} onAskHarvey={()=>setSection('harvey')} demo={DIARIO_DEMO} diasDemo={DIAS_DEMO}/></SectionErrorBoundary>}
         {section==='reportes' && <SectionErrorBoundary section="reportes"><ReportesSection data={data} onNavigate={setSection}/></SectionErrorBoundary>}
-        {section==='clientes' && <SectionErrorBoundary section="clientes"><ClientesSection data={data} selectedId={null} onSelect={()=>{}} onOpenModal={abrirModal} showToast={showToast} isOwner onNavigate={setSection} onSelectProject={()=>{}}/></SectionErrorBoundary>}
+        {section==='clientes' && <SectionErrorBoundary section="clientes"><ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={abrirModal} showToast={showToast} isOwner onNavigate={setSection} onSelectProject={()=>{}}/></SectionErrorBoundary>}
         {section==='proyectos' && <SectionErrorBoundary section="proyectos"><ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={abrirModal} showToast={showToast} isOwner onNavigate={setSection} onSelectClient={()=>{}} justCreatedId={null} onJustCreatedScrolled={()=>{}}/></SectionErrorBoundary>}
         {section==='contenido' && <SectionErrorBoundary section="contenido"><ContenidoSection data={data} onOpenModal={abrirModal} showToast={showToast} onNavigate={setSection} onSelectClient={()=>{}} profile={profile}/></SectionErrorBoundary>}
         {section==='calendario' && <SectionErrorBoundary section="calendario"><CalendarioSection data={data} profile={profile} showToast={showToast} onOpenModal={abrirModal}/></SectionErrorBoundary>}

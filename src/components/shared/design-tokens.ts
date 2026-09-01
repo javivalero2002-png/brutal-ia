@@ -41,3 +41,26 @@ export const PLATAFORMA_COLOR: Record<string, string> = {
   Twitter: '#1DA1F2',
   Pinterest: '#E60023',
 }
+
+// El color de cada ESTADO DE CLIENTE.
+//
+// Estaba escrito como el ternario `status === 'Activo' ? GRN : gris` en TRES
+// pantallas —la rejilla de Clientes, la lista de Reportes y la ficha que sale al
+// abrir un correo—. Al añadir «Potencial» las tres lo habrían pintado del gris de
+// «lo demás», o sea igual que un archivado: el estado nuevo existiría en la base y
+// sería invisible justo donde hace falta distinguirlo.
+//
+// HEX de 6 dígitos, obligatorio: la UI concatena la opacidad (`color + '18'`).
+export const COLOR_ESTADO_CLIENTE: Record<string, string> = {
+  Activo: GRN,
+  // Violeta, el mismo tono que el orbe pensando: es el estado «todavía no».
+  Potencial: VIO,
+  Pausado: AMBAR,
+  Archivado: '#FFFFFF',
+}
+/** El color del estado, con el blanco de «archivado» como suelo para uno que no conozca. */
+export const colorEstadoCliente = (status?: string | null): string =>
+  COLOR_ESTADO_CLIENTE[status || ''] || '#FFFFFF'
+/** Los cuatro estados, en el orden del embudo. Un solo sitio del que salen el
+ *  selector de la ficha y los filtros de la rejilla, que iban por separado. */
+export const ESTADOS_CLIENTE = ['Activo', 'Potencial', 'Pausado', 'Archivado'] as const

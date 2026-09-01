@@ -7477,3 +7477,152 @@ describe('los días del diario llegan al modelo EN ORDEN', () => {
       'los días del diario vuelven a ir en el orden que quiera la base de datos').toBe(true)
   })
 })
+
+describe('un potencial NO es un cliente', () => {
+  // Javi, tras la ronda con el jefe: «algo que diferencie potenciales de los
+  // clientes que tenemos».
+  //
+  // No había nada: para que alguien apareciera en Clientes había que darlo de alta
+  // como «Activo», y entonces entraba en el MRR, en el recuento de clientes del
+  // informe en PDF —que se imprime y se enseña— y en el contexto que leen Harvey y
+  // Brutal.IA, que hablaban de él como de un cliente. Un número enseñado al jefe
+  // con dentro dinero que nadie ha facturado.
+
+  it('los tres sitios que pintan el estado salen del MISMO sitio', () => {
+    // El ternario `status === 'Activo' ? GRN : gris` estaba escrito en la rejilla
+    // de Clientes, en la lista de Reportes y en la ficha que sale al abrir un
+    // correo. Añadir un estado y no tocar los tres lo pinta del gris de «lo
+    // demás», o sea igual que un archivado: existiría en la base y sería invisible
+    // justo donde hace falta distinguirlo. El gemelo de manual.
+    for (const f of ['ClientesSection', 'ReportesSection', 'InboxSection']) {
+      const C = leerCodigo(`src/components/sections/${f}.tsx`)
+      expect(/colorEstadoCliente\(/.test(C),
+        `${f} no usa el color compartido del estado de cliente`).toBe(true)
+      expect(/status\s*===\s*'Activo'\s*\?\s*(GRN|`\$\{GRN\})/.test(C),
+        `${f} vuelve a decidir el color del estado por su cuenta: el estado nuevo saldrá gris`)
+        .toBe(false)
+    }
+  })
+
+  it('el selector de la ficha y los filtros de la rejilla NO son dos listas', () => {
+    // Iban por separado, con los tres estados escritos a mano en cada uno. Añadir
+    // uno en el selector y no en los filtros deja un estado que se puede poner y
+    // por el que no se puede filtrar — o sea invisible en cuanto hay más de una
+    // pantalla de clientes.
+    const C = leerCodigo('src/components/sections/ClientesSection.tsx')
+    expect((C.match(/ESTADOS_CLIENTE/g) || []).length,
+      'el selector de estado y los filtros vuelven a ser dos listas escritas a mano')
+      .toBeGreaterThanOrEqual(2)
+    expect(/\{v:'Activo'.*\{v:'Pausado'/.test(C),
+      'vuelven los filtros de estado escritos a mano en la rejilla').toBe(false)
+  })
+
+  it('el estado existe en TypeScript, en la paleta y en la base', () => {
+    // Tres declaraciones del mismo hecho en tres idiomas. Es exactamente el sitio
+    // donde esta app ya se ha cortado: `content_agenda.feedback` estaba en el
+    // código y no en la base, y la revisión con cliente devolvía 404 durante
+    // semanas — el síntoma no nombraba la causa.
+    const tipos = leerCodigo('src/types/index.ts')
+    const tokens = leerCodigo('src/components/shared/design-tokens.ts')
+    const sql = readFileSync(join(__dirname, '../../../migrations/20260901_clientes_potenciales.sql'), 'utf8')
+
+    const union = (tipos.match(/status: ('[A-Za-zÁ-úñ]+'(?: \| '[A-Za-zÁ-úñ]+')*)/) || [])[1] || ''
+    const enTipo = union.split('|').map(x => x.trim().replace(/'/g, '')).filter(Boolean)
+    const enPaleta = [...tokens.matchAll(/ESTADOS_CLIENTE = \[([^\]]*)\]/g)]
+      .flatMap(m => m[1].split(',').map(x => x.trim().replace(/'/g, ''))).filter(Boolean)
+    const enSql = ((sql.match(/CHECK \(status IN \(([^)]*)\)\)/) || [])[1] || '')
+      .split(',').map(x => x.trim().replace(/'/g, '')).filter(Boolean)
+
+    expect(enTipo.length, 'no encuentro la unión de estados en types: revisa esta regla').toBeGreaterThan(2)
+    expect([...enPaleta].sort(), `la paleta y el tipo declaran estados distintos:\n  tipo:   ${enTipo}\n  paleta: ${enPaleta}`)
+      .toEqual([...enTipo].sort())
+    expect([...enSql].sort(), `la migración y el tipo declaran estados distintos — la app aceptará un estado que la base rechaza:\n  tipo: ${enTipo}\n  sql:  ${enSql}`)
+      .toEqual([...enTipo].sort())
+  })
+
+  it('un potencial no suma en el MRR ni se cuenta como cliente en el informe', () => {
+    const CL = leerCodigo('src/components/sections/ClientesSection.tsx')
+    expect(/totalMRR = activeClients\.reduce/.test(CL),
+      'el MRR vuelve a sumar sobre algo que no son los clientes activos').toBe(true)
+    // Y el PDF, que es el que sale de la app y acaba en la mesa de alguien.
+    const RE = leerCodigo('src/components/sections/ReportesSection.tsx')
+    expect(/\$\{clients\.length\}<\/div><div class="lbl">Clientes/.test(RE),
+      'el informe en PDF vuelve a contar TODAS las filas de clients bajo el rótulo «Clientes»: los potenciales y los archivados incluidos')
+      .toBe(false)
+    expect(/\$\{activeClients\.length\}<\/div><div class="lbl">Clientes activos/.test(RE),
+      'el KPI de clientes del PDF ya no cuenta los activos').toBe(true)
+  })
+
+  it('ninguna de las dos IAs llama cliente a un potencial', () => {
+    // Son la misma cosa para quien las usa: arreglarlo en una y no en la otra es
+    // el gemelo que este repo lleva pagando toda la auditoría.
+    const H = leerCodigo('src/lib/contextoHarvey.ts')
+    expect(/POTENCIALES/.test(H) && /status === 'Potencial'/.test(H),
+      'Harvey no distingue un potencial: dirá «tu cliente X» de alguien con quien no hay nada cerrado')
+      .toBe(true)
+    const C = leerCodigo('src/app/api/chat/route.ts')
+    expect(/select\('name,status'\)/.test(C),
+      'Brutal.IA vuelve a recibir los clientes sin su estado: no puede distinguir un potencial').toBe(true)
+    expect(/POTENCIAL/.test(C), 'Brutal.IA recibe el estado y no lo dice en el contexto').toBe(true)
+  })
+
+  it('si la migración no está aplicada, lo DICE', () => {
+    // El 23514 de Postgres es «new row for relation "clients" violates check
+    // constraint "clients_status_check"». Correcto e inútil: quien lo lee no es
+    // quien puede arreglarlo, y no dice qué hay que hacer.
+    const R = leerCodigo('src/lib/respuestaDb.ts')
+    expect(/23514/.test(R) && /20260901_clientes_potenciales/.test(R),
+      'el error de CHECK vuelve a salir en crudo: nadie sabrá que falta una migración').toBe(true)
+    for (const ruta of ['src/app/api/clients/route.ts', 'src/app/api/clients/[id]/route.ts']) {
+      const C = leerCodigo(ruta)
+      expect(/mensajeDeError\(error\)/.test(C), `${ruta} no traduce el error de la base`).toBe(true)
+      expect(/codigoHttpDeError\(error\)/.test(C),
+        `${ruta} vuelve a devolver 500 por un dato malo del cliente`).toBe(true)
+    }
+  })
+})
+
+describe('el harness puede enseñar lo que se acaba de añadir', () => {
+  // /preview es la ÚNICA forma de mirar la UI sin credenciales, y por tanto la
+  // única en una sesión de trabajo con Claude. Un estado que no está en sus datos
+  // de ejemplo es un estado que no se puede revisar — y así se colaron cosas que
+  // solo se vieron en producción.
+  const P = leerCodigo('src/app/preview/PreviewClient.tsx')
+
+  it('hay un cliente de cada estado en los datos de ejemplo', () => {
+    for (const estado of ['Activo', 'Potencial', 'Pausado', 'Archivado']) {
+      expect(new RegExp(`status:'${estado}'`).test(P),
+        `no hay ningún cliente «${estado}» en /preview: ese estado no se puede mirar sin entrar en producción`)
+        .toBe(true)
+    }
+  })
+
+  it('la ficha de cliente se puede ABRIR en el harness', () => {
+    // Iba con `selectedId={null}` y un `onSelect` vacío: media sección —el
+    // selector de estado, las notas, los ficheros, el botón de cerrar el trato—
+    // no se podía revisar. Estaba montada y era inalcanzable.
+    const i = P.indexOf('<ClientesSection')
+    expect(i, 'ya no se monta ClientesSection en /preview: revisa esta regla').toBeGreaterThan(-1)
+    const props = P.slice(i, P.indexOf('/>', i))
+    expect(/selectedId=\{null\}/.test(props),
+      'la ficha de cliente vuelve a ser inalcanzable en el harness').toBe(false)
+    expect(/onSelect=\{\(\)=>\{\}\}/.test(props),
+      'el harness vuelve a descartar la selección de cliente').toBe(false)
+  })
+
+  it('la ficha de un potencial no habla de contrato activo', () => {
+    // Debajo del importe ponía «Contrato activo» — de alguien con quien no hay
+    // nada firmado, y en la pantalla que se abre para decidir si seguir con él.
+    const C = leerCodigo('src/components/sections/ClientesSection.tsx')
+    const i = C.indexOf("'Al mes · contrato activo'")
+    expect(i, 'ya no existe esa nota: revisa esta regla').toBeGreaterThan(-1)
+    // Desde el `note:` que la contiene, no 700 caracteres hacia atrás: esa ventana
+    // se comía la etiqueta de al lado —que SÍ mira el estado— y daba verde con la
+    // nota reintroducida. Comprobado quitándola.
+    const j = C.lastIndexOf('note:', i)
+    expect(j, 'no encuentro la nota del importe: revisa esta regla').toBeGreaterThan(-1)
+    expect(/Potencial/.test(C.slice(j, i)),
+      `la ficha vuelve a poner «contrato activo» debajo del importe de un potencial:\n${C.slice(j, i)}`)
+      .toBe(true)
+  })
+})

@@ -59,7 +59,11 @@ export async function POST(request: NextRequest) {
 
   const q = await Promise.all([
     admin.from('profiles').select('name').eq('id', user.id).single(),
-    admin.from('clients').select('name'),
+    // CON EL ESTADO. Salían solo los nombres, así que un POTENCIAL —alguien con
+    // quien no hay nada cerrado— llegaba a Brutal.IA en la misma lista que Panrico
+    // y contestaba «tu cliente X». Lo mismo que ya se arregló en el contexto de
+    // Harvey: son la misma IA para quien la usa.
+    admin.from('clients').select('name,status'),
     admin.from('projects').select('name,status,deadline'),
     admin.from('tasks').select('text,level,assignee:profiles!assigned_to(name)').eq('done', false),
     // `id, name`: se pedía solo `id` para contar. El prompt decía «Equipo: 7
@@ -145,7 +149,8 @@ export async function POST(request: NextRequest) {
       (history || []).reverse().map(h => ({ role: h.role as 'user' | 'ai', content: h.content })),
       {
         userName: profile?.name || 'Usuario',
-        clients: (clients || []).map(c => c.name),
+        clients: (clients || []).filter((c: any) => c.status !== 'Archivado')
+          .map((c: any) => (c.status === 'Potencial' ? `${c.name} (POTENCIAL: todavía no es cliente)` : c.name)),
         projects: (projects || []).map(p => ({ name: p.name, status: p.status, deadline: (p as any).deadline })),
         tasks: (tasks || []).map(t => ({ text: t.text, level: t.level, assignee: (t.assignee as any)?.name })),
         unreadInbox: (inbox || []).filter((e: any) => !e.is_read).length,

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { horaMadrid } from '@/lib/ventanaCalendario'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { NexusData } from '@/types'
-import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR, rotuloNivel } from '@/components/shared'
+import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR, rotuloNivel, colorEstadoCliente } from '@/components/shared'
 import { useIsMobile, useBackClosable } from '@/components/shared'
 import { strColor, relTime, todayKey } from '@/components/shared'
 // `plural` no se reexporta desde el índice de shared: se importa del módulo.
@@ -1165,7 +1165,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                     <div className="font-syne text-[13px] font-black text-white">{matchedClient.name}</div>
                     <div className="text-[11px] mt-0.5" style={{color:'rgba(255,255,255,0.3)'}}>{matchedClient.industry}</div>
                   </div>
-                  <span className="font-syne text-[8px] font-black px-2 py-1 rounded-full" style={{background:matchedClient.status==='Activo'?`${GRN}12`:'rgba(255,255,255,0.05)',color:matchedClient.status==='Activo'?GRN:'rgba(255,255,255,0.3)'}}>{matchedClient.status}</span>
+                  <span className="font-syne text-[8px] font-black px-2 py-1 rounded-full" style={{background:`${colorEstadoCliente(matchedClient.status)}12`,color:matchedClient.status==='Archivado'?'rgba(255,255,255,0.3)':colorEstadoCliente(matchedClient.status)}}>{matchedClient.status}</span>
                 </div>
                 <div className="flex gap-2 mb-3">
                   {[

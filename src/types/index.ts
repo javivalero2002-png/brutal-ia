@@ -23,7 +23,10 @@ export interface Client {
   id: string
   name: string
   industry: string
-  status: 'Activo' | 'Pausado' | 'Archivado'
+  /** «Potencial» es con quien todavía NO se ha cerrado nada. No es un cliente
+   *  pausado: no cuenta en el MRR, ni en el recuento del informe, ni se le
+   *  presenta a las IAs como cliente. Ver migrations/20260901_clientes_potenciales.sql */
+  status: 'Activo' | 'Potencial' | 'Pausado' | 'Archivado'
   revenue: string
   notes?: string
   color: string
