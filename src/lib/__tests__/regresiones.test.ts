@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { estadoDeadline, dlLabel, saludoMadrid } from '@/components/shared/helpers'
+import { ventanaPreguntada, preguntaPorElEquipo } from '@/lib/resumenEquipo'
 import { SECCIONES } from '@/components/shared/secciones'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -7363,5 +7364,116 @@ describe('una clase que no existe no da error: no hace nada', () => {
     expect(/data-activa="false"/.test(CSS.slice(i, i + 900)),
       'solo se declara un estado: activo y pausado se pintarían igual')
       .toBe(true)
+  })
+})
+
+describe('a Harvey se le puede preguntar por la semana pasada', () => {
+  // Javi: «que no puedas preguntar por la semana pasada a Harvey, me gustaría que
+  // así fuese, si preguntas por la semana pasada te conteste».
+  //
+  // No es que contestara mal: el bloque de diario que se le enseña era SIEMPRE
+  // esta semana, así que a «¿qué hicimos la semana pasada?» respondía con los
+  // datos de esta. Y eso no se nota — la respuesta tiene la forma correcta, las
+  // personas correctas y las horas correctas. Solo son otros días.
+  //
+  // Se comprueba LLAMANDO a la función con un «hoy» fijo, que es la única forma de
+  // fijar una ventana: leer el código no dice qué días salen.
+
+  it('«la semana pasada» es la semana natural anterior, y NO llega a hoy', () => {
+    // Martes 1 de septiembre de 2026. La semana en curso empieza el lunes 31.
+    const v = ventanaPreguntada('¿qué hicimos la semana pasada?', '2026-09-01')
+    expect(v.desde).toBe('2026-08-24')   // lunes anterior
+    expect(v.hasta).toBe('2026-08-30')   // domingo anterior
+    expect(v.hasta < '2026-08-31').toBe(true)
+  })
+
+  it('cruza el año sin despeinarse', () => {
+    // Lunes 5 de enero de 2026: la semana pasada empieza en 2025. Un `-7` sobre el
+    // número del día habría dado un 2026-00-29 o un 2026-12-29, según cómo.
+    const v = ventanaPreguntada('la semana pasada', '2026-01-05')
+    expect([v.desde, v.hasta]).toEqual(['2025-12-29', '2026-01-04'])
+  })
+
+  it('«el mes pasado» es el mes natural anterior, febrero incluido', () => {
+    expect(ventanaPreguntada('dame el balance del mes pasado', '2026-09-01'))
+      .toMatchObject({ desde: '2026-08-01', hasta: '2026-08-31' })
+    // 28 días, sin saber cuántos tiene ni si es bisiesto: día 1 menos un día.
+    expect(ventanaPreguntada('resumen del mes anterior', '2026-03-15'))
+      .toMatchObject({ desde: '2026-02-01', hasta: '2026-02-28' })
+  })
+
+  it('lo que NO nombra un periodo sigue siendo esta semana', () => {
+    // El sesgo va hacia no cambiar de ventana: equivocarse aquí devuelve datos
+    // VERDADEROS de un momento que nadie preguntó, que es lo que no se detecta.
+    const v = ventanaPreguntada('¿qué tal va el equipo?', '2026-09-01')
+    expect(v).toMatchObject({ desde: '2026-08-31', hasta: '2026-09-01', explicita: false })
+  })
+
+  it('el lunes sigue habiendo un ayer que mirar', () => {
+    // Lunes 31: la semana natural es un solo día y «¿qué hizo ayer?» —domingo— se
+    // quedaría sin respuesta.
+    const v = ventanaPreguntada('¿qué hizo Pablo ayer?', '2026-08-31')
+    expect(v.desde).toBe('2026-08-30')
+    // Y el título no puede llamar «lunes» al 30, que es domingo: el modelo repite
+    // en voz alta lo que se le pone delante.
+    expect(v.titulo).not.toMatch(/lunes 2026-08-30/)
+  })
+
+  it('el TÍTULO viaja con la ventana, o el modelo rebautiza los días', () => {
+    // Si el bloque llega encabezado «esta semana» con dentro los días de la
+    // anterior, el modelo dice «esta semana». El fallo pasa de «no sabe» a
+    // «afirma con seguridad algo falso», que es peor.
+    expect(ventanaPreguntada('la semana pasada', '2026-09-01').titulo).toMatch(/SEMANA PASADA/)
+    expect(ventanaPreguntada('el mes pasado', '2026-09-01').titulo).toMatch(/MES PASADO/)
+    const R = leerCodigo('src/lib/resumenEquipo.ts')
+    expect(/DIARIO DEL EQUIPO \(\$\{titulo\}\)/.test(R),
+      'la cabecera del bloque vuelve a estar escrita a mano: puede decir «esta semana» con otros días dentro')
+      .toBe(true)
+    expect(/esta semana, desde el lunes \$\{desdeClave\}/.test(R),
+      'vuelve la cabecera cableada a «esta semana»').toBe(false)
+  })
+
+  it('nombrar un periodo BASTA para que el diario se traiga', () => {
+    // Dos listas de palabras separadas —una para elegir la ventana y otra para
+    // decidir si se trae el bloque— se desincronizan solas: «¿y el mes pasado?»
+    // elegía bien la ventana y luego no enviaba nada. La ventana correcta de un
+    // bloque que no se manda.
+    expect(preguntaPorElEquipo('¿y el mes pasado?', [])).toBe(true)
+    expect(preguntaPorElEquipo('la semana pasada', [])).toBe(true)
+    // Y lo que no va de trabajo sigue sin pagar esos cientos de tokens.
+    expect(preguntaPorElEquipo('¿qué tiempo hace?', [])).toBe(false)
+  })
+
+  it('las tareas se acotan por ARRIBA, no solo por abajo', () => {
+    // La consulta de tareas no tenía tope superior. Preguntando por la semana
+    // pasada habría traído las tareas de ESTA encima de aquel diario: el peor
+    // resultado posible, porque la respuesta parece completa.
+    const R = leerCodigo('src/lib/resumenEquipo.ts')
+    const i = R.indexOf("from('tasks')")
+    expect(i, 'ya no se leen tareas aquí: revisa esta regla').toBeGreaterThan(-1)
+    const consulta = R.slice(i, i + 320)
+    expect(/\.lte\('completed_at'/.test(consulta),
+      `las tareas vuelven a no tener tope por arriba:\n${consulta}`).toBe(true)
+    // Desde la ventana, no desde el principio del fichero: el PRIMER
+    // `from('diario')` es el de `miJornadaHoy`, que lee un solo día y no tiene
+    // ventana. Apuntando ahí la regla miraba otra consulta y daba roja con el
+    // código bien.
+    const d = R.indexOf("from('diario')", R.indexOf('ventanaPreguntada(pregunta)'))
+    expect(/\.lte\('dia', hastaClave\)/.test(R.slice(d, d + 320)),
+      'el diario vuelve a leerse hasta hoy aunque se pregunte por otro periodo').toBe(true)
+  })
+})
+
+describe('los días del diario llegan al modelo EN ORDEN', () => {
+  // Salían como los devolviera la consulta —jueves, miércoles, viernes, sábado— y
+  // a un modelo al que le pides «cuéntame la semana» eso le hace narrarla en ese
+  // orden. No se ve leyendo el código: apareció al mirar el bloque de verdad
+  // contra la base, que es la razón de mirarlo.
+  it('el diario de cada persona va ordenado por día', () => {
+    const R = leerCodigo('src/lib/resumenEquipo.ts')
+    const i = R.indexOf('const mios =')
+    expect(i, 'ya no se agrupa por persona: revisa esta regla').toBeGreaterThan(-1)
+    expect(/\.sort\(/.test(R.slice(i, i + 300)),
+      'los días del diario vuelven a ir en el orden que quiera la base de datos').toBe(true)
   })
 })
