@@ -6,7 +6,7 @@ import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
 import { parsearAccionHarvey, type AccionHarvey , etiquetaAccion, afirmaHaberloHecho, AVISO_SIN_FICHA} from '@/lib/harveyAccion'
 import { limpiarTextoHarvey } from '@/lib/textoHarvey'
-import { nivelTarea, esNoReply } from '@/components/shared/helpers'
+import { nivelTarea, esNoReply, saludoMadrid } from '@/components/shared/helpers'
 import { BLU, RED, GRN, VIO, BORDER } from '@/components/shared/design-tokens'
 import { useIsMobile } from '@/components/shared/hooks'
 import DiaSinCerrar from '@/components/shared/DiaSinCerrar'
@@ -566,7 +566,7 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
             {dateStr.toUpperCase()}
           </div>
           <div className="font-figtree" style={{fontSize:'16px',fontWeight:300,color:'rgba(255,255,255,0.3)'}}>
-            {hour<13?'Buenos días':hour<20?'Buenas tardes':'Buenas noches'},&nbsp;
+            {saludoMadrid(hour)},&nbsp;
             <span style={{fontWeight:600,color:'rgba(255,255,255,0.72)'}}>{firstName}</span>
           </div>
         </div>
@@ -682,7 +682,7 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
               if (autosToday.length>0) items.push({icon:'zap',color:GRN,text:`El motor ejecutó ${autosToday.length} automatización${autosToday.length>1?'es':''} hoy`,nav:'automatizaciones'})
               if (unread.length>0 && importante===0 && !focusEmail) items.push({icon:'mail',color:BLU,text:`Revisa ${unread.length} correo${unread.length>1?'s':''} sin leer`,nav:'inbox'})
               const shown = items.slice(0,5)
-              const greeting = hour<13?'Buenos días':hour<20?'Buenas tardes':'Buenas noches'
+              const greeting = saludoMadrid(hour)
               const urgMsg = urgentTasks.length>0?`Hay ${urgentTasks.length} tarea${urgentTasks.length>1?'s':''} urgente${urgentTasks.length>1?'s':''}: ${urgentTasks.slice(0,2).map((t:Task)=>t.text).join(' y ')}.`:'Sin urgencias.'
               const inboxMsg = unreadCount>0?`${unreadCount} email${unreadCount>1?'s':''} sin leer en el inbox.`:'Inbox al día.'
               const calMsg = todayEvts.length>0?`Hoy tienes ${todayEvts.length} evento${todayEvts.length>1?'s':''}: ${todayEvts.slice(0,2).map((e:any)=>e.title).join(', ')}.`:'Sin eventos de calendario hoy.'

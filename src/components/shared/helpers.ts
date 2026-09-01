@@ -61,6 +61,20 @@ export const horaMinutoMadrid = (iso: string): { h: number; m: number } => {
   return { h: h === 24 ? 0 : h, m }
 }
 
+/**
+ * El saludo según la hora de MADRID: mañana, tarde o noche.
+ *
+ * Los umbrales son los de España, no los de un reloj anglosajón: la tarde
+ * empieza a las 14:00 (Javi y el jefe: «normalmente a partir de las 14:00 aquí
+ * en España»). Antes estaba en 13:00 y escrito A MANO en tres sitios —dos en
+ * Hoy y uno en Harvey—, así que cambiarlo obligaba a acordarse de los tres.
+ * Vive aquí por eso, y porque uno de los tres calculaba la hora con
+ * `new Date().getHours()`, o sea la del NAVEGADOR: desde un rodaje fuera de
+ * España saludaba a destiempo. La franja se decide siempre en Madrid.
+ */
+export const saludoMadrid = (hora: number = madridHour()): string =>
+  hora < 14 ? 'Buenos días' : hora < 21 ? 'Buenas tardes' : 'Buenas noches'
+
 // Fecha larga en español, fijada a Madrid para que servidor y cliente coincidan.
 export const madridDateLabel = (opts: Intl.DateTimeFormatOptions = { weekday: 'long', day: 'numeric', month: 'long' }): string =>
   new Date().toLocaleDateString('es-ES', { timeZone: 'Europe/Madrid', ...opts })

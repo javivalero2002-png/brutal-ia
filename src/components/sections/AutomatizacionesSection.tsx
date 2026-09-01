@@ -317,14 +317,14 @@ function AutomatizacionesSection({data,onOpenModal,showToast,isOwner}: PropsAuto
               </div>
             </div>
             {isOwner && (
-              <button onClick={()=>alternarRegla(r)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[7.5px] font-black transition-all flex-shrink-0"
+              <button onClick={()=>alternarRegla(r)} data-activa={r.active ? 'true' : 'false'}
+                className="nx-conmutador flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-syne text-[7.5px] font-black transition-all flex-shrink-0"
                 style={{background:r.active?'rgba(27,95,250,0.1)':'rgba(255,255,255,0.04)',color:r.active?BLU:'rgba(240,240,248,0.2)',border:`1px solid ${r.active?'rgba(27,95,250,0.2)':'transparent'}`}}>
                 <div className="w-1.5 h-1.5 rounded-full" style={{background:r.active?BLU:'rgba(255,255,255,0.2)'}}/>
                 {r.active?'ACTIVO':'PAUSADO'}
               </button>
             )}
-            {!isOwner && <span className="font-syne text-[7.5px] font-black px-2.5 py-1 rounded-full flex-shrink-0" style={{background:r.active?'rgba(27,95,250,0.1)':'rgba(255,255,255,0.04)',color:r.active?BLU:'rgba(240,240,248,0.2)',border:`1px solid ${r.active?'rgba(27,95,250,0.2)':'transparent'}`}}>{r.active?'ACTIVO':'PAUSADO'}</span>}
+            {!isOwner && <span data-activa={r.active ? 'true' : 'false'} className="nx-conmutador font-syne text-[7.5px] font-black px-2.5 py-1 rounded-full flex-shrink-0" style={{background:r.active?'rgba(27,95,250,0.1)':'rgba(255,255,255,0.04)',color:r.active?BLU:'rgba(240,240,248,0.2)',border:`1px solid ${r.active?'rgba(27,95,250,0.2)':'transparent'}`}}>{r.active?'ACTIVO':'PAUSADO'}</span>}
             {isOwner && (
               confirmDeleteId === r.id
                 ? <div className="flex items-center gap-1 flex-shrink-0">

@@ -186,7 +186,10 @@ describe('Diario · cableado completo', () => {
   it('un día futuro se planifica, pero no ficha la hora', () => {
     const R = leerCod('src/app/api/diario/route.ts')
     expect(/const esFuturo = dia > hoy/.test(R), 'ya no se distingue un día futuro').toBe(true)
-    expect(/!esFuturo && campos\.entrada[\s\S]{0,60}entrada_at = ahora/.test(R),
+    // La condicion crecio al desacoplar fichar de escribir (ahora admite el gesto
+    // `fichar: true` ademas del texto), pero el invariante es el mismo y es lo
+    // unico que esta regla debe fijar: `!esFuturo` gobierna el sello de la hora.
+    expect(/!esFuturo &&[\s\S]{0,150}entrada_at = ahora/.test(R),
       'un día futuro fichará hora de entrada: un plan quedaría como trabajo hecho').toBe(true)
     // El cierre ya no se sella porque llegue texto en `cierre`, sino con un
     // `cerrar: true` explicito — pulsar TERMINAR sin haber escrito el balance no
@@ -412,7 +415,11 @@ describe('Diario · fichar crea tareas y cerrar las completa', () => {
     // aquí, así que la regla fallaba con el código correcto delante.
     const f = D.indexOf('const fichar = async')
     expect(f, 'ya no existe fichar: revisa esta regla').toBeGreaterThan(-1)
-    const cuerpo = D.slice(f, f + 2600)
+    // Ventana holgada: al desacoplar fichar de escribir, los comentarios de
+    // `fichar()` crecieron y con 2.600 la rama de entrada se quedaba cortada por
+    // el final de la ventana — la regla fallaba con el código correcto delante,
+    // que es exactamente lo que su propio comentario de arriba ya advertía.
+    const cuerpo = D.slice(f, f + 4000)
     const i = cuerpo.indexOf("if (campo === 'entrada')")
     expect(i, 'fichar ya no distingue entrada de cierre').toBeGreaterThan(-1)
     const rama = cuerpo.slice(i, i + 900)

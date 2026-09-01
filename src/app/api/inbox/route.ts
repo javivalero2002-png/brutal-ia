@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 // Lecturas grandes de bandeja + envio de push: el default de Vercel se queda corto.
 export const maxDuration = 60
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -27,6 +27,48 @@ export async function GET() {
     .from('profiles').select('ver_colabs').eq('id', user.id).maybeSingle()
   if (errPerfil) console.error('[inbox] no se pudo leer ver_colabs:', errPerfil.message)
   const veColabs = perfil?.ver_colabs !== false
+
+  // ¿CUÁNTOS HAY DE VERDAD?
+  //
+  // La lista de abajo va topada a 100 a propósito: esto es el arranque del
+  // dashboard entero y traerse el buzón completo lo haría lento para todos. Pero
+  // el TOTAL no puede salir de la longitud de esa lista, y era justo lo que hacía
+  // la UI: con 1.116 correos en la base, la carpeta «Bandeja unificada» ponía 100.
+  // Siempre 100. Y al lado, las carpetas por cuenta enseñaban su número real
+  // —contado en el servidor—, así que en la misma columna convivían un número
+  // verdadero y uno falso, que es lo que lo delató.
+  //
+  // `head: true` no trae ni una fila: solo el recuento. Va como rama de este mismo
+  // GET y no como ruta nueva para no duplicar la regla de `ver_colabs`, que es el
+  // gemelo que este repo paga caro. Las dos consultas ENTERAS con su filtro
+  // pegado, por lo mismo que las de abajo.
+  if (new URL(request.url).searchParams.get('conteo') === '1') {
+    const { count: total, error: eTot } = veColabs
+      ? await admin.from('inbox_messages').select('id', { count: 'exact', head: true })
+          .or(`user_id.eq.${user.id},shared.eq.true`).limit(1)
+      : await admin.from('inbox_messages').select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id).limit(1)
+    const { count: sinLeer, error: eSin } = veColabs
+      ? await admin.from('inbox_messages').select('id', { count: 'exact', head: true })
+          .eq('is_read', false).or(`user_id.eq.${user.id},shared.eq.true`).limit(1)
+      : await admin.from('inbox_messages').select('id', { count: 'exact', head: true })
+          .eq('is_read', false).eq('user_id', user.id).limit(1)
+    const { count: urgentes, error: eUrg } = veColabs
+      ? await admin.from('inbox_messages').select('id', { count: 'exact', head: true })
+          .eq('is_read', false).eq('ai_urgency', 'urgent').or(`user_id.eq.${user.id},shared.eq.true`).limit(1)
+      : await admin.from('inbox_messages').select('id', { count: 'exact', head: true })
+          .eq('is_read', false).eq('ai_urgency', 'urgent').eq('user_id', user.id).limit(1)
+    // `medido: false` en vez de un 0: «no hay correos» y «no he podido contarlos»
+    // no son lo mismo, y un 0 inventado sería el mismo tipo de mentira que el 100.
+    const eConteo = eTot || eSin || eUrg
+    if (eConteo) {
+      console.error('[inbox] no se pudo contar el buzón —', eConteo.message)
+      return NextResponse.json({ medido: false, total: null, sinLeer: null, urgentes: null })
+    }
+    return NextResponse.json({
+      medido: true, total: total ?? 0, sinLeer: sinLeer ?? 0, urgentes: urgentes ?? 0,
+    })
+  }
 
   // Las dos consultas ENTERAS, cada una con su filtro pegado.
   //

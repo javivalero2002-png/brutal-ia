@@ -126,7 +126,16 @@ export async function POST(request: NextRequest) {
   // hora de entrada. Fichar es haber estado, y el jueves todavía no has estado —
   // poner la hora ahí convertiría un plan en un registro de trabajo falso, que es
   // justo lo que no debe poder hacerse.
-  if (!esBorrador && !esFuturo && campos.entrada !== undefined && !previo?.entrada_at) fila.entrada_at = ahora
+  //
+  // Y FICHAR ES UN GESTO, igual que cerrar. Aquí la hora de entrada se sellaba
+  // porque llegara texto en `entrada`, así que no se podía fichar sin haber
+  // escrito objetivos — y el registro de jornada no puede depender de eso: es un
+  // hecho, no una nota. Es el gemelo exacto del fallo que se arregló abajo para
+  // el cierre, y sobrevivió porque allí se cambió la forma y aquí no.
+  // `fichar: true` lo desacopla; `campos.entrada !== undefined` se mantiene para
+  // no romper a quien siga fichando al escribir (el camino viejo).
+  const quiereFichar = body?.fichar === true
+  if (!esBorrador && !esFuturo && (quiereFichar || campos.entrada !== undefined) && !previo?.entrada_at) fila.entrada_at = ahora
 
   // CERRAR EL DÍA ES UN GESTO, NO UN EFECTO SECUNDARIO DE ESCRIBIR.
   //
