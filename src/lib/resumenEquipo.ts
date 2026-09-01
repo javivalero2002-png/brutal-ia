@@ -43,8 +43,13 @@ export function preguntaPorElEquipo(pregunta: string, plantilla: Perfil[]): bool
   //
   // Siguen fuera las palabras corrientes («hoy», «tarea») que dispararían en la
   // mayoría de preguntas y se pagan en tokens cada vez.
-  const porTrabajo = /\b(hizo|hicieron|hecho|hiciste|avanz|complet|equipo|semana|ayer|diario|fich|anda|liad|parte|trabaj|progres|rendimiento|objetiv|cerr|jornada|horas|cuanto tiempo|cuánto tiempo|balance)/.test(p)
-  return nombraAAlguien || porTrabajo
+  const porTrabajo = /\b(hizo|hicieron|hicimos|hecho|hiciste|avanz|complet|equipo|semana|ayer|diario|fich|anda|liad|parte|trabaj|progres|rendimiento|objetiv|cerr|jornada|horas|cuanto tiempo|cuánto tiempo|balance)/.test(p)
+  // Y si la pregunta nombra un PERIODO —«el mes pasado»— también, aunque no case
+  // ninguna palabra de trabajo. Va atado a la misma función que elige la ventana
+  // en vez de repetir aquí sus palabras: con dos listas separadas, «¿y el mes
+  // pasado?» elegía bien la ventana y luego no traía el diario, o sea la ventana
+  // correcta de un bloque que no se envía. Un gemelo esperando.
+  return nombraAAlguien || porTrabajo || ventanaPreguntada(p).explicita
 }
 
 /**
@@ -85,6 +90,71 @@ export async function miJornadaHoy(admin: any, userId: string): Promise<string> 
     : `\nTU JORNADA DE HOY: ABIERTA, sin cerrar. Fichaste a las ${entro} y llevas ${dur}.`
 }
 
+/**
+ * QUÉ PERIODO ESTÁ PREGUNTANDO.
+ *
+ * Javi: «que no puedas preguntar por la semana pasada a Harvey, me gustaría que
+ * así fuese». No es que contestara mal: es que el bloque de diario que se le
+ * enseña SIEMPRE era esta semana, así que a «¿qué hicimos la semana pasada?»
+ * respondía con los datos de esta. Y eso no se nota — la respuesta tiene la forma
+ * correcta, las personas correctas y las horas correctas. Solo son otros días.
+ *
+ * Esto no es entender lenguaje natural, y no pretende serlo: son tres periodos
+ * que se piden de verdad, y el resto cae en «esta semana», que es lo que había.
+ * El sesgo es hacia NO cambiar de ventana, porque equivocarse aquí devuelve datos
+ * verdaderos de un momento que nadie preguntó.
+ *
+ * El TÍTULO viaja con la ventana a propósito. Si el bloque llega encabezado «esta
+ * semana» con dentro los días de la anterior, el modelo dice «esta semana» — y
+ * entonces el fallo pasa de «no sabe» a «afirma con seguridad algo falso».
+ */
+export function ventanaPreguntada(
+  pregunta: string,
+  hoyClave: string = todayKey(),
+): { desde: string; hasta: string; titulo: string; explicita: boolean } {
+  const p = String(pregunta || '').toLowerCase()
+  const dia = (base: string, delta: number) => {
+    const d = new Date(`${base}T12:00:00Z`)
+    d.setUTCDate(d.getUTCDate() + delta)
+    return localDayKey(d)
+  }
+  // El lunes DE ESTA SEMANA, con el mismo desplazamiento que usa el panel de
+  // equipo y el briefing. Si esto cambia, la IA cita días que en la pantalla ya no
+  // están — pasó con un sábado 22 y hay una regla que lo vigila.
+  const l = new Date(`${hoyClave}T12:00:00Z`)
+  l.setUTCDate(l.getUTCDate() - ((l.getUTCDay() + 6) % 7))
+  const lunes = localDayKey(l)
+
+  // «la semana pasada» es la semana natural anterior, de lunes a domingo, y se
+  // acaba donde empieza esta. No es «los últimos 7 días»: eso incluiría hoy, y
+  // preguntar por la semana pasada es justo preguntar por lo que ya cerró.
+  if (/\b(semana pasada|semana anterior|la pasada semana)\b/.test(p)) {
+    return {
+      desde: dia(lunes, -7), hasta: dia(lunes, -1), explicita: true,
+      titulo: `la SEMANA PASADA, del lunes ${dia(lunes, -7)} al domingo ${dia(lunes, -1)}`,
+    }
+  }
+  // El mes natural anterior. `día 1 menos un día` da el último del mes de antes
+  // sin tener que saber cuántos tiene ni si es bisiesto.
+  if (/\b(mes pasado|mes anterior|el pasado mes)\b/.test(p)) {
+    const finMesPasado = dia(`${hoyClave.slice(0, 7)}-01`, -1)
+    return {
+      desde: `${finMesPasado.slice(0, 7)}-01`, hasta: finMesPasado, explicita: true,
+      titulo: `el MES PASADO, del ${finMesPasado.slice(0, 7)}-01 al ${finMesPasado}`,
+    }
+  }
+  // Por defecto, la de siempre: esta semana natural, con suelo en AYER. El lunes,
+  // la semana natural es un solo día y «¿qué hizo ayer?» —domingo— se quedaría sin
+  // respuesta. El día de más solo existe los lunes, y va etiquetado (AYER).
+  const ayer = dia(hoyClave, -1)
+  // El lunes, el titulo decia «esta semana, desde el lunes 2026-08-30» — y el 30
+  // era DOMINGO. Se enseña una fecha con el nombre del día equivocado a un modelo
+  // que luego lo repite en voz alta.
+  return lunes <= ayer
+    ? { desde: lunes, hasta: hoyClave, explicita: false, titulo: `esta semana, desde el lunes ${lunes}` }
+    : { desde: ayer, hasta: hoyClave, explicita: false, titulo: `esta semana (empieza hoy, lunes ${lunes}) más AYER ${ayer}` }
+}
+
 /** El bloque listo para pegar en el prompt, o cadena vacía si no hay nada que contar. */
 /**
  * Lo que se pone en el prompt cuando el diario NO se ha traido.
@@ -112,29 +182,20 @@ export async function resumenDelEquipo(
 ): Promise<string> {
   if (!preguntaPorElEquipo(pregunta, plantilla)) return SIN_DIARIO
 
-  // LA MISMA SEMANA QUE ENSEÑA LA PANTALLA. Antes eran los últimos 7 días y el
-  // panel de equipo la semana natural, así que a «¿qué ha hecho Javi esta semana?»
-  // la IA contestaba «el único día sin cerrar fue el 22» — un sábado que en la
-  // pantalla ya no aparece. El jefe lee un dato que no puede ir a comprobar.
-  //
-  // Con un suelo en AYER: el lunes, la semana natural es un solo día y «¿qué hizo
-  // ayer?» —domingo— se quedaría sin respuesta. El día de más solo existe los
-  // lunes, y va etiquetado (AYER), así que no se confunde con «esta semana».
-  const hoyClave = todayKey()
-  const lunes = new Date(`${hoyClave}T12:00:00Z`)
-  lunes.setUTCDate(lunes.getUTCDate() - ((lunes.getUTCDay() + 6) % 7))
-  const ayerD0 = new Date(`${hoyClave}T12:00:00Z`)
-  ayerD0.setUTCDate(ayerD0.getUTCDate() - 1)
-  const desdeClave = localDayKey(lunes) <= localDayKey(ayerD0) ? localDayKey(lunes) : localDayKey(ayerD0)
+  const { desde: desdeClave, hasta: hastaClave, titulo } = ventanaPreguntada(pregunta)
 
   const q = await Promise.all([
-    // `.lte` con hoy: el calendario del Diario deja PLANIFICAR días futuros a
-    // propósito, y sin tope por arriba la IA leía esos planes y los contaba como
-    // trabajo terminado delante de quien preguntara.
+    // `.lte` con el final de la ventana: el calendario del Diario deja PLANIFICAR
+    // días futuros a propósito, y sin tope por arriba la IA leía esos planes y los
+    // contaba como trabajo terminado delante de quien preguntara.
     admin.from('diario').select('dia,user_id,entrada,cierre,entrada_at,cierre_at,animo')
-      .gte('dia', desdeClave).lte('dia', todayKey()),
+      .gte('dia', desdeClave).lte('dia', hastaClave),
+    // Con tope por arriba TAMBIÉN. No lo tenía, y preguntando por la semana pasada
+    // habría traído las tareas de esta encima de aquel diario: el peor resultado
+    // posible, porque la respuesta parece completa.
     admin.from('tasks').select('text,assigned_to,co_assigned_to,completed_at').eq('done', true)
-      .gte('completed_at', ventanaDelDia(desdeClave).desde),
+      .gte('completed_at', ventanaDelDia(desdeClave).desde)
+      .lte('completed_at', ventanaDelDia(hastaClave).hasta),
   ])
   // supabase-js NO lanza. Al extraer esto se vio que las dos consultas
   // desestructuraban solo `data`: un fallo de lectura del diario llegaba al modelo
@@ -152,7 +213,12 @@ export async function resumenDelEquipo(
     // escrito— se colaba como un día y salía aquí con su línea «no escribió
     // objetivos · no cerró el día», que el modelo lee como un día trabajado sin
     // resultados. Es peor que no decir nada: acusa.
+    // EN ORDEN. Salían como los devolviera la consulta —jueves, miércoles,
+    // viernes, sábado— y a un modelo al que le pides «cuenta la semana» eso le
+    // hace narrar los días en ese mismo orden. Se ve leyendo la respuesta, no el
+    // código: por eso apareció al mirar el bloque de verdad y no antes.
     const mios = (diarios ?? []).filter((d: any) => d.user_id === p.id && diarioTieneAlgo(d))
+      .sort((a: any, b: any) => String(a.dia).localeCompare(String(b.dia)))
     const tareas = (hechas ?? []).filter((t: any) =>
       esTareaDe(t, p as any) && t.completed_at && localDayKey(t.completed_at) >= desdeClave)
     if (!mios.length && !tareas.length) return null
@@ -233,15 +299,15 @@ export async function resumenDelEquipo(
     // voz alta con veinte títulos de tarea no la escucha nadie.
     const lista = tareas.slice(0, 5).map((t: any) => t.text).join(' · ')
     const mas = tareas.length > 5 ? ` y ${tareas.length - 5} más` : ''
-    return `  ${p.name}: ${tareas.length} tarea(s) completada(s) esta semana${lista ? ` (ejemplos: ${lista}${mas})` : ''}\n${porDia.join('\n')}`
+    return `  ${p.name}: ${tareas.length} tarea(s) completada(s) en ese periodo${lista ? ` (ejemplos: ${lista}${mas})` : ''}\n${porDia.join('\n')}`
   }).filter(Boolean)
 
   // Traido y vacio NO es lo mismo que no traido: aqui si se ha mirado, y que no
   // haya nada es una respuesta legitima que el modelo puede dar con seguridad.
   if (!lineasEquipo.length) {
-    return `\n\nDIARIO DEL EQUIPO (esta semana, desde el lunes ${desdeClave}): no hay nada escrito. Se ha mirado y está vacío.`
+    return `\n\nDIARIO DEL EQUIPO (${titulo}): no hay nada escrito. Se ha mirado y está vacío.`
   }
-  return `\n\nDIARIO DEL EQUIPO (esta semana, desde el lunes ${desdeClave}):\n${lineasEquipo.join('\n')}`
+  return `\n\nDIARIO DEL EQUIPO (${titulo}):\n${lineasEquipo.join('\n')}`
 }
 
 /**
@@ -250,6 +316,11 @@ export async function resumenDelEquipo(
  * «se propuso» es un plan y no un hecho.
  */
 export const COMO_LEER_EL_DIARIO = `
+El PERIODO que cubre el bloque está escrito en su cabecera, entre paréntesis. Si
+dice «la SEMANA PASADA», habla de la semana pasada y dilo así: no lo llames «esta
+semana» ni des a entender que son los días de ahora. Y si te preguntan por unos
+días que el bloque no cubre, dilo en vez de contestar con los que sí trae.
+
 Lo que va tras «se propuso» es un PLAN, no un hecho: no lo cuentes como trabajo
 terminado. Lo hecho es lo que va tras «hizo (cierre del día)» y las tareas completadas.
 
