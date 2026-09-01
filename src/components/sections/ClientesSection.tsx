@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { estadoDeadline, parseImporte, buscaEnTexto } from '@/components/shared'
+import { estadoDeadline, parseImporte, buscaEnTexto, colorEstadoCliente, ESTADOS_CLIENTE, VIO } from '@/components/shared'
 import { rutaApp } from '@/lib/appUrl'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { BLU, RED, GRN, SURFACE, SURF2, BORDER, AMBAR} from '@/components/shared/design-tokens'
@@ -322,7 +322,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
               <h1 className="font-figtree text-[28px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>{selected.name}</h1>
               {(
                 <div className="flex items-center gap-1.5 mt-2">
-                  {([{s:'Activo',c:GRN},{s:'Pausado',c:AMBAR},{s:'Archivado',c:'#FFFFFF'}] as {s:'Activo'|'Pausado'|'Archivado';c:string}[]).map(opt=>(
+                  {ESTADOS_CLIENTE.map(s0=>({s:s0,c:colorEstadoCliente(s0)})).map(opt=>(
                     <button key={opt.s} onClick={async()=>{try{await data.updateClient(selected.id,{status:opt.s});showToast(`Estado: ${opt.s}`)}catch{showToast('Error al actualizar')}}} className="px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-all" style={{background:selected.status===opt.s?opt.c+'18':'rgba(255,255,255,0.03)',border:`1px solid ${selected.status===opt.s?opt.c+'50':'rgba(255,255,255,0.08)'}`,color:selected.status===opt.s?opt.c:'#FFFFFF'}}>{opt.s.toUpperCase()}</button>
                   ))}
                   {/* Sin esto, `archived_at` seria una columna que se escribe y no
@@ -332,6 +332,18 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
                     <span className="font-syne text-[8px] font-black tracking-wide ml-1" style={{color:'rgba(255,255,255,0.25)'}}>
                       DESDE {dlLabel(localDayKey(selected.archived_at))}
                     </span>
+                  )}
+                  {/* CERRAR EL TRATO, en un clic. El botón que de verdad se pulsa:
+                      el estado ya se puede cambiar en la fila de arriba, pero este
+                      es el momento que se quiere celebrar y el que hay que hacer
+                      fácil — y es lo que mueve el dinero del embudo al MRR. */}
+                  {selected.status==='Potencial' && (
+                    <button
+                      onClick={async()=>{try{await data.updateClient(selected.id,{status:'Activo'});showToast(`${selected.name} ya es cliente 🎉`)}catch(e:any){showToast(e?.message||'No se pudo cerrar')}}}
+                      className="ml-1 px-3 py-1.5 rounded-xl font-syne text-[8px] font-black tracking-wide transition-opacity hover:opacity-80"
+                      style={{background:`${GRN}18`,border:`1px solid ${GRN}50`,color:GRN}}>
+                      ✓ CERRADO — PASAR A CLIENTE
+                    </button>
                   )}
                 </div>
               )}
@@ -475,9 +487,14 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
              // Decía «Facturación mensual» pasara lo que pasara, incluso con un
              // contrato anual escrito al lado. Ahora lo lee y lo dice, y enseña
              // el equivalente mensual, que es lo que suma en Reportes.
-             l:parseImporte(selected.revenue).anual?'Facturación anual':'Facturación mensual',
-             accent:selected.color,
-             note:parseImporte(selected.revenue).anual
+             // Y en un POTENCIAL es una estimación, no una factura: aquí ponía
+             // «Contrato activo» debajo del importe de alguien con quien no hay
+             // nada firmado. Es la misma frase que en la rejilla, y por lo mismo.
+             l:(selected.status==='Potencial'?'Estimado · f':'F')+(parseImporte(selected.revenue).anual?'acturación anual':'acturación mensual'),
+             accent:selected.status==='Potencial'?VIO:selected.color,
+             note:selected.status==='Potencial'
+               ? 'Sin cerrar · no suma en el MRR'
+               : parseImporte(selected.revenue).anual
                ? `Al año · ${Math.round(parseImporte(selected.revenue).mensual).toLocaleString('es-ES')} €/mes`
                : (selected.revenue||'').includes('/')?'Al mes · contrato activo':'Contrato activo'},
             {v:clientProjects.length, l:'Proyectos totales', accent:BLU, note:plural(activeProjects.length,'activo')},
@@ -719,6 +736,14 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
   const parseRevenue = (s: string): number => parseImporte(s).mensual
   const activeClients = data.clients.filter((c: Client)=>c.status==='Activo')
   const totalMRR = activeClients.reduce((sum: number, c: Client) => sum + parseRevenue(c.revenue||''), 0)
+  // EL EMBUDO, aparte y con su propio número.
+  //
+  // Un potencial NO suma en el MRR: ese dinero no lo ha facturado nadie todavía, y
+  // el MRR es la cifra que se mira para decidir. Pero tampoco puede desaparecer —
+  // «cuánto hay en el aire» es media conversación de un lunes. Van los dos, y con
+  // etiquetas que no se pueden confundir: uno dice TOTAL y el otro EN EL EMBUDO.
+  const potenciales = data.clients.filter((c: Client)=>c.status==='Potencial')
+  const totalEmbudo = potenciales.reduce((sum: number, c: Client) => sum + parseRevenue(c.revenue||''), 0)
   // El desglose tiene que contar los MISMOS clientes que el total que hay al lado.
   // Antes salían todos —también los pausados—, así que las barras sumaban más que
   // el MRR: con los datos de ejemplo, €154.500 en barras bajo un total de €136.500.
@@ -749,6 +774,26 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
         </div>
         <button onClick={()=>onOpenModal('cliente')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white transition-opacity hover:opacity-85" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ NUEVO CLIENTE</button>
       </div>
+      {potenciales.length > 0 && (
+        <button onClick={()=>setClientStatusFilter(clientStatusFilter==='Potencial'?'Todos':'Potencial')}
+          className="w-full flex items-center gap-3 mb-5 px-5 py-3.5 rounded-2xl text-left transition-opacity hover:opacity-85"
+          /* Borde DISCONTINUO, como las tarjetas de abajo: es la misma idea dicha
+             dos veces — nada de esto está cerrado todavía. */
+          style={{background:`${VIO}0A`,border:`1px dashed ${VIO}45`}}>
+          <LucideIcon name="user-plus" size={15} color={VIO}/>
+          <span className="font-syne text-[9.5px] font-black tracking-widest" style={{color:VIO}}>
+            {plural(potenciales.length,'CLIENTE POTENCIAL','CLIENTES POTENCIALES').toUpperCase()}
+          </span>
+          {totalEmbudo > 0 && (
+            <span className="font-figtree text-[13px] font-black" style={{color:VIO}}>
+              €{totalEmbudo.toLocaleString('es-ES')} en el embudo
+            </span>
+          )}
+          <span className="ml-auto font-syne text-[8px] font-black tracking-wide" style={{color:'rgba(255,255,255,0.28)'}}>
+            {clientStatusFilter==='Potencial' ? 'VER TODOS' : 'VER SOLO ESTOS'}
+          </span>
+        </button>
+      )}
       {totalMRR > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <div className="col-span-1 rounded-2xl p-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
@@ -788,7 +833,7 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
             {clientSearch && <button onClick={()=>setClientSearch('')}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.2)"/></button>}
           </div>
           <div className="flex gap-1 p-1 rounded-2xl overflow-x-auto max-w-full" style={{background:SURFACE,border:`1px solid ${BORDER}`,scrollbarWidth:'none'}}>
-            {([{v:'Todos',c:'rgba(255,255,255,0.9)'},{v:'Activo',c:GRN},{v:'Pausado',c:AMBAR},{v:'Archivado',c:'#FFFFFF'}] as const).map(s=>(
+            {[{v:'Todos',c:'rgba(255,255,255,0.9)'},...ESTADOS_CLIENTE.map(e=>({v:e,c:colorEstadoCliente(e)}))].map(s=>(
               <button key={s.v} onClick={()=>setClientStatusFilter(s.v)} className="px-3.5 py-2 rounded-xl font-syne text-[8.5px] font-black tracking-wide transition-all flex-shrink-0" style={{background:clientStatusFilter===s.v?SURF2:'transparent',color:clientStatusFilter===s.v?s.c:'rgba(255,255,255,0.28)'}}>
                 {s.v.toUpperCase()}
               </button>
@@ -820,8 +865,13 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
             const nUrgent = data.tasks.filter((t:Task)=>t.client_id===c.id&&!t.done&&t.level==='urgent').length
             const activeProj = data.projects.filter((p:Project)=>p.client_id===c.id&&(p.status==='activo'||p.status==='urgente')).length
             return (
-              <div key={c.id} onClick={()=>onSelect(c.id)} className="rounded-2xl overflow-hidden cursor-pointer transition-all group hover:border-white/10" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
-                <div className="h-1" style={{background:`linear-gradient(90deg,${c.color}60,transparent)`}}/>
+              <div key={c.id} onClick={()=>onSelect(c.id)} className="rounded-2xl overflow-hidden cursor-pointer transition-all group hover:border-white/10"
+                /* DISCONTINUO si es un potencial. La chapa de estado ya lo dice,
+                   pero se lee después del nombre y del logo; el borde se ve antes
+                   de leer nada, que es lo que se pidió: distinguirlos de un
+                   vistazo en una rejilla donde todos parecen clientes. */
+                style={{background:SURFACE,border:c.status==='Potencial'?`1px dashed ${VIO}40`:`1px solid ${BORDER}`}}>
+                <div className="h-1" style={{background:c.status==='Potencial'?`repeating-linear-gradient(90deg,${VIO}55 0 6px,transparent 6px 12px)`:`linear-gradient(90deg,${c.color}60,transparent)`}}/>
                 <div className="p-6">
                   <div className="flex items-center gap-4 mb-5">
                     <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-syne text-base font-black flex-shrink-0" style={{background:c.color+'18',border:`2px solid ${c.color}25`,color:c.color}}>{c.initials}</div>
@@ -829,12 +879,12 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
                       <div className="font-syne text-[15px] font-black text-white truncate">{c.name}</div>
                       <div className="text-[11px] mt-0.5 truncate" style={{color:'rgba(255,255,255,0.3)'}}>{c.industry}</div>
                     </div>
-                    <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full flex-shrink-0" style={{background:c.status==='Activo'?'rgba(34,197,94,0.08)':'rgba(255,255,255,0.04)',color:c.status==='Activo'?GRN:'rgba(255,255,255,0.3)'}}>{c.status.toUpperCase()}</span>
+                    <span className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full flex-shrink-0" style={{background:`${colorEstadoCliente(c.status)}14`,color:c.status==='Archivado'?'rgba(255,255,255,0.3)':colorEstadoCliente(c.status)}}>{c.status.toUpperCase()}</span>
                   </div>
 
                   {c.revenue && c.revenue !== '—' && (
                     <div className="mb-4 px-4 py-3 rounded-xl" style={{background:c.color+'08',border:`1px solid ${c.color}15`}}>
-                      <div className="font-syne text-[8px] font-black tracking-widest mb-1" style={{color:'rgba(255,255,255,0.25)'}}>{/* El mismo criterio que la ficha: «120k/año» etiquetado MENSUAL hacía apuntar una cifra doce veces mayor a quien lee la rejilla deprisa. */}{parseImporte(c.revenue).anual ? 'FACTURACIÓN ANUAL' : 'FACTURACIÓN MENSUAL'}</div>
+                      <div className="font-syne text-[8px] font-black tracking-widest mb-1" style={{color:'rgba(255,255,255,0.25)'}}>{/* El mismo criterio que la ficha: «120k/año» etiquetado MENSUAL hacía apuntar una cifra doce veces mayor a quien lee la rejilla deprisa. */}{(c.status==='Potencial'?'ESTIMADO · ':'')+(parseImporte(c.revenue).anual ? 'FACTURACIÓN ANUAL' : 'FACTURACIÓN MENSUAL')}</div>
                       <div className="font-figtree text-[22px] font-black leading-none" style={{color:c.color||'rgba(240,240,248,0.85)'}}>{c.revenue}</div>
                     </div>
                   )}

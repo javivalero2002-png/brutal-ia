@@ -1,4 +1,5 @@
-export { BLU, RED, GRN, AMBAR, VIO, SURFACE, SURF2, BORDER, ACCENT_COLORS, PLATAFORMA_COLOR } from './design-tokens'
+export { BLU, RED, GRN, AMBAR, VIO, SURFACE, SURF2, BORDER, ACCENT_COLORS, PLATAFORMA_COLOR,
+  COLOR_ESTADO_CLIENTE, colorEstadoCliente, ESTADOS_CLIENTE } from './design-tokens'
 export { useIsMobile, useBackClosable } from './hooks'
 export { dlDate, dlLabel, strColor, relTime, videoEmbed, videoEsVertical, proporcionEmbed, todayKey, localDayKey, daysBetweenKeys, estadoDeadline, madridHour, madridDateLabel, saludoMadrid, plural, parseImporte, buscaEnTexto, NIVEL_TAREA, rotuloNivel, nivelTarea, mensajeErrorTranscripcion } from './helpers'
 export { getSharedAudio, playAck, isIOSDevice, matchTeamMember, splitForTTS, stopAllVoices, unlockAudio, isSRBroken, markSRBroken } from './audio'

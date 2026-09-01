@@ -57,6 +57,11 @@ export function construirContexto(data: DatosContexto, pregunta?: string): strin
   const activos = projects.filter(p => p.status !== 'completado')
   const atrasados = activos.filter(p => estadoDeadline(txt(p.deadline))?.vencido)
   const clientes = (data.clients || []).filter(c => c.status === 'Activo')
+  // LOS POTENCIALES, aparte y dichos como lo que son. Iban dentro de «clientes
+  // activos» —era el único estado que se enseñaba— y Harvey hablaba de ellos como
+  // de clientes: «tienes que entregarle a X». Fuera de la lista tampoco valía: a
+  // «¿con quién estamos hablando?» contestaba que con nadie, teniéndolos delante.
+  const potenciales = (data.clients || []).filter(c => c.status === 'Potencial')
   const pipeline = (data.agenda || []).filter(a => a.status !== 'publicado')
 
   // El recuento REAL de no leídos, aparte de la lista que se enseña. La lista
@@ -114,7 +119,9 @@ ALTA PRIORIDAD (${altas.length}): ${altas.slice(0, 3).map(t => txt(t.text)).join
 ${venceHoy.length > 0 ? `VENCEN HOY (${venceHoy.length}): ${venceHoy.map(t => txt(t.text)).join(' · ')}\n` : ''}
 PROYECTOS ACTIVOS (${activos.length}): ${lineasProyecto || 'ninguno'}
 ${atrasados.length > 0 ? `ATRASADOS (${atrasados.length}): ${atrasados.map(p => txt(p.name)).join(', ')}\n` : ''}
-CLIENTES ACTIVOS (${clientes.length}): ${clientes.map(c => txt(c.name)).join(', ') || 'ninguno'}
+CLIENTES ACTIVOS (${clientes.length}): ${clientes.map(c => txt(c.name)).join(', ') || 'ninguno'}${
+  potenciales.length ? `
+POTENCIALES — todavía NO son clientes, no hay nada cerrado con ellos (${potenciales.length}): ${potenciales.map(c => txt(c.name)).join(', ')}` : ''}
 EQUIPO: ${(data.team || []).map(m => txt(m.name)).filter(Boolean).join(', ') || 'sin datos'}
 PIPELINE CONTENIDO: ${pipeline.length} piezas pendientes
 

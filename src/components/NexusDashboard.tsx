@@ -687,7 +687,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
       if (modal === 'cliente') {
         if (!mf.name?.trim()) { showToast('Escribe el nombre del cliente'); return }
         const color = ACCENT_COLORS[data.clients.length % ACCENT_COLORS.length]
-        await data.createClient({ name:mf.name.trim(), industry:mf.industria||'—', revenue:mf.facturacion||'—', color })
+        await data.createClient({ name:mf.name.trim(), industry:mf.industria||'—', revenue:mf.facturacion||'—', color, status:mf.estado_cliente==='Potencial'?'Potencial':'Activo' })
         showToast('Cliente creado: '+mf.name)
       } else if (modal === 'proyecto') {
         if (!mf.nombre?.trim()) { showToast('Escribe el nombre'); return }

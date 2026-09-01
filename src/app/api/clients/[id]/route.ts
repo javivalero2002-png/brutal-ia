@@ -1,5 +1,6 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getAuthCtx } from '@/lib/authz'
+import { codigoHttpDeError, mensajeDeError } from '@/lib/respuestaDb'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Solo columnas conocidas: campos desconocidos no deben tumbar la petición
@@ -26,7 +27,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     cambios.archived_at = cambios.status === 'Archivado' ? new Date().toISOString() : null
   }
   const { data, error } = await admin.from('clients').update(cambios).eq('id', id).select().single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) return NextResponse.json({ error: mensajeDeError(error) }, { status: codigoHttpDeError(error) })
   return NextResponse.json(data)
 }
 

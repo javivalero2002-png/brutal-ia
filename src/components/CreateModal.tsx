@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react'
 import type { Profile, Client } from '@/types'
 import { marcarModalAbierto, marcarModalCerrado } from '@/components/shared/modalAbierto'
-import { PLATAFORMA_COLOR, BLU, RED, GRN, SURF2, BORDER, LucideIcon, useIsMobile, AMBAR} from '@/components/shared'
+import { PLATAFORMA_COLOR, BLU, RED, GRN, SURF2, BORDER, LucideIcon, useIsMobile, AMBAR, VIO } from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
 
 const meta: Record<string, { eyebrow: string; title: string; saveLabel: string }> = {
@@ -20,6 +20,11 @@ function fields(type: string, team: Profile[], isOwner = true) {
     cliente: [
       f('Nombre del cliente', 'name', 'Ej: Nike España'),
       f('Industria', 'industria', 'Ej: Fashion · Lifestyle'),
+      // Lo primero que se sabe de alguien nuevo suele ser justo esto —si ya está
+      // cerrado o si todavía se está hablando— y sin el campo aquí había que
+      // crearlo como cliente y corregirlo después: en ese hueco el MRR ya lo ha
+      // sumado y el informe ya lo ha contado.
+      { label:'¿Ya es cliente?', key:'estado_cliente', type:'client-status', placeholder:'' },
       // Solo el owner: el POST descarta `revenue` de cualquier otro rol —igual
       // que el PATCH desde siempre— y enseñar un campo que el servidor va a
       // ignorar en silencio es peor que no enseñarlo.
@@ -246,6 +251,21 @@ export default function CreateModal({ modal, onClose, onDismiss, mf, setMf, savi
                       {s.l.toUpperCase()}
                     </button>
                   ))}
+                </div>
+              ) : f.type === 'client-status' ? (
+                <div className="flex gap-2">
+                  {[{v:'Activo',l:'Ya es cliente',c:GRN},{v:'Potencial',l:'Potencial',c:VIO}].map(s=>{
+                    const act=(mf[f.key]||'Activo')===s.v
+                    return (
+                      <button key={s.v} onClick={()=>setMf(m=>({...m,[f.key]:s.v}))} className="flex-1 py-3 rounded-2xl font-syne text-[9px] font-black tracking-wide transition-all"
+                        /* Discontinuo el de potencial, igual que su tarjeta y su
+                           barra en la rejilla: la misma idea dicha en el mismo
+                           idioma en los tres sitios donde aparece. */
+                        style={{background:act?s.c+'18':SURF2,border:`1.5px ${s.v==='Potencial'?'dashed':'solid'} ${act?s.c+'60':BORDER}`,color:act?s.c:'#FFFFFF'}}>
+                        {s.l.toUpperCase()}
+                      </button>
+                    )
+                  })}
                 </div>
               ) : f.type === 'account' ? (
                 <div className="flex gap-2 flex-wrap">
