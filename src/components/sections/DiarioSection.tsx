@@ -620,7 +620,11 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
     // El balance es valioso, pero es una nota sobre el día; la hora de salida es un
     // hecho. Un hecho no puede depender de que te apetezca escribir. Se pide
     // después, con el día ya cerrado, que es cuando se contesta mejor.
-    if (campo === 'entrada' && !valor.trim()) { showToast('Escribe tus objetivos primero'); return }
+    // Fichar NO exige haber escrito nada. La jornada es un HECHO que se registra;
+    // los objetivos son una nota que se añade después, si se quiere. Además del
+    // sentido común lo pide la ley: el registro horario no puede condicionarse a
+    // rellenar otra cosa. El balance del cierre ya funcionaba así — la entrada era
+    // el gemelo que quedaba, con el comentario de arriba describiéndola sin cumplirla.
     setFichando(true)
     try {
       const res = await fetch('/api/diario', {
@@ -628,8 +632,10 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
         headers: { 'Content-Type': 'application/json' },
         // En el cierre el texto viaja solo si lo hay: mandar `cierre: ''` borraría
         // un balance ya escrito al volver a pulsar.
+        // El GESTO viaja como bandera y el texto solo si lo hay, en los dos
+        // sentidos: mandar `entrada: ''` pisaría unos objetivos ya autoguardados.
         body: JSON.stringify(campo === 'entrada'
-          ? { entrada: valor.trim(), dia }
+          ? { dia, fichar: true, ...(valor.trim() ? { entrada: valor.trim() } : {}) }
           : { dia, cerrar: true, ...(valor.trim() ? { cierre: valor.trim() } : {}) }),
       })
       if (!res.ok) { showToast('No se pudo fichar'); return }
@@ -1297,19 +1303,21 @@ export default function DiarioSection({ data, profile, showToast, onNavigate, on
                       00:00
                     </div>
                     <div className="font-figtree text-[11px] mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                      {porCrear.length > 0 ? 'El reloj arranca al marcar entrada' : 'Escribe tus objetivos para empezar'}
+                      {porCrear.length > 0 ? 'El reloj arranca al marcar entrada' : 'Ficha ahora; los objetivos, cuando quieras'}
                     </div>
                   </div>
-                  {/* Marcar entrada EXIGE objetivos —es lo que hace que el fichaje
-                      valga para algo— así que sin ellos el botón lleva a
-                      escribirlos en vez de dar un error. */}
+                  {/* MARCAR ENTRADA, siempre y sin condiciones. Antes, si no había
+                      objetivos escritos, el botón se convertía en PONER OBJETIVOS y
+                      en vez de fichar te bajaba a escribirlos: no se podía registrar
+                      la jornada sin rellenar antes otra cosa, que es justo lo que la
+                      ley no permite. Los objetivos se añaden después. */}
                   <button
-                    onClick={() => { if (porCrear.length > 0) fichar('entrada'); else refObjetivos.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }}
+                    onClick={() => fichar('entrada')}
                     disabled={fichando}
                     className="flex items-center gap-2 px-4 py-3 rounded-2xl font-syne text-[9px] font-black tracking-widest transition-all hover:opacity-80 disabled:opacity-40 active:scale-[0.97] ml-auto flex-shrink-0"
                     style={{ background: `${GRN}18`, border: `1px solid ${GRN}45`, color: GRN }}>
                     <LucideIcon name="play" size={11} color={GRN} />
-                    {porCrear.length > 0 ? 'MARCAR ENTRADA' : 'PONER OBJETIVOS'}
+                    MARCAR ENTRADA
                   </button>
                 </>
               )}

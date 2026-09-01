@@ -601,3 +601,31 @@ html.theme-light .nx-boot-barra { background: rgba(255,255,255,0.16); }
    ──────────────────────────────────────────────────────────────────────────── */
 .nx-kbd-hints span { color: rgba(255, 255, 255, 0.3) !important; }
 .nx-kbd-hints span span:last-child { color: rgba(255, 255, 255, 0.16) !important; }
+
+/* ── El conmutador ACTIVO/PAUSADO de Automatizaciones ──────────────────────
+   En MODO CLARO no se veía, y en PAUSADO no se veía EN ABSOLUTO: la chapa es
+   blanco al 4% sobre la tarjeta #0A0A14, y tras invert+contrast+brightness las
+   dos se recortan a blanco puro (255) — separación 1,000, con el borde en
+   `transparent`. O sea, ni un indicio de que ahí hubiera un botón que pulsar.
+   El texto quedaba en 1,20:1.
+   Tampoco lo alcanzaba el bloque de colores de marca de más arriba: aquel casa
+   por el atributo `style` y lleva `:not(:has(*))`, y este botón tiene DENTRO el
+   punto de estado. La insignia de solo lectura sí lo recibía — o sea que el
+   único que quedaba fuera era justo el que se puede pulsar.
+   Se cancela el filtro y se declaran los colores TAL COMO se quieren ver. */
+html.theme-light .nx-conmutador {
+  filter: invert(1) hue-rotate(180deg);
+  box-shadow: none;
+  background: #DCE6FB !important;
+  border: 1px solid #4F7FE8 !important;
+  color: #0B4ED9 !important;
+}
+html.theme-light .nx-conmutador[data-activa="false"] {
+  background: #E9EBF1 !important;
+  border: 1px solid #A3AABC !important;
+  color: #3F4657 !important;
+}
+/* El punto de estado va dentro y hereda el contrafiltro del padre, así que se
+   le declara su color final: sin esto se quedaba blanco sobre azul claro. */
+html.theme-light .nx-conmutador > div { background: #0B4ED9 !important; }
+html.theme-light .nx-conmutador[data-activa="false"] > div { background: #6B7285 !important; }

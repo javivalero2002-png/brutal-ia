@@ -22,7 +22,13 @@ export async function GET(request: NextRequest) {
   // el fichero como texto y no distingue codigo de prosa.)
   const { data: profile } = await admin
     .from('profiles')
-    .select('id, email, name, role, avatar_color, initials, gmail_connected, gmail_account, gmail_colabs_connected, gmail_colabs_account, onboarding_at')
+    // `analizar_correo` y `ver_colabs` SÍ viajan: son las que pintan los dos
+    // interruptores de Operativa → Sincronización. Sin ellas el perfil llegaba con
+    // `undefined` y `profile?.ver_colabs !== false` daba true, así que el
+    // interruptor volvía a salir MARCADO al recargar por mucho que lo apagaras —
+    // el PATCH sí lo guardaba, pero nadie lo leía de vuelta. Sigue siendo una
+    // allowlist explícita: aquí no entra ningún token.
+    .select('id, email, name, role, avatar_color, initials, gmail_connected, gmail_account, gmail_colabs_connected, gmail_colabs_account, onboarding_at, analizar_correo, ver_colabs')
     .eq('id', user.id)
     .single()
 
@@ -35,7 +41,10 @@ export async function GET(request: NextRequest) {
   if (user.email) {
     const { data: existingByEmail } = await admin
       .from('profiles')
-      .select('id, email, name, role, avatar_color, initials, gmail_connected, gmail_account, gmail_colabs_connected, gmail_colabs_account, onboarding_at')
+      // La MISMA allowlist que arriba, y por eso hay un test que las compara:
+      // este camino (alta por email de Google) llegaba con las columnas viejas y
+      // el interruptor volvía a salir marcado solo para quien entra por ahí.
+      .select('id, email, name, role, avatar_color, initials, gmail_connected, gmail_account, gmail_colabs_connected, gmail_colabs_account, onboarding_at, analizar_correo, ver_colabs')
       .eq('email', user.email)
       .single()
 

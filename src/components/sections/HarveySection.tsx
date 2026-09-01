@@ -8,7 +8,7 @@ import { parsearAccionHarvey, type AccionHarvey , etiquetaAccion, afirmaHaberloH
 import { limpiarTextoHarvey } from '@/lib/textoHarvey'
 import { nivelTarea } from '@/components/shared/helpers'
 import type { NexusData } from '@/types'
-import { estadoDeadline, Esperando, BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, AMBAR, mensajeErrorTranscripcion } from '@/components/shared'
+import { estadoDeadline, Esperando, BLU, RED, GRN, SURFACE, BORDER, useIsMobile, dlDate, LucideIcon, getSharedAudio, splitForTTS, stopAllVoices, playAck, isIOSDevice, isSRBroken, markSRBroken, matchTeamMember, todayKey, localDayKey, madridDateLabel, saludoMadrid, AMBAR, mensajeErrorTranscripcion } from '@/components/shared'
 import { VIO } from '@/components/shared/design-tokens'
 import type { IrASeccion } from '@/components/shared/secciones'
 
@@ -790,7 +790,7 @@ function HarveySection({data, profile, showToast, onNavigate, preloadMessage, on
                   héroe se ve CADA vez que no hay conversación, no solo si nunca
                   hubo saludo. Es la primera impresión de la sección estrella. */}
               <div className="font-figtree font-black text-white mb-2" style={{fontSize:'22px',letterSpacing:'-0.02em'}}>
-                {(() => { const h = new Date().getHours(); const sal = h<13?'Buenos días':h<20?'Buenas tardes':'Buenas noches'; return `${sal}, ${profile?.name?.split(' ')?.[0]||'jefe'}` })()}
+                {`${saludoMadrid()}, ${profile?.name?.split(' ')?.[0]||'jefe'}`}
               </div>
               <div className="font-figtree text-[13px] leading-relaxed max-w-[280px] mx-auto" style={{color:'rgba(255,255,255,0.45)'}}>
                 {(() => {

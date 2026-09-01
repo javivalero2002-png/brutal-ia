@@ -57,11 +57,23 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
   const [veColabs, setVeColabs] = useState<boolean>(profile?.ver_colabs !== false)
   // Las cuentas de Gmail conectadas. Vienen del servidor y NO llevan token: el
   // cliente solo necesita saber qué direcciones hay.
-  const [cuentas, setCuentas] = useState<{ email: string; compartida: boolean }[]>([])
+  const [cuentas, setCuentas] = useState<{ email: string; compartida: boolean; total?: number; sinLeer?: number }[]>([])
   // Los correos que entraron ANTES de que se guardara el buzon. Vive aqui y no
   // en el Inbox porque es una reparacion puntual de datos viejos, como el
   // arreglo de enlaces de Memoria — y el Inbox es para leer correo.
   const [sinIdent, setSinIdent] = useState(0)
+  // El buzón entero contado en la base: total, sin leer y urgentes. Lo mismo que
+  // usa el Inbox — un solo sitio que sepa contar, para que las dos pantallas no
+  // puedan discrepar.
+  const [conteo, setConteo] = useState<{total:number; sinLeer:number; urgentes:number} | null>(null)
+  useEffect(() => {
+    let vivo = true
+    fetch('/api/inbox?conteo=1')
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (vivo && j && j.medido) setConteo({ total:j.total, sinLeer:j.sinLeer, urgentes:j.urgentes }) })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [])
   // LOS ERRORES QUE LA APP HA ANOTADO.
   //
   // Javi: «estaría bien que se anotasen en algún lado para notificártelos».
@@ -388,12 +400,32 @@ function SincronizacionSection({data, profile, showToast}: PropsSincronizacion) 
 
   const calCount = (data.calendarEvents||[]).length
   const waCount  = (data.inbox||[]).filter((m:any)=>m.source==='whatsapp').length
-  const personalEmails = (data.inbox||[]).filter((m:any)=>m.source==='gmail'&&!m.shared).length
-  const colabsEmails   = (data.inbox||[]).filter((m:any)=>m.source==='gmail'&&m.shared).length
-  const unreadTotal    = (data.inbox||[]).filter((m:any)=>!m.is_read).length
-  const urgentTotal    = (data.inbox||[]).filter((m:any)=>!m.is_read&&m.ai_urgency==='urgent').length
-  const unreadPersonal = (data.inbox||[]).filter((m:any)=>m.source==='gmail'&&!m.shared&&!m.is_read).length
-  const unreadColabs   = (data.inbox||[]).filter((m:any)=>m.source==='gmail'&&m.shared&&!m.is_read).length
+  // LOS TOTALES LOS CUENTA EL SERVIDOR, NO LA LISTA.
+  //
+  // `data.inbox` viene topada a 100 correos —lo hace `/api/inbox` a propósito: es
+  // el arranque del dashboard entero—, así que contar su longitud daba «100
+  // emails» y ahí se quedaba, con 1.116 en la base. Y ese número sale CUATRO veces
+  // en esta pantalla, una de ellas en la tarjeta grande de «Emails»: la pantalla
+  // que existe para responder «¿está entrando el correo?» contestaba con un tope.
+  //
+  // `/api/gmail/cuentas` ya los cuenta contra la base, buzón a buzón, y esta
+  // sección ya lo pedía. Mientras no conteste se enseña lo que se sabe —la
+  // lista—: menos exacto, pero solo durante el primer segundo, y un hueco donde
+  // había un número parece que la pantalla se ha roto.
+  const hayMedida = cuentas.some(c => typeof c.total === 'number')
+  const sumar = (compartida: boolean, campo: 'total'|'sinLeer') =>
+    cuentas.filter(c => c.compartida === compartida).reduce((n, c) => n + (c[campo] || 0), 0)
+  const enLista = (f: (m:any)=>boolean) => (data.inbox||[]).filter(f).length
+  // Los de `sinIdent` entraron antes de que se guardara el buzón y llevan
+  // `cuenta` a NULL: son personales, y sin sumarlos el total se quedaría corto.
+  const personalEmails = hayMedida ? sumar(false,'total') + sinIdent : enLista((m:any)=>m.source==='gmail'&&!m.shared)
+  const colabsEmails   = hayMedida ? sumar(true,'total')             : enLista((m:any)=>m.source==='gmail'&&m.shared)
+  const unreadPersonal = hayMedida ? sumar(false,'sinLeer')          : enLista((m:any)=>m.source==='gmail'&&!m.shared&&!m.is_read)
+  const unreadColabs   = hayMedida ? sumar(true,'sinLeer')           : enLista((m:any)=>m.source==='gmail'&&m.shared&&!m.is_read)
+  // Estos dos NO son solo de Gmail —cuentan también los DM del equipo y WhatsApp—,
+  // así que salen del conteo unificado de `/api/inbox?conteo=1`, que mide justo eso.
+  const unreadTotal    = conteo ? conteo.sinLeer  : enLista((m:any)=>!m.is_read)
+  const urgentTotal    = conteo ? conteo.urgentes : enLista((m:any)=>!m.is_read&&m.ai_urgency==='urgent')
   const recentPersonal = (data.inbox||[]).filter((m:any)=>m.source==='gmail'&&!m.shared).slice(0,5)
   const recentColabs   = (data.inbox||[]).filter((m:any)=>m.source==='gmail'&&m.shared).slice(0,5)
   const nextEvents     = ((data.calendarEvents||[]) as any[]).filter((e:any)=>e.start>=todayKey()).slice(0,5)

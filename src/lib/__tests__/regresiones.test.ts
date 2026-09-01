@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { estadoDeadline, dlLabel } from '@/components/shared/helpers'
+import { estadoDeadline, dlLabel, saludoMadrid } from '@/components/shared/helpers'
 import { SECCIONES } from '@/components/shared/secciones'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -3300,17 +3300,56 @@ describe('el cronometro de Fichar se ve, y en las dos pantallas', () => {
   it('hay una accion clara en cada estado', () => {
     // Sin fichar → arrancar. En marcha → terminar. Un cronometro sin boton de
     // arranque visible no es un cronometro, es un numero.
-    for (const t of ['MARCAR ENTRADA', 'TERMINAR', 'PONER OBJETIVOS']) {
+    for (const t of ['MARCAR ENTRADA', 'TERMINAR']) {
       expect(D.includes(t), `falta la accion «${t}» del cronometro`).toBe(true)
     }
   })
 
-  it('sin objetivos lleva a escribirlos, no da un error', () => {
-    // `fichar('entrada')` exige objetivos —es lo que hace que fichar valga para
-    // algo—. Pulsar y comerse un toast de error es peor que llevar al sitio.
-    const i = D.indexOf('PONER OBJETIVOS')
-    expect(/refObjetivos\.current\?\.scrollIntoView/.test(D.slice(Math.max(0, i - 700), i)),
-      'sin objetivos el boton no lleva a escribirlos')
+  // Verificada devolviendo el `if (porCrear.length > 0) fichar(...)`: roja.
+  it('FICHAR NO EXIGE OBJETIVOS — es un registro de jornada, no un formulario', () => {
+    // Esta regla sustituye a «sin objetivos lleva a escribirlos», que fijaba el
+    // comportamiento CONTRARIO y era el fallo: el boton se convertia en PONER
+    // OBJETIVOS y, en vez de fichar, bajaba a escribirlos. O sea que no se podia
+    // registrar la jornada sin rellenar antes otra cosa.
+    //
+    // No es solo usabilidad. El registro horario (RD-ley 8/2019) no puede
+    // condicionarse a completar un campo ajeno: la hora de entrada es un HECHO.
+    // Y era el gemelo exacto de lo que ya se habia arreglado para CERRAR, con el
+    // comentario del propio fichero describiendo la regla sin cumplirla.
+    expect(/Escribe tus objetivos primero/.test(D),
+      'vuelve el toast que impedia fichar sin objetivos').toBe(false)
+    expect(/PONER OBJETIVOS/.test(D),
+      'el boton de fichar vuelve a convertirse en PONER OBJETIVOS').toBe(false)
+
+    // Y el boton llama a fichar SIN condicion previa.
+    const i = D.indexOf('MARCAR ENTRADA')
+    expect(i, 'ya no existe MARCAR ENTRADA: revisa esta regla').toBeGreaterThan(-1)
+    const antes = D.slice(Math.max(0, i - 900), i)
+    expect(/onClick=\{\(\) => fichar\('entrada'\)\}/.test(antes),
+      'el boton de marcar entrada ya no ficha directamente').toBe(true)
+    expect(/porCrear\.length > 0 \? fichar/.test(antes) || /if \(porCrear\.length > 0\) fichar/.test(antes),
+      'el fichaje vuelve a depender de que haya objetivos escritos').toBe(false)
+  })
+
+  // Verificada quitando el `fichar: true` del cuerpo: roja.
+  it('fichar viaja como GESTO, igual que cerrar, y no pisa los objetivos', () => {
+    // `entrada: ''` en el cuerpo pisaria unos objetivos ya autoguardados, que es
+    // por lo que el cierre ya mandaba solo la bandera y el texto si lo habia.
+    expect(/\{ dia, fichar: true, \.\.\.\(valor\.trim\(\) \? \{ entrada: valor\.trim\(\) \} : \{\}\) \}/.test(D),
+      'fichar dejo de mandar el gesto por separado: o no ficha sin texto, o pisa los objetivos').toBe(true)
+    const R = leerCodigo('src/app/api/diario/route.ts')
+    expect(/body\?\.fichar === true/.test(R),
+      'el servidor ya no entiende el gesto de fichar').toBe(true)
+    // Y que MANDE sobre el sello de la hora, no que solo aparezca en el fichero.
+    // La primera version de esta regla buscaba el nombre y daba VERDE con el bug
+    // reintroducido: `quiereFichar` seguia definido dos lineas mas arriba, sin
+    // gobernar nada. Es el mismo fallo que ya documenta la regla de ver_colabs —
+    // comprobar que un nombre existe no comprueba que decida.
+    const iSello = R.indexOf('fila.entrada_at = ahora')
+    expect(iSello, 'ya no se sella la hora de entrada: revisa esta regla').toBeGreaterThan(-1)
+    const linea = R.slice(R.lastIndexOf('\n', iSello), iSello)
+    expect(/quiereFichar/.test(linea),
+      `la hora de entrada vuelve a depender de que llegue texto:\n${linea.trim()}`)
       .toBe(true)
   })
 })
@@ -3989,10 +4028,30 @@ describe('Harvey · la primera impresion y los estados', () => {
     expect(/setConversation\(\[\{role:'harvey',text:g/.test(carga),
       'el saludo vuelve a inyectarse como mensaje: el heroe no se vera nunca')
       .toBe(false)
-    // Y el saludo vive en el heroe, personalizado.
-    expect(/Buenos días/.test(H) && /Buenas tardes/.test(H),
+    // Y el saludo vive en el heroe, personalizado. Los literales salieron a
+    // `saludoMadrid()` (helpers): un solo sitio para los umbrales —que en España
+    // son las 14:00 y las 21:00— y una sola forma de leer la hora de Madrid.
+    // Estaban escritos a mano en TRES sitios con 13/20, y uno de ellos calculaba
+    // la hora con `new Date().getHours()`, o sea la del navegador.
+    expect(/saludoMadrid\(/.test(H),
       'el heroe ya no lleva el saludo personalizado')
       .toBe(true)
+  })
+
+  // Verificada devolviendo el umbral a las 12: roja.
+  it('la tarde empieza a las 14:00, que es cuando empieza aqui', () => {
+    // Javi: «tema de la tarde/dia cuando se considera, normalmente a partir de
+    // las 14:00 aqui en España». Estaba en 12 y 13 segun el sitio, o sea el
+    // reparto anglosajon: a la una de la tarde la app daba los buenos dias.
+    //
+    // Se comprueba LLAMANDO a la funcion y no leyendo el numero: el umbral es lo
+    // que hace, no como esta escrito. Una regla que mira el literal pasa en verde
+    // con un `hora < 12 + 2` y se pone roja con un refactor inofensivo.
+    expect(saludoMadrid(9)).toBe('Buenos días')
+    expect(saludoMadrid(13)).toBe('Buenos días')
+    expect(saludoMadrid(14)).toBe('Buenas tardes')
+    expect(saludoMadrid(20)).toBe('Buenas tardes')
+    expect(saludoMadrid(21)).toBe('Buenas noches')
   })
 
   it('pensar y hablar SE MUEVEN, y distinto', () => {
@@ -4545,12 +4604,19 @@ describe('parar guarda la jornada, y no se cierra lo que no se abrio', () => {
   // contador SEGUIA CORRIENDO. Y el campo que habia que rellenar esta en otro panel
   // mas abajo — en movil, fuera de pantalla.
   it('cerrar no depende de haber escrito el balance', () => {
+    // Antes esto se comprobaba de rebote: existia una guarda que cortaba el paso
+    // SOLO a `entrada`, y de ahi se deducia que `cierre` quedaba libre. Ese proxy
+    // murio al quitar la guarda —fichar tampoco puede exigir texto—, asi que la
+    // regla pasa a comprobar lo que de verdad importa: que NINGUNA de las dos
+    // acciones se corte por venir sin texto, y que el gesto viaje aparte.
     const D = leerCodigo('src/components/sections/DiarioSection.tsx')
     const i = D.indexOf('const fichar = async')
     expect(i, 'ya no existe fichar(): revisa esta regla').toBeGreaterThan(-1)
     const cuerpo = D.slice(i, i + 1800)
-    expect(/campo === 'entrada' && !valor\.trim\(\)/.test(cuerpo),
-      'vuelve a exigirse el balance para cerrar: el boton de parar no parara y no se vera por que').toBe(true)
+    expect(/!valor\.trim\(\)\s*\)\s*\{[^}]*return/.test(cuerpo),
+      'vuelve una guarda que corta el fichaje o el cierre por no haber escrito nada').toBe(false)
+    expect(/\{ dia, cerrar: true, \.\.\.\(valor\.trim\(\) \? \{ cierre: valor\.trim\(\) \} : \{\}\) \}/.test(cuerpo),
+      'cerrar dejo de mandar el gesto por separado del texto').toBe(true)
   })
 
   it('el servidor rechaza cerrar un dia que no se ha abierto', () => {
@@ -7016,12 +7082,24 @@ describe('lo que se propone se termina de hacer', () => {
     // tarjetas: allMsgs es legítimo en el resto del fichero.
     // Anclas de CÓDIGO, no de comentario — leerCodigo quita los comentarios.
     const inbox = leerCodigo('src/components/sections/InboxSection.tsx')
-    const iniTarjetas = inbox.indexOf("{n:unread, l:'Sin leer'")
+    const iniTarjetas = inbox.indexOf("{n:unreadReal, l:'Sin leer'")
     const finTarjetas = inbox.indexOf("alert-circle", iniTarjetas)
     expect(iniTarjetas, 'no encuentro las tarjetas de estado del Inbox — si cambió su forma, reapunta la regla').toBeGreaterThan(-1)
     expect(finTarjetas, 'no encuentro el final de las tarjetas de estado del Inbox').toBeGreaterThan(iniTarjetas)
     expect(/allMsgs/.test(inbox.slice(iniTarjetas, finTarjetas)),
       'una tarjeta de estado del Inbox vuelve a contar sobre allMsgs: los archivados inflan un número que pide atención').toBe(false)
+    // Y el mismo agujero por el otro lado: desde que el número lo mide el
+    // servidor, los archivados vuelven a entrar —el servidor no sabe que
+    // archivar existe, vive en localStorage—. Así que quien mide tiene que
+    // restarlos. Sin esto, la tarjeta pediría atención por correo ya archivado,
+    // que es exactamente el bug de antes con otra fuente.
+    for (const [nombre, resta] of [['unreadReal', 'archSinLeer'], ['urgentReal', 'archUrgentes']]) {
+      const m = inbox.match(new RegExp(`const ${nombre}\\s*=([^\\n]*)`))
+      expect(m, `ya no existe ${nombre} en el Inbox: revisa esta regla`).toBeTruthy()
+      expect(m![1].includes(resta),
+        `${nombre} no descuenta los archivados (${resta}): un correo archivado vuelve a inflar un número que pide atención`)
+        .toBe(true)
+    }
     // TODA ruta que escribe TEXTO LIBRE del usuario (lo que se pega de un PDF)
     // debe sanear el byte nulo, o el insert rebota con un 500 crudo. La lista
     // salió de la caza multi-agente: eran ocho gemelos del arreglo de tasks, y
@@ -7047,5 +7125,243 @@ describe('lo que se propone se termina de hacer', () => {
     const au = leerCodigo('src/components/sections/AutomatizacionesSection.tsx')
     expect(/al sincronizar emails/.test(au),
       'el texto vuelve a prometer que el motor corre al sincronizar: el sync manual NO lo ejecuta').toBe(false)
+  })
+})
+
+describe('un TOTAL no se cuenta sobre una lista topada', () => {
+  // Javi, enseñándole la app al jefe: «Bandeja unificada pone que hay 100 correos
+  // siempre, no los que en realidad hay». Y era literal: `/api/inbox` trae los 100
+  // más recientes —a propósito, es el arranque del dashboard entero— y la carpeta
+  // pintaba la LONGITUD de esa lista. Con 1.116 correos en la base, 100. Con
+  // 100.000, 100.
+  //
+  // Lo que lo convierte en un fallo y no en una aproximación: justo encima, las
+  // carpetas por cuenta enseñan su total REAL, contado en la base por
+  // `/api/gmail/cuentas`. Dos números en la misma columna, uno verdadero y otro
+  // tope disfrazado de número. Y el mismo error estaba escrito otras seis veces en
+  // Sincronización, que es LA pantalla de «¿está entrando el correo?».
+  const RUTA = 'src/app/api/inbox/route.ts'
+
+  it('la ruta sabe contar sin traerse el buzón entero', () => {
+    const C = leerCodigo(RUTA)
+    expect(/count:\s*'exact'/.test(C) && /head:\s*true/.test(C),
+      'no queda forma de contar el buzón en el servidor: los totales vuelven a salir del tope')
+      .toBe(true)
+    // `head: true` no es un detalle de estilo: sin él la consulta se trae las
+    // 1.116 filas en cada arranque del dashboard, y encima de dos pantallas.
+    for (const m of C.matchAll(/count:\s*'exact'([^)]*)\)/g)) {
+      expect(/head:\s*true/.test(m[1]),
+        `hay un conteo sin head:true — se está trayendo el buzón entero para contarlo:\n${m[0]}`)
+        .toBe(true)
+    }
+  })
+
+  it('distingue «no hay correos» de «no he podido contarlos»', () => {
+    const C = leerCodigo(RUTA)
+    expect(/medido:\s*false/.test(C),
+      'un fallo al contar devuelve ceros: la pantalla diría que no entra correo, que es el susto que esto evita')
+      .toBe(true)
+  })
+
+  it('«Bandeja unificada» NO cuenta la lista que ha recibido', () => {
+    const I = leerCodigo('src/components/sections/InboxSection.tsx')
+    const i = I.indexOf("label:'Bandeja unificada'")
+    expect(i, 'ya no existe esa carpeta: revisa esta regla en vez de borrarla').toBeGreaterThan(-1)
+    // La ventana es la entrada de la carpeta, no el fichero: `activeMsgs.length`
+    // es legítimo en otras diez carpetas —«Personas», «Clientes»— porque ahí SÍ se
+    // filtra sobre lo que hay cargado. Acotar al sitio y no al fichero es lo que
+    // separa esta regla de una que pasa en verde con el bug puesto.
+    const entrada = I.slice(i, I.indexOf('}', i))
+    expect(/\.length/.test(entrada),
+      `el total de la bandeja vuelve a salir de la lista topada:\n${entrada}`)
+      .toBe(false)
+  })
+
+  it('los totales de Sincronización se miden, no se estiman', () => {
+    const S = leerCodigo('src/components/sections/SincronizacionSection.tsx')
+    for (const nombre of ['personalEmails', 'colabsEmails', 'unreadPersonal', 'unreadColabs']) {
+      const m = S.match(new RegExp(`const ${nombre}\\s*=([^\\n]*)`))
+      expect(m, `ya no existe ${nombre}: revisa esta regla`).toBeTruthy()
+      expect(/hayMedida/.test(m![1]),
+        `${nombre} vuelve a contar la lista topada — esta pantalla dice cuánto correo entra:\n${m![1]}`)
+        .toBe(true)
+    }
+    for (const nombre of ['unreadTotal', 'urgentTotal']) {
+      const m = S.match(new RegExp(`const ${nombre}\\s*=([^\\n]*)`))
+      expect(m, `ya no existe ${nombre}: revisa esta regla`).toBeTruthy()
+      expect(/conteo/.test(m![1]),
+        `${nombre} vuelve a contar la lista topada:\n${m![1]}`)
+        .toBe(true)
+    }
+  })
+
+  it('si el buzón no cabe en la lista, la pantalla lo DICE', () => {
+    // Sin esta línea el arreglo crea un desconcierto nuevo: la carpeta dice 1.116
+    // y solo se pueden bajar 100 filas, así que parece que se han perdido correos.
+    // Un número honesto sin decir de qué es tampoco es honesto.
+    const I = leerCodigo('src/components/sections/InboxSection.tsx')
+    expect(/más recientes de \{/.test(I),
+      'ya no se avisa de que la lista es un trozo: el contador real y las filas visibles no cuadran')
+      .toBe(true)
+  })
+})
+
+describe('lo que la UI lee del perfil, /api/me lo trae', () => {
+  // Javi: «cuando desactivas ese correo en sincronización, actualizas y vuelve a
+  // aparecer marcado». El PATCH guardaba bien. Lo que no había era vuelta: el
+  // `select` de `/api/me` era una allowlist explícita —correcta, impide que salgan
+  // los refresh_token— y `ver_colabs` no estaba. El perfil llegaba sin la columna,
+  // `profile?.ver_colabs !== false` daba `true` con `undefined`, y el interruptor
+  // se pintaba encendido. Apagabas algo y la app te decía que seguía encendido.
+  //
+  // El fallo no es de esa columna: es de la FORMA. Una allowlist en un sitio y
+  // lectores en otro se separan sin avisar, y el modo de fallo no es un hueco
+  // —que se vería— sino un valor por defecto, que parece un dato.
+  //
+  // Esta regla los vuelve a atar: se leen los campos que la UI pide y se exige que
+  // el `select` los traiga. Vale para el que se escriba mañana.
+  const RAIZ = join(__dirname, '../../')
+  const ficheros: string[] = []
+  const recorrer = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === '__tests__' || e.name === 'node_modules') continue
+      const p = join(dir, e.name)
+      if (e.isDirectory()) recorrer(p)
+      else if (/\.tsx?$/.test(e.name)) ficheros.push(p)
+    }
+  }
+  recorrer(RAIZ)
+
+  // Lo que el CLIENTE se inventa encima del perfil del servidor, con su motivo.
+  // Una excepción sin motivo escrito es una excepción que nadie puede revisar.
+  const AJENAS = new Set([
+    'user_metadata',   // viene del objeto de Supabase Auth, no de la tabla profiles
+  ])
+
+  it('ningún componente lee una columna que el servidor no manda', () => {
+    const pedidos = new Map<string, string>()
+    for (const f of ficheros) {
+      // Solo el CLIENTE. El servidor consulta la tabla directamente —incluidos
+      // los refresh_token, que es justo lo que la allowlist impide que salgan—,
+      // así que exigirle esas columnas a /api/me sería exigir el agujero.
+      const rel = f.replace(RAIZ, 'src/')
+      const crudo = readFileSync(f, 'utf8')
+      if (!/^['"]use client['"]/.test(crudo.trimStart()) && !rel.startsWith('src/components/')) continue
+      const C = leerCodigo(rel)
+      for (const m of C.matchAll(/\bprofile\??\.([a-z_][a-z0-9_]*)\b/g)) {
+        if (!AJENAS.has(m[1])) pedidos.set(m[1], rel)
+      }
+    }
+    expect(pedidos.size, 'ya nadie lee el perfil: revisa esta regla en vez de borrarla').toBeGreaterThan(5)
+
+    const ME = leerCodigo('src/app/api/me/route.ts')
+    const selects = [...ME.matchAll(/\.select\('([^']*)'\)/g)].map(m =>
+      m[1].split(',').map(s => s.trim()))
+    expect(selects.length, 'no encuentro los select de /api/me: revisa esta regla').toBeGreaterThan(0)
+
+    for (const [campo, donde] of pedidos) {
+      for (const cols of selects) {
+        expect(cols.includes(campo),
+          `${donde} lee profile.${campo} y /api/me no lo trae: la UI se quedará con el valor por defecto y parecerá un dato\n  select: ${cols.join(', ')}`)
+          .toBe(true)
+      }
+    }
+  })
+
+  it('los dos caminos de /api/me traen LO MISMO', () => {
+    // Hay dos: por id (lo normal) y por email (alta con Google de una cuenta que
+    // ya existía). Divergieron una vez y el interruptor solo fallaba a quien entra
+    // por el segundo — el peor tipo de fallo, el que no le pasa a quien lo mira.
+    const ME = leerCodigo('src/app/api/me/route.ts')
+    const selects = [...ME.matchAll(/\.select\('([^']*)'\)/g)].map(m => m[1])
+    expect(selects.length, 'ya no hay dos caminos: revisa esta regla').toBeGreaterThanOrEqual(2)
+    expect(new Set(selects).size,
+      `los dos caminos de /api/me traen columnas distintas:\n  ${selects.join('\n  ')}`)
+      .toBe(1)
+  })
+
+  it('y ninguno de los dos saca un token al navegador', () => {
+    const ME = leerCodigo('src/app/api/me/route.ts')
+    for (const m of ME.matchAll(/\.select\('([^']*)'\)/g)) {
+      expect(/token|\*/.test(m[1]),
+        `/api/me vuelve a mandar credenciales al cliente: ${m[1]}`).toBe(false)
+    }
+  })
+})
+
+describe('una clase que no existe no da error: no hace nada', () => {
+  // Javi: «modo claro, automatizaciones no deja activar o no se ve el botón». El
+  // conmutador estaba ahí y funcionaba; lo que no se veía era su texto. El modo
+  // claro de esta app no es un tema, es un `filter: invert(1) hue-rotate(180deg)`
+  // sobre el body —ver CLAUDE.md—, y ese filtro hunde los colores de marca. El
+  // arreglo es cancelarlo en ese elemento y declararle la variante oscura, que es
+  // lo que hace `.nx-conmutador` en globals.css.
+  //
+  // El riesgo de ese arreglo es su forma: son DOS ficheros que solo se tocan por
+  // el nombre de una clase. Un typo en cualquiera de los dos no da error, no sale
+  // en consola y no rompe el build — deja el botón invisible otra vez, que es de
+  // donde veníamos. Se comprobó reintroduciéndolo: `nx-conmutadorX` pasaba en
+  // verde toda la suite.
+  const CSS = readFileSync(join(__dirname, '../../app/globals.css'), 'utf8')
+
+  const usadas = new Map<string, string>()
+  const RAIZ = join(__dirname, '../../')
+  const recorrer = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === '__tests__' || e.name === 'node_modules') continue
+      const p = join(dir, e.name)
+      if (e.isDirectory()) recorrer(p)
+      else if (/\.tsx$/.test(e.name)) {
+        const rel = p.replace(RAIZ, 'src/')
+        // Solo dentro de `className`: `nx-` tambien nombra ids —el datalist de
+        // carpetas de Proyectos— y esos no van al CSS. La primera version no lo
+        // distinguia y marcaba ese datalist como clase muerta.
+        const C = leerCodigo(rel)
+        for (const attr of C.matchAll(/className=(?:"([^"]*)"|'([^']*)'|\{`([^`]*)`\})/g)) {
+          const valor = attr[1] ?? attr[2] ?? attr[3] ?? ''
+          for (const m of valor.matchAll(/\bnx-[a-z0-9-]+/g)) usadas.set(m[0], rel)
+        }
+      }
+    }
+  }
+  recorrer(RAIZ)
+
+  it('toda clase nx- que usa un componente está declarada en globals.css', () => {
+    expect(usadas.size, 'ya no se usan clases nx-: revisa esta regla').toBeGreaterThan(5)
+    for (const [clase, donde] of usadas) {
+      // Con frontera: `includes('.nx-conmutador')` daba VERDE con la regla
+      // renombrada a `.nx-conmutador-viejo`, que es un prefijo. Comprobado
+      // reintroduciendolo — una regla que casa por prefijo no comprueba nombres.
+      expect(new RegExp('\\.' + clase + '(?![a-z0-9-])').test(CSS),
+        `${donde} usa .${clase} y globals.css no la declara: no da error, simplemente no hace nada`)
+        .toBe(true)
+    }
+  })
+
+  it('el conmutador de Automatizaciones cancela el filtro del modo claro', () => {
+    // La clase por sí sola tampoco basta: tiene que CANCELAR el filtro. Sin el
+    // `invert(1) hue-rotate(180deg)` propio, el color declarado se invierte otra
+    // vez y queda igual de ilegible — que es exactamente el estado del que se
+    // venía, con la diferencia de que ahora parecería arreglado.
+    const A = leerCodigo('src/components/sections/AutomatizacionesSection.tsx')
+    expect(/nx-conmutador/.test(A), 'el conmutador perdió la clase que lo hace legible en claro').toBe(true)
+    // Y en los DOS: el botón del owner y la chapa de quien solo mira. Arreglar
+    // una copia y dejar la otra es el gemelo que este repo paga caro.
+    expect((A.match(/nx-conmutador/g) || []).length,
+      'solo una de las dos formas del conmutador (botón del owner / chapa del resto) está arreglada')
+      .toBeGreaterThanOrEqual(2)
+    // El estado va en un atributo y no solo en el color, que es lo que permite
+    // declararle a cada uno su variante oscura sin tocar el componente.
+    expect(/data-activa=\{/.test(A), 'el conmutador no expone su estado: el CSS no puede distinguir activo de pausado').toBe(true)
+
+    const i = CSS.search(/\.nx-conmutador(?![a-z0-9-])/)
+    expect(i, 'globals.css ya no declara .nx-conmutador').toBeGreaterThan(-1)
+    const bloque = CSS.slice(i, i + 400)
+    expect(/invert\(1\) hue-rotate\(180deg\)/.test(bloque),
+      'la regla de .nx-conmutador no cancela el filtro: el color vuelve a invertirse y queda ilegible')
+      .toBe(true)
+    expect(/data-activa="false"/.test(CSS.slice(i, i + 900)),
+      'solo se declara un estado: activo y pausado se pintarían igual')
+      .toBe(true)
   })
 })

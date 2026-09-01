@@ -91,6 +91,15 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
   // qué buzones hay y cuánto ha entrado por cada uno.
   const [cuentas, setCuentas] = useState<CuentaBuzon[] | null>(null)
   const [cuentasMedidas, setCuentasMedidas] = useState(true)
+  // EL BUZÓN ENTERO LO CUENTA EL SERVIDOR.
+  //
+  // La lista viene topada a 100 correos (`/api/inbox`, y a propósito: es el
+  // arranque del dashboard). Contar su longitud hacía que «Bandeja unificada»
+  // pusiera 100 con 1.116 en la base — y no era un número parado y ya está: justo
+  // encima, las carpetas por cuenta enseñan su total REAL, que lo cuenta
+  // `/api/gmail/cuentas`. Dos números en la misma columna, uno verdadero y otro
+  // falso. Fue así como se cazó.
+  const [conteo, setConteo] = useState<{total:number; sinLeer:number; urgentes:number} | null>(null)
   const [selected, setSelected] = useState<any>(null)
   const [confirmMarkAll, setConfirmMarkAll] = useState(false)
   useBackClosable(!!selected, () => setSelected(null))
@@ -239,6 +248,30 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
   const unread = activeMsgs.filter(m=>!m.is_read).length
   const urgent = activeMsgs.filter(m=>m.ai_urgency==='urgent'&&!m.is_read).length
   const internal = activeMsgs.filter(m=>m.source==='internal'&&!m.is_read).length
+
+  // Se vuelve a pedir cuando la lista cambia: marcar leído baja el contador de la
+  // lista, eso dispara este efecto, y el servidor devuelve el número nuevo. Hay un
+  // parpadeo de un instante con el valor viejo — preferible a un contador que solo
+  // cuadra al recargar la página.
+  useEffect(() => {
+    let vivo = true
+    fetch('/api/inbox?conteo=1')
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (vivo && j && j.medido) setConteo({ total:j.total, sinLeer:j.sinLeer, urgentes:j.urgentes }) })
+      // Si falla se queda en null y los contadores siguen saliendo de la lista.
+      // Un hueco donde había un número parece que se ha roto la pantalla.
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [allMsgs.length, unread])
+
+  // Archivar es local (localStorage), así que el servidor no lo sabe: se descuenta
+  // aquí para que «Bandeja unificada» y «Archivados» no sumen dos veces lo mismo.
+  const archivados    = allMsgs.filter((m:any)=>archivedIds.has(m.id))
+  const archSinLeer   = archivados.filter((m:any)=>!m.is_read).length
+  const archUrgentes  = archivados.filter((m:any)=>!m.is_read&&m.ai_urgency==='urgent').length
+  const totalBandeja  = conteo ? Math.max(0, conteo.total - archivedIds.size) : activeMsgs.length
+  const unreadReal    = conteo ? Math.max(0, conteo.sinLeer - archSinLeer) : unread
+  const urgentReal    = conteo ? Math.max(0, conteo.urgentes - archUrgentes) : urgent
   // Lo escrito por humanos: el equipo (DMs), WhatsApp y el gmail que no venga
   // de una máquina. Medido contra el buzón real: el 49% es noreply y
   // notificaciones — este es el filtro que lo aparta de golpe.
@@ -438,7 +471,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
   // «Personal» mientras haya correo personal. Es exactamente lo que se pidió
   // —personal o colaboraciones— sin depender de si /api/gmail/cuentas contestó.
   const cuentasMobile: {id:string; label:string; accent:string; n:number}[] = [
-    {id:'Todos', label:'Todas', accent:'#8B95A7', n: unread},
+    {id:'Todos', label:'Todas', accent:'#8B95A7', n: unreadReal},
     ...(personalGmailCount>0 ? [{id:'Personal', label:'Personal', accent:'#EA4335', n: personalGmailUnread}] : []),
     ...(colabsGmailCount>0 ? [{id:'Colabs', label:'Colabs', accent: GRN, n: colabsGmailUnread}] : []),
   ]
@@ -449,7 +482,7 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
 
   // Las VISTAS (sin «Todos» ni cuentas: eso vive en el selector de arriba).
   const tabs = [
-    {id:'Sin leer', label:'Sin leer', n: unread, accent: BLU},
+    {id:'Sin leer', label:'Sin leer', n: unreadReal, accent: BLU},
     {id:'Urgente', label:'Urgente', n: activeMsgs.filter((m:any)=>m.ai_urgency==='urgent').length, accent: RED},
     {id:'Personas', label:'Personas', n: dePersonas, accent:'#5EEAD4'},
     {id:'Clientes', label:'Clientes', n: activeMsgs.filter((m:any)=>esDeCliente(m)).length, accent: AMBAR},
@@ -497,7 +530,10 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
               : cuentas.map(cta => ({
                   id: `cuenta:${cta.email}`,
                   label: cta.email,
-                  n: cta.sinLeer,
+                  // Sin medida NO se pinta un cero: «esta cuenta no ha recibido
+                  // nada» y «no he podido contarlo» son cosas distintas, y el cero
+                  // es justo el fallo que esta pantalla existe para descartar.
+                  n: cuentasMedidas ? cta.sinLeer : 0,
                   c: cta.compartida ? GRN : '#EA4335',
                   ic: cta.compartida ? 'users-2' : 'mail',
                 }))
@@ -513,13 +549,13 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
             // quedaba con el número sin fondo. Antes se parcheaba comparando la
             // cadena literal de «Todos», que dejaba fuera a «Clientes».
             const carpetas = [
-              {id:'Todos', label:'Bandeja unificada', n:activeMsgs.length, c:'#FFFFFF', ic:'inbox'},
-              {id:'Sin leer', label:'Sin leer', n:unread, c:BLU, ic:'mail'},
+              {id:'Todos', label:'Bandeja unificada', n:totalBandeja, c:'#FFFFFF', ic:'inbox'},
+              {id:'Sin leer', label:'Sin leer', n:unreadReal, c:BLU, ic:'mail'},
               // «Urgente», como su chip del móvil — se llamaba «Prioridad», el
               // MISMO rótulo, icono y color que la tarjeta de estado de arriba,
               // que mide otra cosa (alta+urgente): dos números distintos con la
               // misma cara en la misma pantalla se leen como un fallo.
-              {id:'Urgente', label:'Urgente', n:urgent, c:AMBAR, ic:'zap'},
+              {id:'Urgente', label:'Urgente', n:urgentReal, c:AMBAR, ic:'zap'},
               {id:'Personas', label:'Personas', n:dePersonas, c:'#5EEAD4', ic:'user-check'},
               {id:'Clientes', label:'Clientes', n:fromClients, c:AMBAR, ic:'user'},
               {id:'Interno', label:'Equipo', n:internal, c:'#A78BFA', ic:'users'},
@@ -575,6 +611,15 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                   )}
                   {filter==='Colabs' && (
                     <div className="font-syne text-[7.5px] truncate mt-0.5" style={{color:`${GRN}60`}}>Visible para todo el equipo</div>
+                  )}
+                  {/* DECIR QUE SE ESTÁ VIENDO UN TROZO. El contador de la carpeta ya
+                      dice cuántos hay de verdad; sin esta línea, ese número y las
+                      filas que se pueden bajar no cuadran y parece que faltan
+                      correos. Solo aparece cuando el buzón pasa de lo que se trae. */}
+                  {filter==='Todos' && conteo && totalBandeja > activeMsgs.length && (
+                    <div className="font-syne text-[7.5px] truncate mt-0.5" style={{color:'rgba(255,255,255,0.22)'}}>
+                      Los {activeMsgs.length} más recientes de {totalBandeja}
+                    </div>
                   )}
                 </div>
                 {/* Mark all read for current filter */}
@@ -638,10 +683,10 @@ function InboxSection({data,showToast,profile,onNavigate,onSelectClient,onAskHar
                 con tres bases distintas no es una fila de estado, es una
                 adivinanza. */}
             {[
-              {n:unread, l:'Sin leer', c:unread>0?'#e2b877':'#FFFFFF', ic:'mail'},
+              {n:unreadReal, l:'Sin leer', c:unreadReal>0?'#e2b877':'#FFFFFF', ic:'mail'},
               {n:activeMsgs.filter((m:any)=>(m.ai_urgency==='high'||m.ai_urgency==='urgent')&&!m.is_read).length, l:'Prioridad', c:AMBAR, ic:'zap'},
               {n:colabsGmailUnread, l:'Colaboraciones', c:GRN, ic:'users-2'},
-              {n:urgent, l:'Urgentes', c:urgent>0?RED:'#FFFFFF', ic:'alert-circle'},
+              {n:urgentReal, l:'Urgentes', c:urgentReal>0?RED:'#FFFFFF', ic:'alert-circle'},
             ].map((s,i)=>(
               <div key={i} className="flex-1 flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl" style={{background:'rgba(255,255,255,0.025)',border:`1px solid rgba(255,255,255,0.05)`}}>
                 <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{background:`${s.c}18`}}><LucideIcon name={s.ic} size={14} color={s.c}/></div>
