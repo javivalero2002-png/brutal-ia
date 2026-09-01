@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { estadoDeadline, dlLabel, saludoMadrid } from '@/components/shared/helpers'
 import { ventanaPreguntada, preguntaPorElEquipo } from '@/lib/resumenEquipo'
+import { importeACentimos, totalConIva, estadoFactura, euros } from '@/lib/facturas'
 import { SECCIONES } from '@/components/shared/secciones'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -7624,5 +7625,144 @@ describe('el harness puede enseñar lo que se acaba de añadir', () => {
     expect(/Potencial/.test(C.slice(j, i)),
       `la ficha vuelve a poner «contrato activo» debajo del importe de un potencial:\n${C.slice(j, i)}`)
       .toBe(true)
+  })
+})
+
+describe('facturas: el dinero no se cuenta en coma flotante', () => {
+  // Javi, tras la ronda con el jefe: «facturas asociadas clientes».
+  //
+  // Lo que había era `clients.revenue`, un TEXTO libre —«12k/mes», «€1.500»— que
+  // dice cuánto vale un cliente al mes. No contesta lo que se pregunta un día 5:
+  // qué se ha emitido, qué falta por cobrar y qué está vencido. Eso vivía en la
+  // cabeza de alguien o en una hoja aparte.
+
+  it('«1.234,56» son 1.234,56 € y no 1,23 €', () => {
+    // El fallo de verdad: con `parseFloat('1.234,56')` salen 1,23 — mil veces
+    // menos— y nadie lo nota hasta que el total no cuadra con el banco. Es el
+    // mismo error que ya se pagó con `parseImporte`, donde «12k» salía como 12.
+    //
+    // La regla: el ÚLTIMO separador decide, y solo si deja DOS dígitos detrás.
+    expect(importeACentimos('1.234,56')).toBe(123456)
+    expect(importeACentimos('1,234.56')).toBe(123456)   // notación inglesa
+    expect(importeACentimos('€1.500')).toBe(150000)     // millares, no decimales
+    expect(importeACentimos('1500')).toBe(150000)
+    expect(importeACentimos('1500,5')).toBe(150050)     // un solo decimal
+    expect(importeACentimos('0,99')).toBe(99)
+    expect(importeACentimos('12.345.678,90')).toBe(1234567890)
+  })
+
+  it('«no hay importe» NO es cero', () => {
+    // Cero es una factura de cero euros —rara, pero legítima—. Devolver 0 ante un
+    // campo vacío crearía facturas fantasma de 0 € cada vez que se pulsa guardar
+    // sin escribir nada, y la lista se llenaría de ellas.
+    expect(importeACentimos('')).toBeNull()
+    expect(importeACentimos('€')).toBeNull()
+    expect(importeACentimos('  ')).toBeNull()
+    expect(importeACentimos('0')).toBe(0)
+  })
+
+  it('los importes se agrupan como el resto de la pantalla', () => {
+    // En es-ES la agrupación automática NO separa los números de cuatro cifras
+    // («1815,00»), que es correcto en castellano y queda raro justo aquí: al lado,
+    // la facturación del cliente la escribe una persona y pone «€1.500». Dos
+    // formas del mismo número en la misma pantalla se leen como un fallo.
+    expect(euros(181500)).toBe('€1.815,00')
+    expect(euros(123456789)).toBe('€1.234.567,89')
+    expect(euros(99)).toBe('€0,99')
+    expect(euros(0)).toBe('€0,00')
+  })
+
+  it('el IVA se suma en enteros y siempre igual', () => {
+    expect(totalConIva({ importe_centimos: 150000, iva_pct: 21 })).toBe(181500)
+    expect(totalConIva({ importe_centimos: 100, iva_pct: 21 })).toBe(121)
+    // Sin IVA (exenta) sigue siendo el importe, no NaN.
+    expect(totalConIva({ importe_centimos: 4200, iva_pct: 0 })).toBe(4200)
+    // Y el redondeo cae siempre del mismo lado: 33,33 € al 21% son 40,33, no
+    // 40,32 en una pantalla y 40,33 en otra.
+    expect(totalConIva({ importe_centimos: 3333, iva_pct: 21 })).toBe(4033)
+  })
+
+  it('el estado se DERIVA de las fechas, y por DÍA', () => {
+    const hoy = '2026-09-01'
+    expect(estadoFactura({ cobrada_el: '2026-08-20', vence_el: '2026-07-01' }, hoy)).toBe('cobrada')
+    expect(estadoFactura({ cobrada_el: null, vence_el: '2026-08-31' }, hoy)).toBe('vencida')
+    // El DÍA del vencimiento todavía NO está vencido: se vence al acabar el día.
+    // Comparar instantes hacía que algo que vencía hoy saliera vencido desde las
+    // 02:00 de Madrid, con la pantalla diciendo lo contrario. Ver CLAUDE.md.
+    expect(estadoFactura({ cobrada_el: null, vence_el: hoy }, hoy)).toBe('pendiente')
+    // Sin fecha de vencimiento NADIE ha incumplido nada. Inventarle una convierte
+    // en moroso a quien no lo es.
+    expect(estadoFactura({ cobrada_el: null, vence_el: null }, hoy)).toBe('pendiente')
+  })
+
+  it('el estado NO es una columna de la base', () => {
+    // Sería una segunda verdad que hay que mantener en sincronía con las fechas, y
+    // en cuanto se olvide una actualización la pantalla dice «pendiente» de algo
+    // cobrado. Esta app ya lo pagó con `archived_at` contra `status`.
+    // SIN LOS COMENTARIOS. La primera versión leía el fichero entero y daba VERDE
+    // con la clave cambiada a `on delete cascade`: la cabecera del propio SQL
+    // explica por qué es `restrict`, así que la regla encontraba su justificación
+    // en vez de la regla. Es el fallo que `leerCodigo()` existe para evitar en TS,
+    // y que aquí había que repetir para el dialecto de comentarios de SQL.
+    const sql = readFileSync(join(__dirname, '../../../migrations/20260901_facturas.sql'), 'utf8')
+      .split('\n').filter(l => !/^\s*--/.test(l)).join('\n')
+    expect(/^\s*(estado|status)\s/m.test(sql),
+      'la tabla de facturas vuelve a guardar el estado: se desincronizará de las fechas').toBe(false)
+    expect(/importe_centimos\s+integer/.test(sql),
+      'el importe deja de ser un entero de céntimos: los totales dejarán de cuadrar').toBe(true)
+    expect(/references public\.clients\(id\) on delete restrict/.test(sql),
+      'borrar un cliente se llevaría sus facturas por delante en silencio').toBe(true)
+  })
+
+  it('el servidor y la pantalla usan la MISMA función', () => {
+    // Dos copias dirían cosas distintas justo el día del vencimiento, que es el
+    // único día en el que alguien mira. Vive en src/lib/facturas.ts y las dos
+    // tiran de ahí.
+    const CL = leerCodigo('src/components/sections/ClientesSection.tsx')
+    expect(/from '@\/lib\/facturas'/.test(CL),
+      'la sección vuelve a calcular el estado de una factura por su cuenta').toBe(true)
+    expect(/cobrada_el\s*\?\s*'cobrada'/.test(CL),
+      'el estado de la factura vuelve a estar escrito a mano en la pantalla').toBe(false)
+  })
+
+  it('solo el propietario factura, en las TRES puertas', () => {
+    // `clients.revenue` ya tuvo dos puertas y una sin cerrojo durante meses: el
+    // PATCH condicionaba por rol y el POST aceptaba el importe de cualquiera.
+    // Aquí hay tres —crear, editar, borrar— y las tres se comprueban.
+    for (const ruta of ['src/app/api/clients/[id]/facturas/route.ts', 'src/app/api/facturas/[id]/route.ts']) {
+      const C = leerCodigo(ruta)
+      for (const m of C.matchAll(/export async function (POST|PATCH|DELETE)\(([\s\S]*?)\n}/g)) {
+        expect(/ctx\.role !== 'owner'/.test(m[2]),
+          `${ruta}: ${m[1]} no comprueba que quien escribe sea propietario`).toBe(true)
+      }
+    }
+  })
+
+  it('si falta la migración, la ficha NO se cae y lo dice', () => {
+    // PGRST205 es «la tabla no existe». Sin distinguirlo, este bloque daría un 500
+    // y un «Error» a secas, y desde ahí hasta «hay que pegar un SQL en Supabase»
+    // hay el mismo camino que ya costó meses con `content_agenda.feedback`.
+    const R = leerCodigo('src/app/api/clients/[id]/facturas/route.ts')
+    expect(/PGRST205/.test(R), 'ya no se distingue «falta la tabla» de un fallo real').toBe(true)
+    expect(/disponible: false/.test(R),
+      'sin la tabla se devolvería un error y tumbaría media ficha de cliente').toBe(true)
+    const CL = leerCodigo('src/components/sections/ClientesSection.tsx')
+    expect(/20260901_facturas\.sql/.test(CL),
+      'la pantalla no dice qué migración falta: el síntoma no nombra la causa').toBe(true)
+  })
+
+  it('una factura no puede vencer antes de existir', () => {
+    // No es un caso raro, es un dedazo — y deja una factura nacida vencida, en
+    // rojo en el panel el mismo día que se crea.
+    for (const ruta of ['src/app/api/clients/[id]/facturas/route.ts', 'src/app/api/facturas/[id]/route.ts']) {
+      const C = leerCodigo(ruta)
+      expect(/vence < emitida/.test(C),
+        `${ruta}: se puede guardar una factura que vence antes de emitirse`).toBe(true)
+    }
+    // Y en el PATCH, contra los valores FINALES: un PATCH que solo manda
+    // `vence_el` no trae la emisión, y comparar contra undefined lo deja pasar.
+    const P = leerCodigo('src/app/api/facturas/[id]/route.ts')
+    expect(/previa\.emitida_el/.test(P),
+      'el PATCH compara las fechas contra el cuerpo y no contra lo que hay guardado').toBe(true)
   })
 })

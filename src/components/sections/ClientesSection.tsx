@@ -11,6 +11,7 @@ import { ProgressRing } from '@/components/shared/ui'
 import LucideIcon from '@/components/shared/LucideIcon'
 import { PlatformLogo } from '@/components/PlatformLogo'
 import type { Client, Project, Task, NexusData} from '@/types'
+import { estadoFactura, totalConIva, euros, importeACentimos, type Factura } from '@/lib/facturas'
 import type { IrASeccion } from '@/components/shared/secciones'
 
 // El plan estrategico lo escribe Claude y /api/clients/[id]/ai-advice reenvia el
@@ -71,6 +72,16 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
   const [clientSort, setClientSort] = useState<'default'|'revenue'|'tareas'|'proyectos'>('default')
   const [clientFiles, setClientFiles] = useState<any[]|null>(null)
   const [filesLoading, setFilesLoading] = useState(false)
+  // LAS FACTURAS DE ESTE CLIENTE. `null` = todavía no se han pedido; `[]` = se han
+  // pedido y no hay ninguna. Son cosas distintas y la pantalla las pinta distinto:
+  // un «sin facturas» mientras se carga es una respuesta que nadie ha comprobado.
+  const [facturas, setFacturas] = useState<Factura[]|null>(null)
+  const [facturasLoading, setFacturasLoading] = useState(false)
+  // `false` solo cuando el servidor DICE que falta la tabla (la migración sin
+  // aplicar). Se arranca en true para no acusar a nadie antes de preguntar.
+  const [facturasDisponibles, setFacturasDisponibles] = useState(true)
+  const [nuevaFactura, setNuevaFactura] = useState<Record<string,string>|null>(null)
+  const [guardandoFactura, setGuardandoFactura] = useState(false)
   const [uploadingFile, setUploadingFile] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -100,7 +111,77 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
     setFilesLoading(false)
     setCommentsLoading(false)
     setAiLoading(false)
+    setFacturas(null)
+    setFacturasLoading(false)
+    setNuevaFactura(null)
   }, [selectedId])
+
+  // Las facturas SÍ se piden solas al abrir la ficha, a diferencia de los
+  // archivos y los comentarios: «cuánto me debe» es la pregunta por la que se
+  // entra aquí, y esconderla tras un botón la deja sin contestar. Es una consulta
+  // por índice sobre una tabla pequeña.
+  useEffect(() => {
+    if (!selectedId) return
+    const id = selectedId
+    let vivo = true
+    setFacturasLoading(true)
+    fetchWithTimeout(`/api/clients/${id}/facturas`)
+      .then(async r => {
+        if (!vivo || selectedIdRef.current !== id) return
+        // `ok` comprobado: sin esto un 500 se leía como JSON, `facturas` salía
+        // undefined y la ficha decía «sin facturas» de un cliente que las tiene.
+        if (!r.ok) { setFacturas([]); return }
+        const j = await r.json()
+        if (!vivo || selectedIdRef.current !== id) return
+        setFacturasDisponibles(j?.disponible !== false)
+        setFacturas(Array.isArray(j?.facturas) ? j.facturas : [])
+      })
+      .catch(() => { if (vivo && selectedIdRef.current === id) setFacturas([]) })
+      .finally(() => { if (vivo && selectedIdRef.current === id) setFacturasLoading(false) })
+    return () => { vivo = false }
+  }, [selectedId])
+
+  const crearFactura = async () => {
+    if (!selected || !nuevaFactura) return
+    const centimos = importeACentimos(nuevaFactura.importe || '')
+    if (centimos === null) { showToast('Escribe el importe'); return }
+    if (!nuevaFactura.emitida) { showToast('Falta la fecha de emisión'); return }
+    const clienteId = selected.id
+    setGuardandoFactura(true)
+    try {
+      const r = await fetchWithTimeout(`/api/clients/${clienteId}/facturas`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          numero: nuevaFactura.numero || null,
+          concepto: nuevaFactura.concepto || null,
+          importe_centimos: centimos,
+          iva_pct: Number(nuevaFactura.iva ?? 21) || 0,
+          emitida_el: nuevaFactura.emitida,
+          vence_el: nuevaFactura.vence || null,
+        }),
+      })
+      const j = await r.json().catch(() => null)
+      if (!r.ok) { showToast(j?.error || 'No se pudo crear la factura'); return }
+      // Al principio de la lista: viene ordenada por emisión descendente y esta es
+      // la más reciente en el caso normal. Se vuelve a pedir si cambia de cliente.
+      if (selectedIdRef.current === clienteId) { setFacturas(f => [j, ...(f || [])]); setNuevaFactura(null) }
+      showToast('Factura añadida')
+    } catch { showToast('No se pudo crear la factura') }
+    finally { setGuardandoFactura(false) }
+  }
+
+  const marcarCobrada = async (f: Factura, cobrada: boolean) => {
+    try {
+      const r = await fetchWithTimeout(`/api/facturas/${f.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cobrada_el: cobrada ? todayKey() : null }),
+      })
+      const j = await r.json().catch(() => null)
+      if (!r.ok) { showToast(j?.error || 'No se pudo actualizar'); return }
+      setFacturas(list => (list || []).map(x => x.id === f.id ? j : x))
+      showToast(cobrada ? 'Cobrada ✓' : 'Marcada como pendiente')
+    } catch { showToast('No se pudo actualizar') }
+  }
 
   const loadFiles = async (id: string) => {
     // El efecto de arriba limpia el estado al cambiar de cliente, pero la
@@ -642,6 +723,128 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
                 arriba es el que quedó como bueno. Hay una regla en
                 regresiones.test.ts que impide que vuelva. */}
           </div>
+        </div>
+
+        {/* ── FACTURAS ─────────────────────────────────────────────────────
+            Lo que había era `clients.revenue`: un texto libre que dice cuánto
+            vale un cliente al mes. No contesta lo que se pregunta un día 5 —qué
+            se ha emitido, qué falta por cobrar, qué está vencido—, y eso vivía
+            en la cabeza de alguien o en una hoja aparte. */}
+        <div className="rounded-2xl overflow-hidden mb-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+          <div className="flex items-center justify-between px-6 py-4 flex-wrap gap-3" style={{borderBottom:`1px solid ${BORDER}`}}>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="font-syne text-[9px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.25)'}}>FACTURAS</div>
+              {(facturas||[]).length>0 && (()=>{
+                // Los tres números que se miran, y en este orden: lo VENCIDO
+                // primero porque es lo único que pide una acción hoy. Se calculan
+                // con el mismo `estadoFactura` que usa el servidor — dos copias
+                // dirían cosas distintas el día del vencimiento.
+                const suma = (e:string) => (facturas||[]).filter(f=>estadoFactura(f)===e).reduce((n,f)=>n+totalConIva(f),0)
+                const vencido = suma('vencida'), pendiente = suma('pendiente'), cobrado = suma('cobrada')
+                return [
+                  ...(vencido>0 ? [{v:vencido, l:'VENCIDO', c:RED}] : []),
+                  ...(pendiente>0 ? [{v:pendiente, l:'POR COBRAR', c:AMBAR}] : []),
+                  ...(cobrado>0 ? [{v:cobrado, l:'COBRADO', c:GRN}] : []),
+                ].map(k=>(
+                  <span key={k.l} className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full" style={{background:`${k.c}14`,color:k.c}}>
+                    {k.l} {euros(k.v)}
+                  </span>
+                ))
+              })()}
+            </div>
+            {isOwner && facturasDisponibles && (
+              <button onClick={()=>setNuevaFactura(n=>n?null:{importe:'',emitida:todayKey(),iva:'21',numero:'',concepto:'',vence:''})}
+                className="font-syne text-[8px] font-black px-3 py-1.5 rounded-xl transition-all"
+                style={{background:nuevaFactura?'rgba(255,255,255,0.04)':`${BLU}1A`,border:`1px solid ${nuevaFactura?BORDER:BLU+'35'}`,color:nuevaFactura?'rgba(255,255,255,0.45)':BLU}}>
+                {nuevaFactura?'CANCELAR':'+ FACTURA'}
+              </button>
+            )}
+          </div>
+
+          {nuevaFactura && (
+            <div className="px-6 py-4 grid grid-cols-2 md:grid-cols-6 gap-2.5" style={{borderBottom:`1px solid ${BORDER}`,background:SURF2}}>
+              {([
+                ['numero','Nº','text','2026-014'],
+                ['concepto','Concepto','text','Campaña verano'],
+                ['importe','Importe (base)','text','1.500,00'],
+                ['iva','IVA %','number',''],
+                ['emitida','Emitida','date',''],
+                ['vence','Vence','date',''],
+              ] as [string,string,string,string][]).map(([k,l,tipo,ph])=>(
+                <label key={k} className="flex flex-col gap-1 min-w-0">
+                  <span className="font-syne text-[7px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.25)'}}>{l.toUpperCase()}</span>
+                  <input type={tipo} value={nuevaFactura[k]||''} placeholder={ph}
+                    onChange={e=>setNuevaFactura(n=>({...(n||{}),[k]:e.target.value}))}
+                    className="px-3 py-2 rounded-xl text-[12px] text-white placeholder-white/20 outline-none min-w-0"
+                    style={{background:SURFACE,border:`1px solid ${BORDER}`,caretColor:BLU,colorScheme:'dark'}}/>
+                </label>
+              ))}
+              <div className="col-span-2 md:col-span-6 flex items-center gap-3">
+                <button onClick={crearFactura} disabled={guardandoFactura}
+                  className="font-syne text-[8.5px] font-black px-4 py-2 rounded-xl transition-opacity hover:opacity-85 disabled:opacity-40"
+                  style={{background:`linear-gradient(135deg,${BLU},#1440CC)`,color:'#FFFFFF'}}>
+                  {guardandoFactura?'GUARDANDO…':'GUARDAR FACTURA'}
+                </button>
+                {/* El total CON IVA mientras se escribe: el campo pide la base y
+                    lo que se compara con el banco es el total. Sin esto hay que
+                    hacer la cuenta a mano para saber si se ha escrito bien. */}
+                {(()=>{ const c=importeACentimos(nuevaFactura.importe||''); return c===null?null:(
+                  <span className="font-figtree text-[12px] font-black" style={{color:'rgba(255,255,255,0.45)'}}>
+                    Total con IVA: {euros(totalConIva({importe_centimos:c,iva_pct:Number(nuevaFactura.iva ?? 21)||0}))}
+                  </span>
+                )})()}
+              </div>
+            </div>
+          )}
+
+          {!facturasDisponibles ? (
+            <div className="px-6 py-5 text-[12px]" style={{color:'rgba(255,255,255,0.3)'}}>
+              Falta aplicar <span className="font-mono text-[11px]" style={{color:AMBAR}}>migrations/20260901_facturas.sql</span> en Supabase.
+              El resto de la ficha funciona con normalidad.
+            </div>
+          ) : facturasLoading && facturas===null ? (
+            <div className="px-6 py-5 text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>Cargando facturas…</div>
+          ) : (facturas||[]).length===0 ? (
+            <div className="px-6 py-5 text-[12px]" style={{color:'rgba(255,255,255,0.2)'}}>
+              Sin facturas{isOwner?' — añade la primera para llevar el cobro aquí':''}
+            </div>
+          ) : (facturas||[]).map(f=>{
+            const est = estadoFactura(f)
+            const c = est==='cobrada'?GRN:est==='vencida'?RED:AMBAR
+            return (
+              // En MÓVIL el estado y su botón bajan a su propia línea. En 375 px
+              // todo en una fila dejaba el número de factura en «20…» y las fechas
+              // partidas en tres renglones: cabía, pero no se leía. Se ve en el
+              // navegador a 375, no leyendo el JSX.
+              <div key={f.id} className="flex items-center gap-3 px-6 py-3 flex-wrap" style={{borderTop:`1px solid ${BORDER}`}}>
+                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{background:c}}/>
+                <div className="min-w-0" style={{flex:'1 1 150px'}}>
+                  <div className="text-[12.5px] truncate" style={{color:'rgba(255,255,255,0.75)'}}>
+                    {f.numero?`${f.numero} · `:''}{f.concepto||'Sin concepto'}
+                  </div>
+                  <div className="font-syne text-[8px] mt-0.5" style={{color:'rgba(255,255,255,0.25)'}}>
+                    EMITIDA {dlLabel(f.emitida_el)}
+                    {f.vence_el?` · VENCE ${dlLabel(f.vence_el)}`:''}
+                    {f.cobrada_el?` · COBRADA ${dlLabel(f.cobrada_el)}`:''}
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div className="font-figtree text-[15px] font-black leading-none" style={{color:'rgba(255,255,255,0.9)'}}>{euros(totalConIva(f))}</div>
+                  <div className="font-syne text-[7px] mt-1" style={{color:'rgba(255,255,255,0.22)'}}>{euros(f.importe_centimos)} + {f.iva_pct}% IVA</div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0" style={isMobile?{width:'100%',paddingLeft:18}:undefined}>
+                  <span className="font-syne text-[7.5px] font-black px-2 py-1 rounded-full" style={{background:`${c}14`,color:c}}>{est.toUpperCase()}</span>
+                  {isOwner && (
+                    <button onClick={()=>marcarCobrada(f, est!=='cobrada')}
+                      className="font-syne text-[7.5px] font-black px-2.5 py-1 rounded-lg transition-all"
+                      style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.4)'}}>
+                      {est==='cobrada'?'DESMARCAR':'MARCAR COBRADA'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
 
         {/* ARCHIVOS */}
