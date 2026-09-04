@@ -7783,3 +7783,77 @@ describe('facturas: el dinero no se cuenta en coma flotante', () => {
       'el PATCH compara las fechas contra el cuerpo y no contra lo que hay guardado').toBe(true)
   })
 })
+
+describe('la portada y el menú, según la reunión de empresa del 2026-09-03', () => {
+  const D = leerCodigo('src/components/NexusDashboard.tsx')
+  const H = leerCodigo('src/components/sections/HoySection.tsx')
+  const C = leerCodigo('src/components/sections/ChatSection.tsx')
+
+  // «Optimizar dashboard: mover la sección de automatizaciones a la pantalla
+  // principal y eliminar el botón duplicado de Harvey.»
+
+  it('el menú tiene UNA sola entrada de IA', () => {
+    // Había dos seguidas —Brutal.IA y Harvey— y a quien las mira le parecen dos
+    // asistentes distintos. No lo son: misma IA, mismo contexto, misma memoria; lo
+    // que cambia es que una escucha. El propio repo ya lo tenía escrito («desde
+    // fuera parecen la misma cosa») y aun así el menú ofrecía dos puertas.
+    const i = D.indexOf("navLabel('IA')")
+    expect(i, 'ya no existe el grupo IA del menú: revisa esta regla').toBeGreaterThan(-1)
+    const grupo = D.slice(i, D.indexOf("navItem('ajustes'", i))
+    expect(/setSection\('harvey'\)/.test(grupo),
+      `vuelve el segundo botón de IA en el menú:\n${grupo.slice(0, 400)}`).toBe(false)
+    expect(/navItem\('chat'/.test(grupo), 'desapareció también la entrada que quedaba').toBe(true)
+  })
+
+  it('pero a Harvey se sigue llegando, y por un botón que se ve', () => {
+    // Quitar el duplicado no puede dejar la sección huérfana. La puerta existía ya
+    // como enlace de 7,5 px en el pie del chat: ahora es un botón de cabecera.
+    // EN LA CABECERA, no en cualquier sitio del fichero. La primera versión
+    // buscaba `onNavigate('harvey')` en todo ChatSection y daba VERDE al quitar el
+    // botón nuevo: seguía existiendo el enlace de 7,5 px del pie, que es
+    // precisamente el que no se ve. Y `/HABLAR/` casaba con «HABLAR2». Las dos
+    // salieron al mutar.
+    const iCab = C.indexOf("Brutal.IA")
+    expect(iCab, 'ya no existe la cabecera de Brutal.IA: revisa esta regla').toBeGreaterThan(-1)
+    const cabecera = C.slice(iCab, C.indexOf('Messages / Empty state') > -1 ? C.indexOf('Messages / Empty state') : iCab + 3000)
+    expect(/onNavigate\('harvey'\)/.test(cabecera),
+      'la cabecera de Brutal.IA ya no lleva a Harvey: solo queda el enlace diminuto del pie').toBe(true)
+    expect(/>\s*HABLAR\s*</.test(cabecera), 'desapareció el rótulo HABLAR de la cabecera').toBe(true)
+    // Y los otros caminos siguen: el atajo del teclado y el panel MÁS del móvil.
+    expect(/y:'harvey'/.test(D), 'se perdió el atajo G·Y hacia Harvey').toBe(true)
+    expect(/id:'harvey' as Section/.test(D), 'se perdió Harvey del panel MÁS del móvil').toBe(true)
+  })
+
+  it('la portada enseña las automatizaciones', () => {
+    // Enterrada la decimotercera en el menú, la mejor función del producto era
+    // invisible: el equipo tenía UNA regla creada.
+    expect(/onNavigate\?\.\('automatizaciones'\)/.test(H),
+      'la portada ya no lleva a Automatizaciones').toBe(true)
+    expect(/data\.reglas/.test(H), 'la portada no lee las reglas: el bloque no puede contar nada').toBe(true)
+  })
+
+  it('y cuenta lo que han hecho, no cuántas hay', () => {
+    // «3 reglas» no dice nada. «3 activas · 11 veces que han saltado» sí: es la
+    // respuesta a «¿qué ha hecho la app por mí?», que es para lo que existe.
+    // Desde donde el bloque LEE las reglas, no desde el primer
+    // `onNavigate('automatizaciones')`: ese es el botón de la cabecera y la
+    // ventana se quedaba corta antes del estado vacío. La regla daba roja con el
+    // código bien, que es tan inútil como darla verde con el código mal.
+    const i = H.indexOf('const reglas = (data.reglas')
+    expect(i, 'ya no existe el bloque de automatizaciones de la portada: revisa esta regla').toBeGreaterThan(-1)
+    const bloque = H.slice(i, i + 4200)
+    expect(/trigger_count/.test(bloque),
+      'el bloque de la portada vuelve a contar solo cuántas reglas hay').toBe(true)
+    // Lo que de verdad protege esta línea no es que la columna se lea —se lee
+    // también para ordenar—, sino que una regla SIN disparar lo diga. Mutar el
+    // orden dejaba la regla verde: comprobaba un uso de la columna, no el aviso.
+    expect(/last_triggered_at \? relTime/.test(bloque),
+      'ya no se dice cuándo saltó cada regla').toBe(true)
+    expect(/'AÚN NO'/.test(bloque),
+      'una regla que nunca ha saltado se pinta en blanco: suele estar mal escrita y así no se entera nadie').toBe(true)
+    // Y el estado vacío INVITA, no deja un hueco: para casi todo el equipo ese es
+    // el estado real, y es justo a quien hay que enseñárselo.
+    expect(/Crear la primera/.test(bloque),
+      'sin reglas el bloque se queda mudo: quien más lo necesita no ve nada').toBe(true)
+  })
+})

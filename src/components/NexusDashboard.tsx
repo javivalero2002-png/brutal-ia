@@ -1041,27 +1041,19 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
               solo se le ofrece al propietario. */}
 
           {navLabel('IA')}
+          {/* UNA SOLA ENTRADA DE IA.
+              Reunión de empresa del 2026-09-03: «eliminar el botón duplicado de
+              Harvey». Aquí había DOS botones seguidos —Brutal.IA y Harvey— y a
+              quien los mira le parecen dos asistentes distintos. No lo son: es la
+              misma IA, el mismo contexto y la misma memoria; lo que cambia es que
+              una escucha. El propio repo lo tenía escrito («desde fuera parecen la
+              misma cosa»), y aun así el menú ofrecía dos puertas.
+              Harvey NO se pierde, y ese es el motivo de quitar ESTE y no el otro:
+              la PORTADA ya es Harvey —el orbe y el «Escribe a Harvey…» son suyos—,
+              se llega por G·Y, por el panel MÁS del móvil, por los botones
+              «pregúntale a Harvey» de Inbox y Diario, y ahora por el botón HABLAR
+              de la cabecera de Brutal.IA, que antes era un enlace de 7,5 px. */}
           {navItem('chat','Brutal.IA','message-square')}
-          {/* Sin candado. Lo llevaba, pero era el ÚNICO de la app: a Harvey se
-              llega igual por G·Y, por el panel MÁS del móvil y por los botones
-              «pregúntale a Harvey» de Inbox y Diario, y su orbe vive en la
-              portada de todo el mundo. Lo único que hacía el candado era que un
-              miembro aterrizara ahí sin entrada por la que volver. */}
-          {(
-            <button onClick={()=>{setSection('harvey'); if (isMobile) setSidebarOpen(false)}}
-              className="flex items-center gap-3 w-full py-2.5 px-3 rounded-xl text-left transition-all duration-150"
-              style={{
-                background: section==='harvey' ? 'rgba(84,116,232,0.15)' : 'rgba(84,116,232,0.05)',
-                border: `1px solid ${section==='harvey' ? 'rgba(124,152,255,0.2)' : 'rgba(124,152,255,0.1)'}`,
-                color: section==='harvey' ? '#eef1fb' : 'rgba(147,180,255,0.7)',
-                fontSize:'14px', fontWeight:section==='harvey'?600:500, marginBottom:'2px',
-                boxShadow: section==='harvey' ? '0 0 22px rgba(70,100,225,0.12)' : 'none',
-              }}>
-              <LucideIcon name="cpu" size={17} color={section==='harvey'?'#93b4ff':'rgba(147,180,255,0.6)'}/>
-              <span className="flex-1 truncate">Harvey</span>
-              <span className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded-full flex-shrink-0" style={{background:'rgba(124,152,255,0.14)',color:'rgba(147,180,255,0.7)',letterSpacing:'0.1em'}}>AI</span>
-            </button>
-          )}
           {navItem('ajustes','Operativa','settings')}
         </nav>
 
