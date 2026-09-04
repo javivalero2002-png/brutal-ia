@@ -82,6 +82,14 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
   const [facturasDisponibles, setFacturasDisponibles] = useState(true)
   const [nuevaFactura, setNuevaFactura] = useState<Record<string,string>|null>(null)
   const [guardandoFactura, setGuardandoFactura] = useState(false)
+  // LOS FICHEROS DE CADA FACTURA. `null` = no se han pedido todavía; `[]` = se han
+  // pedido y no hay ninguno. La factura abierta se guarda aparte para que solo se
+  // pida la carpeta que se mira: son N peticiones si se abren todas.
+  const [facturaAbierta, setFacturaAbierta] = useState<string|null>(null)
+  const [archivosFactura, setArchivosFactura] = useState<Record<string, any[]|null>>({})
+  const [subiendoArchivo, setSubiendoArchivo] = useState<string|null>(null)
+  const [facturaSubiendo, setFacturaSubiendo] = useState<string|null>(null)
+  const inputFacturaRef = useRef<HTMLInputElement>(null)
   const [uploadingFile, setUploadingFile] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -168,6 +176,51 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
       showToast('Factura añadida')
     } catch { showToast('No se pudo crear la factura') }
     finally { setGuardandoFactura(false) }
+  }
+
+  const cargarArchivos = async (facturaId: string) => {
+    try {
+      const r = await fetchWithTimeout(`/api/facturas/${facturaId}/archivos`)
+      // `ok` comprobado: un 500 leído como JSON dejaba `archivos` en undefined y la
+      // factura decía «sin archivos» teniendo su PDF dentro.
+      if (!r.ok) { showToast('No se pudieron cargar los archivos'); setArchivosFactura(a => ({...a, [facturaId]: []})); return }
+      const lista = await r.json()
+      setArchivosFactura(a => ({...a, [facturaId]: Array.isArray(lista) ? lista : []}))
+    } catch { showToast('No se pudieron cargar los archivos'); setArchivosFactura(a => ({...a, [facturaId]: []})) }
+  }
+
+  const abrirArchivos = async (facturaId: string) => {
+    const cerrando = facturaAbierta === facturaId
+    setFacturaAbierta(cerrando ? null : facturaId)
+    if (!cerrando && archivosFactura[facturaId] === undefined) await cargarArchivos(facturaId)
+  }
+
+  const subirArchivoFactura = async (facturaId: string, file: File) => {
+    // La factura se fija al empezar: si se cambia de ficha durante la subida, el
+    // fichero tiene que seguir colgando de la que era. Mismo patrón que los
+    // archivos de cliente y el PDF de proyectos.
+    setSubiendoArchivo(facturaId)
+    try {
+      const fd = new FormData(); fd.append('file', file)
+      const r = await fetchWithTimeout(`/api/facturas/${facturaId}/archivos`, { method: 'POST', body: fd })
+      const j = await r.json().catch(() => null)
+      if (!r.ok) { showToast(j?.error || 'No se pudo subir'); return }
+      setArchivosFactura(a => ({...a, [facturaId]: [j, ...(a[facturaId] || [])]}))
+      showToast('Archivo añadido a la factura')
+    } catch { showToast('No se pudo subir') }
+    finally { setSubiendoArchivo(null) }
+  }
+
+  const borrarArchivoFactura = async (facturaId: string, path: string) => {
+    try {
+      const r = await fetchWithTimeout(`/api/facturas/${facturaId}/archivos`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }),
+      })
+      const j = await r.json().catch(() => null)
+      if (!r.ok) { showToast(j?.error || 'No se pudo borrar'); return }
+      setArchivosFactura(a => ({...a, [facturaId]: (a[facturaId] || []).filter(x => x.path !== path)}))
+      showToast('Archivo borrado')
+    } catch { showToast('No se pudo borrar') }
   }
 
   const marcarCobrada = async (f: Factura, cobrada: boolean) => {
@@ -811,6 +864,9 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
           ) : (facturas||[]).map(f=>{
             const est = estadoFactura(f)
             const c = est==='cobrada'?GRN:est==='vencida'?RED:AMBAR
+            const abierta = facturaAbierta === f.id
+            const archivos = archivosFactura[f.id]
+            const nArchivos = (archivos || []).length
             return (
               // En MÓVIL el estado y su botón bajan a su propia línea. En 375 px
               // todo en una fila dejaba el número de factura en «20…» y las fechas
@@ -834,6 +890,18 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0" style={isMobile?{width:'100%',paddingLeft:18}:undefined}>
                   <span className="font-syne text-[7.5px] font-black px-2 py-1 rounded-full" style={{background:`${c}14`,color:c}}>{est.toUpperCase()}</span>
+                  {/* EL CLIP. Javi: «en facturas no se puede aún meter archivos».
+                      Una factura sin su PDF es media factura: lo que se manda al
+                      cliente y lo que se guarda para la gestoría es el fichero, no
+                      la fila. Los ficheros viven en el Storage bajo `facturas/<id>/`
+                      — sin columna nueva y por tanto sin migración. */}
+                  <button onClick={()=>abrirArchivos(f.id)}
+                    className="flex items-center gap-1 font-syne text-[7.5px] font-black px-2 py-1 rounded-lg transition-all"
+                    title="Archivos de esta factura"
+                    style={{background: abierta?`${BLU}14`:'rgba(255,255,255,0.04)',border:`1px solid ${abierta?BLU+'30':BORDER}`,color:abierta?'#93b4ff':'rgba(255,255,255,0.4)'}}>
+                    <LucideIcon name="paperclip" size={10} color={abierta?'#93b4ff':'rgba(255,255,255,0.4)'}/>
+                    {nArchivos > 0 ? nArchivos : ''}
+                  </button>
                   {isOwner && (
                     <button onClick={()=>marcarCobrada(f, est!=='cobrada')}
                       className="font-syne text-[7.5px] font-black px-2.5 py-1 rounded-lg transition-all"
@@ -842,9 +910,54 @@ export default function ClientesSection({data,selectedId,onSelect,onOpenModal,sh
                     </button>
                   )}
                 </div>
+
+                {abierta && (
+                  <div className="w-full pl-[18px] pt-1" style={{borderTop:`1px solid ${BORDER}`,marginTop:4}}>
+                    {archivos === undefined ? (
+                      <div className="py-2 text-[11.5px]" style={{color:'rgba(255,255,255,0.2)'}}>Cargando…</div>
+                    ) : (archivos || []).length === 0 ? (
+                      <div className="py-2 text-[11.5px]" style={{color:'rgba(255,255,255,0.25)'}}>
+                        Sin archivos{isOwner ? ' — sube el PDF de la factura o el justificante del cobro' : ''}
+                      </div>
+                    ) : (archivos || []).map((a:any)=>(
+                      <div key={a.path} className="flex items-center gap-2 py-1.5">
+                        <LucideIcon name="file-text" size={12} color="rgba(255,255,255,0.28)"/>
+                        {/* `rel="noreferrer"`: el enlace es una firma temporal del
+                            Storage y no tiene por qué viajar como referer. */}
+                        <a href={a.url || '#'} target="_blank" rel="noreferrer"
+                          className="flex-1 min-w-0 truncate text-[12px] transition-opacity hover:opacity-70"
+                          style={{color: a.url ? '#93b4ff' : 'rgba(255,255,255,0.25)'}}>
+                          {a.name}
+                        </a>
+                        <span className="font-syne text-[7.5px] flex-shrink-0" style={{color:'rgba(255,255,255,0.2)'}}>
+                          {Math.max(1, Math.round((a.size||0)/1024))} KB
+                        </span>
+                        {isOwner && (
+                          <button onClick={()=>borrarArchivoFactura(f.id, a.path)}
+                            className="font-syne text-[7px] font-black px-1.5 py-0.5 rounded transition-all hover:opacity-70"
+                            style={{color:`${RED}99`}}>BORRAR</button>
+                        )}
+                      </div>
+                    ))}
+                    {isOwner && (
+                      <button onClick={()=>{ setFacturaSubiendo(f.id); inputFacturaRef.current?.click() }}
+                        disabled={subiendoArchivo===f.id}
+                        className="flex items-center gap-1.5 font-syne text-[7.5px] font-black px-2.5 py-1.5 rounded-lg my-1.5 transition-all disabled:opacity-40"
+                        style={{background:`${BLU}14`,border:`1px solid ${BLU}30`,color:'#93b4ff'}}>
+                        <LucideIcon name="upload" size={10} color="#93b4ff"/>
+                        {subiendoArchivo===f.id ? 'SUBIENDO…' : 'SUBIR ARCHIVO'}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}
+          {/* UN solo input para todas las filas: uno por factura serían N inputs
+              ocultos en el DOM de una ficha con veinte facturas. La factura a la
+              que va el fichero se fija al pulsar. */}
+          <input ref={inputFacturaRef} type="file" className="hidden"
+            onChange={e=>{ const file=e.target.files?.[0]; if(file&&facturaSubiendo) subirArchivoFactura(facturaSubiendo, file); e.target.value='' }}/>
         </div>
 
         {/* ARCHIVOS */}

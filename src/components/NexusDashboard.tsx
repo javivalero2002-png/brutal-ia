@@ -791,6 +791,10 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   // se cae por una función que todavía no está instalada.
   const esCampana = (p: Project) => p.tipo === 'campana'
   const delTipo = data.projects.filter(p => esCampana(p) === (section === 'campanas'))
+  // Las reglas ACTIVAS, para la chapa del menú. Las filas internas que usan la
+  // tabla `reglas` como almacén (push, logos, latido) ya las filtra /api/reglas,
+  // así que `data.reglas` solo trae reglas de verdad.
+  const reglasActivas = (data.reglas || []).filter(r => r.active).length
   const filteredProjects = projStatusFilter === 'Todos' ? delTipo : delTipo.filter(p => p.status === projStatusFilter)
   // «Plan.» y «Revisión» declaraban su color en rgba() mientras las otras tres
   // eran hex, y ProyectosSection concatena opacidad sobre col.color: esas dos
@@ -1052,14 +1056,24 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
               el gemelo de siempre. */}
           {navItem('campanas','Campañas','target')}
           {navItem('contenido','Contenido','film')}
-          {/* Memoria, Equipo, Automatizaciones y Reportes NO van aquí, y es
-              deliberado: las cuatro ya son pestañas dentro de Operativa, así que
-              ponerlas también en el menú era duplicar la puerta y alargar la
-              lista. Un menú con todo dentro no es más accesible — es más difícil
-              de recorrer, y lo del día a día se pierde entre lo de vez en cuando.
+          {/* AUTOMATIZACIONES SÍ VA AQUÍ. Javi, al ver la barra lateral: «no has
+              traído el panel de automatizaciones a la barra lateral principal».
+              La regla de abajo la excluía junto a Memoria, Equipo y Reportes por
+              ser pestaña de Operativa, y para esas tres sigue valiendo — se miran
+              de vez en cuando. Esta no: es lo que hace que la app trabaje sola, y
+              el equipo tiene UNA regla creada precisamente porque estaba a dos
+              clics de profundidad. Una puerta duplicada cuesta una línea de menú;
+              una función que nadie encuentra cuesta la función entera.
+              Con el número de reglas activas, que es lo que dice si está viva. */}
+          {navItem('automatizaciones','Automatizaciones','zap', reglasActivas||undefined)}
+          {/* Memoria, Equipo y Reportes NO van aquí, y es deliberado: las tres ya
+              son pestañas dentro de Operativa, así que ponerlas también en el menú
+              era duplicar la puerta y alargar la lista. Un menú con todo dentro no
+              es más accesible — es más difícil de recorrer, y lo del día a día se
+              pierde entre lo de vez en cuando.
 
               Lo que se conserva del intento anterior: el buscador (⌘K) llega a
-              las cuatro, la cabecera del móvil sabe cómo se llaman, y Reportes
+              las tres, la cabecera del móvil sabe cómo se llaman, y Reportes
               solo se le ofrece al propietario. */}
 
           {navLabel('IA')}
