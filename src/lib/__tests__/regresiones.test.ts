@@ -8022,3 +8022,92 @@ describe('campañas y proyectos, separados sin duplicar el panel', () => {
     expect(/campaña/.test(sql), 'el valor guardado lleva eñe: es un identificador, no un rótulo').toBe(false)
   })
 })
+
+describe('una factura lleva sus ficheros', () => {
+  // Javi: «en facturas no se puede aún meter archivos». Una factura sin su PDF es
+  // media factura: lo que se manda al cliente y lo que se guarda para la gestoría es
+  // el fichero, no la fila de la base.
+  const R = leerCodigo('src/app/api/facturas/[id]/archivos/route.ts')
+  const C = leerCodigo('src/components/sections/ClientesSection.tsx')
+
+  it('sin columna nueva: los ficheros viven en el Storage', () => {
+    // Una columna `archivo_url` habría hecho falta para UN fichero, y una factura
+    // tiene el PDF y el justificante — se habría quedado corta el primer día. Y
+    // además habría sido otra migración que pegar a mano.
+    expect(/facturas\/\$\{id\}/.test(R), 'la carpeta ya no cuelga del id de la factura').toBe(true)
+    const sql = readdirSync(join(__dirname, '../../../migrations'))
+    expect(sql.some(f => /archivo|adjunto/i.test(f)),
+      'ha aparecido una migración para los ficheros de factura: no hace falta, viven en el Storage').toBe(false)
+  })
+
+  it('escribir y borrar son solo del propietario; leer, de todos', () => {
+    // Mismo cerrojo que crear y editar la factura. El GET no lo lleva a propósito:
+    // el MRR y la facturación de cada cliente ya los ve el equipo, así que esconder
+    // el PDF sería una barrera de mentira.
+    for (const m of R.matchAll(/export async function (POST|DELETE)\(([\s\S]*?)\n}/g)) {
+      expect(/ctx\.role !== 'owner'/.test(m[2]), `${m[1]} no comprueba propietario`).toBe(true)
+    }
+    const get = (R.match(/export async function GET\(([\s\S]*?)\n}/) || [])[1] || ''
+    expect(/ctx\.role/.test(get), 'el GET pide propietario: el equipo deja de poder abrir el PDF').toBe(false)
+    expect(/getAuthCtx\(\)/.test(get), 'el GET deja de exigir sesión').toBe(true)
+  })
+
+  it('no se puede borrar un fichero de otra carpeta', () => {
+    // Sin la comprobación del prefijo, mandar `copias/2026-01-01.json.gz` borraría
+    // la copia entera de la base con el service role. Es el gemelo del agujero de
+    // `firmarUrl` que ya costó una PR de seguridad.
+    const del = (R.match(/export async function DELETE\(([\s\S]*?)\n}/) || [])[1] || ''
+    expect(/startsWith\(`\$\{carpeta\(id\)\}\//.test(del),
+      'el borrado ya no comprueba que el path esté dentro de ESTA factura').toBe(true)
+    expect(/Ruta inválida/.test(del), 'desapareció el rechazo de rutas ajenas').toBe(true)
+  })
+
+  it('un fallo al listar NO se lee como «sin archivos»', () => {
+    // Una factura con su PDF dentro y una consulta caída se verían igual, y la
+    // segunda es la que hace pensar que se ha perdido el documento.
+    const get = (R.match(/export async function GET\(([\s\S]*?)\n}/) || [])[1] || ''
+    expect(/if \(error\) return NextResponse\.json\(\{ error/.test(get),
+      'el listado vuelve a devolver una lista vacía cuando el Storage falla').toBe(true)
+    // Y en el cliente, lo mismo: `ok` comprobado antes de leer el JSON.
+    const i = C.indexOf('const cargarArchivos')
+    expect(i, 'ya no se cargan los archivos de factura: revisa esta regla').toBeGreaterThan(-1)
+    expect(/if \(!r\.ok\)/.test(C.slice(i, i + 700)),
+      'la pantalla lee el JSON sin mirar el estado: un 500 saldría como «sin archivos»').toBe(true)
+  })
+
+  it('un solo input de fichero para todas las filas', () => {
+    // Uno por factura serían N inputs ocultos en el DOM de una ficha con veinte.
+    expect((C.match(/inputFacturaRef/g) || []).length,
+      'el input de archivo de facturas se ha duplicado por fila').toBeLessThanOrEqual(3)
+    expect(/facturaSubiendo/.test(C),
+      'no se fija a qué factura va el fichero: acabaría en la que estuviera abierta al terminar').toBe(true)
+  })
+})
+
+describe('Automatizaciones está en la barra lateral', () => {
+  // Javi, mirando el menú: «no has traído el panel de automatizaciones a la barra
+  // lateral principal». Estaba excluido a propósito por ser pestaña de Operativa —
+  // y para Memoria, Equipo y Reportes ese criterio sigue valiendo—, pero esta es la
+  // función que hace que la app trabaje sola, y el equipo tenía UNA regla creada
+  // justamente porque estaba a dos clics de profundidad.
+  const D = leerCodigo('src/components/NexusDashboard.tsx')
+
+  it('tiene su entrada, con el número de reglas activas', () => {
+    expect(/navItem\('automatizaciones'/.test(D),
+      'Automatizaciones vuelve a estar solo dentro de Operativa: nadie la encuentra').toBe(true)
+    const i = D.indexOf("navItem('automatizaciones'")
+    expect(/reglasActivas/.test(D.slice(i, i + 140)),
+      'la entrada no dice cuántas reglas hay activas: no se ve si está viva').toBe(true)
+  })
+
+  it('y el recuento no cuenta las filas internas', () => {
+    // La tabla `reglas` se usa también como almacén (push, logos, latido). Las
+    // filtra /api/reglas, así que el cliente ya recibe solo reglas de verdad — pero
+    // si alguien contara sobre la tabla cruda, el menú diría 14.
+    const i = D.indexOf('const reglasActivas')
+    expect(i, 'ya no se cuentan las reglas activas: revisa esta regla').toBeGreaterThan(-1)
+    expect(/data\.reglas/.test(D.slice(i, i + 120)),
+      'el recuento no sale de data.reglas, que es la lista ya filtrada').toBe(true)
+    expect(/r\.active/.test(D.slice(i, i + 120)), 'se cuentan también las pausadas').toBe(true)
+  })
+})
