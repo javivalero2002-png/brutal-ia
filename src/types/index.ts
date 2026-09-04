@@ -50,6 +50,11 @@ export interface Project {
   pdf_analysis?: string | null
   /** Carpeta donde se archiva. Texto libre — ver migrations/20260819_carpetas_proyectos.sql */
   carpeta?: string | null
+  /** «proyecto» (una entrega con cliente y fecha de fin) o «campana» (un empuje que
+   *  corre un tiempo y se mide por lo que trae). Ausente = proyecto: sin la
+   *  migración aplicada todo se comporta como hasta ahora.
+   *  Ver migrations/20260904_campanas.sql */
+  tipo?: 'proyecto' | 'campana' | null
   created_at: string
   client?: Client
 }

@@ -10,6 +10,11 @@ import type { Project, Task, Profile, NexusData} from '@/types'
 import type { IrASeccion } from '@/components/shared/secciones'
 
 interface PropsProyectos {
+  /** «proyecto» o «campana». Deciden Proyectos y Campañas, que montan ESTE mismo
+   *  componente: comparten cliente, estado, tareas, ficha y PDF, y lo único que
+   *  cambia es cómo se llaman y qué se filtra. Dos copias del panel habrían sido
+   *  el gemelo de siempre. */
+  modo?: 'proyecto' | 'campana'
   data: NexusData
   filteredProjects: any
   kanbanCols: any
@@ -29,8 +34,19 @@ interface PropsProyectos {
   onJustCreatedScrolled: any
 }
 
-function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView,projStatusFilter,setProjStatusFilter,dragRef,selectedId,onSelect,onOpenModal,showToast,isOwner,onNavigate,onSelectClient,justCreatedId,onJustCreatedScrolled}: PropsProyectos) {
+function ProyectosSection({modo='proyecto',data,filteredProjects,kanbanCols,projView,setProjView,projStatusFilter,setProjStatusFilter,dragRef,selectedId,onSelect,onOpenModal,showToast,isOwner,onNavigate,onSelectClient,justCreatedId,onJustCreatedScrolled}: PropsProyectos) {
   const isMobile = useIsMobile()
+  // Las palabras, en un solo sitio. Escritas a mano en los seis puntos donde
+  // aparecen, «campaña» acabaría faltando en dos.
+  const esCampana = modo === 'campana'
+  // LOS DE MI TIPO. Los recuentos de las chapas de estado y la barra de resumen
+  // salían de `data.projects`, o sea de TODO: al separar campañas de proyectos,
+  // Proyectos decía «TODOS 6» y solo pintaba cuatro. Un contador que no cuadra con
+  // lo que hay debajo se lee como que faltan cosas. Visto en el navegador.
+  const mios = (data.projects as Project[]).filter(p => (p.tipo === 'campana') === (modo === 'campana'))
+  const T = esCampana
+    ? { titulo:'Campañas', uno:'campaña', varias:'campañas', nuevo:'+ CAMPAÑA', nuevoLargo:'NUEVA CAMPAÑA', vacio:'SIN CAMPAÑAS' }
+    : { titulo:'Proyectos', uno:'proyecto', varias:'proyectos', nuevo:'+ PROYECTO', nuevoLargo:'NUEVO PROYECTO', vacio:'SIN PROYECTOS' }
   useBackClosable(!!selectedId, () => onSelect(null))
   const [editProgress, setEditProgress] = useState<number|null>(null)
   const [savingProgress, setSavingProgress] = useState(false)
@@ -666,8 +682,8 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
     <div className={isMobile?'p-4':'p-8'}>
       <div className={`flex items-end justify-between ${isMobile?'mb-5':'mb-8'} flex-wrap gap-3`}>
         <div>
-          <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>GESTIÓN</div>
-          <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>Proyectos</h1>
+          <div className="font-syne text-[9px] font-black tracking-[0.25em] mb-2" style={{color:'rgba(255,255,255,0.18)'}}>{esCampana ? 'MARKETING' : 'GESTIÓN'}</div>
+          <h1 className="font-figtree text-[26px] font-black text-white leading-none" style={{letterSpacing:'-0.03em'}}>{T.titulo}</h1>
           <div className="nx-kbd-hints flex items-center gap-2 mt-1.5">
             {(['V VISTA','N NUEVO'] as const).map((hint,i,arr)=>(
               <span key={hint} className="flex items-center gap-2">
@@ -687,7 +703,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
             ))}
           </div>
           )}
-          <button onClick={()=>onOpenModal('proyecto')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>+ PROYECTO</button>
+          <button onClick={()=>onOpenModal('proyecto')} className="flex items-center gap-2 px-5 py-3 rounded-2xl font-syne text-[10px] font-black tracking-widest text-white" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>{T.nuevo}</button>
         </div>
       </div>
       <div className="flex items-center gap-3 mb-6 flex-wrap">
@@ -698,7 +714,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
         <div className="flex items-center gap-1 p-1 rounded-2xl max-w-full overflow-x-auto"
              style={{background:SURFACE,border:`1px solid ${BORDER}`,scrollbarWidth:'none',WebkitOverflowScrolling:'touch' as any}}>
           {statusTabs.map(s=>{
-            const cnt = s.id==='Todos' ? data.projects.length : data.projects.filter((p: Project)=>p.status===s.id).length
+            const cnt = s.id==='Todos' ? mios.length : mios.filter((p: Project)=>p.status===s.id).length
             return (
             <button key={s.id} onClick={()=>setProjStatusFilter(s.id)} className="flex items-center gap-1.5 rounded-xl font-syne font-black tracking-wide transition-all flex-shrink-0" style={{padding:isMobile?'6px 8px':'8px 16px',fontSize:'9px',flex:isMobile?'1 1 0':'none',background:projStatusFilter===s.id?SURF2:'transparent',color:projStatusFilter===s.id?'rgba(255,255,255,0.9)':'rgba(240,240,248,0.28)',whiteSpace:'nowrap',justifyContent:'center'}}>
               {(isMobile ? s.short : s.label).toUpperCase()}
@@ -711,7 +727,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
             compartiendo fila con los filtros. */}
         <div className="basis-full md:basis-auto flex-1 min-w-0 flex items-center gap-2 px-3 py-2 rounded-2xl" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
           <LucideIcon name="search" size={12} color="rgba(255,255,255,0.2)"/>
-          <input value={projSearch} onChange={e=>setProjSearch(e.target.value)} placeholder="Busca proyecto…" className="bg-transparent text-[12px] outline-none flex-1 min-w-0" style={{caretColor:BLU,color:'rgba(255,255,255,0.75)'}}/>
+          <input value={projSearch} onChange={e=>setProjSearch(e.target.value)} placeholder={`Busca ${T.uno}…`} className="bg-transparent text-[12px] outline-none flex-1 min-w-0" style={{caretColor:BLU,color:'rgba(255,255,255,0.75)'}}/>
           {projSearch && <button onClick={()=>setProjSearch('')}><LucideIcon name="x" size={11} color="rgba(255,255,255,0.2)"/></button>}
         </div>
         {projView==='list'&&(
@@ -724,9 +740,9 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
         )}
       </div>
       {/* Quick project stats */}
-      {data.projects.length > 0 && (()=>{
-        const activeP = data.projects.filter((p: Project)=>p.status==='activo'||p.status==='urgente')
-        const overdueP = data.projects.filter((p: Project)=>p.status!=='completado'&&estadoDeadline(p.deadline)?.vencido)
+      {mios.length > 0 && (()=>{
+        const activeP = mios.filter((p: Project)=>p.status==='activo'||p.status==='urgente')
+        const overdueP = mios.filter((p: Project)=>p.status!=='completado'&&estadoDeadline(p.deadline)?.vencido)
         const avgProg = activeP.length ? Math.round(activeP.reduce((s: number,p: Project)=>s+p.progress,0)/activeP.length) : null
         return (
           <div className="flex items-center gap-4 mb-6 px-1">
@@ -743,7 +759,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 <span>⚠</span>{overdueP.length} ATRASADO{overdueP.length>1?'S':''}
               </span>
             )}
-            <span className="font-syne text-[8.5px] font-black" style={{color:'rgba(255,255,255,0.15)'}}>{data.projects.filter((p:Project)=>p.status==='completado').length} COMPLETADO{data.projects.filter((p:Project)=>p.status==='completado').length!==1?'S':''}</span>
+            <span className="font-syne text-[8.5px] font-black" style={{color:'rgba(255,255,255,0.15)'}}>{mios.filter((p:Project)=>p.status==='completado').length} COMPLETADO{mios.filter((p:Project)=>p.status==='completado').length!==1?'S':''}</span>
           </div>
         )
       })()}
@@ -852,7 +868,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                               alRoto={markCoverBroken}/>
                             <div className="min-w-0 flex-1">
                               <div className="font-figtree font-bold truncate" style={{fontSize:'14px',color:'rgba(255,255,255,0.82)',letterSpacing:'-0.01em'}}>{nombre}</div>
-                              <div className="font-figtree text-[9px]" style={{color:'rgba(255,255,255,0.3)'}}>{dentro.length} {dentro.length===1?'proyecto':'proyectos'}</div>
+                              <div className="font-figtree text-[9px]" style={{color:'rgba(255,255,255,0.3)'}}>{dentro.length} {dentro.length===1?T.uno:T.varias}</div>
                             </div>
                             <LucideIcon name={abierta?'chevron-down':'chevron-right'} size={13} color="rgba(255,255,255,0.25)"/>
                           </div>
@@ -997,11 +1013,11 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                     <LucideIcon name="folder-open" size={22} color="rgba(255,255,255,0.15)"/>
                   </div>
                   <div className="text-center">
-                    <div className="font-syne text-[9px] font-black tracking-widest mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>SIN PROYECTOS</div>
+                    <div className="font-syne text-[9px] font-black tracking-widest mb-1.5" style={{color:'rgba(255,255,255,0.18)'}}>{T.vacio}</div>
                     <div className="text-[12px]" style={{color:'rgba(255,255,255,0.22)'}}>Crea tu primer proyecto para empezar a organizar el trabajo</div>
                   </div>
                   <button onClick={()=>onOpenModal?.('proyecto')} className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-syne text-[8.5px] font-black tracking-widest text-white transition-all hover:opacity-80" style={{background:`linear-gradient(135deg,${BLU},#1440CC)`}}>
-                    <LucideIcon name="plus" size={12} color="white"/>NUEVO PROYECTO
+                    <LucideIcon name="plus" size={12} color="white"/>{T.nuevoLargo}
                   </button>
                 </div>
           )}
@@ -1100,7 +1116,7 @@ function ProyectosSection({data,filteredProjects,kanbanCols,projView,setProjView
                 className="w-full px-3 py-2 rounded-xl font-figtree text-[11px] outline-none"
                 style={{background:SURF2,border:`1px solid ${BORDER}`,color:'#FFFFFF'}}/>
               <datalist id="nx-carpetas-proyectos">
-                {[...new Set(data.projects.map((p:Project)=>(p.carpeta||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')).map(c=><option key={c} value={c}/>)}
+                {[...new Set(mios.map((p:Project)=>(p.carpeta||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')).map(c=><option key={c} value={c}/>)}
               </datalist>
             </div>
           </div>

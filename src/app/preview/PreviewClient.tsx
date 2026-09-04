@@ -75,6 +75,10 @@ const PROJECTS: Project[] = [
   { id:'p2', client_id:'c2', name:'Adidas Renovación', status:'urgente', progress:30, deadline:day(-2), color:'#22c55e', created_at:iso(-25), client:CLIENTS[1] },
   { id:'p3', client_id:'c3', name:'Zara F/W',        status:'revisión', progress:82, deadline:day(12), color:'#A78BFA', created_at:iso(-50), client:CLIENTS[2] },
   { id:'p4', client_id:'c4', name:'Mango Social',    status:'plan.',    progress:10, deadline:'TBD',   color:'#F59E0B', created_at:iso(-10), client:CLIENTS[3] },
+  // Dos CAMPAÑAS. Sin ellas, la seccion nueva sale vacia en el harness y no se
+  // puede revisar — el mismo motivo que el cliente archivado y los potenciales.
+  { id:'p5', client_id:'c1', name:'Meta Ads — verano',  status:'activo',  progress:45, deadline:day(20), color:'#1B5FFA', created_at:iso(-15), client:CLIENTS[0], tipo:'campana' },
+  { id:'p6', client_id:'',   name:'Instagram — marca propia', status:'plan.', progress:5, deadline:day(30), color:'#EC4899', created_at:iso(-2), tipo:'campana' },
 ]
 
 const withPeople = (t: Task): Task => ({
@@ -389,6 +393,7 @@ export default function PreviewClient({
     { id:'reportes', label:'Reportes' },
     { id:'clientes', label:'Clientes' },
     { id:'proyectos', label:'Proyectos' },
+    { id:'campanas', label:'Campañas' },
     { id:'contenido', label:'Contenido' },
     { id:'calendario', label:'Calendario' },
     { id:'memoria', label:'Memoria' },
@@ -402,7 +407,10 @@ export default function PreviewClient({
     { id:'puesta', label:'Puesta en marcha' },
   ]
 
-  const filteredProjects = projStatusFilter === 'Todos' ? projects : projects.filter(p => p.status === projStatusFilter)
+  // Por TIPO primero, igual que el dashboard de verdad: sin esto el harness
+  // enseñaría las campañas dentro de Proyectos y la separación no se podría revisar.
+  const delTipo = projects.filter(p => (p.tipo === 'campana') === (section === 'campanas'))
+  const filteredProjects = projStatusFilter === 'Todos' ? delTipo : delTipo.filter(p => p.status === projStatusFilter)
   // Mismas columnas que el dashboard real, del módulo compartido: esta copia
   // llevaba «Plan.» y «Revisión» en rgba() —igual que la del dashboard— y
   // ProyectosSection les concatena opacidad, así que el harness enseñaba el
@@ -443,7 +451,7 @@ export default function PreviewClient({
         {section==='diario' && <SectionErrorBoundary section="diario"><DiarioSection data={data} profile={profile} showToast={showToast} onNavigate={setSection} onAskHarvey={()=>setSection('harvey')} demo={DIARIO_DEMO} diasDemo={DIAS_DEMO}/></SectionErrorBoundary>}
         {section==='reportes' && <SectionErrorBoundary section="reportes"><ReportesSection data={data} onNavigate={setSection}/></SectionErrorBoundary>}
         {section==='clientes' && <SectionErrorBoundary section="clientes"><ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={abrirModal} showToast={showToast} isOwner onNavigate={setSection} onSelectProject={()=>{}}/></SectionErrorBoundary>}
-        {section==='proyectos' && <SectionErrorBoundary section="proyectos"><ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={abrirModal} showToast={showToast} isOwner onNavigate={setSection} onSelectClient={()=>{}} justCreatedId={null} onJustCreatedScrolled={()=>{}}/></SectionErrorBoundary>}
+        {(section==='proyectos'||section==='campanas') && <SectionErrorBoundary section={section}><ProyectosSection modo={section==='campanas'?'campana':'proyecto'} data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={abrirModal} showToast={showToast} isOwner onNavigate={setSection} onSelectClient={()=>{}} justCreatedId={null} onJustCreatedScrolled={()=>{}}/></SectionErrorBoundary>}
         {section==='contenido' && <SectionErrorBoundary section="contenido"><ContenidoSection data={data} onOpenModal={abrirModal} showToast={showToast} onNavigate={setSection} onSelectClient={()=>{}} profile={profile}/></SectionErrorBoundary>}
         {section==='calendario' && <SectionErrorBoundary section="calendario"><CalendarioSection data={data} profile={profile} showToast={showToast} onOpenModal={abrirModal}/></SectionErrorBoundary>}
         {section==='puesta' && <SectionErrorBoundary section="puesta"><PuestaEnMarcha profile={profile} onTerminar={()=>showToast('(en el preview no se guarda nada)')} showToast={showToast}/></SectionErrorBoundary>}

@@ -567,7 +567,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   const gPendingRef = useRef(false)
   const gTimerRef = useRef<ReturnType<typeof setTimeout>|null>(null)
   useEffect(() => {
-    const NAV: Record<string, Section> = { d:'diario', h:'hoy', t:'tareas', i:'inbox', c:'clientes', p:'proyectos', k:'contenido', a:'calendario', m:'memoria', e:'equipo', r:'reportes', s:'ajustes', v:'automatizaciones', n:'chat', y:'harvey' }
+    const NAV: Record<string, Section> = { d:'diario', h:'hoy', t:'tareas', i:'inbox', c:'clientes', p:'proyectos', k:'contenido', a:'calendario', m:'memoria', e:'equipo', r:'reportes', s:'ajustes', v:'automatizaciones', n:'chat', y:'harvey', g:'campanas' }
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(true); setSearchQuery(''); setSearchIdx(-1); return }
       if (e.key === 'Escape') {
@@ -696,8 +696,12 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
           : null
         const color = client?.color || ACCENT_COLORS[data.projects.length % ACCENT_COLORS.length]
         const projStatus = (mf.estado || 'activo') as 'plan.'|'activo'|'urgente'|'revisión'|'completado'
-        const createdProj = await data.createProject({ name:mf.nombre.trim(), client_id:client?.id, status:projStatus, progress:0, deadline:mf.deadline||'TBD', color })
-        showToast('Proyecto creado: ' + mf.nombre + sinCasar(mf.cliente, client, 'el cliente'))
+        // El TIPO sale de dónde estás. Crear una campaña desde Campañas y que
+        // apareciera en Proyectos sería peor que no separarlas: te obliga a ir a
+        // buscarla al sitio del que venías huyendo.
+        const esCampana = sectionRef.current === 'campanas'
+        const createdProj = await data.createProject({ name:mf.nombre.trim(), client_id:client?.id, status:projStatus, progress:0, deadline:mf.deadline||'TBD', color, tipo: esCampana ? 'campana' : 'proyecto' })
+        showToast((esCampana ? 'Campaña creada: ' : 'Proyecto creado: ') + mf.nombre + sinCasar(mf.cliente, client, 'el cliente'))
         if (createdProj?.id) { setSelectedProject(createdProj.id); setJustCreatedProjId(createdProj.id); setProjView('list'); setSection('proyectos') }
       } else if (modal === 'tarea') {
         if (!mf.text?.trim()) { showToast('Escribe la tarea'); return }
@@ -779,7 +783,15 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
   const isOwner = profile.role === 'owner'
   const todayCalCount = (data.calendarEvents||[]).filter((e: any) => e.start?.slice(0,10) === todayKey()).length
 
-  const filteredProjects = projStatusFilter === 'Todos' ? data.projects : data.projects.filter(p => p.status === projStatusFilter)
+  // POR TIPO PRIMERO, y por estado después.
+  //
+  // `tipo` ausente cuenta como proyecto: sin la migración 20260904_campanas.sql
+  // aplicada todo se comporta exactamente como hasta ahora y Campañas sale vacía.
+  // Es la misma degradación honesta que las facturas y los potenciales — la app no
+  // se cae por una función que todavía no está instalada.
+  const esCampana = (p: Project) => p.tipo === 'campana'
+  const delTipo = data.projects.filter(p => esCampana(p) === (section === 'campanas'))
+  const filteredProjects = projStatusFilter === 'Todos' ? delTipo : delTipo.filter(p => p.status === projStatusFilter)
   // «Plan.» y «Revisión» declaraban su color en rgba() mientras las otras tres
   // eran hex, y ProyectosSection concatena opacidad sobre col.color: esas dos
   // columnas se pintaban sin barra de acento y con el contador sin fondo. El
@@ -1029,6 +1041,16 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
               de timestamps: la campana y el menú podían discrepar. Es la misma
               lista, así que se reutiliza. */}
           {navItem('proyectos','Proyectos','folder-open', overdueProjs.length||undefined)}
+          {/* CAMPAÑAS, aparte.
+              Reunión de empresa del 2026-09-03: «separar la sección de proyectos de
+              la de campañas». Iban en el mismo cajón y no son lo mismo: un proyecto
+              es una entrega con cliente y fecha de fin; una campaña corre un tiempo
+              y se mide por lo que trae. Mezcladas, el tablero por estado no
+              significaba lo mismo en cada fila.
+              Comparten sección por dentro —cliente, estado, tareas, ficha, PDF: todo
+              igual— y se separan por `tipo`. Dos copias del mismo panel habrían sido
+              el gemelo de siempre. */}
+          {navItem('campanas','Campañas','target')}
           {navItem('contenido','Contenido','film')}
           {/* Memoria, Equipo, Automatizaciones y Reportes NO van aquí, y es
               deliberado: las cuatro ya son pestañas dentro de Operativa, así que
@@ -1103,7 +1125,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
             )}
             {/* Título de sección */}
             <span className="font-syne text-[10px] font-black tracking-[0.25em] truncate flex-1" style={{color:'rgba(255,255,255,0.55)'}}>
-              {({hoy:'HOY',inbox:'INBOX',calendario:'CALENDARIO',tareas:'TAREAS',diario:'FICHAR',clientes:'CLIENTES',proyectos:'PROYECTOS',contenido:'CONTENIDO',chat:'BRUTAL.IA',harvey:'HARVEY',ajustes:'OPERATIVA',memoria:'MEMORIA',equipo:'EQUIPO',reportes:'REPORTES',automatizaciones:'AUTOMATIZACIONES'} as Record<string,string>)[section] || 'BRUTAL.IA'}
+              {({hoy:'HOY',inbox:'INBOX',calendario:'CALENDARIO',tareas:'TAREAS',diario:'FICHAR',clientes:'CLIENTES',proyectos:'PROYECTOS',campanas:'CAMPAÑAS',contenido:'CONTENIDO',chat:'BRUTAL.IA',harvey:'HARVEY',ajustes:'OPERATIVA',memoria:'MEMORIA',equipo:'EQUIPO',reportes:'REPORTES',automatizaciones:'AUTOMATIZACIONES'} as Record<string,string>)[section] || 'BRUTAL.IA'}
             </span>
             {/* Sin gate de owner en el menú: tarea, cliente, proyecto y pieza los
                 puede crear cualquiera —sus rutas no miran el rol— y ocultar el
@@ -1172,7 +1194,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
           {section === 'reportes' && <SectionErrorBoundary section="reportes">{isOwner ? <ReportesSection data={data} onNavigate={setSection} /> : <div className="h-full flex items-center justify-center"><div className="text-center"><div className="font-syne text-[10px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>SECCIÓN RESTRINGIDA</div><div className="text-[12px]" style={{color:'rgba(255,255,255,0.3)'}}>Solo disponible para propietarios</div></div></div>}</SectionErrorBoundary>}
           {section === 'diario' && <SectionErrorBoundary section="diario"><DiarioSection data={data} profile={profile} showToast={showToast} onNavigate={setSection} onAskHarvey={(msg: string)=>{ setHarveyPreload(msg); setSection('harvey') }} /></SectionErrorBoundary>}
           {section === 'clientes' && <SectionErrorBoundary section="clientes"><ClientesSection data={data} selectedId={selectedClient} onSelect={setSelectedClient} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} onNavigate={setSection} onSelectProject={setSelectedProject} /></SectionErrorBoundary>}
-          {section === 'proyectos' && <SectionErrorBoundary section="proyectos"><ProyectosSection data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} onNavigate={setSection} onSelectClient={setSelectedClient} justCreatedId={justCreatedProjId} onJustCreatedScrolled={()=>setJustCreatedProjId(null)} /></SectionErrorBoundary>}
+          {(section === 'proyectos' || section === 'campanas') && <SectionErrorBoundary section={section}><ProyectosSection modo={section === 'campanas' ? 'campana' : 'proyecto'} data={data} filteredProjects={filteredProjects} kanbanCols={kanbanCols} projView={projView} setProjView={setProjView} projStatusFilter={projStatusFilter} setProjStatusFilter={setProjStatusFilter} dragRef={dragRef} selectedId={selectedProject} onSelect={setSelectedProject} onOpenModal={openModal} showToast={showToast} isOwner={isOwner} onNavigate={setSection} onSelectClient={setSelectedClient} justCreatedId={justCreatedProjId} onJustCreatedScrolled={()=>setJustCreatedProjId(null)} /></SectionErrorBoundary>}
           {section === 'contenido' && <SectionErrorBoundary section="contenido"><ContenidoSection data={data} onOpenModal={openModal} showToast={showToast} onNavigate={setSection} onSelectClient={setSelectedClient} profile={profile} /></SectionErrorBoundary>}
           {section === 'calendario' && <SectionErrorBoundary section="calendario"><CalendarioSection data={data} profile={profile} showToast={showToast} onOpenModal={openModal} /></SectionErrorBoundary>}
           {section === 'memoria' && <SectionErrorBoundary section="memoria"><MemoriaSection data={data} memFilter={memFilter} setMemFilter={setMemFilter} onOpenModal={openModal} showToast={showToast} /></SectionErrorBoundary>}
@@ -1352,6 +1374,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
           inbox: [{key:'J / K',label:'Navegar mensajes'},{key:'E',label:'Marcar leído'},{key:'T',label:'Crear tarea desde msg'},{key:'A',label:'Todo leído'},{key:'ESC',label:'Cerrar detalle'}],
           clientes: [{key:'N',label:'Nuevo cliente'},{key:'ESC',label:'Cerrar detalle'}],
           proyectos: [{key:'N',label:'Nuevo proyecto'},{key:'V',label:'Cambiar vista'},{key:'S',label:'Ciclar estado'},{key:'P',label:'Editar progreso'}],
+          campanas: [{key:'N',label:'Nueva campaña'},{key:'V',label:'Cambiar vista'},{key:'S',label:'Ciclar estado'},{key:'P',label:'Editar progreso'}],
           contenido: [{key:'J / K',label:'Navegar pipeline'},{key:'S',label:'Ciclar estado'},{key:'F',label:'Buscar pieza'},{key:'N',label:'Nueva pieza'}],
           memoria: [{key:'N',label:'Nueva entrada'},{key:'E',label:'Editar'},{key:'P',label:'Anclar/desanclar'},{key:'F',label:'Buscar'}],
           equipo: [{key:'J / K',label:'Navegar equipo'},{key:'M',label:'Escribir mensaje'},{key:'ESC',label:'Cerrar perfil'}],
@@ -1359,7 +1382,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
           automatizaciones: [{key:'J / K',label:'Navegar reglas'},{key:'E',label:'Activar/pausar'},{key:'N',label:'Nueva regla'}],
         }
         const sectionHints = SECTION_HINTS[section] || []
-        const sectionLabels: Record<Section,string> = {hoy:'Hoy',diario:'Fichar',tareas:'Tareas',inbox:'Inbox',clientes:'Clientes',proyectos:'Proyectos',contenido:'Contenido',calendario:'Calendario',memoria:'Memoria',equipo:'Equipo',chat:'Chat IA',automatizaciones:'Automatizaciones',reportes:'Reportes',ajustes:'Operativa',harvey:'Harvey'}
+        const sectionLabels: Record<Section,string> = {hoy:'Hoy',diario:'Fichar',tareas:'Tareas',inbox:'Inbox',clientes:'Clientes',proyectos:'Proyectos',campanas:'Campañas',contenido:'Contenido',calendario:'Calendario',memoria:'Memoria',equipo:'Equipo',chat:'Chat IA',automatizaciones:'Automatizaciones',reportes:'Reportes',ajustes:'Operativa',harvey:'Harvey'}
         return (
           <div onClick={()=>setShowShortcuts(false)} className="fixed inset-0 z-[120] flex items-center justify-center" style={{background:'rgba(2,2,8,0.75)',backdropFilter:'blur(6px)'}}>
             <div onClick={e=>e.stopPropagation()} className="w-[560px] max-w-[94vw] rounded-3xl" style={{background:'linear-gradient(180deg,#0D0D1E 0%,#080810 100%)',border:`1px solid rgba(27,95,250,0.2)`,boxShadow:'0 40px 100px rgba(0,0,0,0.85),0 0 0 1px rgba(27,95,250,0.04)',maxHeight:'94dvh',overflowY:'auto'}}>
