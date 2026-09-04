@@ -254,7 +254,20 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ ok: true, inviteLink: link, motivo })
   }
 
-  const ALLOWED_COLS = ['name', 'role', 'initials', 'avatar_color']
+  // `ver_colabs` entra en la allowlist a propósito.
+  //
+  // Reunión de empresa del 2026-09-03: «conceder acceso al buzón de colaboraciones
+  // a Pablo y a Julio». No había forma de hacerlo desde la app: la columna solo la
+  // escribía cada uno en su propia Sincronización, así que un «concede acceso a X»
+  // solo se podía cumplir tocando la base a mano. Un permiso que no se puede
+  // gestionar desde dentro es un permiso que acaba gestionando quien tiene la clave
+  // de servicio, que es lo contrario de lo que se quiere.
+  //
+  // Sigue siendo UN solo interruptor, no dos: lo puede tocar el propietario desde
+  // Equipo y la propia persona desde Sincronización, y los dos ven el mismo valor.
+  // Con siete personas de confianza, separar «permiso» de «preferencia» en dos
+  // columnas sería inventarse un problema.
+  const ALLOWED_COLS = ['name', 'role', 'initials', 'avatar_color', 'ver_colabs']
   const safeUpdates: Record<string, unknown> = {}
   for (const k of ALLOWED_COLS) if (k in updates) safeUpdates[k] = updates[k]
   if (Object.keys(safeUpdates).length === 0) return NextResponse.json({ error: 'No valid fields' }, { status: 400 })

@@ -7608,6 +7608,11 @@ describe('el harness puede enseñar lo que se acaba de añadir', () => {
   const P = leerCodigo('src/app/preview/PreviewClient.tsx')
 
   it('hay un cliente de cada estado en los datos de ejemplo', () => {
+    // Y alguien SIN el buzon compartido, por lo mismo: sin ese caso, el
+    // interruptor de acceso de Equipo no se puede revisar aqui.
+    expect(/ver_colabs:false/.test(P),
+      'nadie en /preview tiene el buzon compartido apagado: ese estado solo se ve en produccion')
+      .toBe(true)
     for (const estado of ['Activo', 'Potencial', 'Pausado', 'Archivado']) {
       expect(new RegExp(`status:'${estado}'`).test(P),
         `no hay ningún cliente «${estado}» en /preview: ese estado no se puede mirar sin entrar en producción`)
@@ -7855,5 +7860,94 @@ describe('la portada y el menú, según la reunión de empresa del 2026-09-03', 
     // el estado real, y es justo a quien hay que enseñárselo.
     expect(/Crear la primera/.test(bloque),
       'sin reglas el bloque se queda mudo: quien más lo necesita no ve nada').toBe(true)
+  })
+})
+
+describe('un icono que no existe tampoco da error: no se pinta', () => {
+  // Hermana de la regla de las clases `nx-`, y del mismo tipo de fallo: LucideIcon
+  // busca el nombre en un mapa y, si no está, no dibuja nada. Sin error, sin
+  // consola y sin romper el build — un botón sin icono.
+  //
+  // Nació de cometerlo: al añadir el interruptor del buzón compartido en Equipo
+  // escribí `user-x`, que no existe (sí existen `user`, `user-plus`, `user-check`
+  // y `mail-x`). El botón se habría quedado vacío y solo se habría visto mirándolo.
+  const MAPA = leerCodigo('src/components/shared/LucideIcon.tsx')
+  const conocidos = new Set(
+    [...MAPA.matchAll(/^\s+'?([a-z0-9-]+)'?:\s*'/gm)].map(m => m[1]))
+
+  const usados = new Map<string, string>()
+  const RAIZ = join(__dirname, '../../')
+  const recorrer = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === '__tests__' || e.name === 'node_modules') continue
+      const p = join(dir, e.name)
+      if (e.isDirectory()) recorrer(p)
+      else if (/\.tsx$/.test(e.name)) {
+        const rel = p.replace(RAIZ, 'src/')
+        // Solo los literales: `name={f.ic}` sale de un dato y no se puede resolver
+        // aquí. Los que van escritos a mano son la inmensa mayoría y son los que se
+        // escriben mal.
+        for (const m of leerCodigo(rel).matchAll(/<LucideIcon[^>]*\bname=['"]([a-z0-9-]+)['"]/g)) {
+          usados.set(m[1], rel)
+        }
+        // Y los de los ternarios dentro de `name={...}`, que es justo donde metí el
+        // fallo: `name={x ? 'user-x' : 'users'}`.
+        for (const m of leerCodigo(rel).matchAll(/<LucideIcon[^>]*\bname=\{[^}]*\}/g)) {
+          for (const lit of m[0].matchAll(/'([a-z][a-z0-9-]{2,})'/g)) {
+            if (conocidos.has(lit[1]) || /-/.test(lit[1])) usados.set(lit[1], rel)
+          }
+        }
+      }
+    }
+  }
+  recorrer(RAIZ)
+
+  it('todos los iconos escritos a mano existen en el mapa', () => {
+    expect(conocidos.size, 'no encuentro el mapa de iconos: revisa esta regla').toBeGreaterThan(40)
+    expect(usados.size, 'ya no se usa LucideIcon con nombres literales: revisa esta regla').toBeGreaterThan(20)
+    const faltan = [...usados].filter(([n]) => !conocidos.has(n))
+      .map(([n, donde]) => `${donde}: <LucideIcon name="${n}"> no existe en el mapa`)
+    expect(faltan, `hay iconos que no se van a pintar, y no lo va a decir nadie:\n  ${faltan.join('\n  ')}`)
+      .toEqual([])
+  })
+})
+
+describe('el buzón compartido se gestiona DESDE la app', () => {
+  // Reunión de empresa del 2026-09-03: «conceder acceso al buzón de colaboraciones
+  // a Pablo y a Julio». No se podía hacer desde ningún sitio: `ver_colabs` solo la
+  // escribía cada uno en su propia Sincronización, así que cumplir ese acuerdo
+  // pedía tocar la base con la clave de servicio.
+  //
+  // Un permiso que no se gestiona desde dentro acaba gestionándolo quien tiene esa
+  // clave — o sea, no se gestiona.
+
+  it('el propietario puede conceder y quitar el acceso', () => {
+    const R = leerCodigo('src/app/api/admin/team/route.ts')
+    const i = R.indexOf('ALLOWED_COLS')
+    expect(i, 'ya no hay allowlist de columnas en /api/admin/team: revisa esta regla').toBeGreaterThan(-1)
+    expect(/ver_colabs/.test(R.slice(i, i + 300)),
+      'el propietario vuelve a no poder tocar el acceso al buzón: solo queda la base a mano').toBe(true)
+    // Y sigue siendo una ALLOWLIST: lo que impide que por aquí se escriba cualquier
+    // columna de `profiles` —incluido `role`— es que la lista sea cerrada.
+    expect(/for \(const k of ALLOWED_COLS\)/.test(R),
+      'la allowlist deja de gobernar: por esta ruta se podría escribir cualquier columna').toBe(true)
+    // La ruta entera es solo-propietario. Sin esto, cualquiera se daría acceso.
+    expect(/requireOwner\(\)/.test(R.slice(R.indexOf('export async function PATCH'), i)),
+      'el PATCH de equipo deja de exigir propietario').toBe(true)
+  })
+
+  it('y el dato llega a la pantalla, o no se puede pintar', () => {
+    const T = leerCodigo('src/app/api/team/route.ts')
+    expect(/ver_colabs/.test(T),
+      '/api/team no devuelve ver_colabs: el panel de Equipo no puede saber quién lo tiene').toBe(true)
+    // Y sin el comodín: esta tabla guarda los refresh_token de Gmail.
+    for (const m of T.matchAll(/\.select\('([^']*)'\)/g)) {
+      expect(/token|\*/.test(m[1]), `/api/team manda credenciales al cliente: ${m[1]}`).toBe(false)
+    }
+    const E = leerCodigo('src/components/sections/EquipoSection.tsx')
+    expect(/alternarColabs\(/.test(E), 'Equipo pierde el interruptor del buzón compartido').toBe(true)
+    // El estado se DICE aunque no se pueda tocar: quien no es propietario también
+    // tiene que poder ver quién lo tiene, que era la pregunta de la reunión.
+    expect(/Sin colabs/.test(E), 'no se ve quién NO tiene el buzón: había que preguntárselo a cada uno').toBe(true)
   })
 })
