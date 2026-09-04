@@ -7951,3 +7951,74 @@ describe('el buzón compartido se gestiona DESDE la app', () => {
     expect(/Sin colabs/.test(E), 'no se ve quién NO tiene el buzón: había que preguntárselo a cada uno').toBe(true)
   })
 })
+
+describe('campañas y proyectos, separados sin duplicar el panel', () => {
+  // Reunión de empresa del 2026-09-03: «reorganizar interfaz: separar la sección de
+  // proyectos de la de campañas y mejorar la navegación».
+  //
+  // Un PROYECTO es una entrega con cliente y fecha de fin; una CAMPAÑA corre un
+  // tiempo y se mide por lo que trae. Mezcladas, el tablero por estado no
+  // significaba lo mismo en cada fila.
+  const P = leerCodigo('src/components/sections/ProyectosSection.tsx')
+  const D = leerCodigo('src/components/NexusDashboard.tsx')
+
+  it('las dos secciones montan el MISMO componente', () => {
+    // Comparten cliente, estado, progreso, fecha, tareas colgando, portada, PDF,
+    // carpeta y la ficha entera. Dos copias del panel serían el gemelo que este
+    // repo lleva toda la auditoría pagando: se arregla una y la otra se queda.
+    expect((D.match(/<ProyectosSection/g) || []).length,
+      'hay más de un ProyectosSection montado: se ha duplicado el panel en vez de pasarle el modo')
+      .toBe(1)
+    expect(/section === 'campanas'/.test(D), 'el dashboard no conoce la sección de campañas').toBe(true)
+    expect(/modo=\{/.test(D), 'no se le pasa el modo: las dos secciones se verían igual').toBe(true)
+  })
+
+  it('sin la migración aplicada, todo sigue siendo un proyecto', () => {
+    // `tipo` ausente se lee como undefined. Comparar contra 'campana' hace que un
+    // proyecto viejo caiga del lado bueno; comparar contra 'proyecto' lo dejaría
+    // FUERA de las dos listas — invisible en una app donde la migración aún no se
+    // ha pegado. Es la misma degradación honesta que facturas y potenciales.
+    for (const [donde, src] of [['dashboard', D], ['sección', P]] as const) {
+      const usos = [...src.matchAll(/tipo === '(\w+)'/g)].map(m => m[1])
+      expect(usos.length, `${donde}: ya no se compara el tipo: revisa esta regla`).toBeGreaterThan(0)
+      expect([...new Set(usos)],
+        `${donde}: se compara contra 'proyecto' y no contra 'campana'; sin la migración, las filas viejas desaparecen de las DOS listas`)
+        .toEqual(['campana'])
+    }
+  })
+
+  it('los recuentos cuentan lo que hay debajo', () => {
+    // Salían de `data.projects`, o sea de TODO: al separar, Proyectos decía
+    // «TODOS 6» y pintaba cuatro. Un contador que no cuadra con la lista se lee
+    // como que faltan cosas. Se vio en el navegador, no leyendo el JSX.
+    const i = P.indexOf("s.id==='Todos'")
+    expect(i, 'ya no están las chapas de estado: revisa esta regla').toBeGreaterThan(-1)
+    const chapas = P.slice(i, i + 220)
+    expect(/data\.projects/.test(chapas),
+      `las chapas de estado vuelven a contar TODOS los proyectos, campañas incluidas:\n${chapas}`)
+      .toBe(false)
+    expect(/\bmios\b/.test(chapas), 'las chapas no cuentan sobre la lista del tipo actual').toBe(true)
+  })
+
+  it('crear desde Campañas crea una campaña', () => {
+    // Crear una campaña y que apareciera en Proyectos es peor que no separarlas:
+    // te obliga a ir a buscarla al sitio del que venías huyendo.
+    const i = D.indexOf('data.createProject(')
+    expect(i, 'ya no se crean proyectos aquí: revisa esta regla').toBeGreaterThan(-1)
+    const llamada = D.slice(Math.max(0, i - 400), i + 400)
+    expect(/tipo:/.test(llamada), 'el proyecto se crea sin tipo: una campaña nacería como proyecto').toBe(true)
+    expect(/sectionRef\.current === 'campanas'/.test(llamada),
+      'el tipo no sale de la sección en la que estás').toBe(true)
+  })
+
+  it('el tipo existe en TypeScript y en la base', () => {
+    const tipos = leerCodigo('src/types/index.ts')
+    const sql = readFileSync(join(__dirname, '../../../migrations/20260904_campanas.sql'), 'utf8')
+      .split('\n').filter(l => !/^\s*--/.test(l)).join('\n')
+    expect(/tipo\?: 'proyecto' \| 'campana'/.test(tipos), 'el tipo desapareció de Project').toBe(true)
+    expect(/CHECK \(tipo IN \('proyecto', 'campana'\)\)/.test(sql),
+      'la migración y el tipo declaran valores distintos: la app aceptaría uno que la base rechaza').toBe(true)
+    // Sin eñe en el valor guardado: viaja en la URL y en comparaciones.
+    expect(/campaña/.test(sql), 'el valor guardado lleva eñe: es un identificador, no un rótulo').toBe(false)
+  })
+})
