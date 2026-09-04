@@ -124,6 +124,45 @@ export async function getEmailsWithRefreshToken(refreshToken: string, maxResults
   return results.filter(r => r.status === 'fulfilled').map(r => (r as PromiseFulfilledResult<any>).value)
 }
 
+/**
+ * CUÁNDO ESTÁ OCUPADA UNA PERSONA — sin decir en qué.
+ *
+ * Javi: «cuando en el calendario le das a "todo el equipo" no se ven las reuniones
+ * que tiene todo el equipo». Era verdad: el interruptor solo filtraba TAREAS y los
+ * eventos eran siempre los de quien mira.
+ *
+ * Se pregunta con `freeBusy`, que es la primitiva que Google ofrece justo para
+ * esto, y NO leyendo el calendario ajeno. La diferencia no es de esfuerzo, es de
+ * qué sale: `freeBusy` devuelve intervalos y nada más — ni título, ni asistentes,
+ * ni sitio. Leer el calendario entero de un compañero pondría su médico y su
+ * entrevista de trabajo en la pantalla de los demás y, peor, en el contexto que se
+ * le manda a Harvey, que pega los títulos literales.
+ *
+ * Elegido por Javi teniendo las tres opciones delante. Para cuadrar una hora
+ * —que es la pregunta de verdad— «ocupado» basta.
+ *
+ * Solo el calendario `primary` de cada uno: los secundarios que alguien tenga
+ * suscritos (festivos, el calendario de su pareja) no son su jornada.
+ */
+export async function getFreeBusy(refreshToken: string, timeMin: string, timeMax: string) {
+  const oauth2Client = getOAuthClient()
+  oauth2Client.setCredentials({ refresh_token: refreshToken })
+  const calendar = google.calendar({ version: 'v3', auth: oauth2Client })
+  const { data } = await calendar.freebusy.query({
+    requestBody: { timeMin, timeMax, items: [{ id: 'primary' }] },
+  })
+  const cal = data.calendars?.primary
+  // Google devuelve `errors` por calendario en vez de fallar la petición. Sin
+  // mirarlo, un token caducado sale como «libre todo el día», que es la respuesta
+  // más dañina posible: se le convoca una reunión encima de otra.
+  if (cal?.errors?.length) {
+    throw new Error(cal.errors.map(e => e.reason).join(', ') || 'freeBusy error')
+  }
+  return (cal?.busy || [])
+    .filter(b => b.start && b.end)
+    .map(b => ({ start: b.start as string, end: b.end as string }))
+}
+
 export async function getCalendarEvents(refreshToken: string, monthsAhead = 2) {
   const oauth2Client = getOAuthClient()
   oauth2Client.setCredentials({ refresh_token: refreshToken })

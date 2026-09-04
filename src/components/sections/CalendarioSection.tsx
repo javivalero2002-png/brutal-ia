@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { mesCargado } from '@/lib/ventanaCalendario'
+import { mesCargado, horaMadrid } from '@/lib/ventanaCalendario'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import type { NexusData } from '@/types'
 import { PLATAFORMA_COLOR, useIsMobile, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, SafeImg, dlDate, AMBAR, NIVEL_TAREA, rotuloNivel, nivelTarea } from '@/components/shared'
@@ -51,6 +51,18 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
    * el mes a mano. Arranca en «solo las mías», que es el caso de todos los días.
    */
   const [tareasDeTodos, setTareasDeTodos] = useState(false)
+  // LA DISPONIBILIDAD DEL EQUIPO del día que se está mirando.
+  //
+  // Javi: «cuando le das a "todo el equipo" no se ven las reuniones que tiene todo
+  // el equipo». Era verdad: este interruptor solo filtraba TAREAS, y los eventos
+  // eran siempre los de quien mira.
+  //
+  // Se pregunta con `freeBusy` —lo eligió Javi teniendo las tres opciones delante—
+  // así que llegan INTERVALOS y no eventos: ni título, ni asistentes, ni sitio. Es
+  // lo que hace que se pueda enseñar el calendario de otro sin enseñar su médico.
+  // `null` = no se ha pedido; el array vacío es una respuesta legítima.
+  const [dispoEquipo, setDispoEquipo] = useState<null | { equipo: any[]; sinCuenta: string[] }>(null)
+  const [dispoCargando, setDispoCargando] = useState(false)
   const [syncingCal, setSyncingCal] = useState(false)
   const [calEvents, setCalEvents] = useState<any[]>(data.calendarEvents || [])
   // Alta rápida de evento en Google Calendar (usa POST /api/calendar/events)
@@ -265,6 +277,29 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
   const toKey = (d: Date) => localDayKey(new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12))
   const todayKey = claveHoy
   const selKey = selectedDay ? toKey(selectedDay) : ''
+
+  // Se pide SOLO del día que se mira y SOLO con el interruptor puesto: son cinco
+  // llamadas a Google y nadie las quiere en cada cambio de mes. Al cambiar de día
+  // se vuelve a pedir; `vivo` descarta la respuesta que ya no corresponde, que es
+  // el mismo patrón que los archivos de cliente.
+  useEffect(() => {
+    if (!tareasDeTodos || !selKey) { setDispoEquipo(null); return }
+    let vivo = true
+    setDispoCargando(true)
+    fetch(`/api/calendar/equipo?desde=${selKey}&hasta=${selKey}`)
+      .then(async r => {
+        if (!vivo) return
+        // `ok` comprobado: un 500 leído como JSON dejaría `equipo` en undefined y
+        // la tira diría que no hay nadie ocupado. «No lo sé» pintado como «libre»
+        // es la mentira que hace convocar una reunión encima de otra.
+        if (!r.ok) { setDispoEquipo(null); return }
+        const j = await r.json()
+        if (vivo) setDispoEquipo({ equipo: Array.isArray(j?.equipo) ? j.equipo : [], sinCuenta: j?.sinCuenta || [] })
+      })
+      .catch(() => { if (vivo) setDispoEquipo(null) })
+      .finally(() => { if (vivo) setDispoCargando(false) })
+    return () => { vivo = false }
+  }, [tareasDeTodos, selKey])
 
   // Build event map by date
   const eventsByDay: Record<string, {type:string;label:string;color:string;raw:any}[]> = {}
@@ -509,13 +544,15 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
               lado —vencidas y sin fecha— cambian con él, y hay que ver a la vez
               qué se está contando y de quién. */}
           <button onClick={()=>setTareasDeTodos(v=>!v)}
-            title={tareasDeTodos ? 'Viendo las tareas de todo el equipo' : 'Viendo solo tus tareas'}
+            title={tareasDeTodos
+              ? 'Tareas de todo el equipo, y cuándo está ocupado cada uno el día seleccionado'
+              : 'Solo tus tareas'}
             className="font-syne text-[8px] font-black px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-all active:scale-95"
             style={tareasDeTodos
               ? {background:`${BLU}18`,border:`1px solid ${BLU}38`,color:BLU}
               : {background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.35)'}}>
             <LucideIcon name={tareasDeTodos ? 'users' : 'user'} size={9} color={tareasDeTodos ? BLU : 'rgba(255,255,255,0.35)'} />
-            {tareasDeTodos ? 'TODO EL EQUIPO' : 'SOLO MÍAS'}
+            {tareasDeTodos ? 'TODO EL EQUIPO' : 'SOLO YO'}
           </button>
 
           {tareasSinFecha.length > 0 && (
@@ -743,6 +780,81 @@ function CalendarioSection({data, profile, showToast, onOpenModal}: PropsCalenda
               </div>
             )}
             <div className={`flex-1 overflow-y-auto ${isMobile?'p-4':'p-5'} space-y-${isMobile?'3':'4'}`}>
+              {/* ══ CUÁNDO PUEDE EL EQUIPO ══
+                  Va ARRIBA del todo y antes de los eventos: cuando se enciende
+                  «todo el equipo» la pregunta es «¿a qué hora podemos?», y la
+                  respuesta tiene que estar antes que la agenda de uno mismo.
+                  Franjas, no eventos: llegan de `freeBusy`, así que no hay título
+                  que enseñar ni aunque se quisiera. */}
+              {tareasDeTodos && (
+                <div className="rounded-2xl p-4 mb-1" style={{background:'rgba(255,255,255,0.02)',border:`1px solid ${BORDER}`}}>
+                  <div className="font-syne text-[8px] font-black tracking-widest mb-3 flex items-center gap-2">
+                    <LucideIcon name="users" size={11} color={BLU}/>
+                    <span style={{color:`${BLU}cc`}}>CUÁNDO ESTÁ OCUPADO EL EQUIPO</span>
+                  </div>
+                  {dispoCargando && !dispoEquipo ? (
+                    <div className="text-[11.5px]" style={{color:'rgba(255,255,255,0.2)'}}>Preguntando a los calendarios…</div>
+                  ) : !dispoEquipo ? (
+                    // Ni «libre» ni «ocupado»: no se ha podido mirar, y decirlo es
+                    // lo único honesto. Pintarlo libre haría convocar encima.
+                    <div className="text-[11.5px]" style={{color:`${AMBAR}cc`}}>No se ha podido consultar la disponibilidad.</div>
+                  ) : (
+                    <>
+                      {/* Regla horaria de las 8 a las 22, que es la jornada. Lo de
+                          fuera existe y se ve igual: la barra se recorta, no se
+                          esconde. */}
+                      <div className="flex items-center gap-2 mb-1.5 pl-[62px]">
+                        {[8,11,14,17,20].map(h=>(
+                          <div key={h} className="flex-1 font-syne text-[7px] font-black" style={{color:'rgba(255,255,255,0.16)'}}>{h}:00</div>
+                        ))}
+                      </div>
+                      {dispoEquipo.equipo.map((m:any)=>(
+                        <div key={m.profile_id} className="flex items-center gap-2 mb-1.5">
+                          <div className="flex items-center gap-1.5" style={{width:56}}>
+                            <div className="w-4 h-4 rounded-full flex items-center justify-center font-syne text-[6px] font-black flex-shrink-0"
+                              style={{background:`${m.avatar_color}30`,color:m.avatar_color}}>{m.initials}</div>
+                            <span className="font-syne text-[7.5px] font-black truncate" style={{color:'rgba(255,255,255,0.4)'}}>
+                              {String(m.name||'').split(' ')[0]}
+                            </span>
+                          </div>
+                          <div className="flex-1 h-4 rounded-md relative overflow-hidden" style={{background:'rgba(255,255,255,0.035)'}}>
+                            {m.medido === false ? (
+                              <div className="absolute inset-0 flex items-center justify-center font-syne text-[7px] font-black" style={{color:`${AMBAR}aa`}}>
+                                NO SE PUDO LEER
+                              </div>
+                            ) : m.ocupado.length === 0 ? (
+                              <div className="absolute inset-0 flex items-center pl-2 font-syne text-[7px] font-black" style={{color:'rgba(255,255,255,0.18)'}}>
+                                LIBRE
+                              </div>
+                            ) : m.ocupado.map((b:any,i:number)=>{
+                              // De hora de MADRID a porcentaje de la barra. `getHours`
+                              // del navegador daría la del portátil: en un móvil en
+                              // otra franja la reunión saldría desplazada.
+                              const pct = (iso:string) => {
+                                const [hh,mm] = horaMadrid(iso).split(':').map(Number)
+                                return Math.min(100, Math.max(0, ((hh + (mm||0)/60) - 8) / 14 * 100))
+                              }
+                              const x = pct(b.start), w = Math.max(1.5, pct(b.end) - x)
+                              return <div key={i} className="absolute top-0 bottom-0 rounded-md"
+                                style={{left:`${x}%`, width:`${w}%`, background:`${m.avatar_color}66`, border:`1px solid ${m.avatar_color}99`}}/>
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                      {dispoEquipo.sinCuenta.length > 0 && (
+                        // Sin Google conectado NO es «libre»: es que no lo sabemos.
+                        // Callarlo sería la misma mentira que el 0 inventado.
+                        <div className="font-syne text-[7.5px] font-black mt-2.5" style={{color:'rgba(255,255,255,0.22)'}}>
+                          SIN CALENDARIO CONECTADO: {dispoEquipo.sinCuenta.join(' · ').toUpperCase()}
+                        </div>
+                      )}
+                      <div className="text-[10px] mt-2.5" style={{color:'rgba(255,255,255,0.18)'}}>
+                        Solo se ve si están ocupados, nunca de qué.
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               {selEvents.length === 0 ? (
                 <div className="text-center py-10">
                   <div className="w-10 h-10 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{background:'rgba(255,255,255,0.03)',border:`1px solid ${BORDER}`}}><LucideIcon name="calendar" size={16} color="rgba(255,255,255,0.15)"/></div>

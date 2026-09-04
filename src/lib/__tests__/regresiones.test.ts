@@ -8111,3 +8111,69 @@ describe('Automatizaciones está en la barra lateral', () => {
     expect(/r\.active/.test(D.slice(i, i + 120)), 'se cuentan también las pausadas').toBe(true)
   })
 })
+
+describe('«todo el equipo» del calendario enseña al equipo', () => {
+  // Javi: «cuando en el calendario le das a "todo el equipo", no funciona bien: no
+  // se ven las reuniones que tiene todo el equipo».
+  //
+  // Era verdad y la causa era exacta: `tareasDeTodos` solo filtraba TAREAS. Los
+  // eventos salían siempre de las cuentas de Google de quien mira, así que el botón
+  // decía «TODO EL EQUIPO» y enseñaba la agenda de uno solo.
+  const C = leerCodigo('src/components/sections/CalendarioSection.tsx')
+  const R = leerCodigo('src/app/api/calendar/equipo/route.ts')
+  const G = leerCodigo('src/lib/gmail.ts')
+
+  it('se pregunta con freeBusy, NO leyendo el calendario ajeno', () => {
+    // La diferencia no es de esfuerzo, es de qué sale: `freeBusy` devuelve
+    // intervalos y nada más. Leer el calendario entero de un compañero pondría su
+    // médico en la pantalla de los demás y —peor— en el contexto de Harvey, que
+    // pega los títulos literales. Lo eligió Javi con las tres opciones delante.
+    expect(/freebusy\.query/.test(G), 'ya no se usa freeBusy: revisa esta regla').toBe(true)
+    expect(/getCalendarEvents\(/.test(R),
+      'la ruta del equipo vuelve a leer los EVENTOS de los demás: eso trae títulos, asistentes y sitio')
+      .toBe(false)
+    // Y lo que se devuelve son intervalos, no eventos.
+    expect(/ocupado: await getFreeBusy\(/.test(R), 'la ruta ya no devuelve franjas de ocupación').toBe(true)
+  })
+
+  it('un token caducado NO se pinta como «libre»', () => {
+    // Es la mentira peligrosa: se convoca una reunión encima de otra. Google
+    // devuelve los fallos POR CALENDARIO en vez de romper la petición, así que sin
+    // mirar `errors` un token muerto sale como día libre.
+    expect(/cal\?\.errors\?\.length/.test(G),
+      'freeBusy deja de mirar los errores por calendario: un token caducado saldría como libre').toBe(true)
+    expect(/allSettled/.test(R),
+      'una cuenta que falla tumbaría la disponibilidad de todos').toBe(true)
+    expect(/medido: false/.test(R), 'quien falla ya no se distingue de quien está libre').toBe(true)
+    expect(/NO SE PUDO LEER/.test(C), 'la pantalla ya no distingue «no se pudo leer» de «libre»').toBe(true)
+    // Y quien no tiene Google conectado tampoco está libre: no lo sabemos.
+    expect(/sinCuenta/.test(R) && /SIN CALENDARIO CONECTADO/.test(C),
+      'quien no tiene calendario conectado se pinta como libre').toBe(true)
+  })
+
+  it('la barra se dibuja en hora de MADRID', () => {
+    // `getHours()` daría la del portátil: en un móvil en otra franja la reunión
+    // saldría desplazada. Es el mismo fallo que ya se arregló en PanelEquipo.
+    const i = C.indexOf('CUÁNDO ESTÁ OCUPADO EL EQUIPO')
+    expect(i, 'ya no existe la tira de disponibilidad: revisa esta regla').toBeGreaterThan(-1)
+    const tira = C.slice(i, i + 3000)
+    expect(/horaMadrid\(/.test(tira), 'la tira vuelve a usar la hora del navegador').toBe(true)
+    expect(/getHours\(\)/.test(tira), 'se ha colado getHours() en la tira').toBe(false)
+  })
+
+  it('el buzón compartido no cuenta como jornada de nadie', () => {
+    // `colaboraciones@` es de los siete: su calendario no dice si Pablo puede a las
+    // cinco. Sin esta criba, la disponibilidad de quien lo tenga conectado sería la
+    // del buzón común.
+    expect(/if \(c\.compartida \|\| !c\.refresh_token\) continue/.test(R),
+      'la disponibilidad vuelve a incluir el buzón compartido').toBe(true)
+  })
+
+  it('y el botón ya no promete lo que no da', () => {
+    // Decía «SOLO MÍAS / TODO EL EQUIPO» para un interruptor que solo tocaba
+    // tareas. Una etiqueta que miente es un fallo por sí sola.
+    expect(/SOLO MÍAS/.test(C), 'vuelve la etiqueta vieja').toBe(false)
+    expect(/nunca de qué/.test(C),
+      'la pantalla ya no dice que solo se ve la ocupación: alguien creerá que ve las reuniones').toBe(true)
+  })
+})
