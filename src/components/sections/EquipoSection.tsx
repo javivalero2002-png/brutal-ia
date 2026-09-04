@@ -245,6 +245,33 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
     }
   }
 
+  /**
+   * Conceder o quitar el buzón de colaboraciones.
+   *
+   * Reunión de empresa del 2026-09-03: «conceder acceso al buzón de colaboraciones
+   * a Pablo y a Julio». No se podía hacer desde la app —la columna solo la escribía
+   * cada uno en su propia Sincronización—, así que cumplir ese acuerdo pedía tocar
+   * la base a mano. Un permiso que no se gestiona desde dentro acaba gestionándolo
+   * quien tiene la clave de servicio.
+   */
+  const [cambiandoColabs, setCambiandoColabs] = useState<string|null>(null)
+  const alternarColabs = async (member: Profile, ver: boolean) => {
+    setCambiandoColabs(member.email || '')
+    try {
+      const r = await fetch('/api/admin/team', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: member.email, ver_colabs: ver }),
+      })
+      const j = await r.json().catch(() => null)
+      // `ok` comprobado: sin esto un 403 se leia como exito y la lista se recargaba
+      // igual, asi que el interruptor volvia solo a su sitio sin decir por que.
+      if (!r.ok) { showToast(j?.error || 'No se pudo cambiar el acceso'); return }
+      await data.reloadTeam?.()
+      showToast(ver ? `${member.name} ya ve el buzón del equipo` : `${member.name} deja de ver el buzón del equipo`)
+    } catch { showToast('No se pudo cambiar el acceso') }
+    finally { setCambiandoColabs(null) }
+  }
+
   const deleteMember = async (email: string) => {
     setDeletingEmail(email)
     try {
@@ -385,6 +412,11 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
                         {mDueToday.length>0&&mOverdue.length===0?<span style={{color:'rgba(255,176,32,0.75)'}}> · {mDueToday.length} hoy</span>:null}
                         {' · '}
                         <span style={{color:gmailOk?GRN+'88':'rgba(255,255,255,0.2)'}}>{gmailOk?'Gmail ✓':'Sin Gmail'}</span>
+                        {/* Quien ve el buzon compartido, dicho. Antes no se veia en
+                            ningun sitio: habia que preguntarselo a cada uno. */}
+                        {member.ver_colabs === false && (
+                          <span style={{color:'rgba(255,255,255,0.2)'}}> · Sin colabs</span>
+                        )}
                         {/* Si no ha pasado la puesta en marcha, la app está muda
                             para esa persona: es ahí donde se activan los avisos y
                             se conecta el correo. Sin verlo, parecía que el equipo
@@ -400,6 +432,13 @@ function EquipoSection({data, profile, showToast}: PropsEquipo) {
                       {/* Owner actions — visible on hover */}
                       {isOwner && !isMe(member) && !isConfirmDelete && (
                         <div className={`flex items-center gap-1.5 transition-opacity ${isMobile?'opacity-50':'opacity-0 group-hover/mc:opacity-100'}`}>
+                          <button disabled={cambiandoColabs===member.email}
+                            onClick={e=>{ e.stopPropagation(); alternarColabs(member, member.ver_colabs === false) }}
+                            className={`${isMobile?'w-9 h-9':'w-6 h-6'} rounded-lg flex items-center justify-center transition-all hover:opacity-70 disabled:opacity-40`}
+                            title={member.ver_colabs === false ? 'Dar acceso al buzón de colaboraciones' : 'Quitar el buzón de colaboraciones'}
+                            style={{background:member.ver_colabs===false?'rgba(255,255,255,0.05)':`rgba(34,197,94,0.12)`,border:`1px solid ${member.ver_colabs===false?'rgba(255,255,255,0.12)':'rgba(34,197,94,0.25)'}`}}>
+                            <LucideIcon name={member.ver_colabs===false?'mail-x':'users-2'} size={10} color={member.ver_colabs===false?'rgba(255,255,255,0.3)':GRN}/>
+                          </button>
                           <button onClick={e=>{ e.stopPropagation(); openInvitePanel(member.email||'', member.name) }}
                             className={`${isMobile?'w-9 h-9':'w-6 h-6'} rounded-lg flex items-center justify-center transition-all hover:opacity-70`} title="Generar enlace de acceso"
                             style={{background:`rgba(27,95,250,0.12)`,border:`1px solid rgba(27,95,250,0.25)`}}>

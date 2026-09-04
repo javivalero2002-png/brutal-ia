@@ -49,7 +49,10 @@ const day = (dOffsetDays: number) => iso(dOffsetDays).slice(0,10)
 const TEAM: Profile[] = [
   { id:'u1', email:'javi@brutal.studio', name:'Javier Valero', role:'owner',  avatar_color:'#1B5FFA', initials:'JV', gmail_connected:true },
   { id:'u2', email:'paula@brutal.studio', name:'Paula Bravo',  role:'member', avatar_color:'#22c55e', initials:'PB', gmail_connected:false },
-  { id:'u3', email:'marco@brutal.studio', name:'Marco Ruiz',   role:'member', avatar_color:'#A78BFA', initials:'MR', gmail_connected:false },
+  // Sin el buzon compartido, por lo mismo que hay un cliente archivado y dos
+  // potenciales: sin este caso en los datos, el interruptor de acceso de Equipo
+  // y el rotulo «Sin colabs» no se pueden mirar sin entrar en produccion.
+  { id:'u3', email:'marco@brutal.studio', name:'Marco Ruiz',   role:'member', avatar_color:'#A78BFA', initials:'MR', gmail_connected:false, ver_colabs:false },
 ]
 
 const CLIENTS: Client[] = [
