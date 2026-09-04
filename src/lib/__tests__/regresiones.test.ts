@@ -3193,8 +3193,9 @@ describe('sincronizar un buzon personal esta escrito UNA vez', () => {
   //
   //   · el cron aprendio a recorrer varias cuentas y la ruta se quedo leyendo una
   //     sola columna — el boton sincronizaba UNA de las dos, sin decirlo;
-  //   · y desde antes, la ruta creaba tareas de reunion y el cron no. Un enlace de
-  //     Meet en tu Gmail personal creaba tarea solo si pulsabas a mano.
+  //   · y desde antes, la ruta creaba tareas de reunion y el cron no. (Esas tareas
+  //     ya no existen: la reunion de empresa del 2026-09-03 las retiro. Lo que
+  //     sigue valiendo es la leccion sobre el gemelo, ver el describe de abajo.)
   //
   // Un gemelo que diverge es peor que uno que no: el primero da resultados
   // distintos segun por donde entres, y nadie sabe cual es el bueno.
@@ -3203,21 +3204,37 @@ describe('sincronizar un buzon personal esta escrito UNA vez', () => {
   it('la ruta manual delega, no reimplementa', () => {
     expect(/syncPersonalInbox\(/.test(R), 'la ruta no delega en la libreria').toBe(true)
     // Las señales de tener un bucle propio: si aparecen aqui, la copia ha vuelto.
-    for (const señal of ['analyzeEmail(', 'getEmailsWithRefreshToken(', 'aplazarResto(', 'MEETING_RE']) {
+    // `MEETING_RE` estaba en esta lista y se ha quitado a proposito: la constante
+    // ya no existe en NINGUN fichero, asi que buscarla aqui seria una regla que no
+    // puede ponerse roja jamas. Lo que impide que vuelva es la regla de abajo.
+    for (const señal of ['analyzeEmail(', 'getEmailsWithRefreshToken(', 'aplazarResto(']) {
       expect(R.includes(señal),
         `la ruta manual vuelve a tener su propia copia del bucle (${señal}): divergira otra vez del cron`)
         .toBe(false)
     }
   })
 
-  it('las tareas de reunion se crean por LOS DOS caminos', () => {
-    // Lo que hacia distinto al gemelo. Ahora vive en la libreria, asi que lo hacen
-    // el cron y el boton por igual — por construccion, no por acordarse.
+  // Esta regla decia lo CONTRARIO —«las tareas de reunion se crean por los dos
+  // caminos»— y era correcta mientras la funcion existio. La reunion de empresa del
+  // 2026-09-03 la retiro: «eliminar la creacion automatica de tareas vinculadas a
+  // las reuniones de Google Meet». Se invierte en vez de borrarse, porque el
+  // invariante nuevo es mas fuerte que el viejo y protege exactamente lo mismo:
+  // que los dos caminos hagan LO MISMO.
+  it('SINCRONIZAR CORREO NO CREA TAREAS, por ninguno de los dos caminos', () => {
+    // Lo que paso en produccion: toda invitacion de Google Calendar lleva un enlace
+    // de Meet, asi que cada una se convertia en tarea. Julio se encontro tres que no
+    // habia creado —dos eran la MISMA reunion, la invitacion y su «Re:»— con su
+    // nombre en `created_by` y con la fecha del CORREO, no la de la reunion.
     const C = leerCodigo('src/lib/colabsSync.ts')
-    const personal = C.slice(C.indexOf('async function syncPersonalInboxSinCerrojo'))
-    expect(/MEETING_RE\.test\(/.test(personal),
-      'el sync personal no crea tareas de reunion: un enlace de Meet solo la crearia pulsando el boton a mano')
-      .toBe(true)
+    expect(/MEETING_RE/.test(C),
+      'vuelve el detector de enlaces de reunion: cada invitacion de Calendar sera una tarea')
+      .toBe(false)
+    // La regla de verdad, que no depende de como se llame la constante: NADA en el
+    // sincronizador escribe en `tasks`. Es lo unico que no se puede reintroducir
+    // con otro nombre.
+    expect(/from\('tasks'\)/.test(C),
+      'el sincronizador de correo vuelve a escribir en tasks: el correo no crea tareas solo')
+      .toBe(false)
   })
 })
 
