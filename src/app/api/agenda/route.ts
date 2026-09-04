@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await request.json()
   const admin = await createAdminClient()
-  const payload: any = { ...pick(body, ['title','platform','content_type','status','publish_date','publish_time','notes','client_id','account_name','video_url','carpeta']), created_by: user.id }
+  const payload: any = { ...pick(body, ['title','platform','content_type','status','publish_date','publish_time','notes','client_id','account_name','video_url','carpeta','project_id']), created_by: user.id }
   // video_url sale firmado por el GET y por /api/review (público): no se guarda un
   // identificador a otro bucket. Los enlaces externos (YouTube) pasan.
   if (esStorageDeOtroBucket(payload.video_url)) return NextResponse.json({ error: 'URL de almacenamiento no permitida' }, { status: 400 })

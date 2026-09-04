@@ -43,7 +43,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   // `feedback` y `cover_url` faltaban en el allowlist, así que "Opiniones del
   // equipo" pintaba el estado optimista, decía "Opinión publicada" y se perdía al
   // recargar: el PATCH nunca las llevaba.
-  const payload: any = pick(body, ['title','platform','content_type','status','publish_date','publish_time','notes','client_id','account_name','video_url','carpeta','feedback','cover_url'])
+  const payload: any = pick(body, ['title','platform','content_type','status','publish_date','publish_time','notes','client_id','account_name','video_url','carpeta','project_id','feedback','cover_url'])
   // cover_url/video_url salen firmados por el GET y por /api/review (PÚBLICO): un
   // identificador a otro bucket (copias) se convertiría en una URL firmada al
   // backup expuesta a cualquiera con el enlace de revisión. Defensa en

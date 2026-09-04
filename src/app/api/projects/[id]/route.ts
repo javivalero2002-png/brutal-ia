@@ -24,7 +24,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (esStorageDeOtroBucket(body?.cover_url) || esStorageDeOtroBucket(body?.pdf_url))
     return NextResponse.json({ error: 'URL de almacenamiento no permitida' }, { status: 400 })
   const { data, error } = await admin
-    .from('projects').update({ ...pick(body, ['name','client_id','status','progress','deadline','color','cover_url','pdf_url','pdf_analysis','carpeta','tipo']), updated_at: new Date().toISOString() })
+    .from('projects').update({ ...pick(body, ['name','client_id','status','progress','deadline','color','cover_url','pdf_url','pdf_analysis','carpeta','tipo','empieza_el','semanas','salidas_semana']), updated_at: new Date().toISOString() })
     .eq('id', id).select('*, client:clients(id,name,initials,color)').single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   // El bucket es privado: lo guardado es un identificador, no una URL que

@@ -760,7 +760,11 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
       } else if (modal === 'contenido') {
         if (!mf.titulo?.trim()) { showToast('Escribe el título'); return }
         // Sin cliente: las piezas son contenido propio del estudio para RRSS.
-        await data.createAgenda({ title:mf.titulo.trim(), platform:mf.plataforma||'Instagram', account_name:mf.cuenta?.trim()||undefined, content_type:'Post', status:(mf.estado||'borrador') as 'borrador'|'pendiente'|'listo'|'publicado', publish_date:mf.fecha })
+        // `project_id`: de qué CAMPAÑA es la pieza. Llega de dos sitios —el
+        // selector del modal y el hueco de la parrilla, que lo prellena— y sin él
+        // la parrilla estaría vacía siempre: un campo que solo se puede escribir
+        // desde la pantalla que quiere leerlo es la definición del campo muerto.
+        await data.createAgenda({ title:mf.titulo.trim(), platform:mf.plataforma||'Instagram', account_name:mf.cuenta?.trim()||undefined, content_type:'Post', status:(mf.estado||'borrador') as 'borrador'|'pendiente'|'listo'|'publicado', publish_date:mf.fecha, project_id: mf.campana || undefined })
         showToast('Pieza añadida')
       }
       setModal(null); setMf({})
@@ -1345,6 +1349,7 @@ export default function NexusDashboard({ profile, initialSection }: Props) {
       {modal && (
         <CreateModal
           isOwner={isOwner}
+          campanas={data.projects.filter(p => p.tipo === 'campana')}
           modal={modal}
           onClose={() => setModal(null)}
           // El clic en el FONDO pasa por la misma comprobacion que Escape. Cancelar y

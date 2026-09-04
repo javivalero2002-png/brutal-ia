@@ -77,7 +77,9 @@ const PROJECTS: Project[] = [
   { id:'p4', client_id:'c4', name:'Mango Social',    status:'plan.',    progress:10, deadline:'TBD',   color:'#F59E0B', created_at:iso(-10), client:CLIENTS[3] },
   // Dos CAMPAÑAS. Sin ellas, la seccion nueva sale vacia en el harness y no se
   // puede revisar — el mismo motivo que el cliente archivado y los potenciales.
-  { id:'p5', client_id:'c1', name:'Meta Ads — verano',  status:'activo',  progress:45, deadline:day(20), color:'#1B5FFA', created_at:iso(-15), client:CLIENTS[0], tipo:'campana' },
+  // CON COMPROMISO y con piezas colgando: sin esto la parrilla no se puede
+  // revisar en el harness, que es la unica via sin credenciales.
+  { id:'p5', client_id:'c1', name:'Meta Ads — verano',  status:'activo',  progress:45, deadline:day(20), color:'#1B5FFA', created_at:iso(-15), client:CLIENTS[0], tipo:'campana', empieza_el:day(-21), semanas:5, salidas_semana:3 },
   { id:'p6', client_id:'',   name:'Instagram — marca propia', status:'plan.', progress:5, deadline:day(30), color:'#EC4899', created_at:iso(-2), tipo:'campana' },
 ]
 
@@ -127,6 +129,13 @@ const REGLAS: Regla[] = [
 ]
 
 const AGENDA: ContentItem[] = [
+  // Piezas de la campaña «Meta Ads — verano» (p5): dos semanas cerradas con huecos,
+  // una en curso a medias. Es el estado que hace legible la parrilla.
+  { id:'ag-c1', title:'Teaser verano 01', platform:'Instagram', content_type:'Reel', status:'publicado', publish_date:day(-20), project_id:'p5' },
+  { id:'ag-c2', title:'Teaser verano 02', platform:'TikTok',   content_type:'Reel', status:'publicado', publish_date:day(-18), project_id:'p5' },
+  { id:'ag-c3', title:'Detrás de cámaras', platform:'Instagram', content_type:'Post', status:'borrador', publish_date:day(-13), project_id:'p5' },
+  { id:'ag-c4', title:'Caso Nike',        platform:'Instagram', content_type:'Post', status:'publicado', publish_date:day(-11), project_id:'p5' },
+  { id:'ag-c5', title:'Corte 03',         platform:'TikTok',   content_type:'Reel', status:'listo',     publish_date:day(-1),  project_id:'p5' },
   { id:'a1', title:'Reel lanzamiento Nike', platform:'Instagram', content_type:'Reel', status:'borrador', client_id:'c1' },
   { id:'a2', title:'Carrusel Zara F/W',     platform:'Instagram', content_type:'Post',  status:'pendiente', client_id:'c3' },
   { id:'a3', title:'TikTok Adidas',         platform:'TikTok',    content_type:'Video', status:'listo', client_id:'c2' },
@@ -470,6 +479,7 @@ export default function PreviewClient({
 
       {modal && (
         <CreateModal
+          campanas={projects.filter(p => p.tipo === 'campana')}
           modal={modal as any}
           onClose={() => setModal(null)}
           mf={mf}
