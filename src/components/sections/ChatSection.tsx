@@ -280,6 +280,22 @@ function ChatSection({profile,data,chatInput,setChatInput,chatLoading,setChatLoa
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            {/* HABLAR, en la cabecera y no en un pie de 7,5 px.
+                Reunión de empresa del 2026-09-03: «eliminar el botón duplicado de
+                Harvey». En el menú había DOS entradas de IA seguidas —Brutal.IA y
+                Harvey— y a quien las ve le parecen dos asistentes distintos. Se
+                queda una, y la puerta de voz vive DENTRO: es la misma IA con el
+                micrófono abierto, no otra herramienta.
+                Existía ya como enlace diminuto abajo del todo; el enlace se queda
+                por el atajo, pero esta es la que se ve. */}
+            {onNavigate && (
+              <button onClick={()=>onNavigate('harvey')}
+                className="flex items-center gap-1.5 font-syne text-[8px] font-black tracking-widest px-3 py-1.5 rounded-xl transition-all hover:opacity-80"
+                style={{background:`${BLU}14`,border:`1px solid ${BLU}30`,color:'#93b4ff'}}>
+                <LucideIcon name="mic" size={11} color="#93b4ff"/>
+                HABLAR
+              </button>
+            )}
             {!isEmpty && (
             confirmClear
               ? <div className="flex items-center gap-1">

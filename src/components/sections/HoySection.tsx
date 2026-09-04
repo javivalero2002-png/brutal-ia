@@ -6,14 +6,14 @@ import { hayModalAbierto } from '@/components/shared/modalAbierto'
 import { ejecutarAccionHarvey } from '@/lib/harveyEjecutar'
 import { parsearAccionHarvey, type AccionHarvey , etiquetaAccion, afirmaHaberloHecho, AVISO_SIN_FICHA} from '@/lib/harveyAccion'
 import { limpiarTextoHarvey } from '@/lib/textoHarvey'
-import { nivelTarea, esNoReply, saludoMadrid } from '@/components/shared/helpers'
+import { nivelTarea, esNoReply, saludoMadrid, relTime, plural } from '@/components/shared/helpers'
 import { BLU, RED, GRN, VIO, BORDER } from '@/components/shared/design-tokens'
 import { useIsMobile } from '@/components/shared/hooks'
 import DiaSinCerrar from '@/components/shared/DiaSinCerrar'
 import { todayKey, localDayKey, madridHour, madridDateLabel, estadoDeadline } from '@/components/shared/helpers'
 import { getSharedAudio, playAck, isIOSDevice, matchTeamMember, splitForTTS, stopAllVoices, isSRBroken, markSRBroken } from '@/components/shared/audio'
 import LucideIcon from '@/components/shared/LucideIcon'
-import type { Task, Project, Client, NexusData} from '@/types'
+import type { Task, Project, Client, Regla, NexusData} from '@/types'
 import type { IrASeccion, Section } from '@/components/shared/secciones'
 import { mensajeErrorTranscripcion } from '@/components/shared/helpers'
 
@@ -756,6 +756,77 @@ export default function HoySection({profile,data,urgentCount,unreadCount,onOpenM
                         )
                       })()}
                     </div>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* ══ AUTOMATIZACIONES, EN LA PORTADA ══
+                Reunión de empresa del 2026-09-03: «mover la sección de
+                automatizaciones a la pantalla principal».
+
+                No se mueve la sección entera —ahí se editan las reglas y eso pide
+                sitio—: se trae a la portada lo que contesta la pregunta por la que
+                existe, que es «¿QUÉ HA HECHO LA APP POR MÍ?». Enterrada la
+                decimotercera en el menú, la mejor función del producto era
+                invisible: el equipo tiene UNA regla creada.
+
+                Por eso el estado vacío no es un hueco, es una invitación: para casi
+                todo el mundo ese es el estado real, y es justo a quien hay que
+                enseñárselo. */}
+            {(()=>{
+              const reglas = (data.reglas || []) as Regla[]
+              const activas = reglas.filter(r => r.active)
+              const saltos = reglas.reduce((n, r) => n + (r.trigger_count || 0), 0)
+              // Las que han saltado primero: una regla que nunca ha disparado no
+              // cuenta nada, y aquí solo caben tres.
+              const alFrente = [...activas].sort((x, y) =>
+                (y.last_triggered_at || '').localeCompare(x.last_triggered_at || '')).slice(0, 3)
+              return (
+                <div className="animate-fadeUp rounded-3xl px-6 py-5 w-full mt-4"
+                  style={{background:'rgba(255,255,255,0.02)',border:'1px solid rgba(255,255,255,0.06)',backdropFilter:'blur(4px)'}}>
+                  <button onClick={()=>onNavigate?.('automatizaciones')}
+                    className="flex items-center gap-2.5 w-full text-left transition-all hover:opacity-85 active:scale-[0.99]">
+                    <span className="w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0"
+                      style={{background:`${VIO}16`,border:`1px solid ${VIO}30`}}>
+                      <LucideIcon name="zap" size={15} color="#a78bfa"/>
+                    </span>
+                    <span className="font-figtree flex-1 min-w-0" style={{fontSize:'16px',fontWeight:600,color:'rgba(255,255,255,0.9)'}}>
+                      Automatizaciones
+                      <span className="block font-figtree" style={{fontSize:'12px',fontWeight:400,color:'rgba(255,255,255,0.32)'}}>
+                        {activas.length === 0
+                          ? 'Dile a la app qué vigilar por ti'
+                          : `${plural(activas.length,'regla activa','reglas activas')}${saltos > 0 ? ` · ${plural(saltos,'vez','veces')} que han saltado` : ''}`}
+                      </span>
+                    </span>
+                    <LucideIcon name="chevron-right" size={14} color="rgba(255,255,255,0.2)"/>
+                  </button>
+                  <div className="mt-3 mb-1" style={{height:'1px',background:'rgba(255,255,255,0.06)'}}/>
+                  {alFrente.length > 0 ? (
+                    <div className="flex flex-col">
+                      {alFrente.map(r => (
+                        <button key={r.id} onClick={()=>onNavigate?.('automatizaciones')}
+                          className="flex items-center gap-3 py-2.5 text-left transition-all hover:opacity-80 active:scale-[0.99]">
+                          <LucideIcon name="zap" size={16} color={r.last_triggered_at ? '#a78bfa' : 'rgba(255,255,255,0.18)'}/>
+                          <span className="font-figtree flex-1 min-w-0 truncate" style={{fontSize:'14px',color:'rgba(255,255,255,0.66)'}}>{r.name}</span>
+                          {/* «Aún no ha saltado» dicho, no en blanco: una regla que
+                              nunca dispara suele estar mal escrita, y un hueco no
+                              se lo cuenta a nadie. */}
+                          <span className="font-syne text-[8px] font-black flex-shrink-0" style={{color:'rgba(255,255,255,0.22)'}}>
+                            {r.last_triggered_at ? relTime(r.last_triggered_at) : 'AÚN NO'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <button onClick={()=>onNavigate?.('automatizaciones')}
+                      className="flex items-center gap-3 py-3 w-full text-left transition-all hover:opacity-80">
+                      <LucideIcon name="plus-circle" size={16} color="#a78bfa"/>
+                      <span className="font-figtree" style={{fontSize:'14px',color:'rgba(255,255,255,0.5)'}}>
+                        Crear la primera: avisar de un email de cliente, de una entrega
+                        que se acerca, de alguien que lleva días sin fichar…
+                      </span>
+                    </button>
                   )}
                 </div>
               )
