@@ -35,9 +35,28 @@ function camposDeAnalisis(a: EmailAnalysis | null) {
   }
 }
 import { sendPushToAll, sendPushToUser, canSendPush } from '@/lib/push'
-import { localDayKey } from '@/components/shared/helpers'
 
-const MEETING_RE = /meet\.google\.com\/[a-z-]+|zoom\.us\/j\/\d+|teams\.microsoft\.com\/l\/meetup/i
+// NO SE CREAN TAREAS A PARTIR DE CORREOS. Decisión de la reunión de empresa del
+// 2026-09-03: «eliminar la creación automática de tareas vinculadas a las
+// reuniones de Google Meet».
+//
+// Aquí había un `MEETING_RE` que buscaba enlaces de Meet/Zoom/Teams en el correo
+// y creaba una tarea «Reunión: <asunto>». Lo que se vio en producción:
+//
+//   · toda invitación de Google Calendar lleva un enlace de Meet, así que cada
+//     invitación se convertía en tarea. Julio se encontró tres que no había
+//     creado, y dos eran LA MISMA reunión —la invitación y su «Re:»—: no había
+//     ningún control de duplicados, así que cada «Invitación actualizada» sumaba
+//     otra;
+//   · la tarea llevaba `created_by` y `assigned_to` con el id de esa persona, sin
+//     ninguna marca de ser automática: la app decía que la había creado él;
+//   · y `due_date` era el día en que llegó EL CORREO, no el de la reunión, así que
+//     una reunión del miércoles nacía vencida el martes.
+//
+// Y sobre todo: la sección Calendario ya lee Google Calendar en vivo, con la hora
+// real y los asistentes. La tarea era un duplicado peor de algo que la app ya
+// enseñaba. Si algún día se quiere volver a esto, el dato bueno es el EVENTO del
+// calendario, no el correo que lo anuncia.
 
 type SyncResult =
   // `insertFailures` sale al exterior a propósito: con los inserts fallando el
@@ -321,30 +340,6 @@ async function syncColabsInboxSinCerrojo(
       insertFailures++
     } else {
       newCount++
-      // Email con enlace de reunión → tarea con fecha (aparece en el Calendario)
-      const meetingText = `${email.subject || ''} ${email.body_preview || ''}`
-      // Solo si el correo mereció análisis. Un webinar promocional con enlace de
-      // Zoom casa este patrón igual que la reunión de un cliente, y crearía una
-      // tarea con fecha en el calendario de todo el equipo.
-      if (analizar && MEETING_RE.test(meetingText)) {
-        // localDayKey, no slice: `received_at` viene en UTC y cortarlo da el día
-      // UTC. Un email recibido a las 00:30 de Madrid generaba la tarea con la
-      // fecha de AYER, o sea vencida en el momento de crearse.
-      const day = localDayKey(email.received_at || Date.now())
-        // El error SE MIRA, igual que en el insert hermano de veinte lineas arriba.
-        // Se registra y no se corta: convertirlo en `continue` romperia otra cosa
-        // —se saltarian newUnread.push y newCount++ para un correo que SI se
-        // guardo—. Y no se reintenta solo: el gmail_id ya esta en la base, asi que
-        // el siguiente sync hace `continue` y la tarea no vuelve a intentarse nunca.
-        const { error: reunionErr } = await admin.from('tasks').insert({
-          created_by: ownerId,
-          text: `Reunión: ${email.subject || email.from_name || 'sin asunto'}`,
-          level: 'high',
-          due_date: day,
-          source: 'gmail',
-        })
-        if (reunionErr) console.error('[colabs] no se pudo crear la tarea de reunión:', reunionErr.message)
-      }
       if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgent: analysis?.urgency === 'urgent' })
     }
   }
@@ -663,36 +658,6 @@ async function syncPersonalInboxSinCerrojo(
       insertFailures++
     } else {
       newCount++
-
-      // Tarea de reunión, IGUAL que en el buzón compartido.
-      //
-      // Esto faltaba aquí y no en la ruta manual, así que un enlace de Meet en tu
-      // Gmail personal creaba tarea SOLO si pulsabas el botón a mano: el cron
-      // horario se la saltaba. Dos caminos que hacen lo mismo con distinto
-      // resultado — el gemelo clásico, y de los silenciosos, porque nadie echa de
-      // menos una tarea que no sabe que debería existir.
-      //
-      // Con la guarda de `analizar`, como en colabs y a diferencia de la ruta
-      // manual: un boletín promocional con un enlace de Zoom no es una reunión
-      // tuya, y crear esa tarea es peor que no crearla.
-      const meetingText = `${email.subject || ''} ${email.body_preview || ''}`
-      if (analizar && MEETING_RE.test(meetingText)) {
-        // localDayKey, no slice: `received_at` viene en UTC y cortarlo da el día
-        // UTC. Un email recibido a las 00:30 de Madrid generaba la tarea con la
-        // fecha de AYER, o sea vencida en el momento de crearse.
-        const day = localDayKey(email.received_at || Date.now())
-        const { error: reunionErr } = await admin.from('tasks').insert({
-          created_by: profile.id,
-          // `assigned_to`: es TU buzón personal, así que la reunión es tuya. En
-          // colabs va sin asignar porque ese correo es de los siete.
-          assigned_to: profile.id,
-          text: `Reunión: ${email.subject || email.from_name || 'sin asunto'}`,
-          level: 'high',
-          due_date: day,
-          source: 'gmail',
-        })
-        if (reunionErr) console.error('[sync personal] no se pudo crear la tarea de reunión:', reunionErr.message)
-      }
 
       if (email.is_unread) newUnread.push({ from_name: email.from_name || '?', subject: email.subject || '(sin asunto)', urgent: analysis?.urgency === 'urgent' })
     }
