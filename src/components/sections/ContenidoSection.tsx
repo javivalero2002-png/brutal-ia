@@ -60,6 +60,11 @@ function ContenidoSection({data,onOpenModal,showToast,onNavigate,onSelectClient,
   const [editCarpeta, setEditCarpeta] = useState('')
   const carpetaTocada = useRef(false)
   const [editAccountName, setEditAccountName] = useState('')
+  // DE QUÉ CAMPAÑA ES la pieza. Sin poder decirlo desde AQUÍ —que es donde se
+  // trabaja el contenido— `project_id` solo se escribiría desde la parrilla, o sea
+  // desde la única pantalla que quiere leerlo: la definición del campo muerto.
+  const [editCampana, setEditCampana] = useState('')
+  const campanas = (data.projects || []).filter((p:any)=>p.tipo === 'campana')
   const [editPublishDate, setEditPublishDate] = useState('')
   const [editPublishTime, setEditPublishTime] = useState('')
   const [pendingEmoji, setPendingEmoji] = useState('')
@@ -362,6 +367,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
     carpetaTocada.current = false
     videoTocado.current = false
     setEditAccountName(item.account_name||'')
+    setEditCampana((item as any).project_id||'')
     setEditPublishDate(item.publish_date||'')
     setEditPublishTime(item.publish_time||'')
     setEditContentType(normContentType(item.content_type))
@@ -420,7 +426,7 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
       // La subida de portada NO marca `coverTocada`: upload-cover ya guardó el
       // identificador en el servidor (agenda/[id]/upload-cover). Reenviarlo desde
       // aquí solo serviría para pisarlo con la firma.
-      const updates: any = { notes: editNotes, account_name: editAccountName, publish_date: editPublishDate || null, publish_time: editPublishTime || null, content_type: editContentType }
+      const updates: any = { notes: editNotes, account_name: editAccountName, publish_date: editPublishDate || null, publish_time: editPublishTime || null, content_type: editContentType, project_id: editCampana || null }
       // El PATCH reintenta sin las columnas ausentes en la BD y responde 200 con
       // `__dropped`. Nadie lo leia: la UI decia "Guardado" y ademas dejaba fijados
       // en la pieza valores que no se habian escrito en ninguna parte, asi que la
@@ -1495,6 +1501,22 @@ const logoPorDefecto = (nombre: string) => (esCuentaDelEstudio(nombre) ? LOGO_MA
                   </div>
                   <div className="mt-1.5 font-syne text-[7.5px]" style={{color:'rgba(255,255,255,0.2)'}}>Toca el avatar para cambiar la foto de la cuenta</div>
                 </div>
+
+                {/* DE QUÉ CAMPAÑA ES. Es lo que llena la parrilla de Campañas, y va
+                    aquí porque aquí es donde se trabaja el contenido: un campo que
+                    solo se puede escribir desde la pantalla que quiere leerlo se
+                    queda vacío para siempre. */}
+                {campanas.length > 0 && (
+                  <div>
+                    <div className="font-syne text-[8.5px] font-black tracking-widest mb-2" style={{color:'rgba(255,255,255,0.2)'}}>CAMPAÑA</div>
+                    <select value={editCampana} onChange={e=>setEditCampana(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl text-[12px] text-white outline-none appearance-none"
+                      style={{background:'rgba(255,255,255,0.04)',border:`1.5px solid rgba(255,255,255,0.07)`,colorScheme:'dark'}}>
+                      <option value="">Suelta — sin campaña</option>
+                      {campanas.map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                )}
 
                 {/* La página pública /review/[token] existía pero su enlace no se
                     generaba en NINGÚN sitio de la app: era inalcanzable, así que

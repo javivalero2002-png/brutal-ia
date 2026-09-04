@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'URL de almacenamiento no permitida' }, { status: 400 })
   const { data, error } = await admin
     .from('projects')
-    .insert({ ...pick(body, ['name','client_id','status','progress','deadline','color','cover_url','pdf_url','tipo']), created_by: user.id })
+    .insert({ ...pick(body, ['name','client_id','status','progress','deadline','color','cover_url','pdf_url','tipo','empieza_el','semanas','salidas_semana']), created_by: user.id })
     .select('*, client:clients(id,name,initials,color)')
     .single()
 

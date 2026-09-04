@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { estadoDeadline, dlLabel, saludoMadrid } from '@/components/shared/helpers'
 import { ventanaPreguntada, preguntaPorElEquipo } from '@/lib/resumenEquipo'
 import { importeACentimos, totalConIva, estadoFactura, euros } from '@/lib/facturas'
+import { compromisoDe, parrilla, marcador, masDias } from '@/lib/parrilla'
 import { SECCIONES } from '@/components/shared/secciones'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -8175,5 +8176,204 @@ describe('«todo el equipo» del calendario enseña al equipo', () => {
     expect(/SOLO MÍAS/.test(C), 'vuelve la etiqueta vieja').toBe(false)
     expect(/nunca de qué/.test(C),
       'la pantalla ya no dice que solo se ve la ocupación: alguien creerá que ve las reuniones').toBe(true)
+  })
+})
+
+describe('la parrilla de una campaña: el hueco existe antes que la pieza', () => {
+  // Javi: «el apartado de campañas no aporta valor real. Quiero que aporte un valor
+  // distintivo, algo que lo haga diferente y único».
+  //
+  // Lo que la separa de un tablero, de Later o de Trello: se escribe UNA vez lo que
+  // se promete —«3 salidas por semana durante 6 semanas»— y a partir de ahí «van 11
+  // de 18 y en las semanas cerradas faltaron 4» es un hecho verificable. Ninguna
+  // herramienta del estudio sabe decir eso hoy, porque ninguna sabe qué se prometió.
+  //
+  // Estas reglas LLAMAN a las funciones con un «hoy» fijo: leer el código no dice
+  // cuántos huecos salen.
+
+  const C = { empieza: '2026-08-03', semanas: 4, salidasSemana: 3 } // lunes 3 ago, 4 semanas
+
+  it('media promesa no es una promesa', () => {
+    // `null` y no un objeto con ceros: «no ha prometido nada» y «prometió cero» son
+    // cosas distintas y la pantalla las pinta distinto. Sin la migración aplicada
+    // las tres columnas llegan undefined y la campaña se comporta como hoy.
+    expect(compromisoDe(null)).toBeNull()
+    expect(compromisoDe({})).toBeNull()
+    expect(compromisoDe({ empieza_el: '2026-08-03', semanas: 4 })).toBeNull()
+    expect(compromisoDe({ empieza_el: '2026-08-03', semanas: 4, salidas_semana: 0 })).toBeNull()
+    expect(compromisoDe({ empieza_el: 'TBD', semanas: 4, salidas_semana: 3 })).toBeNull()
+    expect(compromisoDe({ empieza_el: '2026-08-03', semanas: 4, salidas_semana: 3 }))
+      .toEqual({ empieza: '2026-08-03', semanas: 4, salidasSemana: 3 })
+  })
+
+  it('las semanas van de lunes a domingo y no se solapan', () => {
+    const p = parrilla(C, [], '2026-08-03')
+    expect(p.semanas.map(s => [s.desde, s.hasta])).toEqual([
+      ['2026-08-03', '2026-08-09'],
+      ['2026-08-10', '2026-08-16'],
+      ['2026-08-17', '2026-08-23'],
+      ['2026-08-24', '2026-08-30'],
+    ])
+    expect(p.termina).toBe('2026-08-30')
+    expect(p.prometidas).toBe(12)
+  })
+
+  it('un HUECO solo cuenta lo que SALIÓ, y solo en semanas cerradas', () => {
+    // Es lo que hace honesto el marcador. Contando «piezas» a secas, una semana con
+    // tres borradores que no se publicaron daría cero huecos: la pantalla diría que
+    // la semana está llena de trabajo que nadie ha visto.
+    const piezas = [
+      { id:'a', status:'publicado', publish_date:'2026-08-04' },
+      { id:'b', status:'borrador',  publish_date:'2026-08-05' },
+      { id:'c', status:'borrador',  publish_date:'2026-08-06' },
+    ]
+    const p = parrilla(C, piezas, '2026-08-20')   // la semana 1 ya cerró
+    expect(p.semanas[0].emitidas).toBe(1)
+    expect(p.semanas[0].huecos).toBe(2)           // 3 prometidas − 1 publicada
+    expect(p.semanas[0].porCubrir).toBe(0)        // ya no se puede cubrir
+  })
+
+  it('la semana EN CURSO no acusa a nadie', () => {
+    // Todavía se puede publicar: lo que falta es «por cubrir», no un fallo.
+    const p = parrilla(C, [{ id:'a', status:'borrador', publish_date:'2026-08-18' }], '2026-08-19')
+    const s3 = p.semanas[2]
+    expect([s3.cerrada, s3.enCurso]).toEqual([false, true])
+    expect(s3.huecos).toBe(0)
+    expect(s3.porCubrir).toBe(2)                  // 3 − 1 planificada
+  })
+
+  it('el ÚLTIMO DÍA de la semana todavía no ha fallado', () => {
+    // Comparación por DÍA. Este repo ya ha pagado tres veces confundir «vence hoy»
+    // con «vencido»: una tarea salía vencida desde las 02:00 de Madrid.
+    const p = parrilla(C, [], '2026-08-09')       // domingo, último día de la semana 1
+    expect(p.semanas[0].cerrada).toBe(false)
+    expect(p.semanas[0].huecos).toBe(0)
+    const q = parrilla(C, [], '2026-08-10')       // el lunes siguiente, ya cerrada
+    expect(q.semanas[0].cerrada).toBe(true)
+    expect(q.semanas[0].huecos).toBe(3)
+  })
+
+  it('una pieza fuera de plazo NO se pierde: se dice', () => {
+    // Contarla en una semana sería mentir; tirarla, esconder justo lo que alguien
+    // quiere ver — una pieza de la campaña con fecha fuera del plazo.
+    const p = parrilla(C, [{ id:'z', status:'publicado', publish_date:'2026-09-15' }], '2026-09-20')
+    expect(p.fuera.map(x => x.id)).toEqual(['z'])
+    expect(p.emitidas).toBe(0)
+  })
+
+  it('el marcador dice lo que ha pasado, no un porcentaje', () => {
+    expect(marcador(parrilla(C, [], '2026-08-31'))).toBe('0 de 12 · faltaron 12')
+    expect(marcador(parrilla(C, [], '2026-08-01'))).toBe('0 de 12 · 12 por cubrir')
+    const todas = Array.from({length:12}, (_,i)=>({
+      id:'p'+i, status:'publicado', publish_date: masDias('2026-08-03', Math.floor(i/3)*7 + (i%3)),
+    }))
+    expect(marcador(parrilla(C, todas, '2026-08-31'))).toBe('12 de 12')
+  })
+
+  it('sumar días no se rompe en el cambio de hora ni a fin de mes', () => {
+    expect(masDias('2026-08-30', 7)).toBe('2026-09-06')
+    expect(masDias('2026-12-28', 7)).toBe('2027-01-04')
+    // Último domingo de octubre: el cambio de hora. Sumando sobre medianoche esto
+    // devolvía el día de antes.
+    expect(masDias('2026-10-24', 1)).toBe('2026-10-25')
+    expect(masDias('2026-10-25', 1)).toBe('2026-10-26')
+    expect(masDias('2028-02-28', 1)).toBe('2028-02-29')   // bisiesto
+  })
+})
+
+describe('la rejilla y el contador dicen el MISMO número', () => {
+  // Se vio en el navegador con datos reales: una semana cerrada con [listo, —, —]
+  // pintaba DOS casillas rojas y el contador decía TRES huecos. Dos denominadores
+  // en la misma pantalla, que es justo lo que hace que un marcador deje de ser
+  // verificable — y toda la tesis de la parrilla es que sea un hecho.
+  const C = { empieza: '2026-08-03', semanas: 3, salidasSemana: 3 }
+
+  it('en una semana cerrada, las publicadas van primero', () => {
+    // Es lo que hace que «casillas rojas» y «huecos» sean el mismo número: las
+    // llenas-y-verdes ocupan las primeras posiciones y el resto queda en rojo.
+    const p = parrilla(C, [
+      { id:'a', status:'borrador',  publish_date:'2026-08-04' },
+      { id:'b', status:'publicado', publish_date:'2026-08-05' },
+    ], '2026-08-20')
+    expect(p.semanas[0].piezas.map(x => x.id)).toEqual(['b', 'a'])
+  })
+
+  it('las casillas rojas de una semana cerrada son EXACTAMENTE sus huecos', () => {
+    // La regla que de verdad importa, y comprobada como la comprueba la pantalla:
+    // roja = cerrada y no publicada, sea una casilla vacía o una pieza que se
+    // quedó en borrador.
+    for (const piezas of [
+      [],
+      [{ id:'a', status:'publicado', publish_date:'2026-08-04' }],
+      [{ id:'a', status:'listo', publish_date:'2026-08-04' }],
+      [{ id:'a', status:'publicado', publish_date:'2026-08-04' }, { id:'b', status:'borrador', publish_date:'2026-08-05' }],
+      [{ id:'a', status:'publicado', publish_date:'2026-08-04' }, { id:'b', status:'publicado', publish_date:'2026-08-05' },
+       { id:'c', status:'publicado', publish_date:'2026-08-06' }],
+    ]) {
+      const s = parrilla(C, piezas, '2026-08-20').semanas[0]
+      const rojas = Array.from({ length: C.salidasSemana })
+        .filter((_, i) => s.cerrada && s.piezas[i]?.status !== 'publicado').length
+      expect(rojas, `con ${piezas.length} piezas la rejilla pinta ${rojas} rojas y el contador dice ${s.huecos}`)
+        .toBe(s.huecos)
+    }
+  })
+})
+
+describe('el campo de campaña no puede morirse', () => {
+  // El riesgo real de esta función, y el que tumbó la primera versión del plan: un
+  // campo que SOLO se puede escribir desde la pantalla que quiere leerlo se queda
+  // vacío para siempre. `content_agenda.project_id` es lo que llena la parrilla, y
+  // las piezas se crean en Contenido, no en Campañas.
+  it('se puede decir la campaña donde se trabaja el contenido', () => {
+    const M = leerCodigo('src/components/CreateModal.tsx')
+    expect(/type:'campana'/.test(M), 'el modal de pieza ya no pregunta por la campaña').toBe(true)
+    const D = leerCodigo('src/components/NexusDashboard.tsx')
+    expect(/project_id: mf\.campana/.test(D),
+      'el modal pregunta la campaña y luego no la manda: el campo nace vacío igual').toBe(true)
+    // Y en la ficha de la pieza, para las que ya existen.
+    const C = leerCodigo('src/components/sections/ContenidoSection.tsx')
+    expect(/setEditCampana/.test(C), 'la ficha de la pieza no deja cambiar de campaña').toBe(true)
+    expect(/project_id: editCampana \|\| null/.test(C),
+      'la ficha ofrece el selector y no lo guarda').toBe(true)
+    // `|| null` y no `|| undefined`: JSON.stringify borra las claves undefined, así
+    // que «quitar de la campaña» no se guardaría nunca. Ya pasó con otros campos.
+    expect(/project_id: editCampana \|\| undefined/.test(C),
+      'quitar una pieza de su campaña no se persistiría: undefined desaparece del JSON').toBe(false)
+  })
+
+  it('y el hueco de la parrilla prellena la campaña', () => {
+    const P = leerCodigo('src/components/sections/ProyectosSection.tsx')
+    expect(/campana: selectedProject\.id/.test(P),
+      'crear desde un hueco ya no ata la pieza a esa campaña: el hueco seguiría ahí').toBe(true)
+  })
+
+  it('las rutas dejan escribir project_id', () => {
+    for (const r of ['src/app/api/agenda/route.ts', 'src/app/api/agenda/[id]/route.ts']) {
+      const C = leerCodigo(r)
+      expect(/'project_id'/.test(C), `${r}: la allowlist descarta project_id en silencio`).toBe(true)
+    }
+  })
+
+  it('el compromiso NO pisa progress ni deadline', () => {
+    // `projects.progress` y `deadline` los leen SIETE sitios que no filtran por
+    // tipo —contextoHarvey, ai-advice, Clientes ×3, Reportes ×2, Calendario—, así
+    // que derivar el progreso aquí dejaría la campaña al 61% en esta pantalla y al
+    // 0% en el informe y en la boca de las dos IAs. El marcador va aparte.
+    const P = leerCodigo('src/components/sections/ProyectosSection.tsx')
+    const i = P.indexOf('const P = parrilla(comp, piezas)')
+    expect(i, 'ya no se calcula la parrilla: revisa esta regla').toBeGreaterThan(-1)
+    const bloque = P.slice(i, i + 3500)
+    expect(/progress:/.test(bloque), 'la parrilla vuelve a escribir en progress: divergirá de Harvey y de Reportes').toBe(false)
+    expect(/deadline:/.test(bloque), 'la parrilla vuelve a escribir en deadline: re-arma el aviso project_deadline sin decirlo').toBe(false)
+  })
+
+  it('una campaña se puede cerrar antes de tiempo', () => {
+    // El cliente para en la semana 2 y sin esto la ficha acumula huecos rojos hasta
+    // la 6, para siempre. Una herramienta que regaña se cierra, no se mantiene.
+    const P = leerCodigo('src/components/sections/ProyectosSection.tsx')
+    expect(/CERRAR HOY/.test(P), 'no hay forma de cerrar una campaña antes de tiempo').toBe(true)
+    const i = P.indexOf('CERRAR HOY')
+    expect(/Math\.max\(1,/.test(P.slice(Math.max(0, i - 700), i)),
+      'cerrar hoy puede dejar la campaña en cero semanas: una promesa de cero no se puede medir').toBe(true)
   })
 })

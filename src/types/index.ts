@@ -55,6 +55,13 @@ export interface Project {
    *  migración aplicada todo se comporta como hasta ahora.
    *  Ver migrations/20260904_campanas.sql */
   tipo?: 'proyecto' | 'campana' | null
+  /** EL COMPROMISO de una campaña: desde cuándo, cuántas semanas y cuántas salidas
+   *  por semana. Las tres o ninguna — media promesa no se puede medir. De ahí sale
+   *  la parrilla (src/lib/parrilla.ts). Ausentes = sin compromiso, y la campaña se
+   *  comporta como hoy. Ver migrations/20260905_campanas_parrilla.sql */
+  empieza_el?: string | null
+  semanas?: number | null
+  salidas_semana?: number | null
   created_at: string
   client?: Client
 }
@@ -146,6 +153,9 @@ export interface ContentItem {
   notes?: string
   video_url?: string
   cover_url?: string
+  /** De qué campaña es esta pieza. Es lo que llena la parrilla. `null` = suelta.
+   *  Ver migrations/20260905_campanas_parrilla.sql */
+  project_id?: string | null
   /**
    * Carpeta donde vive la pieza una vez publicada.
    *

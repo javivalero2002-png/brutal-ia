@@ -4,9 +4,10 @@ import { useState, useRef, useEffect, useCallback, Fragment} from 'react'
 import { rutaApp } from '@/lib/appUrl'
 import { componerNotaDocumento } from '@/lib/notaDocumento'
 import { hayModalAbierto } from '@/components/shared/modalAbierto'
-import { Abanico, useIsMobile, useBackClosable, BLU, RED, GRN, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, dlLabel, todayKey, estadoDeadline, AMBAR, buscaEnTexto } from '@/components/shared'
+import { Abanico, useIsMobile, useBackClosable, BLU, RED, GRN, VIO, SURFACE, SURF2, BORDER, LucideIcon, ProgressRing, SafeImg, dlDate, dlLabel, todayKey, estadoDeadline, AMBAR, buscaEnTexto } from '@/components/shared'
 import { plural } from '@/components/shared/helpers'
 import type { Project, Task, Profile, NexusData} from '@/types'
+import { compromisoDe, parrilla, marcador, masDias, type Pieza } from '@/lib/parrilla'
 import type { IrASeccion } from '@/components/shared/secciones'
 
 interface PropsProyectos {
@@ -49,6 +50,9 @@ function ProyectosSection({modo='proyecto',data,filteredProjects,kanbanCols,proj
     : { titulo:'Proyectos', uno:'proyecto', varias:'proyectos', nuevo:'+ PROYECTO', nuevoLargo:'NUEVO PROYECTO', vacio:'SIN PROYECTOS' }
   useBackClosable(!!selectedId, () => onSelect(null))
   const [editProgress, setEditProgress] = useState<number|null>(null)
+  // EL COMPROMISO de la campaña abierta, mientras se escribe.
+  const [editCompromiso, setEditCompromiso] = useState<null|{empieza:string;semanas:string;salidas:string}>(null)
+  const [guardandoCompromiso, setGuardandoCompromiso] = useState(false)
   const [savingProgress, setSavingProgress] = useState(false)
   const [confirmDeleteProjId, setConfirmDeleteProjId] = useState<string|null>(null)
   const [confirmDeleteDetail, setConfirmDeleteDetail] = useState(false)
@@ -1120,6 +1124,165 @@ function ProyectosSection({modo='proyecto',data,filteredProjects,kanbanCols,proj
               </datalist>
             </div>
           </div>
+          {/* ══ LA PARRILLA ══ Solo en campañas.
+              Javi: «el apartado de campañas no aporta valor real, quiero algo que
+              lo haga único». Esto es lo que lo hace: EL HUECO EXISTE ANTES QUE LA
+              PIEZA. Se escribe una vez lo que se promete y a partir de ahí «van 11
+              de 18, y en las semanas cerradas faltaron 4» es un hecho.
+
+              El marcador va como línea APARTE y no sustituye a la barra de
+              progreso: `projects.progress` lo leen otros siete sitios que no
+              filtran por tipo —Harvey, el consejo de cliente, la ficha, Reportes,
+              el calendario—, así que derivarlo aquí dejaría la campaña al 61% en
+              esta pantalla y al 0% en el informe y en la boca de las dos IAs. */}
+          {esCampana && (()=>{
+            const comp = compromisoDe(selectedProject)
+            const piezas: Pieza[] = (data.agenda || [])
+              .filter((a:any)=>a.project_id === selectedProject.id)
+              .map((a:any)=>({ id:a.id, title:a.title, status:a.status, publish_date:a.publish_date }))
+            if (!comp) {
+              return (
+                <div className="rounded-2xl p-5 mb-5" style={{background:`${VIO}0A`,border:`1px dashed ${VIO}45`}}>
+                  <div className="font-syne text-[8px] font-black tracking-widest mb-2" style={{color:VIO}}>LA PROMESA</div>
+                  {!editCompromiso ? (
+                    <>
+                      <div className="text-[12.5px] mb-3" style={{color:'rgba(255,255,255,0.5)'}}>
+                        Una campaña sin promesa es una carpeta. Di cuánto vas a sacar y desde cuándo,
+                        y a partir de ahí la app sabe lo que falta.
+                      </div>
+                      <button onClick={()=>setEditCompromiso({empieza:todayKey(),semanas:'6',salidas:'3'})}
+                        className="font-syne text-[8.5px] font-black px-4 py-2 rounded-xl transition-opacity hover:opacity-85"
+                        style={{background:`${VIO}20`,border:`1px solid ${VIO}50`,color:'#c4b5fd'}}>
+                        FIJAR LA PROMESA
+                      </button>
+                    </>
+                  ) : (
+                    <div className="flex items-end gap-2 flex-wrap">
+                      {([['empieza','Empieza','date'],['salidas','Salidas/semana','number'],['semanas','Semanas','number']] as [string,string,string][]).map(([k,l,t])=>(
+                        <label key={k} className="flex flex-col gap-1">
+                          <span className="font-syne text-[7px] font-black tracking-widest" style={{color:'rgba(255,255,255,0.25)'}}>{l.toUpperCase()}</span>
+                          <input type={t} value={(editCompromiso as any)[k]}
+                            onChange={e=>setEditCompromiso(c=>({...(c as any),[k]:e.target.value}))}
+                            className="px-3 py-2 rounded-xl text-[12px] text-white outline-none"
+                            style={{background:SURFACE,border:`1px solid ${BORDER}`,caretColor:BLU,colorScheme:'dark',width:t==='number'?90:150}}/>
+                        </label>
+                      ))}
+                      <button disabled={guardandoCompromiso} onClick={async()=>{
+                        const sem = Number(editCompromiso.semanas), sal = Number(editCompromiso.salidas)
+                        if (!/^\d{4}-\d{2}-\d{2}$/.test(editCompromiso.empieza)) { showToast('Falta la fecha de inicio'); return }
+                        if (!Number.isInteger(sem)||sem<1||sem>52) { showToast('Entre 1 y 52 semanas'); return }
+                        if (!Number.isInteger(sal)||sal<1||sal>21) { showToast('Entre 1 y 21 salidas por semana'); return }
+                        setGuardandoCompromiso(true)
+                        try {
+                          await data.updateProject(selectedProject.id, { empieza_el: editCompromiso.empieza, semanas: sem, salidas_semana: sal })
+                          setEditCompromiso(null); showToast('Promesa fijada')
+                        } catch(e:any){ showToast(e?.message||'No se pudo guardar') }
+                        finally { setGuardandoCompromiso(false) }
+                      }}
+                        className="font-syne text-[8.5px] font-black px-4 py-2 rounded-xl transition-opacity hover:opacity-85 disabled:opacity-40"
+                        style={{background:`linear-gradient(135deg,${BLU},#1440CC)`,color:'#FFFFFF'}}>
+                        {guardandoCompromiso?'GUARDANDO…':'GUARDAR'}
+                      </button>
+                      <button onClick={()=>setEditCompromiso(null)} className="font-syne text-[8.5px] font-black px-3 py-2 rounded-xl" style={{color:'rgba(255,255,255,0.3)'}}>CANCELAR</button>
+                    </div>
+                  )}
+                </div>
+              )
+            }
+            const P = parrilla(comp, piezas)
+            return (
+              <div className="rounded-2xl p-5 mb-5" style={{background:SURFACE,border:`1px solid ${BORDER}`}}>
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                  <div>
+                    <div className="font-syne text-[8px] font-black tracking-widest mb-1.5" style={{color:'rgba(255,255,255,0.25)'}}>
+                      LA PARRILLA · {comp.salidasSemana}/SEMANA DURANTE {comp.semanas}
+                    </div>
+                    <div className="font-figtree text-[22px] font-black leading-none" style={{color:P.huecos>0?RED:GRN,letterSpacing:'-0.02em'}}>
+                      {marcador(P)}
+                    </div>
+                    <div className="font-syne text-[7.5px] mt-1.5" style={{color:'rgba(255,255,255,0.22)'}}>
+                      DEL {dlLabel(comp.empieza)} AL {dlLabel(P.termina)}
+                    </div>
+                  </div>
+                  {/* CERRAR HOY. Una campaña se para: el cliente frena en la semana
+                      2 y sin esto la ficha sigue acumulando huecos rojos hasta la 6,
+                      para siempre. Una herramienta que regaña se cierra. */}
+                  {isOwner && (
+                    <button onClick={async()=>{
+                      const hoy = todayKey()
+                      // Semanas COMPLETAS transcurridas, mínimo una: cerrar hoy no
+                      // puede inventar una promesa de cero semanas.
+                      const dias = Math.floor((Date.parse(hoy+'T12:00:00Z') - Date.parse(comp.empieza+'T12:00:00Z'))/86400000)
+                      const sem = Math.max(1, Math.min(comp.semanas, Math.ceil((dias+1)/7)))
+                      try { await data.updateProject(selectedProject.id, { semanas: sem }); showToast(`Campaña cerrada en la semana ${sem}`) }
+                      catch(e:any){ showToast(e?.message||'No se pudo cerrar') }
+                    }}
+                      className="font-syne text-[7.5px] font-black px-3 py-1.5 rounded-xl transition-all"
+                      style={{background:'rgba(255,255,255,0.04)',border:`1px solid ${BORDER}`,color:'rgba(255,255,255,0.4)'}}>
+                      CERRAR HOY
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  {P.semanas.map(sm=>(
+                    <div key={sm.n} className="flex items-center gap-2.5">
+                      <span className="font-syne text-[7.5px] font-black flex-shrink-0" style={{width:56,color:sm.enCurso?BLU:'rgba(255,255,255,0.25)'}}>
+                        SEM {sm.n}{sm.enCurso?' ·':''}
+                      </span>
+                      <div className="flex items-center gap-1 flex-1 flex-wrap">
+                        {/* Una casilla por salida prometida. Las llenas llevan la
+                            pieza; las vacías son el hueco — y en una semana cerrada
+                            el hueco es rojo, porque ya no se puede cubrir. */}
+                        {Array.from({length:comp.salidasSemana}).map((_,i)=>{
+                          const pz = sm.piezas[i]
+                          const pub = pz?.status === 'publicado'
+                          // En una semana CERRADA, todo lo que no salió es un
+                          // hueco: la casilla vacía y también la que tiene una
+                          // pieza que se quedó en borrador. Si no, la rejilla
+                          // pintaría dos rojas donde el contador dice tres y el
+                          // marcador dejaría de cuadrar con lo que se ve.
+                          const rojo = sm.cerrada && !pub
+                          return (
+                            <button key={i}
+                              onClick={()=>{ if(!pz) onOpenModal('contenido', { fecha: masDias(sm.desde, Math.min(i,6)), campana: selectedProject.id }) }}
+                              title={pz ? `${pz.title||'Pieza'}${pub?' · publicada':' · sin publicar'}` : sm.cerrada ? 'Este hueco ya no se puede cubrir' : 'Crear la pieza de este hueco'}
+                              className="h-6 rounded-md flex items-center px-2 transition-all hover:opacity-80"
+                              style={{
+                                flex:'1 1 90px', minWidth:60,
+                                background: pub?`${GRN}20`:rojo?`${RED}12`:pz?`${BLU}18`:'rgba(255,255,255,0.03)',
+                                border:`1px ${pz?'solid':'dashed'} ${pub?GRN+'55':rojo?RED+'40':pz?BLU+'40':BORDER}`,
+                              }}>
+                              <span className="font-syne text-[7px] font-black truncate" style={{color:pub?GRN:rojo?RED:pz?'#93b4ff':'rgba(255,255,255,0.22)'}}>
+                                {pz ? (rojo ? `${pz.title||'Pieza'} · NO SALIÓ` : (pz.title||'Pieza')) : rojo ? 'FALTÓ' : '+'}
+                              </span>
+                            </button>
+                          )
+                        })}
+                        {/* Lo que se sacó DE MÁS esa semana. No es un fallo, y
+                            esconderlo haría que el número no cuadrara con la lista. */}
+                        {sm.piezas.length > comp.salidasSemana && (
+                          <span className="font-syne text-[7px] font-black px-1.5" style={{color:'rgba(255,255,255,0.3)'}}>
+                            +{sm.piezas.length - comp.salidasSemana}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {P.fuera.length > 0 && (
+                  // Una pieza de la campaña con fecha fuera del plazo es justo lo
+                  // que alguien quiere ver. Contarla dentro sería mentir; tirarla,
+                  // esconderlo.
+                  <div className="font-syne text-[7.5px] font-black mt-3" style={{color:AMBAR}}>
+                    {P.fuera.length} PIEZA{P.fuera.length>1?'S':''} DE ESTA CAMPAÑA FUERA DEL PLAZO
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
           <div className="grid grid-cols-[1fr_auto] gap-6 items-end">
             <div>
               <div className="flex items-center justify-between mb-2">

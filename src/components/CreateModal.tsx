@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef } from 'react'
-import type { Profile, Client } from '@/types'
+import type { Profile, Client, Project } from '@/types'
 import { marcarModalAbierto, marcarModalCerrado } from '@/components/shared/modalAbierto'
 import { PLATAFORMA_COLOR, BLU, RED, GRN, SURF2, BORDER, LucideIcon, useIsMobile, AMBAR, VIO } from '@/components/shared'
 import { PlatformLogo } from '@/components/PlatformLogo'
@@ -67,6 +67,10 @@ function fields(type: string, team: Profile[], isOwner = true) {
       { label:'Cuenta / Perfil', key:'cuenta', type:'account', placeholder:'' },
       { label:'Fecha de publicación', key:'fecha', type:'date-input', placeholder:'' },
       { label:'Estado', key:'estado', type:'status' },
+      // DE QUÉ CAMPAÑA ES. Sin esto, `project_id` solo se podría escribir desde la
+      // parrilla, o sea desde la única pantalla que quiere leerlo — la definición
+      // del campo muerto. Aquí es donde se crean las piezas de verdad.
+      { label:'¿De alguna campaña?', key:'campana', type:'campana', placeholder:'' },
     ],
   }
   return (maps[type] || []) as Array<{ label: string; key: string; placeholder: string; type?: string; secundario?: boolean }>
@@ -86,6 +90,8 @@ interface CreateModalProps {
   onSave: () => void
   team: Profile[]
   clients?: Client[]
+  /** Las campañas, para poder decir de cuál es una pieza al crearla. */
+  campanas?: Project[]
 }
 
 // ── Builder de reglas: triggers y acciones disponibles ───────────────────────
@@ -129,7 +135,7 @@ const VARS_POR_DISPARADOR: Record<string, string[]> = {
 const varsDe = (trigger?: string): string =>
   (VARS_POR_DISPARADOR[trigger || ''] || []).map(v => `{${v}}`).join(' ')
 
-export default function CreateModal({ modal, onClose, onDismiss, mf, setMf, saving, onSave, team, clients = [], isOwner = true }: CreateModalProps) {
+export default function CreateModal({ modal, onClose, onDismiss, mf, setMf, saving, onSave, team, clients = [], campanas: campanasDisponibles = [], isOwner = true }: CreateModalProps) {
   const isMobile = useIsMobile()
   const m = meta[modal]
   if (!m) return null
@@ -252,6 +258,29 @@ export default function CreateModal({ modal, onClose, onDismiss, mf, setMf, savi
                     </button>
                   ))}
                 </div>
+              ) : f.type === 'campana' ? (
+                (()=>{
+                  const campanas = (campanasDisponibles || []).filter(c => c.tipo === 'campana')
+                  if (!campanas.length) return (
+                    <div className="text-[12px] px-4 py-3 rounded-2xl" style={{background:SURF2, border:`1px solid ${BORDER}`, color:'rgba(255,255,255,0.3)'}}>
+                      No hay campañas todavía. Se crean en Campañas.
+                    </div>
+                  )
+                  return (
+                    <div className="flex gap-2 flex-wrap">
+                      {[{id:'',name:'Ninguna'}, ...campanas].map(c=>{
+                        const act = (mf[f.key]||'') === c.id
+                        return (
+                          <button key={c.id||'ninguna'} onClick={()=>setMf(m=>({...m,[f.key]:c.id}))}
+                            className="py-2.5 px-4 rounded-2xl font-syne text-[9px] font-black tracking-wide transition-all"
+                            style={{background:act?VIO+'18':SURF2,border:`1.5px solid ${act?VIO+'60':BORDER}`,color:act?'#c4b5fd':'rgba(255,255,255,0.35)'}}>
+                            {c.name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )
+                })()
               ) : f.type === 'client-status' ? (
                 <div className="flex gap-2">
                   {[{v:'Activo',l:'Ya es cliente',c:GRN},{v:'Potencial',l:'Potencial',c:VIO}].map(s=>{
